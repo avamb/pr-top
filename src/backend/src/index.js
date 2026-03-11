@@ -14,6 +14,7 @@ const authRoutes = require('./routes/auth');
 const botRoutes = require('./routes/bot');
 const subscriptionRoutes = require('./routes/subscription');
 const webhookRoutes = require('./routes/webhooks');
+const adminRoutes = require('./routes/admin');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -73,11 +74,11 @@ app.get('/api/health', async (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/bot', botRoutes);
 app.use('/api/subscription', subscriptionRoutes);
+app.use('/api/admin', adminRoutes);
 // app.use('/api/clients', require('./routes/clients'));
 // app.use('/api/sessions', require('./routes/sessions'));
 // app.use('/api/exercises', require('./routes/exercises'));
 // app.use('/api/search', require('./routes/search'));
-// app.use('/api/admin', require('./routes/admin'));
 
 // 404 handler
 app.use('/api/*', (req, res) => {
