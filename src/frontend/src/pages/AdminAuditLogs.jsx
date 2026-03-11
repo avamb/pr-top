@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 const API_URL = 'http://localhost:3001/api';
 
@@ -24,6 +25,7 @@ const ACTION_COLORS = {
 };
 
 export default function AdminAuditLogs() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState([]);
@@ -153,7 +155,7 @@ export default function AdminAuditLogs() {
   if (loading && logs.length === 0) {
     return (
       <div className="flex items-center justify-center py-20">
-        <p className="text-secondary text-lg">Loading audit logs...</p>
+        <p className="text-secondary text-lg">{t('admin.loadingAuditLogs')}</p>
       </div>
     );
   }
@@ -161,14 +163,14 @@ export default function AdminAuditLogs() {
   return (
     <div>
       <a href="#main-content" className="skip-to-content">
-        Skip to main content
+        {t('nav.skipToContent')}
       </a>
 
       <main id="main-content" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
-          <h2 className="text-xl font-semibold text-text">Audit Logs</h2>
+          <h2 className="text-xl font-semibold text-text">{t('admin.auditLogsTitle')}</h2>
           <p className="text-secondary mt-1">
-            Security and activity audit trail ({total} total entries)
+            {t('admin.auditLogsSubtitle', { total })}
           </p>
         </div>
 
@@ -176,20 +178,20 @@ export default function AdminAuditLogs() {
         <div className="bg-white rounded-lg shadow-md p-4 mb-6">
           <div className="flex flex-wrap gap-4 items-end">
             <div>
-              <label className="block text-sm font-medium text-text mb-1">Action Type</label>
+              <label className="block text-sm font-medium text-text mb-1">{t('admin.actionType')}</label>
               <select
                 value={actionFilter}
                 onChange={(e) => handleFilterChange(e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm"
               >
-                <option value="">All Actions</option>
+                <option value="">{t('admin.allActions')}</option>
                 {actions.map(a => (
                   <option key={a} value={a}>{a}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-text mb-1">Date From</label>
+              <label className="block text-sm font-medium text-text mb-1">{t('admin.dateFrom')}</label>
               <input
                 type="date"
                 value={dateFrom}
@@ -198,7 +200,7 @@ export default function AdminAuditLogs() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-text mb-1">Date To</label>
+              <label className="block text-sm font-medium text-text mb-1">{t('admin.dateTo')}</label>
               <input
                 type="date"
                 value={dateTo}
@@ -211,7 +213,7 @@ export default function AdminAuditLogs() {
                 onClick={handleClearFilters}
                 className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-secondary"
               >
-                Clear Filters
+                {t('admin.clearFilters')}
               </button>
             </div>
           </div>
@@ -223,19 +225,19 @@ export default function AdminAuditLogs() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">ID</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">Timestamp</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">Actor</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">Action</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">Target</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">Details</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.id')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.timestamp')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.actor')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.action')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.target')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.details')}</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {logs.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-4 py-8 text-center text-secondary">
-                      No audit log entries found.
+                      {t('admin.noAuditLogs')}
                     </td>
                   </tr>
                 ) : (
@@ -244,7 +246,7 @@ export default function AdminAuditLogs() {
                       <td className="px-4 py-3 text-sm text-secondary">#{log.id}</td>
                       <td className="px-4 py-3 text-sm text-text whitespace-nowrap">{formatDate(log.created_at)}</td>
                       <td className="px-4 py-3 text-sm text-text">
-                        {log.actor_id ? `User #${log.actor_id}` : 'System'}
+                        {log.actor_id ? t('admin.userPrefix', { id: log.actor_id }) : t('admin.system')}
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getActionBadgeClass(log.action)}`}>
@@ -274,7 +276,7 @@ export default function AdminAuditLogs() {
           {totalPages > 1 && (
             <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
               <p className="text-sm text-secondary">
-                Page {page} of {totalPages} ({total} total entries)
+                {t('admin.pageOf', { page, totalPages, total })}
               </p>
               <div className="flex gap-2">
                 <button
@@ -282,7 +284,7 @@ export default function AdminAuditLogs() {
                   disabled={page <= 1}
                   className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Previous
+                  {t('admin.previous')}
                 </button>
                 {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                   let pageNum;
@@ -314,7 +316,7 @@ export default function AdminAuditLogs() {
                   disabled={page >= totalPages}
                   className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Next
+                  {t('admin.next')}
                 </button>
               </div>
             </div>

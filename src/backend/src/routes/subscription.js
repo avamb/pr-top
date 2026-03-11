@@ -466,6 +466,18 @@ router.post('/checkout', requireAuth, async (req, res) => {
          WHERE therapist_id = ?`,
         [plan, session.id, now.toISOString(), periodEnd.toISOString(), userId]
       );
+      // Also create a payment record in dev mode
+      const subIdResult = db.exec('SELECT id FROM subscriptions WHERE therapist_id = ?', [userId]);
+      if (subIdResult.length > 0 && subIdResult[0].values.length > 0) {
+        const subId = subIdResult[0].values[0][0];
+        const planPrices = { basic: 1900, pro: 4900, premium: 9900 };
+        const amount = planPrices[plan] || 0;
+        db.run(
+          `INSERT INTO payments (subscription_id, stripe_payment_intent_id, amount, currency, status, created_at)
+           VALUES (?, ?, ?, 'usd', 'succeeded', datetime('now'))`,
+          [subId, 'pi_dev_' + Date.now(), amount]
+        );
+      }
       saveDatabase();
       logger.info(`Dev mode: auto-completed upgrade to ${plan} for user ${userId}`);
     }

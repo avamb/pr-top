@@ -12,6 +12,7 @@ const { logger } = require('./utils/logger');
 const { initStripe, getStripeStatus, isConfigured: isStripeConfigured } = require('./services/stripe');
 const cookieParser = require('cookie-parser');
 const { csrfProtection, csrfTokenEndpoint } = require('./middleware/csrf');
+const { requireActiveSubscription } = require('./middleware/auth');
 const authRoutes = require('./routes/auth');
 const botRoutes = require('./routes/bot');
 const subscriptionRoutes = require('./routes/subscription');
@@ -114,15 +115,15 @@ app.use('/api/auth', authRoutes);
 app.use('/api/bot', botRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/dashboard', requireActiveSubscription, dashboardRoutes);
 app.use('/api/encryption', encryptionRoutes);
-app.use('/api/clients', require('./routes/clients'));
-app.use('/api/invite-code', require('./routes/inviteCode'));
-app.use('/api/sessions', require('./routes/sessions'));
-app.use('/api/exercises', require('./routes/exercises'));
-app.use('/api/settings', require('./routes/settings'));
-app.use('/api/search', require('./routes/search'));
-app.use('/api/query', require('./routes/query'));
+app.use('/api/clients', requireActiveSubscription, require('./routes/clients'));
+app.use('/api/invite-code', requireActiveSubscription, require('./routes/inviteCode'));
+app.use('/api/sessions', requireActiveSubscription, require('./routes/sessions'));
+app.use('/api/exercises', requireActiveSubscription, require('./routes/exercises'));
+app.use('/api/settings', requireActiveSubscription, require('./routes/settings'));
+app.use('/api/search', requireActiveSubscription, require('./routes/search'));
+app.use('/api/query', requireActiveSubscription, require('./routes/query'));
 
 // Dev-only seed endpoint for testing with large datasets
 if (process.env.NODE_ENV !== 'production') {
@@ -168,6 +169,18 @@ if (process.env.NODE_ENV !== 'production') {
       db.run("UPDATE diary_entries SET created_at = ?, updated_at = ? WHERE id = ?", [created_at, created_at, entry_id]);
       save();
       res.json({ updated: true, entry_id, created_at });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/dev/expire-trial', (req, res) => {
+    try {
+      const { therapist_id } = req.body;
+      if (!therapist_id) return res.status(400).json({ error: 'therapist_id required' });
+      const { getDatabase, saveDatabase: save } = require('./db/connection');
+      const db = getDatabase();
+      db.run("UPDATE subscriptions SET trial_ends_at = datetime('now', '-1 day') WHERE therapist_id = ? AND plan = 'trial'", [therapist_id]);
+      save();
+      res.json({ expired: true, therapist_id });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 }

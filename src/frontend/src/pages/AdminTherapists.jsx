@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 const API_URL = 'http://localhost:3001/api';
 
 export default function AdminTherapists() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -67,13 +69,13 @@ export default function AdminTherapists() {
       });
       const data = await res.json();
       if (res.ok) {
-        setMessage(`Therapist #${therapistId} blocked successfully`);
+        setMessage(t('admin.blockedSuccess', { id: therapistId }));
         await loadTherapists(token);
       } else {
         setMessage(`Error: ${data.error}`);
       }
     } catch (err) {
-      setMessage('Failed to block therapist');
+      setMessage(t('admin.failedToBlock'));
     } finally {
       setActionLoading(null);
     }
@@ -90,13 +92,13 @@ export default function AdminTherapists() {
       });
       const data = await res.json();
       if (res.ok) {
-        setMessage(`Therapist #${therapistId} unblocked successfully`);
+        setMessage(t('admin.unblockedSuccess', { id: therapistId }));
         await loadTherapists(token);
       } else {
         setMessage(`Error: ${data.error}`);
       }
     } catch (err) {
-      setMessage('Failed to unblock therapist');
+      setMessage(t('admin.failedToUnblock'));
     } finally {
       setActionLoading(null);
     }
@@ -105,7 +107,7 @@ export default function AdminTherapists() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <p className="text-secondary text-lg">Loading therapist management...</p>
+        <p className="text-secondary text-lg">{t('admin.loadingAdmin')}</p>
       </div>
     );
   }
@@ -113,14 +115,14 @@ export default function AdminTherapists() {
   return (
     <div>
       <a href="#main-content" className="skip-to-content">
-        Skip to main content
+        {t('nav.skipToContent')}
       </a>
 
       <main id="main-content" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-text">Therapist Management</h2>
-            <p className="text-secondary mt-1">{therapists.length} therapists registered</p>
+            <h2 className="text-xl font-semibold text-text">{t('admin.therapistManagement')}</h2>
+            <p className="text-secondary mt-1">{t('admin.therapistsRegistered', { count: therapists.length })}</p>
           </div>
         </div>
 
@@ -134,52 +136,52 @@ export default function AdminTherapists() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">ID</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">Email</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">Telegram ID</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">Invite Code</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">Registered</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">Actions</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.id')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.email')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.telegramId')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.inviteCode')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.status')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.registered')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {therapists.map(t => (
-                <tr key={t.id} className={t.is_blocked ? 'bg-red-50/50' : ''}>
-                  <td className="px-6 py-4 text-sm text-text">{t.id}</td>
-                  <td className="px-6 py-4 text-sm text-text font-medium">{t.email || '—'}</td>
-                  <td className="px-6 py-4 text-sm text-secondary">{t.telegram_id || '—'}</td>
-                  <td className="px-6 py-4 text-sm text-secondary font-mono">{t.invite_code || '—'}</td>
+              {therapists.map(therapist => (
+                <tr key={therapist.id} className={therapist.is_blocked ? 'bg-red-50/50' : ''}>
+                  <td className="px-6 py-4 text-sm text-text">{therapist.id}</td>
+                  <td className="px-6 py-4 text-sm text-text font-medium">{therapist.email || '—'}</td>
+                  <td className="px-6 py-4 text-sm text-secondary">{therapist.telegram_id || '—'}</td>
+                  <td className="px-6 py-4 text-sm text-secondary font-mono">{therapist.invite_code || '—'}</td>
                   <td className="px-6 py-4">
-                    {t.is_blocked ? (
+                    {therapist.is_blocked ? (
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                        Blocked
+                        {t('admin.blocked')}
                       </span>
                     ) : (
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                        Active
+                        {t('admin.active')}
                       </span>
                     )}
                   </td>
                   <td className="px-6 py-4 text-sm text-secondary">
-                    {t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}
+                    {therapist.created_at ? new Date(therapist.created_at).toLocaleDateString() : '—'}
                   </td>
                   <td className="px-6 py-4">
-                    {t.is_blocked ? (
+                    {therapist.is_blocked ? (
                       <button
-                        onClick={() => handleUnblock(t.id)}
-                        disabled={actionLoading === t.id}
+                        onClick={() => handleUnblock(therapist.id)}
+                        disabled={actionLoading === therapist.id}
                         className="text-sm px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors"
                       >
-                        {actionLoading === t.id ? 'Unblocking...' : 'Unblock'}
+                        {actionLoading === therapist.id ? t('admin.unblocking') : t('admin.unblock')}
                       </button>
                     ) : (
                       <button
-                        onClick={() => handleBlock(t.id)}
-                        disabled={actionLoading === t.id}
+                        onClick={() => handleBlock(therapist.id)}
+                        disabled={actionLoading === therapist.id}
                         className="text-sm px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 transition-colors"
                       >
-                        {actionLoading === t.id ? 'Blocking...' : 'Block'}
+                        {actionLoading === therapist.id ? t('admin.blocking') : t('admin.block')}
                       </button>
                     )}
                   </td>
@@ -188,7 +190,7 @@ export default function AdminTherapists() {
               {therapists.length === 0 && (
                 <tr>
                   <td colSpan="7" className="px-6 py-8 text-center text-secondary">
-                    No therapists registered yet.
+                    {t('admin.noTherapists')}
                   </td>
                 </tr>
               )}

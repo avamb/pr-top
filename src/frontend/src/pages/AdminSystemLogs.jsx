@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 const API_URL = 'http://localhost:3001/api';
 
@@ -13,6 +14,7 @@ const LEVEL_COLORS = {
 const LEVEL_OPTIONS = ['', 'error', 'warn', 'info', 'debug'];
 
 export default function AdminSystemLogs() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState([]);
@@ -123,7 +125,7 @@ export default function AdminSystemLogs() {
   if (loading && logs.length === 0) {
     return (
       <div className="flex items-center justify-center py-20">
-        <p className="text-secondary text-lg">Loading system logs...</p>
+        <p className="text-secondary text-lg">{t('admin.loadingSystemLogs')}</p>
       </div>
     );
   }
@@ -131,22 +133,22 @@ export default function AdminSystemLogs() {
   return (
     <div>
       <a href="#main-content" className="skip-to-content">
-        Skip to main content
+        {t('nav.skipToContent')}
       </a>
 
       <main id="main-content" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-text">System Logs</h2>
+            <h2 className="text-xl font-semibold text-text">{t('admin.systemLogsTitle')}</h2>
             <p className="text-secondary mt-1">
-              Server application logs ({total} entries in memory)
+              {t('admin.systemLogsSubtitle', { total })}
             </p>
           </div>
           <button
             onClick={handleRefresh}
             className="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90"
           >
-            Refresh
+            {t('admin.refresh')}
           </button>
         </div>
 
@@ -154,34 +156,34 @@ export default function AdminSystemLogs() {
         <div className="bg-white rounded-lg shadow-md p-4 mb-6">
           <div className="flex flex-wrap gap-4 items-end">
             <div>
-              <label className="block text-sm font-medium text-text mb-1">Log Level</label>
+              <label className="block text-sm font-medium text-text mb-1">{t('admin.logLevel')}</label>
               <select
                 value={levelFilter}
                 onChange={(e) => handleLevelChange(e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm"
               >
-                <option value="">All Levels</option>
+                <option value="">{t('admin.allLevels')}</option>
                 {LEVEL_OPTIONS.filter(Boolean).map(l => (
                   <option key={l} value={l}>{l.toUpperCase()}</option>
                 ))}
               </select>
             </div>
             <div className="flex-1 min-w-[200px]">
-              <label className="block text-sm font-medium text-text mb-1">Search</label>
+              <label className="block text-sm font-medium text-text mb-1">{t('admin.search')}</label>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   onKeyDown={handleSearchKeyDown}
-                  placeholder="Search log messages..."
+                  placeholder={t('admin.searchPlaceholder')}
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm"
                 />
                 <button
                   onClick={handleSearch}
                   className="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90"
                 >
-                  Search
+                  {t('admin.search')}
                 </button>
               </div>
             </div>
@@ -190,7 +192,7 @@ export default function AdminSystemLogs() {
                 onClick={handleClearFilters}
                 className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-secondary"
               >
-                Clear
+                {t('admin.clear')}
               </button>
             </div>
           </div>
@@ -201,7 +203,7 @@ export default function AdminSystemLogs() {
           <div className="divide-y divide-gray-100">
             {logs.length === 0 ? (
               <div className="px-4 py-8 text-center text-secondary">
-                No system log entries found.
+                {t('admin.noSystemLogs')}
               </div>
             ) : (
               logs.map((log, idx) => (
@@ -231,7 +233,7 @@ export default function AdminSystemLogs() {
           {totalPages > 1 && (
             <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
               <p className="text-sm text-secondary">
-                Page {page} of {totalPages} ({total} total entries)
+                {t('admin.pageOf', { page, totalPages, total })}
               </p>
               <div className="flex gap-2">
                 <button
@@ -239,7 +241,7 @@ export default function AdminSystemLogs() {
                   disabled={page <= 1}
                   className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Previous
+                  {t('admin.previous')}
                 </button>
                 {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                   let pageNum;
@@ -271,7 +273,7 @@ export default function AdminSystemLogs() {
                   disabled={page >= totalPages}
                   className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Next
+                  {t('admin.next')}
                 </button>
               </div>
             </div>

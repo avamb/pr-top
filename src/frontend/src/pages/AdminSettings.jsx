@@ -1,46 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 const API_URL = 'http://localhost:3001/api';
 
-const SETTING_GROUPS = [
-  {
-    title: 'Trial Configuration',
-    description: 'Configure trial period settings for new therapist registrations',
-    fields: [
-      { key: 'trial_duration_days', label: 'Trial Duration (days)', min: 1, max: 365 },
-      { key: 'trial_client_limit', label: 'Trial Client Limit', min: 1, max: 1000 },
-      { key: 'trial_session_limit', label: 'Trial Session Limit', min: 1, max: 10000 },
-    ]
-  },
-  {
-    title: 'Basic Plan Limits',
-    description: 'Configure limits for Basic plan subscribers',
-    fields: [
-      { key: 'basic_client_limit', label: 'Client Limit', min: 1, max: 1000 },
-      { key: 'basic_session_limit', label: 'Sessions per Month', min: 1, max: 10000 },
-    ]
-  },
-  {
-    title: 'Pro Plan Limits',
-    description: 'Configure limits for Pro plan subscribers',
-    fields: [
-      { key: 'pro_client_limit', label: 'Client Limit', min: 1, max: 10000 },
-      { key: 'pro_session_limit', label: 'Sessions per Month', min: 1, max: 100000 },
-    ]
-  },
-  {
-    title: 'Pricing (cents)',
-    description: 'Monthly pricing in cents (e.g., 1900 = $19.00)',
-    fields: [
-      { key: 'basic_price_monthly', label: 'Basic Plan Price', min: 100, max: 100000, isCents: true },
-      { key: 'pro_price_monthly', label: 'Pro Plan Price', min: 100, max: 100000, isCents: true },
-      { key: 'premium_price_monthly', label: 'Premium Plan Price', min: 100, max: 100000, isCents: true },
-    ]
-  }
-];
-
 export default function AdminSettings() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -48,6 +13,43 @@ export default function AdminSettings() {
   const [formValues, setFormValues] = useState({});
   const [message, setMessage] = useState(null);
   const [errors, setErrors] = useState([]);
+
+  const SETTING_GROUPS = [
+    {
+      title: t('admin.trialConfig'),
+      description: t('admin.trialConfigDesc'),
+      fields: [
+        { key: 'trial_duration_days', label: t('admin.trialDuration'), min: 1, max: 365 },
+        { key: 'trial_client_limit', label: t('admin.trialClientLimit'), min: 1, max: 1000 },
+        { key: 'trial_session_limit', label: t('admin.trialSessionLimit'), min: 1, max: 10000 },
+      ]
+    },
+    {
+      title: t('admin.basicLimits'),
+      description: t('admin.basicLimitsDesc'),
+      fields: [
+        { key: 'basic_client_limit', label: t('admin.clientLimit'), min: 1, max: 1000 },
+        { key: 'basic_session_limit', label: t('admin.sessionsPerMonth'), min: 1, max: 10000 },
+      ]
+    },
+    {
+      title: t('admin.proLimits'),
+      description: t('admin.proLimitsDesc'),
+      fields: [
+        { key: 'pro_client_limit', label: t('admin.clientLimit'), min: 1, max: 10000 },
+        { key: 'pro_session_limit', label: t('admin.sessionsPerMonth'), min: 1, max: 100000 },
+      ]
+    },
+    {
+      title: t('admin.pricingCents'),
+      description: t('admin.pricingCentsDesc'),
+      fields: [
+        { key: 'basic_price_monthly', label: t('admin.basicPrice'), min: 100, max: 100000, isCents: true },
+        { key: 'pro_price_monthly', label: t('admin.proPrice'), min: 100, max: 100000, isCents: true },
+        { key: 'premium_price_monthly', label: t('admin.premiumPrice'), min: 100, max: 100000, isCents: true },
+      ]
+    }
+  ];
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -85,7 +87,6 @@ export default function AdminSettings() {
       if (res.ok) {
         const data = await res.json();
         setSettings(data.settings);
-        // Initialize form values from settings
         const values = {};
         for (const group of SETTING_GROUPS) {
           for (const field of group.fields) {
@@ -112,7 +113,6 @@ export default function AdminSettings() {
 
     try {
       const token = localStorage.getItem('token');
-      // Only send changed values
       const changedSettings = {};
       for (const [key, value] of Object.entries(formValues)) {
         const currentVal = settings[key]?.value || '';
@@ -122,7 +122,7 @@ export default function AdminSettings() {
       }
 
       if (Object.keys(changedSettings).length === 0) {
-        setMessage('No changes to save.');
+        setMessage(t('admin.noChanges'));
         setSaving(false);
         return;
       }
@@ -139,7 +139,7 @@ export default function AdminSettings() {
       const data = await res.json();
 
       if (res.ok) {
-        setMessage(data.message || 'Settings updated successfully');
+        setMessage(data.message || t('settings.settingsSaved'));
         if (data.errors) setErrors(data.errors);
         if (data.settings) {
           setSettings(data.settings);
@@ -170,7 +170,7 @@ export default function AdminSettings() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <p className="text-secondary text-lg">Loading platform settings...</p>
+        <p className="text-secondary text-lg">{t('admin.loadingSettings')}</p>
       </div>
     );
   }
@@ -178,13 +178,13 @@ export default function AdminSettings() {
   return (
     <div>
       <a href="#main-content" className="skip-to-content">
-        Skip to main content
+        {t('nav.skipToContent')}
       </a>
 
       <main id="main-content" className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h2 className="text-xl font-semibold text-text">Platform Settings</h2>
-          <p className="text-secondary mt-1">Configure trial duration, tier limits, and pricing</p>
+          <h2 className="text-xl font-semibold text-text">{t('admin.settingsTitle')}</h2>
+          <p className="text-secondary mt-1">{t('admin.settingsSubtitle')}</p>
         </div>
 
         {message && (
@@ -232,7 +232,7 @@ export default function AdminSettings() {
                     </div>
                     {settings[field.key]?.updated_at && (
                       <p className="text-xs text-secondary mt-1">
-                        Last updated: {new Date(settings[field.key].updated_at).toLocaleDateString()}
+                        {t('admin.lastUpdated', { date: new Date(settings[field.key].updated_at).toLocaleDateString() })}
                       </p>
                     )}
                   </div>
@@ -248,7 +248,7 @@ export default function AdminSettings() {
             disabled={saving}
             className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 font-medium"
           >
-            {saving ? 'Saving...' : 'Save Settings'}
+            {saving ? t('admin.savingSettings') : t('admin.saveSettings')}
           </button>
         </div>
       </main>
