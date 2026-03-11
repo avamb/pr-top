@@ -21,6 +21,8 @@ export default function Subscription() {
 
   const token = localStorage.getItem('token');
 
+  const isExpiredRedirect = location.state?.expired === true;
+
   useEffect(() => {
     if (!token) {
       navigate('/login');
@@ -178,6 +180,14 @@ export default function Subscription() {
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8">
+        {/* Expired Trial Banner */}
+        {(isExpiredRedirect || subscription?.status === 'expired') && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-300 rounded-lg">
+            <h3 className="text-amber-800 font-semibold text-lg">Your trial has expired</h3>
+            <p className="text-amber-700 mt-1">Please select a plan below to continue using PsyLink. Your data is safe and will be available once you subscribe.</p>
+          </div>
+        )}
+
         {/* Status Messages */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
