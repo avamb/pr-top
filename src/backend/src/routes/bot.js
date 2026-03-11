@@ -6,6 +6,7 @@ const { getDatabase, saveDatabase } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { encrypt } = require('../services/encryption');
 const { processDiaryTranscription } = require('../services/diaryTranscription');
+const { checkClientLimit } = require('../utils/planLimits');
 
 const router = express.Router();
 
@@ -245,6 +246,19 @@ router.post('/consent', botAuth, (req, res) => {
       saveDatabase();
       logger.info(`Client ${client[0]} declined consent for therapist ${therapist_id}`);
       return res.json({ message: 'Consent declined. No connection was made.', linked: false });
+    }
+
+    // Check client limit before linking
+    const limitCheck = checkClientLimit(parseInt(therapist_id));
+    if (!limitCheck.allowed) {
+      logger.warn(`Client limit reached for therapist ${therapist_id}: ${limitCheck.message}`);
+      return res.status(403).json({
+        error: 'Client limit reached',
+        message: limitCheck.message,
+        current: limitCheck.current,
+        limit: limitCheck.limit,
+        plan: limitCheck.plan
+      });
     }
 
     // Link client to therapist with consent

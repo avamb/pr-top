@@ -160,9 +160,21 @@ router.get('/', requireAuth, (req, res) => {
     }
 
     const columns = results[0].columns;
+    const { language } = req.query;
+    const validLangs = ['ru', 'en', 'es'];
+    const lang = validLangs.includes(language) ? language : null;
+
     const exercises = results[0].values.map(row => {
       const obj = {};
       columns.forEach((col, i) => { obj[col] = row[i]; });
+
+      // If language specified, add convenience fields with localized content
+      if (lang) {
+        obj.title = obj[`title_${lang}`] || obj.title_en;
+        obj.description = obj[`description_${lang}`] || obj.description_en;
+        obj.instructions = obj[`instructions_${lang}`] || obj.instructions_en;
+      }
+
       return obj;
     });
 
@@ -177,7 +189,7 @@ router.get('/', requireAuth, (req, res) => {
       grouped[ex.category].push(ex);
     }
 
-    res.json({ exercises, categories, grouped });
+    res.json({ exercises, categories, grouped, language: lang || 'all' });
   } catch (error) {
     logger.error('Get exercises error: ' + error.message);
     res.status(500).json({ error: 'Failed to fetch exercises' });
@@ -214,6 +226,16 @@ router.get('/:id', requireAuth, (req, res) => {
     const row = results[0].values[0];
     const exercise = {};
     columns.forEach((col, i) => { exercise[col] = row[i]; });
+
+    // Support language parameter
+    const { language } = req.query;
+    const validLangs = ['ru', 'en', 'es'];
+    const lang = validLangs.includes(language) ? language : null;
+    if (lang) {
+      exercise.title = exercise[`title_${lang}`] || exercise.title_en;
+      exercise.description = exercise[`description_${lang}`] || exercise.description_en;
+      exercise.instructions = exercise[`instructions_${lang}`] || exercise.instructions_en;
+    }
 
     res.json({ exercise });
   } catch (error) {
