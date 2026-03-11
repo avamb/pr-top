@@ -1,5 +1,28 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-11 (batch #18, #26, #29) ===
+
+- Feature #18: Therapist can refresh/regenerate invite code ✅
+  - Backend + frontend already existed from feature #16
+  - Verified: old code rejected, new code works for client connection
+  - Zero console errors, UI regenerate button works
+
+- Feature #26: Voice messages are transcribed automatically ✅
+  - Auto-transcription triggers async after voice diary submission
+  - transcript_encrypted populated with AES-256-GCM encrypted data
+  - embedding_ref set (vector DB indexing works)
+  - Added embedding_ref to diary GET API response (was missing)
+  - Data persists across server restart
+
+- Feature #29: Unauthorized therapist cannot access client diary ✅
+  - Changed diary endpoint auth: checks client existence, then therapist linkage
+  - Unlinked therapist gets 403 (was 404 before) with audit logging
+  - Audit log records access_denied with reason 'not_linked_therapist'
+  - No diary data leaked to unauthorized therapist
+  - Browser verification: page shows "Failed to fetch client"
+
+CURRENT STATUS: ~81/205 features passing (78 before + 3 this session)
+
 === Session 2026-03-11 ===
 
 COMPLETED:
