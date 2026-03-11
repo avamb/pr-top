@@ -81,7 +81,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/encryption', encryptionRoutes);
 app.use('/api/clients', require('./routes/clients'));
 app.use('/api/invite-code', require('./routes/inviteCode'));
-// app.use('/api/sessions', require('./routes/sessions'));
+app.use('/api/sessions', require('./routes/sessions'));
 // app.use('/api/exercises', require('./routes/exercises'));
 // app.use('/api/search', require('./routes/search'));
 
