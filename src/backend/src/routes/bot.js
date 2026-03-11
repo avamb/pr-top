@@ -131,4 +131,133 @@ router.get('/user/:telegram_id', botAuth, (req, res) => {
   }
 });
 
+// POST /api/bot/connect - Client enters invite code to connect with therapist
+router.post('/connect', botAuth, (req, res) => {
+  try {
+    const { telegram_id, invite_code } = req.body;
+
+    if (!telegram_id) {
+      return res.status(400).json({ error: 'telegram_id is required' });
+    }
+    if (!invite_code) {
+      return res.status(400).json({ error: 'invite_code is required' });
+    }
+
+    const db = getDatabase();
+
+    // Verify the client exists and is a client
+    const clientResult = db.exec(
+      'SELECT id, role, therapist_id, consent_therapist_access FROM users WHERE telegram_id = ?',
+      [String(telegram_id)]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found. Please register first with /start.' });
+    }
+
+    const client = clientResult[0].values[0];
+    const clientId = client[0];
+    const clientRole = client[1];
+    const existingTherapistId = client[2];
+
+    if (clientRole !== 'client') {
+      return res.status(400).json({ error: 'Only clients can use invite codes to connect.' });
+    }
+
+    if (existingTherapistId) {
+      return res.status(400).json({
+        error: 'You are already connected to a therapist. Use /disconnect first if you want to change.',
+        therapist_id: existingTherapistId
+      });
+    }
+
+    // Look up therapist by invite code (case-insensitive)
+    const therapistResult = db.exec(
+      "SELECT id, email, telegram_id, role, blocked_at FROM users WHERE LOWER(invite_code) = LOWER(?) AND role = 'therapist'",
+      [invite_code.trim()]
+    );
+
+    if (therapistResult.length === 0 || therapistResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Invalid invite code. Please check the code and try again.' });
+    }
+
+    const therapist = therapistResult[0].values[0];
+    const therapistId = therapist[0];
+    const therapistBlocked = therapist[4];
+
+    if (therapistBlocked) {
+      return res.status(400).json({ error: 'This therapist account is currently unavailable.' });
+    }
+
+    logger.info(`Client ${clientId} (telegram_id=${telegram_id}) found therapist ${therapistId} via invite code`);
+
+    // Return therapist info for consent flow - do NOT link yet (consent required)
+    res.json({
+      message: 'Therapist found. Consent is required before linking.',
+      therapist: {
+        id: therapistId,
+        display_name: therapist[1] || `Therapist #${therapistId}`
+      },
+      client_id: clientId,
+      requires_consent: true
+    });
+  } catch (error) {
+    logger.error('Bot connect error: ' + error.message);
+    logger.error('Stack: ' + error.stack);
+    res.status(500).json({ error: 'Connection failed: ' + error.message });
+  }
+});
+
+// POST /api/bot/consent - Client gives consent and links to therapist
+router.post('/consent', botAuth, (req, res) => {
+  try {
+    const { telegram_id, therapist_id, consent } = req.body;
+
+    if (!telegram_id || !therapist_id) {
+      return res.status(400).json({ error: 'telegram_id and therapist_id are required' });
+    }
+
+    const db = getDatabase();
+
+    // Verify client
+    const clientResult = db.exec(
+      'SELECT id, role, therapist_id FROM users WHERE telegram_id = ?',
+      [String(telegram_id)]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+
+    const client = clientResult[0].values[0];
+    if (client[1] !== 'client') {
+      return res.status(400).json({ error: 'Only clients can give consent' });
+    }
+
+    if (consent === false) {
+      logger.info(`Client ${client[0]} declined consent for therapist ${therapist_id}`);
+      return res.json({ message: 'Consent declined. No connection was made.', linked: false });
+    }
+
+    // Link client to therapist with consent
+    db.run(
+      "UPDATE users SET therapist_id = ?, consent_therapist_access = 1, updated_at = datetime('now') WHERE id = ?",
+      [therapist_id, client[0]]
+    );
+    saveDatabase();
+
+    logger.info(`Client ${client[0]} consented and linked to therapist ${therapist_id}`);
+
+    res.json({
+      message: 'Successfully connected to therapist',
+      linked: true,
+      client_id: client[0],
+      therapist_id: parseInt(therapist_id)
+    });
+  } catch (error) {
+    logger.error('Bot consent error: ' + error.message);
+    res.status(500).json({ error: 'Consent processing failed: ' + error.message });
+  }
+});
+
 module.exports = router;

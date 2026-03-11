@@ -59,12 +59,94 @@ if (!token || token === 'your-telegram-bot-token') {
     });
   });
 
-  // Handle role selection callback
+  // /connect command - client enters invite code to connect with therapist
+  bot.onText(/\/connect\s+(.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+    const inviteCode = match[1].trim();
+
+    try {
+      // Step 1: Look up therapist by invite code
+      const connectResult = await api.post('/api/bot/connect', {
+        telegram_id: String(telegramId),
+        invite_code: inviteCode
+      });
+
+      const { therapist } = connectResult.data;
+
+      // Step 2: Show consent prompt
+      bot.sendMessage(chatId,
+        `🔗 Found therapist: *${therapist.display_name}*\n\n` +
+        `By connecting, you consent to sharing your diary entries, exercise responses, and activity data with this therapist.\n\n` +
+        `Do you want to connect?`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '✅ Yes, I consent', callback_data: `consent_yes_${therapist.id}` },
+                { text: '❌ No, cancel', callback_data: `consent_no_${therapist.id}` }
+              ]
+            ]
+          }
+        }
+      );
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || 'Failed to process invite code. Please try again.';
+      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+    }
+  });
+
+  // /connect without code - show usage
+  bot.onText(/^\/connect$/, async (msg) => {
+    bot.sendMessage(msg.chat.id,
+      '📋 To connect with your therapist, use:\n`/connect YOUR_CODE`\n\nReplace YOUR_CODE with the invite code your therapist gave you.',
+      { parse_mode: 'Markdown' }
+    );
+  });
+
+  // Handle callback queries (role selection + consent)
   bot.on('callback_query', async (callbackQuery) => {
     const chatId = callbackQuery.message.chat.id;
     const telegramId = callbackQuery.from.id;
     const data = callbackQuery.data;
 
+    // Handle consent callbacks
+    if (data.startsWith('consent_yes_') || data.startsWith('consent_no_')) {
+      const consent = data.startsWith('consent_yes_');
+      const therapistId = data.split('_').pop();
+
+      try {
+        const result = await api.post('/api/bot/consent', {
+          telegram_id: String(telegramId),
+          therapist_id: parseInt(therapistId),
+          consent: consent
+        });
+
+        if (consent && result.data.linked) {
+          bot.sendMessage(chatId,
+            '✅ You are now connected to your therapist!\n\n' +
+            'You can now:\n' +
+            '• Write diary entries by sending text messages\n' +
+            '• Send voice messages for your diary\n' +
+            '• Use /sos for emergency contact\n\n' +
+            'Use /help to see all available commands.'
+          );
+        } else {
+          bot.sendMessage(chatId,
+            '❌ Connection cancelled. You can try again with /connect <code>.'
+          );
+        }
+      } catch (error) {
+        const errorMsg = error.response?.data?.error || 'Failed to process consent. Please try again.';
+        bot.sendMessage(chatId, `❌ ${errorMsg}`);
+      }
+
+      bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
+
+    // Handle role selection callbacks
     if (data === 'role_therapist' || data === 'role_client') {
       const role = data === 'role_therapist' ? 'therapist' : 'client';
 
