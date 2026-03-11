@@ -50,7 +50,7 @@ export default function Login() {
 
       // Fetch user profile to sync language
       try {
-        const profileRes = await fetch('http://localhost:3001/api/settings/profile', {
+        const profileRes = await fetch('/api/settings/profile', {
           headers: { 'Authorization': `Bearer ${data.token}` }
         });
         if (profileRes.ok) {
