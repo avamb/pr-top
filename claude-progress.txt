@@ -201,10 +201,36 @@ TECHNICAL NOTES (Session 2):
   - Downgrades scheduled for end of billing period via pending_plan column
   - UI shows pending downgrade banner, current access remains active
 
-CURRENT STATUS: ~33/205 features passing (estimate, other agents also working)
+- Feature #21: Client consent grants therapist access and links accounts ✅
+  - Added audit logging for consent_granted and consent_declined in bot consent endpoint
+  - Added GET /api/admin/logs/audit endpoint for superadmin audit log viewing
+  - Full flow verified: connect → consent → therapist_id set → consent_therapist_access=true
+  - Client appears in therapist's client list after consent
+  - Audit log records consent grant events
+
+- Feature #23: Client can submit text diary entry via Telegram ✅
+  - Created POST /api/bot/diary endpoint for encrypted diary entry submission
+  - Created GET /api/bot/diary/:telegram_id for retrieving diary entries
+  - Content encrypted with AES-256-GCM before storage (Class A data)
+  - Supports text, voice, video entry types
+  - Verified persistence across server restart
+
+- Feature #28: Therapist can view linked client diary entries ✅
+  - Created GET /api/clients/:id/diary endpoint with decryption on authorized read
+  - Created GET /api/clients/:id endpoint for client detail
+  - Audit log records read_diary and access_denied events
+  - Created ClientDetail frontend page with diary view and type filters
+  - Made client rows clickable in ClientList page
+  - All 3 entry types (text/voice/video) displayed with decrypted content
+  - Unauthorized therapist access properly blocked
+  - Verified via browser automation with screenshot
+
+CURRENT STATUS: ~36/205 features passing (estimate, other agents also working)
 
 NEXT UP:
-- Client detail views (timeline, diary, notes)
+- Client diary filtering by date/type
+- Client consent revocation flow
+- Therapist notes CRUD
 - More Stripe features (cancellation, expiry)
 - Exercise library and SOS features
 - Admin settings and audit logs pages
