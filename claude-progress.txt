@@ -1,5 +1,32 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-11 (batch #67, #71, #72) ===
+
+- Feature #67: Therapist analytics: session frequency ✅
+  - Added session_frequency object to GET /api/dashboard/analytics
+  - Includes total_sessions, sessions_per_week, days_with_sessions, weekly_breakdown, per_client
+  - Frontend Session Frequency section with summary cards, weekly bar chart, per-client table
+  - Time period selector (7d/14d/30d/60d) updates session frequency data
+  - Verified via browser automation with zero console errors
+
+- Feature #71: Superadmin subscription/payment statistics ✅
+  - New GET /api/admin/stats/subscriptions endpoint
+  - Revenue metrics: MRR ($401.00), total revenue, payment counts
+  - Payment analytics: success rate (66.7%), failed/refunded/canceled counts
+  - Plan distribution visual bar chart with percentages
+  - Recent payments table with color-coded status badges
+  - All data from real database
+
+- Feature #72: Superadmin UTM attribution analytics ✅
+  - New GET /api/admin/stats/utm endpoint
+  - Registration captures UTM params (source, medium, campaign, content, term) from URL
+  - Updated POST /api/auth/register to store UTM fields
+  - Frontend Register page captures URL query params (?utm_source=google&utm_campaign=spring)
+  - Admin dashboard shows: Registration Sources chart, UTM Campaigns chart, Registration Trends
+  - Seeded 9 test users with UTM data across google/facebook/twitter/newsletter sources
+
+CURRENT STATUS: ~97/205 features passing (94 + 3 new from this session)
+
 === Session 2026-03-11 (batch #18, #26, #29) ===
 
 - Feature #18: Therapist can refresh/regenerate invite code ✅
@@ -585,7 +612,30 @@ TECHNICAL NOTES (Timeline Session):
   - Codes are 8-char lowercase hex, generated via crypto randomBytes
   - Each therapist gets exactly one invite code, refreshable via regenerate
 
-CURRENT STATUS: ~81/205 features passing (estimate, other agents also working)
+- Feature #52: Encryption key rotation supported ✅
+  - Encrypt data with current key, rotate, encrypt new data with new key
+  - Old data still decrypts correctly after rotation
+  - Key statuses updated: old key -> 'rotated' with rotated_at, new key -> 'active'
+  - Encrypted format includes correct version prefix
+  - All 8 verification checks pass, no mock data patterns
+
+- Feature #60: Session management secure ✅
+  - HttpOnly cookie set on login (session_token)
+  - SameSite=Strict attribute set
+  - MaxAge=86400 (24 hours), matching JWT expiry
+  - JWT has valid exp claim (24h from iat)
+  - Logout clears session cookie (expires in past)
+  - After logout, auth fails (401), protected routes redirect to /login
+  - All 10 verification checks pass
+
+- Feature #65: Therapist notes management in web panel ✅
+  - Create notes via web form (textarea + Save Note button)
+  - Notes appear in list with timestamps
+  - Search by keyword filters notes (server-side decrypted search)
+  - Non-matching search returns 0 results
+  - Browser verified: note creation, list display, search with zero console errors
+
+CURRENT STATUS: ~97/205 features passing (estimate, other agents also working)
 
 NEXT UP:
 - More Stripe features (cancellation, expiry)
