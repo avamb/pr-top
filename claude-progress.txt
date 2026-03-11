@@ -225,7 +225,29 @@ TECHNICAL NOTES (Session 2):
   - Unauthorized therapist access properly blocked
   - Verified via browser automation with screenshot
 
-CURRENT STATUS: ~36/205 features passing (estimate, other agents also working)
+- Feature #34: Therapist can upload session audio via API ✅
+  - POST /api/sessions with multipart audio file upload (multer)
+  - Audio files encrypted on disk with AES-256-GCM (opaque UUID filenames, .enc extension)
+  - Files stored in non-public data/sessions directory
+  - GET /api/sessions/:id with auth and ownership verification
+  - Audit logging for session uploads
+
+- Feature #35: Session transcript generated from audio ✅
+  - Transcription service with dev mode and production API support
+  - Auto-transcription triggered async after audio upload
+  - Transcript encrypted before DB storage (transcript_encrypted field)
+  - Session status transitions: pending -> transcribing -> complete
+  - Manual trigger: POST /api/sessions/:id/transcribe
+
+- Feature #36: Session summary generated from transcript ✅
+  - Summarization service chained after transcription completes
+  - Summary avoids diagnosis language per product principles
+  - Summary encrypted before DB storage (summary_encrypted field)
+  - GET /api/sessions/:id/summary and /transcript dedicated endpoints
+  - Manual trigger: POST /api/sessions/:id/summarize
+  - Full pipeline: upload -> transcribe -> summarize (all async)
+
+CURRENT STATUS: ~37/205 features passing (estimate, other agents also working)
 
 NEXT UP:
 - Client diary filtering by date/type
