@@ -1,5 +1,23 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-11_22:54 (features #115, #116) ===
+
+- Feature #115: Empty state shown when no sessions exist ✅
+  - Enhanced sessions tab empty state with 🎧 icon, heading, and helpful hint
+  - Consistent with diary/notes empty state pattern
+  - Verified with browser automation on client with 0 sessions
+  - Zero console errors
+
+- Feature #116: Client list empty state for new therapist ✅
+  - Enhanced empty client list with 👥 icon, heading, hint about invite code
+  - Added "View Invite Code" button navigating to dashboard
+  - Search empty state also enhanced with 🔍 icon
+  - Added i18n translations for en/ru/es
+  - Verified with newly registered therapist (0 clients)
+  - Zero console errors
+
+CURRENT STATUS: ~132/205 features passing
+
 === Session 2026-03-11_22:47 (features #113, #114) ===
 
 - Feature #113: Empty state shown when no diary entries exist ✅
