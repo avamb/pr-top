@@ -178,6 +178,9 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
+      <a href="#main-content" className="skip-to-content">
+        Skip to main content
+      </a>
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <h1 className="text-xl font-bold text-primary">PsyLink Dashboard</h1>
@@ -194,7 +197,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main id="main-content" className="max-w-7xl mx-auto px-4 py-8">
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             Failed to load dashboard data: {error}

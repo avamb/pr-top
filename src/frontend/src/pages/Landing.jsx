@@ -135,8 +135,13 @@ const highlights = [
 export default function Landing() {
   return (
     <div className="min-h-screen bg-background font-sans">
+      {/* ─── Skip to content ─── */}
+      <a href="#main-content" className="skip-to-content">
+        Skip to main content
+      </a>
+
       {/* ─── Navbar ─── */}
-      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur border-b border-surface">
+      <nav aria-label="Main navigation" className="sticky top-0 z-50 bg-white/80 backdrop-blur border-b border-surface">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
           <span className="text-xl font-bold text-primary tracking-tight">PsyLink</span>
           <div className="flex items-center gap-4">
@@ -153,8 +158,11 @@ export default function Landing() {
         </div>
       </nav>
 
+      {/* ─── Main Content ─── */}
+      <main id="main-content">
+
       {/* ─── Hero ─── */}
-      <section className="relative overflow-hidden">
+      <section aria-label="Hero" className="relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-24 text-center">
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-text leading-tight tracking-tight">
             Your Between-Session
@@ -188,7 +196,7 @@ export default function Landing() {
       </section>
 
       {/* ─── Features ─── */}
-      <section id="features" className="py-20 bg-surface">
+      <section id="features" aria-label="Features" className="py-20 bg-surface">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold text-text">
@@ -218,7 +226,7 @@ export default function Landing() {
       </section>
 
       {/* ─── Pricing ─── */}
-      <section id="pricing" className="py-20 bg-background">
+      <section id="pricing" aria-label="Pricing" className="py-20 bg-background">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold text-text">
@@ -284,6 +292,8 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      </main>
 
       {/* ─── Footer ─── */}
       <footer className="bg-text text-white/70">

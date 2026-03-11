@@ -65,7 +65,10 @@ export default function Register() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
+      <a href="#main-content" className="skip-to-content">
+        Skip to main content
+      </a>
+      <main id="main-content" className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-primary">PsyLink</h1>
           <p className="text-secondary mt-2">Create your therapist account</p>
@@ -148,7 +151,7 @@ export default function Register() {
             </Link>
           </p>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
