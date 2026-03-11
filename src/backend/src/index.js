@@ -31,10 +31,38 @@ app.use(cors({
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'development' ? 10000 : 100, // limit each IP to N requests per windowMs
-  message: { error: 'Too many requests, please try again later.' }
+  max: process.env.RATE_LIMIT_MAX ? parseInt(process.env.RATE_LIMIT_MAX) : (process.env.NODE_ENV === 'development' ? 10000 : 100),
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: true, // Include `X-RateLimit-*` headers
+  message: { error: 'Too many requests, please try again later.', retryAfter: '15 minutes' },
+  handler: (req, res, next, options) => {
+    const retryAfterSeconds = Math.ceil((options.windowMs - (Date.now() % options.windowMs)) / 1000);
+    res.status(429).json({
+      error: 'Too many requests, please try again later.',
+      retryAfter: retryAfterSeconds,
+      retryAfterMs: retryAfterSeconds * 1000
+    });
+  }
 });
 app.use('/api/', limiter);
+
+// Auth-specific rate limiting (stricter for login/register)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: process.env.AUTH_RATE_LIMIT_MAX ? parseInt(process.env.AUTH_RATE_LIMIT_MAX) : (process.env.NODE_ENV === 'development' ? 1000 : 20),
+  standardHeaders: true,
+  legacyHeaders: true,
+  handler: (req, res, next, options) => {
+    const retryAfterSeconds = Math.ceil((options.windowMs - (Date.now() % options.windowMs)) / 1000);
+    res.status(429).json({
+      error: 'Too many authentication attempts, please try again later.',
+      retryAfter: retryAfterSeconds,
+      retryAfterMs: retryAfterSeconds * 1000
+    });
+  }
+});
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
 
 // Webhook routes MUST be mounted before JSON body parser (needs raw body for signature verification)
 app.use('/api/webhooks', webhookRoutes);
