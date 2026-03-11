@@ -18,6 +18,7 @@ function ClientDetail() {
   const [notesTotal, setNotesTotal] = useState(0);
   const [newNoteContent, setNewNoteContent] = useState('');
   const [creatingNote, setCreatingNote] = useState(false);
+  const [notesSearch, setNotesSearch] = useState('');
   const [context, setContext] = useState(null);
   const [contextForm, setContextForm] = useState({ anamnesis: '', current_goals: '', contraindications: '', ai_instructions: '' });
   const [contextSaving, setContextSaving] = useState(false);
@@ -119,9 +120,13 @@ function ClientDetail() {
     }
   }
 
-  async function fetchNotes() {
+  async function fetchNotes(search) {
     try {
-      const res = await fetch(`${API}/clients/${id}/notes`, {
+      const params = new URLSearchParams();
+      const q = search !== undefined ? search : notesSearch;
+      if (q) params.set('search', q);
+      const qs = params.toString();
+      const res = await fetch(`${API}/clients/${id}/notes${qs ? '?' + qs : ''}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Failed to fetch notes');
@@ -587,6 +592,52 @@ function ClientDetail() {
                 {importMsg}
               </div>
             )}
+
+            {/* Search Notes */}
+            <div className="mb-4">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={notesSearch}
+                  onChange={(e) => {
+                    setNotesSearch(e.target.value);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      fetchNotes(notesSearch);
+                    }
+                  }}
+                  placeholder="Search notes by keyword..."
+                  className="w-full border border-stone-300 rounded-lg pl-10 pr-20 py-2 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                />
+                <svg className="absolute left-3 top-2.5 h-4 w-4 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <div className="absolute right-2 top-1.5 flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => fetchNotes(notesSearch)}
+                    className="px-3 py-1 bg-teal-600 text-white rounded text-xs font-medium hover:bg-teal-700"
+                  >
+                    Search
+                  </button>
+                  {notesSearch && (
+                    <button
+                      type="button"
+                      onClick={() => { setNotesSearch(''); fetchNotes(''); }}
+                      className="px-2 py-1 bg-stone-200 text-stone-600 rounded text-xs font-medium hover:bg-stone-300"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+              {notesSearch && (
+                <p className="text-xs text-stone-500 mt-1">
+                  Showing {notes.length} of {notesTotal} notes matching "{notesSearch}"
+                </p>
+              )}
+            </div>
 
             {/* Create Note Form */}
             <form onSubmit={handleCreateNote} className="mb-6">
