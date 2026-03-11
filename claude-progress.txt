@@ -172,10 +172,28 @@ TECHNICAL NOTES (Session 2):
   - ClientList.jsx with professional table layout
   - Dev seed endpoint for testing large datasets
 
-CURRENT STATUS: 24/205 features passing (estimate, other agents also working)
+- Feature #12: Superadmin can login to web panel ✅
+  - Seeded superadmin account (admin@psylink.app / Admin123!) on DB init
+  - Login redirects to /admin for superadmin role
+  - Created AdminDashboard page with real stats from /api/admin/stats/users
+  - GET /api/auth/me returns role 'superadmin'
+
+- Feature #69: Superadmin dashboard shows platform statistics ✅
+  - Enhanced /api/admin/stats/users: user counts, content counts, subscription breakdown
+  - Dashboard sections: User Statistics, Platform Metrics, Subscription Statistics
+  - All data from real database (therapists, clients, sessions, diary entries, notes, SOS, subscriptions)
+  - Subscription breakdown by tier (trial/basic/pro/premium)
+
+- Feature #70: Superadmin therapist management (block/unblock) ✅
+  - AdminTherapists page at /admin/therapists lists all therapists
+  - Block button sets blocked_at, prevents login (403)
+  - Unblock button clears blocked_at, restores login access
+  - Success messages shown, list auto-refreshes after action
+
+CURRENT STATUS: ~30/205 features passing (estimate, other agents also working)
 
 NEXT UP:
-- Continue with web panel features (superadmin dashboard, therapist management)
 - Client detail views (timeline, diary, notes)
 - More Stripe features (cancellation, expiry)
 - Exercise library and SOS features
+- Admin settings and audit logs pages
