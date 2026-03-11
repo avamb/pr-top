@@ -4,7 +4,7 @@ const { getDatabase, saveDatabase } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { checkClientLimit } = require('../utils/planLimits');
-const { decrypt } = require('../services/encryption');
+const { encrypt, decrypt } = require('../services/encryption');
 
 const router = express.Router();
 
@@ -224,6 +224,144 @@ router.get('/:id/diary', (req, res) => {
   } catch (error) {
     logger.error('Get client diary error: ' + error.message);
     res.status(500).json({ error: 'Failed to fetch diary entries' });
+  }
+});
+
+// POST /api/clients/:id/notes - Create encrypted therapist note for a client
+router.post('/:id/notes', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+    const { content, session_date } = req.body;
+
+    if (!content || typeof content !== 'string' || content.trim().length === 0) {
+      return res.status(400).json({ error: 'Note content is required' });
+    }
+
+    // Verify client belongs to this therapist
+    const clientResult = db.exec(
+      "SELECT id, consent_therapist_access FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [clientId, therapistId]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    }
+
+    // Encrypt the note content (Class A data)
+    const { encrypted, keyVersion, keyId } = encrypt(content.trim());
+
+    // Insert note into therapist_notes table
+    db.run(
+      `INSERT INTO therapist_notes (therapist_id, client_id, note_encrypted, encryption_key_id, payload_version, session_date, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+      [therapistId, clientId, encrypted, keyId, keyVersion, session_date || null]
+    );
+
+    // Get the inserted note ID immediately (before any other writes)
+    const lastIdResult = db.exec('SELECT last_insert_rowid()');
+    const noteId = lastIdResult[0].values[0][0];
+
+    // Record in audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      [therapistId, 'create_note', 'therapist_note', noteId, JSON.stringify({ client_id: clientId })]
+    );
+    saveDatabase();
+
+    logger.info(`Therapist ${therapistId} created note ${noteId} for client ${clientId}`);
+
+    res.status(201).json({
+      id: noteId,
+      therapist_id: therapistId,
+      client_id: parseInt(clientId),
+      content: content.trim(),
+      session_date: session_date || null,
+      created_at: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Create note error: ' + error.message);
+    res.status(500).json({ error: 'Failed to create note' });
+  }
+});
+
+// GET /api/clients/:id/notes - Get therapist notes for a client (decrypted)
+router.get('/:id/notes', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page) || 25));
+    const offset = (page - 1) * perPage;
+
+    // Verify client belongs to this therapist
+    const clientResult = db.exec(
+      "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [clientId, therapistId]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    }
+
+    // Get total count
+    const countResult = db.exec(
+      'SELECT COUNT(*) FROM therapist_notes WHERE therapist_id = ? AND client_id = ?',
+      [therapistId, clientId]
+    );
+    const total = countResult.length > 0 ? countResult[0].values[0][0] : 0;
+
+    // Get paginated notes
+    const result = db.exec(
+      `SELECT id, therapist_id, client_id, note_encrypted, encryption_key_id, payload_version, session_date, created_at, updated_at
+       FROM therapist_notes
+       WHERE therapist_id = ? AND client_id = ?
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`,
+      [therapistId, clientId, perPage, offset]
+    );
+
+    const notes = (result.length > 0 ? result[0].values : []).map(row => {
+      let content = null;
+      try {
+        if (row[3]) {
+          content = decrypt(row[3]);
+        }
+      } catch (e) {
+        logger.error(`Failed to decrypt note ${row[0]}: ${e.message}`);
+        content = '[decryption error]';
+      }
+
+      return {
+        id: row[0],
+        therapist_id: row[1],
+        client_id: row[2],
+        content: content,
+        session_date: row[6],
+        created_at: row[7],
+        updated_at: row[8]
+      };
+    });
+
+    // Record data access in audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      [therapistId, 'read_notes', 'client', clientId, JSON.stringify({ notes_count: notes.length, page })]
+    );
+    saveDatabase();
+
+    res.json({
+      notes,
+      total,
+      page,
+      per_page: perPage,
+      total_pages: Math.ceil(total / perPage)
+    });
+  } catch (error) {
+    logger.error('Get client notes error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch notes' });
   }
 });
 

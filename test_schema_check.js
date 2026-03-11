@@ -1,29 +1,14 @@
-const path = require('path');
-const fs = require('fs');
+const Database = require('better-sqlite3');
+const db = new Database('./src/backend/data/psylink.db');
 
-const backendDir = path.join(__dirname, 'src', 'backend');
-const initSqlJs = require(path.join(backendDir, 'node_modules', 'sql.js'));
+const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all();
+console.log('=== TABLES ===');
+console.log(tables.map(t => t.name).join('\n'));
 
-async function main() {
-  const SQL = await initSqlJs();
-  const dbPath = path.join(backendDir, 'data', 'psylink.db');
-  const buffer = fs.readFileSync(dbPath);
-  const db = new SQL.Database(buffer);
-
-  const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
-  if (tables.length > 0) {
-    const tableNames = tables[0].values.map(r => r[0]);
-    console.log('Tables (' + tableNames.length + '):', tableNames.join(', '));
-
-    for (const name of tableNames) {
-      const cols = db.exec('PRAGMA table_info(' + name + ')');
-      if (cols.length > 0) {
-        const colNames = cols[0].values.map(r => r[1]);
-        console.log('\n' + name + ':', colNames.join(', '));
-      }
-    }
-  }
-
-  db.close();
+console.log('\n=== COLUMNS ===');
+for (const t of tables) {
+  const cols = db.prepare('PRAGMA table_info(' + t.name + ')').all();
+  console.log('\n' + t.name + ': ' + cols.map(c => c.name).join(', '));
 }
-main().catch(console.error);
+
+db.close();
