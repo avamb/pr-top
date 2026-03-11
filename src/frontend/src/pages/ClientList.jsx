@@ -11,7 +11,7 @@ function debounce(fn, ms) {
   };
 }
 
-function ClientRow({ client }) {
+function ClientRow({ client, onClick }) {
   const consentColor = client.consent_therapist_access
     ? 'bg-green-100 text-green-700'
     : 'bg-gray-100 text-gray-600';
@@ -20,8 +20,8 @@ function ClientRow({ client }) {
   const date = new Date(client.created_at);
 
   return (
-    <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-      <td className="px-4 py-3 text-sm font-medium text-text">{displayName}</td>
+    <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer" onClick={onClick}>
+      <td className="px-4 py-3 text-sm font-medium text-primary hover:underline">{displayName}</td>
       <td className="px-4 py-3 text-sm text-secondary">{client.telegram_id || '—'}</td>
       <td className="px-4 py-3 text-sm text-secondary">{client.language?.toUpperCase() || 'EN'}</td>
       <td className="px-4 py-3">
@@ -219,7 +219,7 @@ export default function ClientList() {
                   ))
                 ) : clients.length > 0 ? (
                   clients.map(client => (
-                    <ClientRow key={client.id} client={client} />
+                    <ClientRow key={client.id} client={client} onClick={() => navigate(`/clients/${client.id}`)} />
                   ))
                 ) : (
                   <tr>
