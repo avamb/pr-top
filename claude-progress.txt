@@ -483,7 +483,34 @@ TECHNICAL NOTES (Timeline Session):
   - Details include metadata (entries_count, page, context_id)
   - Verified via admin audit log API
 
-CURRENT STATUS: ~70/205 features passing (estimate, other agents also working)
+- Feature #8: Navigation displays correctly based on auth state ✅
+  - Created shared Sidebar component with role-based nav items
+  - Created AppLayout wrapper for authenticated pages
+  - Therapist sidebar: Dashboard, Clients, Exercise Library, Analytics, Subscription, Settings
+  - Superadmin sidebar: all therapist items + Administration section (Overview, Therapists, Settings, Audit Logs)
+  - Active nav item highlighted (teal for therapist items, red for admin items)
+  - Admin badge shown next to PsyLink brand for superadmin
+  - Removed duplicate inline headers/nav from all 11 pages
+  - Landing page retains public nav (login/register links)
+  - User email and logout button in sidebar footer
+  - Zero console errors, verified via browser automation
+
+- Feature #145: Login form has proper styling and layout ✅
+  - Form centered on page with flex layout
+  - Teal primary color on submit button
+  - Proper input field styling with focus ring
+  - Appropriate spacing, padding, and design system colors
+  - Zero console errors
+
+- Feature #184: Landing page responsive at tablet (768px) ✅
+  - Hero section adapts with centered text and side-by-side CTA buttons
+  - Features section displays in 2-column grid (md:grid-cols-2)
+  - Pricing cards display in 2-column grid (sm:grid-cols-2)
+  - Footer adapts to 2 columns
+  - No horizontal scroll at 768px viewport
+  - Zero console errors
+
+CURRENT STATUS: ~75/205 features passing (estimate, other agents also working)
 
 NEXT UP:
 - More Stripe features (cancellation, expiry)
