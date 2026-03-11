@@ -777,6 +777,121 @@ router.get('/:id/timeline', (req, res) => {
   }
 });
 
+// GET /api/clients/:id/sessions - Get sessions for a client
+router.get('/:id/sessions', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page) || 25));
+    const offset = (page - 1) * perPage;
+
+    // Verify client belongs to this therapist
+    const clientResult = db.exec(
+      "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [clientId, therapistId]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    }
+
+    // Get total count
+    const countResult = db.exec(
+      'SELECT COUNT(*) FROM sessions WHERE therapist_id = ? AND client_id = ?',
+      [therapistId, clientId]
+    );
+    const total = countResult.length > 0 ? countResult[0].values[0][0] : 0;
+
+    // Get paginated sessions
+    const result = db.exec(
+      `SELECT id, audio_ref, transcript_encrypted, summary_encrypted, status, scheduled_at, created_at, updated_at
+       FROM sessions
+       WHERE therapist_id = ? AND client_id = ?
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`,
+      [therapistId, clientId, perPage, offset]
+    );
+
+    const sessions = (result.length > 0 ? result[0].values : []).map(row => {
+      let summary = null;
+      try { if (row[3]) summary = decrypt(row[3]); } catch (e) { summary = '[decryption error]'; }
+
+      return {
+        id: row[0],
+        has_audio: !!row[1],
+        has_transcript: !!row[2],
+        summary: summary,
+        status: row[4],
+        scheduled_at: row[5],
+        created_at: row[6],
+        updated_at: row[7]
+      };
+    });
+
+    res.json({
+      sessions,
+      total,
+      page,
+      per_page: perPage,
+      total_pages: Math.ceil(total / perPage)
+    });
+  } catch (error) {
+    logger.error('Get client sessions error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch sessions' });
+  }
+});
+
+// GET /api/clients/:id/exercises - Get exercise deliveries for a client
+router.get('/:id/exercises', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+
+    // Verify client belongs to this therapist
+    const clientResult = db.exec(
+      "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [clientId, therapistId]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    }
+
+    // Get exercise deliveries for this client
+    const result = db.exec(
+      `SELECT ed.id, ed.exercise_id, ed.status, ed.sent_at, ed.completed_at,
+              e.title_en, e.title_ru, e.title_es, e.category, e.description_en
+       FROM exercise_deliveries ed
+       LEFT JOIN exercises e ON ed.exercise_id = e.id
+       WHERE ed.therapist_id = ? AND ed.client_id = ?
+       ORDER BY ed.sent_at DESC`,
+      [therapistId, clientId]
+    );
+
+    const deliveries = (result.length > 0 ? result[0].values : []).map(row => ({
+      id: row[0],
+      exercise_id: row[1],
+      status: row[2],
+      sent_at: row[3],
+      completed_at: row[4],
+      exercise_title: row[5] || row[6] || row[7] || 'Unknown',
+      exercise_category: row[8],
+      exercise_description: row[9]
+    }));
+
+    res.json({
+      deliveries,
+      total: deliveries.length
+    });
+  } catch (error) {
+    logger.error('Get client exercises error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch exercise deliveries' });
+  }
+});
+
 // POST /api/clients/link - Link a client to this therapist (via invite code)
 router.post('/link', (req, res) => {
   try {

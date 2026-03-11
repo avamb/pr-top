@@ -29,6 +29,12 @@ function ClientDetail() {
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineStartDate, setTimelineStartDate] = useState('');
   const [timelineEndDate, setTimelineEndDate] = useState('');
+  const [sessions, setSessions] = useState([]);
+  const [sessionsTotal, setSessionsTotal] = useState(0);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [exercises, setExercises] = useState([]);
+  const [exercisesTotal, setExercisesTotal] = useState(0);
+  const [exercisesLoading, setExercisesLoading] = useState(false);
   const token = localStorage.getItem('token');
 
   useEffect(() => {
@@ -41,6 +47,8 @@ function ClientDetail() {
     fetchNotes();
     fetchContext();
     fetchTimeline();
+    fetchSessions();
+    fetchExercises();
   }, [id, typeFilter, dateFrom, dateTo, timelineStartDate, timelineEndDate]);
 
   async function fetchClient() {
@@ -207,6 +215,40 @@ function ClientDetail() {
     }
   }
 
+  async function fetchSessions() {
+    try {
+      setSessionsLoading(true);
+      const res = await fetch(`${API}/clients/${id}/sessions`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch sessions');
+      const data = await res.json();
+      setSessions(data.sessions);
+      setSessionsTotal(data.total);
+    } catch (e) {
+      console.error('Sessions fetch error:', e.message);
+    } finally {
+      setSessionsLoading(false);
+    }
+  }
+
+  async function fetchExercises() {
+    try {
+      setExercisesLoading(true);
+      const res = await fetch(`${API}/clients/${id}/exercises`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch exercises');
+      const data = await res.json();
+      setExercises(data.deliveries);
+      setExercisesTotal(data.total);
+    } catch (e) {
+      console.error('Exercises fetch error:', e.message);
+    } finally {
+      setExercisesLoading(false);
+    }
+  }
+
   const timelineTypeIcon = (item) => {
     switch(item.type) {
       case 'diary': return item.entry_type === 'voice' ? '🎤' : item.entry_type === 'video' ? '🎥' : '📝';
@@ -295,6 +337,14 @@ function ClientDetail() {
             onClick={() => setActiveTab('notes')}
             className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'notes' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >🗒️ Notes ({notesTotal})</button>
+          <button
+            onClick={() => setActiveTab('sessions')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'sessions' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+          >🎧 Sessions ({sessionsTotal})</button>
+          <button
+            onClick={() => setActiveTab('exercises')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'exercises' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+          >💪 Exercises ({exercisesTotal})</button>
           <button
             onClick={() => setActiveTab('context')}
             className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'context' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
@@ -529,6 +579,98 @@ function ClientDetail() {
                 </button>
               </div>
             </form>
+          </div>
+        )}
+
+        {/* Sessions Tab */}
+        {activeTab === 'sessions' && (
+          <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6 mb-6">
+            <h3 className="text-lg font-semibold text-stone-800 mb-4">Session History ({sessionsTotal})</h3>
+            {sessionsLoading ? (
+              <p className="text-stone-500 text-center py-8">Loading sessions...</p>
+            ) : sessions.length === 0 ? (
+              <p className="text-stone-400 text-center py-8">No sessions recorded yet.</p>
+            ) : (
+              <div className="space-y-4">
+                {sessions.map(session => (
+                  <div key={session.id} className="border border-stone-200 rounded-lg p-4 hover:border-teal-300 transition-colors">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">🎧</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          session.status === 'complete' ? 'bg-green-100 text-green-800' :
+                          session.status === 'transcribing' ? 'bg-blue-100 text-blue-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {session.status}
+                        </span>
+                      </div>
+                      <span className="text-xs text-stone-400">
+                        {new Date(session.created_at).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex gap-3 text-xs text-stone-500 mb-2">
+                      <span>{session.has_audio ? '🔊 Audio' : '❌ No audio'}</span>
+                      <span>{session.has_transcript ? '📄 Transcript' : '❌ No transcript'}</span>
+                      <span>{session.summary ? '📋 Summary' : '❌ No summary'}</span>
+                    </div>
+                    {session.summary && (
+                      <div className="p-3 bg-green-50 rounded-lg text-sm text-stone-700">
+                        <p className="whitespace-pre-wrap">{session.summary.length > 300 ? session.summary.substring(0, 300) + '...' : session.summary}</p>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => navigate(`/sessions/${session.id}`)}
+                      className="mt-2 text-sm text-teal-600 hover:text-teal-700 font-medium"
+                    >View Session Details &rarr;</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Exercises Tab */}
+        {activeTab === 'exercises' && (
+          <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6 mb-6">
+            <h3 className="text-lg font-semibold text-stone-800 mb-4">Exercises ({exercisesTotal})</h3>
+            {exercisesLoading ? (
+              <p className="text-stone-500 text-center py-8">Loading exercises...</p>
+            ) : exercises.length === 0 ? (
+              <p className="text-stone-400 text-center py-8">No exercises sent to this client yet.</p>
+            ) : (
+              <div className="space-y-4">
+                {exercises.map(delivery => (
+                  <div key={delivery.id} className="border border-stone-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">💪</span>
+                        <span className="font-medium text-stone-700">{delivery.exercise_title}</span>
+                        {delivery.exercise_category && (
+                          <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-800 rounded-full">
+                            {delivery.exercise_category}
+                          </span>
+                        )}
+                      </div>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        delivery.status === 'completed' ? 'bg-green-100 text-green-800' :
+                        delivery.status === 'acknowledged' ? 'bg-blue-100 text-blue-800' :
+                        'bg-amber-100 text-amber-800'
+                      }`}>
+                        {delivery.status}
+                      </span>
+                    </div>
+                    {delivery.exercise_description && (
+                      <p className="text-sm text-stone-600 mt-1">{delivery.exercise_description}</p>
+                    )}
+                    <div className="text-xs text-stone-400 mt-2">
+                      Sent: {new Date(delivery.sent_at).toLocaleString()}
+                      {delivery.completed_at && ` • Completed: ${new Date(delivery.completed_at).toLocaleString()}`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
