@@ -322,6 +322,7 @@ router.post('/:id/notes', (req, res) => {
 });
 
 // GET /api/clients/:id/notes - Get therapist notes for a client (decrypted)
+// Supports ?search=keyword to filter notes by decrypted content
 router.get('/:id/notes', (req, res) => {
   try {
     const db = getDatabase();
@@ -329,7 +330,7 @@ router.get('/:id/notes', (req, res) => {
     const clientId = req.params.id;
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page) || 25));
-    const offset = (page - 1) * perPage;
+    const searchQuery = (req.query.search || '').trim().toLowerCase();
 
     // Verify client belongs to this therapist
     const clientResult = db.exec(
@@ -341,24 +342,16 @@ router.get('/:id/notes', (req, res) => {
       return res.status(404).json({ error: 'Client not found or not linked to you' });
     }
 
-    // Get total count
-    const countResult = db.exec(
-      'SELECT COUNT(*) FROM therapist_notes WHERE therapist_id = ? AND client_id = ?',
-      [therapistId, clientId]
-    );
-    const total = countResult.length > 0 ? countResult[0].values[0][0] : 0;
-
-    // Get paginated notes
+    // Get all notes (need to decrypt for search filtering, then paginate)
     const result = db.exec(
       `SELECT id, therapist_id, client_id, note_encrypted, encryption_key_id, payload_version, session_date, created_at, updated_at
        FROM therapist_notes
        WHERE therapist_id = ? AND client_id = ?
-       ORDER BY created_at DESC
-       LIMIT ? OFFSET ?`,
-      [therapistId, clientId, perPage, offset]
+       ORDER BY created_at DESC`,
+      [therapistId, clientId]
     );
 
-    const notes = (result.length > 0 ? result[0].values : []).map(row => {
+    let allNotes = (result.length > 0 ? result[0].values : []).map(row => {
       let content = null;
       try {
         if (row[3]) {
@@ -380,10 +373,21 @@ router.get('/:id/notes', (req, res) => {
       };
     });
 
+    // Filter by search query if provided (searches decrypted content)
+    if (searchQuery) {
+      allNotes = allNotes.filter(note =>
+        note.content && note.content.toLowerCase().includes(searchQuery)
+      );
+    }
+
+    const total = allNotes.length;
+    const offset = (page - 1) * perPage;
+    const notes = allNotes.slice(offset, offset + perPage);
+
     // Record data access in audit log
     db.run(
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
-      [therapistId, 'read_notes', 'client', clientId, JSON.stringify({ notes_count: notes.length, page })]
+      [therapistId, 'read_notes', 'client', clientId, JSON.stringify({ notes_count: notes.length, page, search: searchQuery || undefined })]
     );
     saveDatabase();
 
