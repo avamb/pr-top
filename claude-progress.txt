@@ -353,10 +353,30 @@ TECHNICAL NOTES (Timeline Session):
   - Audit log records sos_notification_sent events
   - Zero console errors in browser verification
 
-CURRENT STATUS: ~52/205 features passing (estimate, other agents also working)
+- Feature #22: Client can revoke consent at any time ✅
+  - POST /api/bot/revoke-consent endpoint
+  - Sets consent_therapist_access=0 and therapist_id=NULL immediately
+  - Therapist loses access to client list, diary, notes, timeline
+  - Audit log records consent_revoked event
+  - Verified end-to-end: link → diary → revoke → verify blocked
+
+- Feature #161: Shareable filter URLs preserve filter state ✅
+  - URL query params sync: tab, type, date_from, date_to, tl_start, tl_end
+  - useSearchParams from react-router-dom for URL read/write
+  - Filter state initialized from URL on page load
+  - URL updates on filter change with replace:true (no history pollution)
+  - Verified: tab, type filter, date filter all persist across page reload
+
+- Feature #169: Blocking therapist cascades to restrict all access ✅
+  - Blocked therapist gets 403 on /me, /clients, /dashboard, login
+  - Web UI shows "Your account has been blocked" error on login
+  - Client data preserved (user record, diary entries intact)
+  - Pre-existing auth middleware checks blocked_at on every request
+
+CURRENT STATUS: ~55/205 features passing (estimate, other agents also working)
 
 NEXT UP:
-- Client consent revocation flow
 - More Stripe features (cancellation, expiry)
 - Exercise library features
 - Admin settings and audit logs pages
+- Multilingual support
