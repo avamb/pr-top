@@ -399,10 +399,33 @@ TECHNICAL NOTES (Timeline Session):
   - Navigation header with Dashboard, Clients, Analytics links
   - Zero console errors, all data from real database
 
-CURRENT STATUS: ~58/205 features passing (estimate, other agents also working)
+- Feature #40: Exercise library browsable by category ✅
+  - Created GET /api/exercises endpoint with 16 seeded exercises across 6 categories
+  - Categories: breathing, mindfulness, cognitive, journaling, behavioral, self-compassion
+  - Category filter query parameter and /categories endpoint
+  - ExerciseLibrary.jsx frontend page with filter buttons and detail modal
+  - Each exercise has title_en, title_ru, description, instructions (multilingual)
+  - Route added at /exercises, linked from dashboard
+
+- Feature #41: Therapist can send exercise to client ✅
+  - POST /api/clients/:id/exercises creates exercise_deliveries record with status 'sent'
+  - Exercise picker UI added to ClientDetail exercises tab (+ Send Exercise button)
+  - Audit logging with correct audit_logs schema (actor_id, target_type, target_id)
+  - Telegram notification logged in dev mode
+  - Validated: 400 for missing exercise_id, 401 for no auth, 404 for bad client/exercise
+
+- Feature #42: Client receives and responds to exercise ✅
+  - GET /api/bot/exercises/:telegram_id returns client's exercises with full details
+  - POST /api/bot/exercises/:delivery_id/acknowledge updates status to 'acknowledged'
+  - POST /api/bot/exercises/:delivery_id/respond stores encrypted response, sets 'completed'
+  - Response encrypted with AES-256-GCM (encrypt().encrypted format)
+  - Audit logging for exercise_completed events
+  - Data persists across server restart
+
+CURRENT STATUS: ~61/205 features passing (estimate, other agents also working)
 
 NEXT UP:
 - More Stripe features (cancellation, expiry)
-- Exercise library features
 - Admin settings and audit logs pages
 - Multilingual support
+- Additional exercise features (custom exercises, response viewing)
