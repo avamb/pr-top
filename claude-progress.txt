@@ -128,7 +128,26 @@ TECHNICAL NOTES (Session 2):
   - Pro card highlighted with "Most Popular" badge
   - CTA buttons on each card
 
-CURRENT STATUS: 16/205 features passing
+- Feature #16: Therapist can generate invite code ✅
+  - GET /api/invite-code returns therapist's current invite code
+  - POST /api/invite-code/regenerate creates new unique code (8-char alphanumeric, uppercase)
+  - InviteCodeSection component added to Dashboard with Copy and Regenerate buttons
+  - Auth-protected (401 for unauthenticated, therapist/superadmin only)
+
+- Feature #19: Client enters invite code to connect with therapist ✅
+  - POST /api/bot/connect: client enters invite code → finds therapist, returns requires_consent
+  - POST /api/bot/consent: explicit consent before linking (accept/decline)
+  - Case-insensitive invite code lookup
+  - Prevents double-connection, therapists-cannot-connect validation
+  - Bot /connect command handler with inline consent UI
+
+- Feature #20: Client sees explicit consent screen before linking ✅
+  - Two-step flow: connect (no linking) → consent (explicit accept/decline)
+  - Bot shows clear data-sharing explanation before linking
+  - Decline preserves unlinked state, accept sets consent_therapist_access=true
+  - No linking occurs until explicit consent is granted
+
+CURRENT STATUS: 21/205 features passing
 
 NEXT UP:
 - Continue with web panel features (superadmin login, dashboard views)
