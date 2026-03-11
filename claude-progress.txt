@@ -293,7 +293,30 @@ TECHNICAL NOTES (Timeline Session):
 - Timeline API returns decrypted content for all data types
 - Zero console errors across all pages
 
-CURRENT STATUS: ~43/205 features passing (estimate, other agents also working)
+- Feature #45: Therapist can add/edit client anamnesis ✅
+  - PUT /api/clients/:id/context creates/updates encrypted client context
+  - GET /api/clients/:id/context returns decrypted context fields
+  - Supports: anamnesis, current_goals, contraindications, ai_instructions
+  - All fields encrypted with AES-256-GCM (Class A data)
+  - Context tab added to ClientDetail page with 4 textarea fields
+  - Merge update: only provided fields are updated, others preserved
+  - Audit logging for context reads and writes
+  - Verified persistence across server restart
+
+- Feature #130: Context fields validate max length ✅
+  - Server-side validation rejects fields > 50,000 chars with 400 error
+  - Frontend maxLength=50000 attribute prevents exceeding limit
+  - Character counters (e.g., "53/50000") shown below each field
+  - System remains stable after oversized requests
+
+- Feature #156: Page state preserved after API error recovery ✅
+  - Dashboard skeleton only shows on initial load, not when data already exists
+  - Diary error shows retry button instead of clearing loaded entries
+  - Context form preserves user input across save failures
+  - Error banners shown alongside existing data, not replacing it
+  - Retry button added to dashboard error banner
+
+CURRENT STATUS: ~46/205 features passing (estimate, other agents also working)
 
 NEXT UP:
 - Client consent revocation flow
