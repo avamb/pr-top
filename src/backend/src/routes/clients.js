@@ -23,31 +23,38 @@ router.get('/', (req, res) => {
     const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page) || 25));
     const languageFilter = req.query.language || '';
 
-    // Build query with optional filters
-    let whereClause = "therapist_id = ? AND role = 'client'";
+    // Build query with optional filters (use u. prefix for aliased queries)
+    let whereClause = "u.therapist_id = ? AND u.role = 'client'";
     const params = [therapistId];
 
     if (search) {
-      whereClause += " AND (email LIKE ? OR telegram_id LIKE ?)";
+      whereClause += " AND (u.email LIKE ? OR u.telegram_id LIKE ?)";
       params.push(`%${search}%`, `%${search}%`);
     }
 
     if (languageFilter) {
-      whereClause += " AND language = ?";
+      whereClause += " AND u.language = ?";
       params.push(languageFilter);
     }
 
     // Get total count
-    const countResult = db.exec(`SELECT COUNT(*) FROM users WHERE ${whereClause}`, params);
+    const countResult = db.exec(`SELECT COUNT(*) FROM users u WHERE ${whereClause}`, params);
     const total = countResult.length > 0 ? countResult[0].values[0][0] : 0;
 
-    // Get paginated results
+    // Get paginated results with last activity indicator
     const offset = (page - 1) * perPage;
     const result = db.exec(
-      `SELECT id, telegram_id, email, consent_therapist_access, language, created_at, updated_at
-       FROM users
+      `SELECT u.id, u.telegram_id, u.email, u.consent_therapist_access, u.language, u.created_at, u.updated_at,
+              (SELECT MAX(created_at) FROM (
+                SELECT created_at FROM diary_entries WHERE client_id = u.id
+                UNION ALL
+                SELECT created_at FROM therapist_notes WHERE client_id = u.id
+                UNION ALL
+                SELECT created_at FROM sessions WHERE client_id = u.id
+              )) AS last_activity
+       FROM users u
        WHERE ${whereClause}
-       ORDER BY created_at DESC
+       ORDER BY last_activity DESC NULLS LAST, u.created_at DESC
        LIMIT ? OFFSET ?`,
       [...params, perPage, offset]
     );
@@ -59,7 +66,8 @@ router.get('/', (req, res) => {
       consent_therapist_access: !!row[3],
       language: row[4],
       created_at: row[5],
-      updated_at: row[6]
+      updated_at: row[6],
+      last_activity: row[7] || null
     }));
 
     // Also include limit info
@@ -827,6 +835,123 @@ router.post('/link', (req, res) => {
   } catch (error) {
     logger.error('Link client error: ' + error.message);
     res.status(500).json({ error: 'Failed to link client' });
+  }
+});
+
+// GET /api/clients/:id/sos - Get SOS events for a client
+router.get('/:id/sos', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+
+    // Verify client belongs to this therapist
+    const clientResult = db.exec(
+      "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [clientId, therapistId]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    }
+
+    const result = db.exec(
+      `SELECT id, client_id, therapist_id, message_encrypted, encryption_key_id, status, created_at, acknowledged_at
+       FROM sos_events WHERE client_id = ? AND therapist_id = ?
+       ORDER BY created_at DESC`,
+      [clientId, therapistId]
+    );
+
+    const events = (result.length > 0 ? result[0].values : []).map(row => {
+      let message = null;
+      try {
+        if (row[3]) message = decrypt(row[3]);
+      } catch (e) {
+        logger.error('Failed to decrypt SOS message: ' + e.message);
+        message = '[decryption error]';
+      }
+
+      return {
+        id: row[0],
+        client_id: row[1],
+        therapist_id: row[2],
+        message: message,
+        status: row[5],
+        created_at: row[6],
+        acknowledged_at: row[7]
+      };
+    });
+
+    res.json({ sos_events: events, total: events.length });
+  } catch (error) {
+    logger.error('Get SOS events error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch SOS events' });
+  }
+});
+
+// PUT /api/clients/:id/sos/:sosId/acknowledge - Therapist acknowledges SOS event
+router.put('/:id/sos/:sosId/acknowledge', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+    const sosId = req.params.sosId;
+
+    // Verify client belongs to this therapist
+    const clientResult = db.exec(
+      "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [clientId, therapistId]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    }
+
+    // Verify SOS event exists and belongs to this therapist/client
+    const sosResult = db.exec(
+      'SELECT id, status FROM sos_events WHERE id = ? AND client_id = ? AND therapist_id = ?',
+      [sosId, clientId, therapistId]
+    );
+
+    if (sosResult.length === 0 || sosResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'SOS event not found' });
+    }
+
+    const currentStatus = sosResult[0].values[0][1];
+    if (currentStatus === 'acknowledged' || currentStatus === 'resolved') {
+      return res.json({
+        message: 'SOS event already ' + currentStatus,
+        sos_event: { id: parseInt(sosId), status: currentStatus }
+      });
+    }
+
+    // Update SOS event status to acknowledged
+    db.run(
+      "UPDATE sos_events SET status = 'acknowledged', acknowledged_at = datetime('now') WHERE id = ?",
+      [sosId]
+    );
+
+    // Record in audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      [therapistId, 'sos_acknowledged', 'sos_event', sosId, JSON.stringify({ client_id: parseInt(clientId), therapist_id: therapistId })]
+    );
+    saveDatabase();
+
+    logger.info(`Therapist ${therapistId} acknowledged SOS event #${sosId} for client ${clientId}`);
+
+    res.json({
+      message: 'SOS event acknowledged',
+      sos_event: {
+        id: parseInt(sosId),
+        client_id: parseInt(clientId),
+        therapist_id: therapistId,
+        status: 'acknowledged'
+      }
+    });
+  } catch (error) {
+    logger.error('Acknowledge SOS error: ' + error.message);
+    res.status(500).json({ error: 'Failed to acknowledge SOS event' });
   }
 });
 
