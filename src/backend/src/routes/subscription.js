@@ -5,6 +5,7 @@ const express = require('express');
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { createCustomer, getCustomer, isConfigured, isDevMode, getStripeClient } = require('../services/stripe');
+const { getClientLimit, getClientCount, checkClientLimit } = require('../utils/planLimits');
 const jwt = require('jsonwebtoken');
 
 const router = express.Router();
@@ -210,6 +211,117 @@ router.get('/payments', requireAuth, (req, res) => {
   } catch (error) {
     logger.error('Get payments error: ' + error.message);
     res.status(500).json({ error: 'Failed to get payments' });
+  }
+});
+
+// POST /api/subscription/change-plan
+// Change subscription plan (upgrade or downgrade)
+router.post('/change-plan', requireAuth, (req, res) => {
+  try {
+    const db = getDatabase();
+    const userId = req.user.userId;
+    const { plan: newPlan } = req.body;
+
+    const validPlans = ['trial', 'basic', 'pro', 'premium'];
+    if (!newPlan || !validPlans.includes(newPlan)) {
+      return res.status(400).json({ error: 'Invalid plan. Must be one of: ' + validPlans.join(', ') });
+    }
+
+    // Get current subscription
+    const subResult = db.exec(
+      'SELECT id, plan, status FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
+      [userId]
+    );
+
+    if (subResult.length === 0 || subResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'No subscription found' });
+    }
+
+    const subId = subResult[0].values[0][0];
+    const currentPlan = subResult[0].values[0][1];
+    const currentStatus = subResult[0].values[0][2];
+
+    if (currentStatus !== 'active') {
+      return res.status(400).json({ error: 'Subscription is not active' });
+    }
+
+    if (currentPlan === newPlan) {
+      return res.status(400).json({ error: 'Already on this plan' });
+    }
+
+    // Determine if this is an upgrade or downgrade
+    const planOrder = { trial: 0, basic: 1, pro: 2, premium: 3 };
+    const isDowngrade = planOrder[newPlan] < planOrder[currentPlan];
+
+    // For downgrade, check if current usage exceeds new plan limits
+    let downgradeWarning = null;
+    if (isDowngrade) {
+      const currentClients = getClientCount(userId);
+      const newLimit = getClientLimit(newPlan);
+
+      if (currentClients > newLimit) {
+        downgradeWarning = {
+          message: `You currently have ${currentClients} clients but the ${newPlan} plan allows ${newLimit}. Your existing client links will be preserved, but you won't be able to add new clients until you're within the limit.`,
+          current_clients: currentClients,
+          new_limit: newLimit,
+          excess: currentClients - newLimit
+        };
+      }
+    }
+
+    // Update the subscription plan
+    const now = new Date();
+    const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
+
+    db.run(
+      `UPDATE subscriptions SET plan = ?, current_period_start = ?, current_period_end = ?, updated_at = datetime('now') WHERE id = ?`,
+      [newPlan, now.toISOString(), periodEnd.toISOString(), subId]
+    );
+    saveDatabase();
+
+    logger.info(`User ${userId} changed plan from ${currentPlan} to ${newPlan}${isDowngrade ? ' (downgrade)' : ' (upgrade)'}`);
+
+    const response = {
+      message: `Plan changed from ${currentPlan} to ${newPlan} successfully`,
+      subscription: {
+        plan: newPlan,
+        previous_plan: currentPlan,
+        is_downgrade: isDowngrade,
+        current_period_start: now.toISOString(),
+        current_period_end: periodEnd.toISOString()
+      }
+    };
+
+    if (downgradeWarning) {
+      response.downgrade_warning = downgradeWarning;
+    }
+
+    res.json(response);
+  } catch (error) {
+    logger.error('Change plan error: ' + error.message);
+    res.status(500).json({ error: 'Failed to change plan' });
+  }
+});
+
+// GET /api/subscription/limits
+// Get current plan limits and usage for the authenticated therapist
+router.get('/limits', requireAuth, (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const limitCheck = checkClientLimit(userId);
+
+    res.json({
+      plan: limitCheck.plan,
+      clients: {
+        current: limitCheck.current,
+        limit: limitCheck.limit,
+        can_add: limitCheck.allowed,
+        message: limitCheck.message
+      }
+    });
+  } catch (error) {
+    logger.error('Get limits error: ' + error.message);
+    res.status(500).json({ error: 'Failed to get plan limits' });
   }
 });
 
