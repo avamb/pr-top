@@ -394,6 +394,10 @@ function ClientDetail() {
                               <p className="whitespace-pre-wrap">{item.summary.length > 300 ? item.summary.substring(0, 300) + '...' : item.summary}</p>
                             </div>
                           )}
+                          <button
+                            onClick={() => navigate(`/sessions/${item.id}`)}
+                            className="mt-2 text-sm text-teal-600 hover:text-teal-700 font-medium"
+                          >View Session Details &rarr;</button>
                         </div>
                       )}
                     </div>
@@ -579,8 +583,11 @@ function ClientDetail() {
           </div>
 
           {diaryError ? (
-            <p className="text-amber-600 text-center py-8">{diaryError}</p>
-          ) : loading ? (
+            <div className="text-center py-8">
+              <p className="text-amber-600">{diaryError}</p>
+              <button onClick={fetchDiary} className="mt-2 px-3 py-1 text-sm bg-amber-100 hover:bg-amber-200 text-amber-800 rounded">Retry</button>
+            </div>
+          ) : loading && diary.length === 0 ? (
             <p className="text-stone-500">Loading diary entries...</p>
           ) : diary.length === 0 ? (
             <p className="text-stone-400 text-center py-8">No diary entries found</p>

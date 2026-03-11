@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import ClientList from './pages/ClientList';
 import Subscription from './pages/Subscription';
 import ClientDetail from './pages/ClientDetail';
+import SessionDetail from './pages/SessionDetail';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminTherapists from './pages/AdminTherapists';
 
@@ -20,6 +21,7 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/clients" element={<ClientList />} />
         <Route path="/clients/:id" element={<ClientDetail />} />
+        <Route path="/sessions/:id" element={<SessionDetail />} />
         <Route path="/subscription" element={<Subscription />} />
         <Route path="/subscription/success" element={<Subscription />} />
         <Route path="/admin" element={<AdminDashboard />} />
