@@ -1,5 +1,29 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-11 (feature #86) ===
+
+- Feature #86: Expired trial restricts access ✅
+  - Backend middleware requireActiveSubscription already in place:
+    - Checks trial_ends_at, returns 402 with redirect: '/subscription' for expired trials
+    - All protected routes (/dashboard, /clients, /exercises, /sessions, /query, etc.) gated
+    - Subscription endpoints NOT gated (so user can upgrade)
+  - Frontend AppLayout catches 402 responses and redirects to /subscription
+  - Dashboard.jsx improved to handle 402 gracefully (redirect instead of error throw)
+  - Subscription page shows "Your trial has expired" banner when status=expired
+  - Plan selection cards (Basic/Pro/Premium) with Upgrade buttons
+  - Dev mode auto-completes checkout - plan upgrade restores access immediately
+  - Full E2E flow verified:
+    1. Register therapist → trial active → dashboard accessible
+    2. Expire trial via dev endpoint → 402 on all protected APIs
+    3. Frontend redirects to /subscription with expired banner
+    4. Click "Upgrade to Basic" → plan upgraded to basic/active
+    5. Dashboard accessible again with "Basic Plan" badge
+  - API test: 20/20 checks passing
+  - Browser automation: full flow verified with screenshots
+  - No mock data patterns found
+
+CURRENT STATUS: ~111/205 features passing (110 + this one)
+
 === Session 2026-03-11 (feature #82) ===
 
 - Feature #82: Paywall enforces client count limit per tier ✅
