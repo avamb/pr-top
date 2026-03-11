@@ -11,6 +11,48 @@ function debounce(fn, ms) {
   };
 }
 
+function formatRelativeTime(dateStr) {
+  if (!dateStr) return null;
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+  return date.toLocaleDateString();
+}
+
+function ActivityIndicator({ lastActivity }) {
+  if (!lastActivity) {
+    return <span className="text-gray-400 text-xs">No activity</span>;
+  }
+
+  const date = new Date(lastActivity);
+  const now = new Date();
+  const diffDays = Math.floor((now - date) / 86400000);
+
+  // Color based on recency
+  let dotColor = 'bg-gray-300'; // >30 days
+  if (diffDays < 1) dotColor = 'bg-green-400';
+  else if (diffDays < 7) dotColor = 'bg-teal-400';
+  else if (diffDays < 30) dotColor = 'bg-amber-400';
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className={`inline-block w-2 h-2 rounded-full ${dotColor}`}></span>
+      <span className="text-sm text-secondary" title={date.toLocaleString()}>
+        {formatRelativeTime(lastActivity)}
+      </span>
+    </div>
+  );
+}
+
 function ClientRow({ client, onClick }) {
   const consentColor = client.consent_therapist_access
     ? 'bg-green-100 text-green-700'
@@ -28,6 +70,9 @@ function ClientRow({ client, onClick }) {
         <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${consentColor}`}>
           {consentLabel}
         </span>
+      </td>
+      <td className="px-4 py-3">
+        <ActivityIndicator lastActivity={client.last_activity} />
       </td>
       <td className="px-4 py-3 text-sm text-secondary">{date.toLocaleDateString()}</td>
     </tr>
@@ -203,6 +248,7 @@ export default function ClientList() {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Telegram</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Language</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Consent</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Last Activity</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Joined</th>
                 </tr>
               </thead>
@@ -214,6 +260,7 @@ export default function ClientList() {
                       <td className="px-4 py-3"><div className="h-4 bg-gray-200 rounded w-20"></div></td>
                       <td className="px-4 py-3"><div className="h-4 bg-gray-200 rounded w-10"></div></td>
                       <td className="px-4 py-3"><div className="h-4 bg-gray-200 rounded w-16"></div></td>
+                      <td className="px-4 py-3"><div className="h-4 bg-gray-200 rounded w-20"></div></td>
                       <td className="px-4 py-3"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
                     </tr>
                   ))
@@ -223,7 +270,7 @@ export default function ClientList() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center text-secondary">
+                    <td colSpan={6} className="px-4 py-12 text-center text-secondary">
                       {search ? 'No clients match your search.' : 'No clients linked yet.'}
                     </td>
                   </tr>
