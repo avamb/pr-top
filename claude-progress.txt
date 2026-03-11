@@ -147,10 +147,35 @@ TECHNICAL NOTES (Session 2):
   - Decline preserves unlinked state, accept sets consent_therapist_access=true
   - No linking occurs until explicit consent is granted
 
-CURRENT STATUS: 21/205 features passing
+- Feature #61: Therapist dashboard overview renders ✅
+  - Dashboard shows Quick Stats (Clients, Sessions, Notes, Active SOS) from real API
+  - GET /api/dashboard/stats and GET /api/dashboard/activity endpoints
+  - Subscription badge with plan name and trial days remaining
+  - Recent activity feed (diary entries, sessions, SOS events, notes)
+  - All data from real database, zero hardcoded values
+  - Zero console errors
+
+- Feature #171: Subscription downgrade effects cascade correctly ✅
+  - POST /api/subscription/change-plan endpoint for plan upgrades/downgrades
+  - GET /api/subscription/limits for checking current usage vs plan limits
+  - planLimits utility reads tier limits from platform_settings
+  - Downgrade preserves existing client links (15 clients preserved on Basic 10-limit)
+  - Cannot add new clients beyond plan limit (403 with descriptive message)
+  - Downgrade warning returned with excess client count
+  - GET /api/clients endpoint with client limit info in response
+
+- Feature #205: Client list performs well with 100+ clients ✅
+  - /clients page with paginated table (25 per page, server-side)
+  - 112 clients loads in ~11ms, search in ~7-9ms
+  - Debounced search by email/Telegram ID
+  - Pagination controls with page numbers
+  - ClientList.jsx with professional table layout
+  - Dev seed endpoint for testing large datasets
+
+CURRENT STATUS: 24/205 features passing (estimate, other agents also working)
 
 NEXT UP:
-- Continue with web panel features (superadmin login, dashboard views)
-- Client management endpoints
-- More Stripe features (subscription creation, plan changes)
-- More encryption features (re-encryption migration)
+- Continue with web panel features (superadmin dashboard, therapist management)
+- Client detail views (timeline, diary, notes)
+- More Stripe features (cancellation, expiry)
+- Exercise library and SOS features
