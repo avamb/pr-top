@@ -36,6 +36,13 @@ export default function Register() {
       return;
     }
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(form.email)) {
+      setError(t('auth.invalidEmail', 'Please enter a valid email address'));
+      return;
+    }
+
     if (form.password.length < 6) {
       setError(t('auth.passwordMinLength'));
       return;
@@ -103,7 +110,7 @@ export default function Register() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} noValidate className="space-y-4">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-text mb-1">
                 {t('auth.email')}

@@ -42,6 +42,12 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
+
     const validRoles = ['therapist', 'client', 'superadmin'];
     const userRole = validRoles.includes(role) ? role : 'therapist';
 
