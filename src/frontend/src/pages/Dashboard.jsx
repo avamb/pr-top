@@ -101,6 +101,111 @@ function SubscriptionBadge({ subscription }) {
   );
 }
 
+function InviteCodeSection() {
+  const [inviteCode, setInviteCode] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [regenerating, setRegenerating] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetchInviteCode();
+  }, []);
+
+  async function fetchInviteCode() {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/invite-code`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch invite code');
+      const data = await res.json();
+      setInviteCode(data.invite_code);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRegenerate() {
+    try {
+      setRegenerating(true);
+      setError(null);
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/invite-code/regenerate`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to regenerate invite code');
+      const data = await res.json();
+      setInviteCode(data.invite_code);
+      setCopied(false);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(inviteCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for environments without clipboard API
+      const textArea = document.createElement('textarea');
+      textArea.value = inviteCode;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow-md p-6">
+      <h3 className="text-lg font-semibold text-text mb-3">Your Invite Code</h3>
+      <p className="text-sm text-secondary mb-4">
+        Share this code with clients so they can connect to you via the Telegram bot.
+      </p>
+      {loading ? (
+        <div className="animate-pulse h-12 bg-gray-200 rounded w-48"></div>
+      ) : error ? (
+        <p className="text-red-500 text-sm">{error}</p>
+      ) : (
+        <div className="flex items-center gap-3 flex-wrap">
+          <span
+            className="inline-block bg-primary/10 text-primary font-mono text-2xl font-bold px-6 py-3 rounded-lg tracking-widest select-all"
+            data-testid="invite-code"
+          >
+            {inviteCode}
+          </span>
+          <button
+            onClick={handleCopy}
+            className="px-4 py-2 text-sm font-medium text-primary border border-primary rounded-lg hover:bg-primary/5 transition-colors"
+            title="Copy invite code"
+          >
+            {copied ? '✓ Copied!' : 'Copy'}
+          </button>
+          <button
+            onClick={handleRegenerate}
+            disabled={regenerating}
+            className="px-4 py-2 text-sm font-medium text-secondary border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+            title="Generate a new invite code"
+          >
+            {regenerating ? 'Regenerating...' : 'Regenerate'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -202,6 +307,13 @@ export default function Dashboard() {
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             Failed to load dashboard data: {error}
           </div>
+        )}
+
+        {/* Invite Code Section */}
+        {(user.role === 'therapist' || user.role === 'superadmin') && (
+          <section className="mb-8">
+            <InviteCodeSection />
+          </section>
         )}
 
         {/* Quick Stats Section */}
