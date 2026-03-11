@@ -121,6 +121,26 @@ function ClientDetail() {
     }
   }
 
+  async function deleteDiaryEntry(entryId) {
+    if (!window.confirm('Are you sure you want to delete this diary entry?')) return;
+    try {
+      const res = await fetch(`${API}/clients/${id}/diary/${entryId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Failed to delete diary entry');
+        return;
+      }
+      // Refresh diary and timeline
+      fetchDiary();
+      fetchTimeline();
+    } catch (e) {
+      alert('Error deleting diary entry: ' + e.message);
+    }
+  }
+
   async function fetchNotes(search) {
     try {
       const params = new URLSearchParams();
@@ -989,6 +1009,11 @@ function ClientDetail() {
                     <span className="text-xs text-stone-400 ml-auto">
                       {new Date(entry.created_at).toLocaleString()}
                     </span>
+                    <button
+                      onClick={() => deleteDiaryEntry(entry.id)}
+                      className="ml-2 text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 border border-red-200"
+                      title="Delete diary entry"
+                    >🗑️ Delete</button>
                   </div>
                   <p className="text-stone-700 whitespace-pre-wrap">{entry.content}</p>
                   {entry.transcript && (

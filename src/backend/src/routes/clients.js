@@ -262,6 +262,69 @@ router.get('/:id/diary', (req, res) => {
   }
 });
 
+// DELETE /api/clients/:id/diary/:entryId - Delete a diary entry
+router.delete('/:id/diary/:entryId', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+    const entryId = req.params.entryId;
+
+    // Verify client exists and is linked to this therapist
+    const clientResult = db.exec(
+      "SELECT id, therapist_id, consent_therapist_access FROM users WHERE id = ? AND role = 'client'",
+      [clientId]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+
+    const clientRow = clientResult[0].values[0];
+    if (String(clientRow[1]) !== String(therapistId)) {
+      return res.status(403).json({ error: 'You are not authorized to manage this client\'s data' });
+    }
+
+    if (!clientRow[2]) {
+      return res.status(403).json({ error: 'Client has not granted consent for data access' });
+    }
+
+    // Verify entry exists and belongs to this client
+    const entryResult = db.exec(
+      'SELECT id FROM diary_entries WHERE id = ? AND client_id = ?',
+      [entryId, clientId]
+    );
+
+    if (entryResult.length === 0 || entryResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Diary entry not found' });
+    }
+
+    // Delete associated vector embeddings
+    db.run(
+      "DELETE FROM vector_embeddings WHERE source_type = 'diary_entry' AND source_id = ?",
+      [entryId]
+    );
+
+    // Delete the diary entry
+    db.run('DELETE FROM diary_entries WHERE id = ? AND client_id = ?', [entryId, clientId]);
+    saveDatabase();
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      [therapistId, 'delete_diary', 'diary_entry', entryId, JSON.stringify({ client_id: parseInt(clientId) })]
+    );
+    saveDatabase();
+
+    logger.info(`Therapist ${therapistId} deleted diary entry ${entryId} for client ${clientId}`);
+
+    res.json({ success: true, message: 'Diary entry deleted successfully' });
+  } catch (error) {
+    logger.error('Delete diary entry error: ' + error.message);
+    res.status(500).json({ error: 'Failed to delete diary entry' });
+  }
+});
+
 // POST /api/clients/:id/notes - Create encrypted therapist note for a client
 router.post('/:id/notes', (req, res) => {
   try {
