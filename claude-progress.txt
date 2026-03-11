@@ -1,5 +1,19 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-11 (features #100, #101) ===
+
+- Feature #100: Login page link navigates to registration ✅
+  - Login page has "Don't have an account? Register" link
+  - Clicking navigates to /register correctly
+  - Zero console errors
+
+- Feature #101: Registration page link navigates to login ✅
+  - Register page has "Already have an account? Log In" link
+  - Clicking navigates to /login correctly
+  - Zero console errors
+
+CURRENT STATUS: ~118/205 features passing
+
 === Session 2026-03-11 (features #96, #99) ===
 
 - Feature #96: Exercises support multiple languages ✅
