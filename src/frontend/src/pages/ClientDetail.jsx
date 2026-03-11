@@ -9,8 +9,18 @@ function ClientDetail() {
   const [client, setClient] = useState(null);
   const [diary, setDiary] = useState([]);
   const [diaryTotal, setDiaryTotal] = useState(0);
+  const [notes, setNotes] = useState([]);
+  const [notesTotal, setNotesTotal] = useState(0);
+  const [newNoteContent, setNewNoteContent] = useState('');
+  const [creatingNote, setCreatingNote] = useState(false);
+  const [context, setContext] = useState(null);
+  const [contextForm, setContextForm] = useState({ anamnesis: '', current_goals: '', contraindications: '', ai_instructions: '' });
+  const [contextSaving, setContextSaving] = useState(false);
+  const [contextMsg, setContextMsg] = useState('');
+  const [activeTab, setActiveTab] = useState('diary');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [diaryError, setDiaryError] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const token = localStorage.getItem('token');
 
@@ -21,6 +31,7 @@ function ClientDetail() {
     }
     fetchClient();
     fetchDiary();
+    fetchNotes();
   }, [id, typeFilter]);
 
   async function fetchClient() {
@@ -39,20 +50,62 @@ function ClientDetail() {
   async function fetchDiary() {
     try {
       setLoading(true);
+      setDiaryError('');
       const url = typeFilter
         ? `${API}/clients/${id}/diary?entry_type=${typeFilter}`
         : `${API}/clients/${id}/diary`;
       const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (!res.ok) throw new Error('Failed to fetch diary');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setDiaryError(data.error || 'Failed to fetch diary');
+        return;
+      }
       const data = await res.json();
       setDiary(data.entries);
       setDiaryTotal(data.total);
     } catch (e) {
-      setError(e.message);
+      setDiaryError(e.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchNotes() {
+    try {
+      const res = await fetch(`${API}/clients/${id}/notes`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch notes');
+      const data = await res.json();
+      setNotes(data.notes);
+      setNotesTotal(data.total);
+    } catch (e) {
+      console.error('Notes fetch error:', e.message);
+    }
+  }
+
+  async function handleCreateNote(e) {
+    e.preventDefault();
+    if (!newNoteContent.trim()) return;
+    setCreatingNote(true);
+    try {
+      const res = await fetch(`${API}/clients/${id}/notes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ content: newNoteContent.trim() })
+      });
+      if (!res.ok) throw new Error('Failed to create note');
+      setNewNoteContent('');
+      fetchNotes();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setCreatingNote(false);
     }
   }
 
@@ -112,7 +165,70 @@ function ClientDetail() {
           </div>
         )}
 
-        <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6">
+        {/* Tab Navigation */}
+        <div className="flex gap-2 mb-6">
+          <button
+            onClick={() => setActiveTab('diary')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'diary' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+          >📝 Diary ({diaryTotal})</button>
+          <button
+            onClick={() => setActiveTab('notes')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'notes' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+          >🗒️ Notes ({notesTotal})</button>
+        </div>
+
+        {/* Notes Tab */}
+        {activeTab === 'notes' && (
+          <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6 mb-6">
+            <h3 className="text-lg font-semibold text-stone-800 mb-4">Therapist Notes</h3>
+
+            {/* Create Note Form */}
+            <form onSubmit={handleCreateNote} className="mb-6">
+              <textarea
+                value={newNoteContent}
+                onChange={(e) => setNewNoteContent(e.target.value)}
+                placeholder="Write a private note about this client..."
+                className="w-full border border-stone-300 rounded-lg p-3 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                rows={3}
+              />
+              <div className="flex justify-end mt-2">
+                <button
+                  type="submit"
+                  disabled={creatingNote || !newNoteContent.trim()}
+                  className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {creatingNote ? 'Saving...' : 'Save Note'}
+                </button>
+              </div>
+            </form>
+
+            {/* Notes List */}
+            {notes.length === 0 ? (
+              <p className="text-stone-400 text-center py-8">No notes yet. Write your first note above.</p>
+            ) : (
+              <div className="space-y-4">
+                {notes.map(note => (
+                  <div key={note.id} className="border border-stone-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-stone-400">
+                        {new Date(note.created_at).toLocaleString()}
+                      </span>
+                      {note.session_date && (
+                        <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                          Session: {note.session_date}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-stone-700 whitespace-pre-wrap">{note.content}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Diary Tab */}
+        {activeTab === 'diary' && <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-semibold text-stone-800">Diary Entries ({diaryTotal})</h3>
             <div className="flex gap-2">
@@ -135,7 +251,9 @@ function ClientDetail() {
             </div>
           </div>
 
-          {loading ? (
+          {diaryError ? (
+            <p className="text-amber-600 text-center py-8">{diaryError}</p>
+          ) : loading ? (
             <p className="text-stone-500">Loading diary entries...</p>
           ) : diary.length === 0 ? (
             <p className="text-stone-400 text-center py-8">No diary entries found</p>
@@ -162,7 +280,7 @@ function ClientDetail() {
               ))}
             </div>
           )}
-        </div>
+        </div>}
       </main>
     </div>
   );
