@@ -80,11 +80,32 @@ function generateDevSummary(transcript, options = {}) {
   }
 
   // Build summary - avoiding diagnosis language per product principles
-  const summary = [
+  const summaryParts = [
     `Session Summary`,
     `Generated: ${timestamp}`,
     `Transcript length: ${wordCount} words, ${lineCount} lines`,
-    ``,
+    ``
+  ];
+
+  // Include AI instructions/boundaries if provided by therapist
+  if (options.ai_instructions) {
+    summaryParts.push(
+      `AI Instructions Applied:`,
+      `  ${options.ai_instructions}`,
+      ``
+    );
+  }
+
+  // Include contraindications if set
+  if (options.contraindications) {
+    summaryParts.push(
+      `Contraindications Noted:`,
+      `  ${options.contraindications}`,
+      ``
+    );
+  }
+
+  summaryParts.push(
     `Key Topics Discussed:`,
     ...topics.map(t => `  - ${t}`),
     ``,
@@ -94,7 +115,19 @@ function generateDevSummary(transcript, options = {}) {
     topics.length > 1
       ? `  - Multiple areas of focus addressed during the session`
       : `  - Session maintained focus on a single area`,
-    ``,
+    ``
+  );
+
+  // Include client goals context if available
+  if (options.goals) {
+    summaryParts.push(
+      `Current Goals Context:`,
+      `  ${options.goals}`,
+      ``
+    );
+  }
+
+  summaryParts.push(
     `Client-Reported Progress:`,
     `  - Client described engagement with previously assigned exercises`,
     `  - Noted areas where they observed changes in their daily experience`,
@@ -106,7 +139,9 @@ function generateDevSummary(transcript, options = {}) {
     ``,
     `Note: This summary is a supportive tool for session preparation.`,
     `It reflects observed themes and client-reported experiences only.`
-  ].join('\n');
+  );
+
+  const summary = summaryParts.join('\n');
 
   logger.info(`Dev summary generated (${wordCount} words transcript -> summary)`);
   return summary;
@@ -159,13 +194,15 @@ async function processSessionSummary(sessionId) {
     // Get client context if available (for richer summaries)
     let context = {};
     const ctxResult = db.exec(
-      'SELECT anamnesis_encrypted, current_goals_encrypted FROM client_context WHERE therapist_id = ? AND client_id = ?',
+      'SELECT anamnesis_encrypted, current_goals_encrypted, contraindications_encrypted, ai_instructions_encrypted FROM client_context WHERE therapist_id = ? AND client_id = ?',
       [therapistId, clientId]
     );
     if (ctxResult.length > 0 && ctxResult[0].values.length > 0) {
       try {
         if (ctxResult[0].values[0][0]) context.anamnesis = decrypt(ctxResult[0].values[0][0]);
         if (ctxResult[0].values[0][1]) context.goals = decrypt(ctxResult[0].values[0][1]);
+        if (ctxResult[0].values[0][2]) context.contraindications = decrypt(ctxResult[0].values[0][2]);
+        if (ctxResult[0].values[0][3]) context.ai_instructions = decrypt(ctxResult[0].values[0][3]);
       } catch (e) {
         logger.warn(`Could not decrypt client context for summary: ${e.message}`);
       }

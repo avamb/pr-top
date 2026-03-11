@@ -184,7 +184,7 @@ router.get('/:id/diary', (req, res) => {
 
     // Get paginated entries
     const result = db.exec(
-      `SELECT id, entry_type, content_encrypted, transcript_encrypted, encryption_key_id, payload_version, created_at, updated_at
+      `SELECT id, entry_type, content_encrypted, transcript_encrypted, encryption_key_id, payload_version, created_at, updated_at, embedding_ref
        FROM diary_entries WHERE ${whereClause}
        ORDER BY created_at DESC
        LIMIT ? OFFSET ?`,
@@ -221,7 +221,8 @@ router.get('/:id/diary', (req, res) => {
         content: content,
         transcript: transcript,
         created_at: row[6],
-        updated_at: row[7]
+        updated_at: row[7],
+        embedding_ref: row[8] || null
       };
     });
 
