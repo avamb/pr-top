@@ -31,23 +31,30 @@ const categoryI18nKeys = {
   'self-compassion': 'exerciseLibrary.selfCompassion'
 };
 
-function ExerciseCard({ exercise, onClick }) {
+function getLocalizedField(exercise, field, lang) {
+  return exercise[`${field}_${lang}`] || exercise[field] || exercise[`${field}_en`] || '';
+}
+
+function ExerciseCard({ exercise, onClick, lang }) {
+  const title = getLocalizedField(exercise, 'title', lang);
+  const description = getLocalizedField(exercise, 'description', lang);
   return (
     <div
       className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer"
       onClick={onClick}
     >
-      <h3 className="font-semibold text-text text-base mb-1">{exercise.title_en}</h3>
-      {exercise.title_ru && (
-        <p className="text-xs text-secondary mb-2 italic">{exercise.title_ru}</p>
-      )}
-      <p className="text-sm text-secondary line-clamp-2">{exercise.description_en}</p>
+      <h3 className="font-semibold text-text text-base mb-1">{title}</h3>
+      <p className="text-sm text-secondary line-clamp-2">{description}</p>
     </div>
   );
 }
 
-function ExerciseModal({ exercise, onClose, t }) {
+function ExerciseModal({ exercise, onClose, t, lang }) {
   if (!exercise) return null;
+
+  const title = getLocalizedField(exercise, 'title', lang);
+  const description = getLocalizedField(exercise, 'description', lang);
+  const instructions = getLocalizedField(exercise, 'instructions', lang);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -60,10 +67,7 @@ function ExerciseModal({ exercise, onClose, t }) {
             <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium border mb-2 ${categoryColors[exercise.category] || 'bg-gray-50 border-gray-200 text-gray-700'}`}>
               {categoryIcons[exercise.category] || ''} {categoryI18nKeys[exercise.category] ? t(categoryI18nKeys[exercise.category]) : exercise.category}
             </span>
-            <h2 className="text-xl font-bold text-text">{exercise.title_en}</h2>
-            {exercise.title_ru && (
-              <p className="text-sm text-secondary italic mt-1">{exercise.title_ru}</p>
-            )}
+            <h2 className="text-xl font-bold text-text">{title}</h2>
           </div>
           <button
             onClick={onClose}
@@ -76,14 +80,14 @@ function ExerciseModal({ exercise, onClose, t }) {
 
         <div className="mb-4">
           <h3 className="text-sm font-semibold text-secondary uppercase tracking-wide mb-1">{t('exerciseLibrary.description')}</h3>
-          <p className="text-text">{exercise.description_en}</p>
+          <p className="text-text">{description}</p>
         </div>
 
         <div className="mb-4">
           <h3 className="text-sm font-semibold text-secondary uppercase tracking-wide mb-2">{t('exerciseLibrary.instructions')}</h3>
           <div className="bg-gray-50 rounded-lg p-4">
-            {exercise.instructions_en ? (
-              exercise.instructions_en.split('\n').map((line, i) => (
+            {instructions ? (
+              instructions.split('\n').map((line, i) => (
                 <p key={i} className="text-text text-sm mb-1 last:mb-0">{line}</p>
               ))
             ) : (
@@ -91,19 +95,6 @@ function ExerciseModal({ exercise, onClose, t }) {
             )}
           </div>
         </div>
-
-        {exercise.instructions_ru && (
-          <details className="mb-4">
-            <summary className="text-sm font-semibold text-secondary uppercase tracking-wide cursor-pointer">
-              {t('exerciseLibrary.instructionsRu')}
-            </summary>
-            <div className="bg-gray-50 rounded-lg p-4 mt-2">
-              {exercise.instructions_ru.split('\n').map((line, i) => (
-                <p key={i} className="text-text text-sm mb-1 last:mb-0">{line}</p>
-              ))}
-            </div>
-          </details>
-        )}
 
         <button
           onClick={onClose}
@@ -118,7 +109,8 @@ function ExerciseModal({ exercise, onClose, t }) {
 
 function ExerciseLibrary() {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language || 'en';
   const [grouped, setGrouped] = useState({});
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -133,16 +125,17 @@ function ExerciseLibrary() {
       return;
     }
     fetchExercises(token);
-  }, [selectedCategory]);
+  }, [selectedCategory, lang]);
 
   async function fetchExercises(tokenArg) {
     const token = tokenArg || localStorage.getItem('token');
     setLoading(true);
     setError('');
     try {
-      const url = selectedCategory
-        ? `${API_URL}/exercises?category=${encodeURIComponent(selectedCategory)}`
-        : `${API_URL}/exercises`;
+      const params = new URLSearchParams();
+      if (selectedCategory) params.set('category', selectedCategory);
+      params.set('language', lang);
+      const url = `${API_URL}/exercises?${params.toString()}`;
       const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -237,6 +230,7 @@ function ExerciseLibrary() {
                   key={ex.id}
                   exercise={ex}
                   onClick={() => setSelectedExercise(ex)}
+                  lang={lang}
                 />
               ))}
             </div>
@@ -249,6 +243,7 @@ function ExerciseLibrary() {
         exercise={selectedExercise}
         onClose={() => setSelectedExercise(null)}
         t={t}
+        lang={lang}
       />
     </div>
   );
