@@ -266,10 +266,36 @@ TECHNICAL NOTES (Session 2):
   - Frontend: Save Note button disabled when textarea is empty
   - No empty notes created in database
 
-CURRENT STATUS: ~40/205 features passing (estimate, other agents also working)
+- Feature #37: Unified client timeline shows all data types ✅
+  - GET /api/clients/:id/timeline aggregates diary entries, notes, sessions
+  - All items sorted chronologically (newest first)
+  - Each item has type indicator (diary/note/session)
+  - Decrypts content for authorized therapist
+  - Audit logging for timeline access
+
+- Feature #38: Timeline filterable by date range ✅
+  - start_date and end_date query parameters filter timeline
+  - Date range applied to all 3 data types (diary, notes, sessions)
+  - Future dates return 0 items, past dates return 0 items
+  - UI date pickers with Clear dates button
+
+- Feature #120: End-to-end session upload to timeline ✅
+  - Created SessionDetail page at /sessions/:id
+  - Shows audio recording info, transcript, and summary sections
+  - Session appears in client timeline with summary preview
+  - "View Session Details" link navigates to session page
+  - Back to Client navigation works correctly
+
+TECHNICAL NOTES (Timeline Session):
+- Timeline tab added as default active tab on ClientDetail page
+- SessionDetail.jsx created with audio player, transcript, summary sections
+- Route /sessions/:id added to App.jsx
+- Timeline API returns decrypted content for all data types
+- Zero console errors across all pages
+
+CURRENT STATUS: ~43/205 features passing (estimate, other agents also working)
 
 NEXT UP:
-- Client diary filtering by date/type
 - Client consent revocation flow
 - More Stripe features (cancellation, expiry)
 - Exercise library and SOS features
