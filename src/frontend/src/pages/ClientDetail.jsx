@@ -60,8 +60,9 @@ function ClientDetail() {
     if (dateTo) params.set('date_to', dateTo);
     if (timelineStartDate) params.set('tl_start', timelineStartDate);
     if (timelineEndDate) params.set('tl_end', timelineEndDate);
+    if (timelineTypeFilter) params.set('tl_type', timelineTypeFilter);
     setSearchParams(params, { replace: true });
-  }, [activeTab, typeFilter, dateFrom, dateTo, timelineStartDate, timelineEndDate]);
+  }, [activeTab, typeFilter, dateFrom, dateTo, timelineStartDate, timelineEndDate, timelineTypeFilter]);
 
   useEffect(() => {
     if (!token) {
@@ -75,7 +76,7 @@ function ClientDetail() {
     fetchTimeline();
     fetchSessions();
     fetchExercises();
-  }, [id, typeFilter, dateFrom, dateTo, timelineStartDate, timelineEndDate]);
+  }, [id, typeFilter, dateFrom, dateTo, timelineStartDate, timelineEndDate, timelineTypeFilter]);
 
   async function fetchClient() {
     try {
@@ -250,6 +251,7 @@ function ClientDetail() {
       const params = new URLSearchParams();
       if (timelineStartDate) params.set('start_date', timelineStartDate);
       if (timelineEndDate) params.set('end_date', timelineEndDate);
+      if (timelineTypeFilter) params.set('type', timelineTypeFilter);
       const qs = params.toString();
       const url = `${API}/clients/${id}/timeline${qs ? '?' + qs : ''}`;
       const res = await fetch(url, {
@@ -438,6 +440,24 @@ function ClientDetail() {
           <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6 mb-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold text-stone-800">{t('clientDetail.unifiedTimeline', { count: timelineTotal })}</h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setTimelineTypeFilter('')}
+                  className={`px-3 py-1 rounded text-sm ${!timelineTypeFilter ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+                >All</button>
+                <button
+                  onClick={() => setTimelineTypeFilter('diary')}
+                  className={`px-3 py-1 rounded text-sm ${timelineTypeFilter === 'diary' ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+                >📝 Diary</button>
+                <button
+                  onClick={() => setTimelineTypeFilter('note')}
+                  className={`px-3 py-1 rounded text-sm ${timelineTypeFilter === 'note' ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+                >🗒️ Notes</button>
+                <button
+                  onClick={() => setTimelineTypeFilter('session')}
+                  className={`px-3 py-1 rounded text-sm ${timelineTypeFilter === 'session' ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+                >🎧 Sessions</button>
+              </div>
             </div>
 
             {/* Date Range Filter */}
@@ -469,7 +489,7 @@ function ClientDetail() {
             {timelineLoading ? (
               <p className="text-stone-500 text-center py-8">Loading timeline...</p>
             ) : timeline.length === 0 ? (
-              <p className="text-stone-400 text-center py-8">No timeline items found{(timelineStartDate || timelineEndDate) ? ' for the selected date range' : ''}</p>
+              <p className="text-stone-400 text-center py-8">No timeline items found{(timelineStartDate || timelineEndDate || timelineTypeFilter) ? ' for the selected filters' : ''}</p>
             ) : (
               <div className="space-y-4">
                 {timeline.map((item, idx) => {

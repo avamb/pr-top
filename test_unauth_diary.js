@@ -1,4 +1,5 @@
 var http = require('http');
+var TS = Date.now();
 
 function request(method, path, body, headers) {
   return new Promise(function(resolve, reject) {
@@ -22,113 +23,97 @@ function request(method, path, body, headers) {
 
 async function main() {
   console.log('=== Feature #29: Unauthorized therapist cannot access client diary ===\n');
+  var botH = { 'Content-Type': 'application/json', 'X-Bot-Api-Key': 'dev-bot-api-key' };
 
-  // Step 1: Create therapist A
+  // Step 1: Create therapist A (unique)
   var regA = await request('POST', '/api/auth/register', {
-    email: 'therapist_a_29@test.com', password: 'Test123!', name: 'TherapistA'
+    email: 'thA_' + TS + '@test.com', password: 'Test123!', name: 'TherapistA'
   });
-  console.log('1. Register Therapist A:', regA.status, '- id:', regA.body.user ? regA.body.user.id : 'exists');
   var tokenA = regA.body.token;
+  var idA = regA.body.user.id;
+  console.log('1. Therapist A: id=' + idA + ' (type=' + typeof idA + ')');
 
-  // If already exists, login
-  if (!tokenA) {
-    var loginA = await request('POST', '/api/auth/login', {
-      email: 'therapist_a_29@test.com', password: 'Test123!'
-    });
-    tokenA = loginA.body.token;
-    console.log('   Logged in Therapist A instead');
-  }
-
-  // Step 2: Create therapist B
+  // Step 2: Create therapist B (unique)
   var regB = await request('POST', '/api/auth/register', {
-    email: 'therapist_b_29@test.com', password: 'Test123!', name: 'TherapistB'
+    email: 'thB_' + TS + '@test.com', password: 'Test123!', name: 'TherapistB'
   });
-  console.log('2. Register Therapist B:', regB.status, '- id:', regB.body.user ? regB.body.user.id : 'exists');
   var tokenB = regB.body.token;
-
-  if (!tokenB) {
-    var loginB = await request('POST', '/api/auth/login', {
-      email: 'therapist_b_29@test.com', password: 'Test123!'
-    });
-    tokenB = loginB.body.token;
-    console.log('   Logged in Therapist B instead');
-  }
+  var idB = regB.body.user.id;
+  console.log('2. Therapist B: id=' + idB);
 
   // Step 3: Get Therapist A's invite code
-  var invA = await request('GET', '/api/invite-code', null, {
-    'Authorization': 'Bearer ' + tokenA
-  });
+  var invA = await request('GET', '/api/invite-code', null, { 'Authorization': 'Bearer ' + tokenA });
   console.log('3. Therapist A invite code:', invA.body.invite_code);
 
   // Step 4: Register client and link to therapist A
-  var botHeaders = { 'Content-Type': 'application/json', 'X-Bot-Api-Key': 'dev-bot-api-key' };
+  var clientTgId = 'client_29_' + TS;
   var clientReg = await request('POST', '/api/bot/register', {
-    telegram_id: 'unauth_test_client_29', role: 'client', username: 'unauthclient29'
-  }, botHeaders);
-  var clientId = clientReg.body.user ? clientReg.body.user.id : null;
-  console.log('4. Register client:', clientReg.status, '- id:', clientId);
+    telegram_id: clientTgId, role: 'client', username: 'c29_' + TS
+  }, botH);
+  var clientId = clientReg.body.user.id;
+  console.log('4. Client: id=' + clientId);
 
   // Connect and consent
-  await request('POST', '/api/bot/connect', {
-    telegram_id: 'unauth_test_client_29', invite_code: invA.body.invite_code
-  }, botHeaders);
-
-  var meA = await request('GET', '/api/auth/me', null, { 'Authorization': 'Bearer ' + tokenA });
-  var therapistAId = meA.body.id;
-
-  await request('POST', '/api/bot/consent', {
-    telegram_id: 'unauth_test_client_29', therapist_id: therapistAId, action: 'accept'
-  }, botHeaders);
+  await request('POST', '/api/bot/connect', { telegram_id: clientTgId, invite_code: invA.body.invite_code }, botH);
+  await request('POST', '/api/bot/consent', { telegram_id: clientTgId, therapist_id: idA, action: 'accept' }, botH);
   console.log('   Client linked to Therapist A with consent');
 
   // Step 5: Client creates diary entry
   var diary = await request('POST', '/api/bot/diary', {
-    telegram_id: 'unauth_test_client_29', content: 'PRIVATE_DIARY_29 This is confidential', entry_type: 'text'
-  }, botHeaders);
-  console.log('5. Diary entry created:', diary.status, '- id:', diary.body.entry ? diary.body.entry.id : 'err');
+    telegram_id: clientTgId, content: 'PRIVATE_DIARY_29_' + TS + ' confidential data', entry_type: 'text'
+  }, botH);
+  console.log('5. Diary entry created: id=' + (diary.body.entry ? diary.body.entry.id : 'err'));
 
   // Step 6: Therapist A CAN access diary (sanity check)
   var diaryA = await request('GET', '/api/clients/' + clientId + '/diary', null, {
     'Authorization': 'Bearer ' + tokenA
   });
-  console.log('6. Therapist A accesses diary:', diaryA.status, '- entries:', diaryA.body.entries ? diaryA.body.entries.length : 0);
+  console.log('6. Therapist A diary access: status=' + diaryA.status + ' entries=' + (diaryA.body.entries ? diaryA.body.entries.length : 'none'));
 
   // Step 7: Therapist B attempts to access diary -> should get 403
   var diaryB = await request('GET', '/api/clients/' + clientId + '/diary', null, {
     'Authorization': 'Bearer ' + tokenB
   });
-  console.log('7. Therapist B accesses diary:', diaryB.status, '- error:', diaryB.body.error || 'none');
-  console.log('   Status is 403:', diaryB.status === 403);
+  console.log('7. Therapist B diary access: status=' + diaryB.status + ' error=' + (diaryB.body.error || 'none'));
 
   // Step 8: Verify no diary data returned to B
   var hasEntries = diaryB.body.entries && diaryB.body.entries.length > 0;
-  console.log('8. No diary data returned to B:', !hasEntries);
+  console.log('8. No data leaked to B: ' + !hasEntries);
 
-  // Step 9: Verify audit log records access denial
-  var adminLogin = await request('POST', '/api/auth/login', {
-    email: 'admin@psylink.app', password: 'Admin123!'
-  });
+  // Step 9: Check audit log
+  var adminLogin = await request('POST', '/api/auth/login', { email: 'admin@psylink.app', password: 'Admin123!' });
   var adminToken = adminLogin.body.token;
-
-  var audit = await request('GET', '/api/admin/logs/audit?limit=10', null, {
+  var audit = await request('GET', '/api/admin/logs/audit?action=access_denied&per_page=100', null, {
     'Authorization': 'Bearer ' + adminToken
   });
   var denialLog = null;
   if (audit.body.logs) {
     denialLog = audit.body.logs.find(function(l) {
-      return l.action === 'access_denied' && l.target_type === 'diary' && l.target_id === String(clientId);
+      return l.action === 'access_denied' && l.target_type === 'diary' &&
+             (l.target_id == clientId || String(l.target_id) === String(clientId));
     });
   }
-  console.log('9. Audit log has access_denied entry:', !!denialLog);
+  console.log('9. Audit log has access_denied: ' + !!denialLog);
   if (denialLog) {
-    console.log('   Reason:', denialLog.details ? JSON.parse(denialLog.details).reason : 'unknown');
+    console.log('   Details:', denialLog.details);
   }
 
-  console.log('\n=== ALL CHECKS ===');
-  console.log('403 for unauthorized:', diaryB.status === 403);
-  console.log('No data leaked:', !hasEntries);
-  console.log('Audit logged:', !!denialLog);
-  console.log('Overall PASS:', diaryB.status === 403 && !hasEntries && !!denialLog);
+  // Debug info
+  if (!denialLog && audit.body.logs) {
+    console.log('   Recent access_denied logs (last 5):');
+    audit.body.logs.filter(function(l) { return l.action === 'access_denied'; }).slice(0, 5).forEach(function(l) {
+      console.log('     target_type=' + l.target_type + ' target_id=' + l.target_id + ' (' + typeof l.target_id + ') actor=' + l.actor_id);
+    });
+    console.log('   Looking for client_id=' + clientId + ' (' + typeof clientId + ')');
+  }
+
+  console.log('\n=== RESULTS ===');
+  console.log('Therapist A gets 200: ' + (diaryA.status === 200));
+  console.log('Therapist B gets 403: ' + (diaryB.status === 403));
+  console.log('No data leaked: ' + !hasEntries);
+  console.log('Audit logged: ' + !!denialLog);
+  var pass = diaryA.status === 200 && diaryB.status === 403 && !hasEntries && !!denialLog;
+  console.log('Overall: ' + (pass ? 'PASS' : 'FAIL'));
 }
 
 main().catch(function(e) { console.error(e); process.exit(1); });
