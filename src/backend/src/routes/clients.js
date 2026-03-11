@@ -4,6 +4,7 @@ const { getDatabase, saveDatabase } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { checkClientLimit } = require('../utils/planLimits');
+const { decrypt } = require('../services/encryption');
 
 const router = express.Router();
 
@@ -78,6 +79,151 @@ router.get('/', (req, res) => {
   } catch (error) {
     logger.error('List clients error: ' + error.message);
     res.status(500).json({ error: 'Failed to list clients' });
+  }
+});
+
+// GET /api/clients/:id - Get client detail
+router.get('/:id', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+
+    // Verify client belongs to this therapist
+    const clientResult = db.exec(
+      "SELECT id, telegram_id, email, consent_therapist_access, language, created_at, updated_at FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [clientId, therapistId]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    }
+
+    const row = clientResult[0].values[0];
+    res.json({
+      client: {
+        id: row[0],
+        telegram_id: row[1],
+        email: row[2],
+        consent_therapist_access: !!row[3],
+        language: row[4],
+        created_at: row[5],
+        updated_at: row[6]
+      }
+    });
+  } catch (error) {
+    logger.error('Get client detail error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch client details' });
+  }
+});
+
+// GET /api/clients/:id/diary - Get diary entries for a client (decrypted)
+router.get('/:id/diary', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page) || 25));
+    const entryType = req.query.entry_type || '';
+    const offset = (page - 1) * perPage;
+
+    // Verify client belongs to this therapist and has consent
+    const clientResult = db.exec(
+      "SELECT id, consent_therapist_access FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [clientId, therapistId]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    }
+
+    const client = clientResult[0].values[0];
+    if (!client[1]) {
+      // Record access denial in audit log
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+        [therapistId, 'access_denied', 'diary', clientId, JSON.stringify({ reason: 'consent_not_granted' })]
+      );
+      saveDatabase();
+      return res.status(403).json({ error: 'Client has not granted consent for data access' });
+    }
+
+    // Build query with optional type filter
+    let whereClause = 'client_id = ?';
+    const params = [clientId];
+
+    if (entryType && ['text', 'voice', 'video'].includes(entryType)) {
+      whereClause += ' AND entry_type = ?';
+      params.push(entryType);
+    }
+
+    // Get total count
+    const countResult = db.exec(`SELECT COUNT(*) FROM diary_entries WHERE ${whereClause}`, params);
+    const total = countResult.length > 0 ? countResult[0].values[0][0] : 0;
+
+    // Get paginated entries
+    const result = db.exec(
+      `SELECT id, entry_type, content_encrypted, transcript_encrypted, encryption_key_id, payload_version, created_at, updated_at
+       FROM diary_entries WHERE ${whereClause}
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, perPage, offset]
+    );
+
+    const entries = (result.length > 0 ? result[0].values : []).map(row => {
+      let content = null;
+      let transcript = null;
+
+      // Decrypt content for authorized read
+      try {
+        if (row[2]) {
+          content = decrypt(row[2]);
+        }
+      } catch (e) {
+        logger.error(`Failed to decrypt diary entry ${row[0]}: ${e.message}`);
+        content = '[decryption error]';
+      }
+
+      // Decrypt transcript if present
+      try {
+        if (row[3]) {
+          transcript = decrypt(row[3]);
+        }
+      } catch (e) {
+        logger.error(`Failed to decrypt transcript for entry ${row[0]}: ${e.message}`);
+        transcript = '[decryption error]';
+      }
+
+      return {
+        id: row[0],
+        entry_type: row[1],
+        content: content,
+        transcript: transcript,
+        created_at: row[6],
+        updated_at: row[7]
+      };
+    });
+
+    // Record data access in audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      [therapistId, 'read_diary', 'client', clientId, JSON.stringify({ entries_count: entries.length, page })]
+    );
+    saveDatabase();
+
+    logger.info(`Therapist ${therapistId} accessed diary entries for client ${clientId} (${entries.length} entries)`);
+
+    res.json({
+      entries,
+      total,
+      page,
+      per_page: perPage,
+      total_pages: Math.ceil(total / perPage)
+    });
+  } catch (error) {
+    logger.error('Get client diary error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch diary entries' });
   }
 });
 
