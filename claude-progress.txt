@@ -818,4 +818,16 @@ NEXT UP:
   - Browser automation: click Delete, confirm, verify removal
   - Zero console errors
 
-CURRENT STATUS: ~126/205 features passing
+- Feature #111: Create unique therapist note and verify ✅
+  - Created note 'NOTE_VERIFY_33333' via API for linked client
+  - GET /api/clients/:id/notes returns note with exact content
+  - Verified note visible in web UI notes tab with correct timestamp
+  - Zero console errors
+
+- Feature #112: Therapist note persists after refresh ✅
+  - Created note 'NOTE_REFRESH_44444' via web UI (textarea + Save Note)
+  - Note appeared immediately in notes list
+  - Full page refresh: both notes still present with correct content
+  - Real database persistence confirmed, zero console errors
+
+CURRENT STATUS: ~128/205 features passing
