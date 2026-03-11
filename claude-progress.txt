@@ -247,12 +247,30 @@ TECHNICAL NOTES (Session 2):
   - Manual trigger: POST /api/sessions/:id/summarize
   - Full pipeline: upload -> transcribe -> summarize (all async)
 
-CURRENT STATUS: ~37/205 features passing (estimate, other agents also working)
+- Feature #32: Therapist can create encrypted private note ✅
+  - POST /api/clients/:id/notes creates note with AES-256-GCM encryption
+  - note_encrypted column contains encrypted data, NOT plaintext
+  - encryption_key_id and payload_version correctly set
+  - therapist_id and client_id properly linked
+  - Audit logging for note creation
+
+- Feature #33: Therapist can view notes for a client ✅
+  - GET /api/clients/:id/notes returns decrypted notes with pagination
+  - Notes ordered by date DESC (newest first)
+  - Added Notes tab to ClientDetail page with create form
+  - UI allows creating notes via textarea with Save button
+  - Diary errors now non-fatal (inline message instead of full-page error)
+
+- Feature #129: Note creation with empty content prevented ✅
+  - Backend validates: empty string, whitespace-only, missing field all return 400
+  - Frontend: Save Note button disabled when textarea is empty
+  - No empty notes created in database
+
+CURRENT STATUS: ~40/205 features passing (estimate, other agents also working)
 
 NEXT UP:
 - Client diary filtering by date/type
 - Client consent revocation flow
-- Therapist notes CRUD
 - More Stripe features (cancellation, expiry)
 - Exercise library and SOS features
 - Admin settings and audit logs pages
