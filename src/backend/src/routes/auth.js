@@ -48,20 +48,46 @@ router.post('/register', async (req, res) => {
     // Get the inserted user
     const result = db.exec('SELECT id, email, role, created_at FROM users WHERE email = ?', [email]);
     const user = result[0].values[0];
+    const userId = user[0];
+
+    // Create trial subscription for therapists
+    if (userRole === 'therapist') {
+      let trialDays = 14;
+      try {
+        const settingsResult = db.exec("SELECT value FROM platform_settings WHERE key = 'trial_duration_days'");
+        if (settingsResult.length > 0 && settingsResult[0].values.length > 0) {
+          trialDays = parseInt(settingsResult[0].values[0][0], 10) || 14;
+        }
+      } catch (e) {
+        logger.warn('Could not read trial_duration_days setting, using default 14');
+      }
+
+      const now = new Date();
+      const trialEnd = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
+
+      db.run(
+        `INSERT INTO subscriptions (therapist_id, plan, status, trial_ends_at, current_period_start, current_period_end, created_at, updated_at)
+         VALUES (?, 'trial', 'active', ?, ?, ?, ?, ?)`,
+        [userId, trialEnd.toISOString(), now.toISOString(), trialEnd.toISOString(), now.toISOString(), now.toISOString()]
+      );
+      logger.info(`Trial subscription created for therapist id=${userId}, expires ${trialEnd.toISOString()}`);
+    }
+
+    saveDatabase();
 
     // Generate JWT
     const token = jwt.sign(
-      { userId: user[0], email: user[1], role: user[2] },
+      { userId: userId, email: user[1], role: user[2] },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
 
-    logger.info(`User registered successfully: id=${user[0]}, email=${user[1]}`);
+    logger.info(`User registered successfully: id=${userId}, email=${user[1]}`);
 
     res.status(201).json({
       message: 'User registered successfully',
       user: {
-        id: user[0],
+        id: userId,
         email: user[1],
         role: user[2],
         created_at: user[3]
