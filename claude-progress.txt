@@ -65,9 +65,32 @@ TECHNICAL NOTES (Session 2):
 - Subscription route already existed at /api/subscription/current
 - Other agents concurrently built: Telegram bot features (#13, #14), Stripe integration, admin routes
 
-CURRENT STATUS: 8/205 features passing
+- Feature #13: User role selection on Telegram /start ✅
+  - Created POST /api/bot/register endpoint for Telegram user registration
+  - Created GET /api/bot/user/:telegram_id lookup endpoint
+  - Bot stores role (therapist/client) and telegram_id in database
+  - Therapists get auto-generated invite codes
+  - Duplicate /start handled gracefully (returns existing user)
+  - Bot API key authentication for bot-backend communication
+
+- Feature #14: Client onboarding flow completes successfully ✅
+  - Client selects role via /start inline keyboard
+  - Welcome message shown with invite code instructions
+  - Client record created with role='client', correct telegram_id
+  - Already implemented as part of feature #13
+
+- Feature #142: Blocked therapist cannot access platform ✅
+  - Created auth middleware with JWT verification + blocked user check
+  - Created admin routes: PUT /api/admin/therapists/:id/block and /unblock
+  - Login rejects blocked users with 403 and descriptive message
+  - Existing sessions invalidated: /me returns 403 for blocked users
+  - After unblock, therapist can login again
+  - Superadmin role required for admin endpoints
+
+CURRENT STATUS: 11/205 features passing
 
 NEXT UP:
 - Continue with web panel features (superadmin login, dashboard views)
 - Encryption/security features
 - Client management endpoints
+- More admin panel features
