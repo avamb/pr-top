@@ -176,6 +176,19 @@ router.get('/stats/users', (req, res) => {
   }
 });
 
+// GET /api/admin/logs/audit/actions - Get distinct audit log action types
+router.get('/logs/audit/actions', (req, res) => {
+  try {
+    const db = getDatabase();
+    const result = db.exec('SELECT DISTINCT action FROM audit_logs ORDER BY action');
+    const actions = result.length > 0 ? result[0].values.map(r => r[0]) : [];
+    res.json({ actions });
+  } catch (error) {
+    logger.error('Admin audit actions error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch audit actions' });
+  }
+});
+
 // GET /api/admin/logs/audit - View audit logs
 router.get('/logs/audit', (req, res) => {
   try {
@@ -187,10 +200,22 @@ router.get('/logs/audit', (req, res) => {
 
     let whereClause = '1=1';
     const params = [];
+    const dateFrom = req.query.date_from || '';
+    const dateTo = req.query.date_to || '';
 
     if (action) {
       whereClause += ' AND a.action = ?';
       params.push(action);
+    }
+
+    if (dateFrom) {
+      whereClause += ' AND a.created_at >= ?';
+      params.push(dateFrom);
+    }
+
+    if (dateTo) {
+      whereClause += ' AND a.created_at <= ?';
+      params.push(dateTo + ' 23:59:59');
     }
 
     // Get total count
