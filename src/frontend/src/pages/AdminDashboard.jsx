@@ -23,6 +23,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
   const [subStats, setSubStats] = useState(null);
+  const [utmStats, setUtmStats] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -58,9 +59,10 @@ export default function AdminDashboard() {
     try {
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [statsRes, subStatsRes] = await Promise.all([
+      const [statsRes, subStatsRes, utmRes] = await Promise.all([
         fetch(`${API_URL}/admin/stats/users`, { headers }),
-        fetch(`${API_URL}/admin/stats/subscriptions`, { headers })
+        fetch(`${API_URL}/admin/stats/subscriptions`, { headers }),
+        fetch(`${API_URL}/admin/stats/utm`, { headers })
       ]);
 
       if (statsRes.ok) {
@@ -70,6 +72,10 @@ export default function AdminDashboard() {
       if (subStatsRes.ok) {
         const data = await subStatsRes.json();
         setSubStats(data);
+      }
+      if (utmRes.ok) {
+        const data = await utmRes.json();
+        setUtmStats(data);
       }
     } catch (err) {
       console.error('Failed to load admin stats:', err);
@@ -331,6 +337,124 @@ export default function AdminDashboard() {
                   </table>
                 </div>
               </>
+            )}
+          </>
+        )}
+
+        {/* UTM Attribution Analytics */}
+        {utmStats && (
+          <>
+            <h3 className="text-lg font-semibold text-text mb-4">Registration Attribution (UTM)</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              <StatCard
+                label="Total Therapist Registrations"
+                value={utmStats.total_therapists ?? 0}
+                icon="📋"
+                color="bg-indigo-50"
+              />
+              <StatCard
+                label="With UTM Tracking"
+                value={utmStats.with_utm_tracking ?? 0}
+                icon="🏷️"
+                color="bg-teal-50"
+              />
+              <StatCard
+                label="Direct (No UTM)"
+                value={utmStats.without_utm_tracking ?? 0}
+                icon="🔗"
+                color="bg-gray-100"
+              />
+            </div>
+
+            {/* Registration Sources */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h4 className="text-md font-semibold text-text mb-4">Registration Sources</h4>
+                {utmStats.sources && utmStats.sources.length > 0 ? (
+                  <div className="space-y-3">
+                    {utmStats.sources.map((s, i) => {
+                      const maxCount = utmStats.sources[0]?.count || 1;
+                      return (
+                        <div key={i} className="flex items-center gap-3">
+                          <span className="text-sm font-medium text-stone-600 w-24 truncate" title={s.source}>{s.source}</span>
+                          <div className="flex-1 bg-stone-100 rounded-full h-5 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-indigo-500 transition-all duration-500"
+                              style={{ width: `${Math.max((s.count / maxCount) * 100, s.count > 0 ? 3 : 0)}%` }}
+                            />
+                          </div>
+                          <span className="text-sm font-semibold text-stone-700 w-10 text-right">{s.count}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-stone-400 text-sm">No source data available</p>
+                )}
+              </div>
+
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h4 className="text-md font-semibold text-text mb-4">UTM Campaigns</h4>
+                {utmStats.campaigns && utmStats.campaigns.length > 0 ? (
+                  <div className="space-y-3">
+                    {utmStats.campaigns.map((c, i) => {
+                      const maxCount = utmStats.campaigns[0]?.count || 1;
+                      return (
+                        <div key={i} className="flex items-center gap-3">
+                          <span className="text-sm font-medium text-stone-600 w-24 truncate" title={c.campaign}>{c.campaign}</span>
+                          <div className="flex-1 bg-stone-100 rounded-full h-5 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-purple-500 transition-all duration-500"
+                              style={{ width: `${Math.max((c.count / maxCount) * 100, c.count > 0 ? 3 : 0)}%` }}
+                            />
+                          </div>
+                          <span className="text-sm font-semibold text-stone-700 w-10 text-right">{c.count}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-stone-400 text-sm">No campaign data yet. UTM campaigns will appear when therapists register via tracked links.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Registration Trends Chart */}
+            {utmStats.daily_trends && utmStats.daily_trends.some(d => d.total > 0) && (
+              <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+                <h4 className="text-md font-semibold text-text mb-4">Registration Trends (Last 30 Days)</h4>
+                <div className="flex items-end gap-px" style={{ height: '160px' }}>
+                  {utmStats.daily_trends.map((day, i) => {
+                    const maxTotal = Math.max(...utmStats.daily_trends.map(d => d.total), 1);
+                    const height = (day.total / maxTotal) * 100;
+                    return (
+                      <div
+                        key={i}
+                        className="flex-1 flex flex-col justify-end group relative"
+                        title={`${day.date}: ${day.total} registration(s)`}
+                      >
+                        <div className="hidden group-hover:block absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-stone-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10">
+                          <div className="font-medium">{day.date}</div>
+                          <div>{day.total} registration(s)</div>
+                        </div>
+                        <div
+                          className="bg-indigo-400 hover:bg-indigo-500 rounded-t-sm w-full transition-colors"
+                          style={{ height: `${Math.max(height, day.total > 0 ? 4 : 0)}%`, minHeight: day.total > 0 ? '4px' : '0' }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex gap-px mt-1">
+                  {utmStats.daily_trends.map((day, i) => (
+                    <div key={i} className="flex-1 text-center">
+                      {i % 7 === 0 ? (
+                        <span className="text-xs text-stone-400">{day.date.slice(5)}</span>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </>
         )}

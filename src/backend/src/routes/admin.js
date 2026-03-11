@@ -489,4 +489,99 @@ router.get('/stats/subscriptions', (req, res) => {
   }
 });
 
+// GET /api/admin/stats/utm - UTM attribution analytics
+router.get('/stats/utm', (req, res) => {
+  try {
+    const db = getDatabase();
+
+    // Registration sources (utm_source breakdown)
+    const sourceResult = db.exec(
+      `SELECT COALESCE(utm_source, 'direct') as source, COUNT(*) as count
+       FROM users WHERE role = 'therapist'
+       GROUP BY COALESCE(utm_source, 'direct')
+       ORDER BY count DESC`
+    );
+    const sources = (sourceResult.length > 0 ? sourceResult[0].values : []).map(row => ({
+      source: row[0],
+      count: row[1]
+    }));
+
+    // UTM medium breakdown
+    const mediumResult = db.exec(
+      `SELECT COALESCE(utm_medium, 'none') as medium, COUNT(*) as count
+       FROM users WHERE role = 'therapist'
+       GROUP BY COALESCE(utm_medium, 'none')
+       ORDER BY count DESC`
+    );
+    const mediums = (mediumResult.length > 0 ? mediumResult[0].values : []).map(row => ({
+      medium: row[0],
+      count: row[1]
+    }));
+
+    // UTM campaign breakdown
+    const campaignResult = db.exec(
+      `SELECT utm_campaign, COUNT(*) as count
+       FROM users WHERE role = 'therapist' AND utm_campaign IS NOT NULL
+       GROUP BY utm_campaign
+       ORDER BY count DESC`
+    );
+    const campaigns = (campaignResult.length > 0 ? campaignResult[0].values : []).map(row => ({
+      campaign: row[0],
+      count: row[1]
+    }));
+
+    // Registration trends by source over time (last 30 days, daily)
+    const trendResult = db.exec(
+      `SELECT DATE(created_at) as day, COALESCE(utm_source, 'direct') as source, COUNT(*) as count
+       FROM users WHERE role = 'therapist' AND created_at >= datetime('now', '-30 days')
+       GROUP BY DATE(created_at), COALESCE(utm_source, 'direct')
+       ORDER BY day ASC, count DESC`
+    );
+    const trendsMap = {};
+    if (trendResult.length > 0) {
+      for (const row of trendResult[0].values) {
+        const day = row[0];
+        if (!trendsMap[day]) trendsMap[day] = {};
+        trendsMap[day][row[1]] = row[2];
+      }
+    }
+
+    // Build daily trend array
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 30);
+    const dailyTrends = [];
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+      const dayStr = d.toISOString().split('T')[0];
+      const dayData = trendsMap[dayStr] || {};
+      dailyTrends.push({
+        date: dayStr,
+        ...dayData,
+        total: Object.values(dayData).reduce((a, b) => a + b, 0)
+      });
+    }
+
+    // Total therapist registrations
+    const totalResult = db.exec("SELECT COUNT(*) FROM users WHERE role = 'therapist'");
+    const totalTherapists = totalResult.length > 0 ? totalResult[0].values[0][0] : 0;
+
+    // Registrations with UTM data vs without
+    const withUtmResult = db.exec("SELECT COUNT(*) FROM users WHERE role = 'therapist' AND utm_source IS NOT NULL");
+    const withUtm = withUtmResult.length > 0 ? withUtmResult[0].values[0][0] : 0;
+
+    res.json({
+      total_therapists: totalTherapists,
+      with_utm_tracking: withUtm,
+      without_utm_tracking: totalTherapists - withUtm,
+      sources,
+      mediums,
+      campaigns,
+      daily_trends: dailyTrends
+    });
+  } catch (error) {
+    logger.error('Admin UTM stats error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch UTM statistics' });
+  }
+});
+
 module.exports = router;

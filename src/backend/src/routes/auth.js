@@ -36,7 +36,7 @@ function extractToken(req) {
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, role } = req.body;
+    const { email, password, role, utm_source, utm_medium, utm_campaign, utm_content, utm_term } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
@@ -59,10 +59,10 @@ router.post('/register', async (req, res) => {
 
     logger.info(`Registering new user: ${email} with role: ${userRole}`);
 
-    // Insert user into database
+    // Insert user into database with UTM tracking
     db.run(
-      'INSERT INTO users (email, password_hash, role, invite_code) VALUES (?, ?, ?, ?)',
-      [email, passwordHash, userRole, inviteCode]
+      'INSERT INTO users (email, password_hash, role, invite_code, utm_source, utm_medium, utm_campaign, utm_content, utm_term) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [email, passwordHash, userRole, inviteCode, utm_source || null, utm_medium || null, utm_campaign || null, utm_content || null, utm_term || null]
     );
 
     // Save to disk after write

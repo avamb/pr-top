@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useMemo } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useCsrfToken } from '../hooks/useCsrfToken';
 
@@ -7,6 +7,16 @@ export default function Register() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const csrfToken = useCsrfToken();
+  const [searchParams] = useSearchParams();
+
+  // Capture UTM params from URL
+  const utmParams = useMemo(() => ({
+    utm_source: searchParams.get('utm_source') || undefined,
+    utm_medium: searchParams.get('utm_medium') || undefined,
+    utm_campaign: searchParams.get('utm_campaign') || undefined,
+    utm_content: searchParams.get('utm_content') || undefined,
+    utm_term: searchParams.get('utm_term') || undefined,
+  }), [searchParams]);
   const [form, setForm] = useState({ email: '', password: '', confirmPassword: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -48,7 +58,8 @@ export default function Register() {
         body: JSON.stringify({
           email: form.email,
           password: form.password,
-          role: 'therapist'
+          role: 'therapist',
+          ...utmParams
         })
       });
 
