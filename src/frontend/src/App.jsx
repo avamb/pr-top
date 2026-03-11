@@ -17,6 +17,7 @@ import AdminTherapists from './pages/AdminTherapists';
 import AdminSettings from './pages/AdminSettings';
 import AdminAuditLogs from './pages/AdminAuditLogs';
 import AdminSystemLogs from './pages/AdminSystemLogs';
+import NotFound from './pages/NotFound';
 
 function App() {
   return (
@@ -44,7 +45,7 @@ function App() {
         <Route path="/admin/system-logs" element={<AppLayout><AdminSystemLogs /></AppLayout>} />
         <Route path="/admin/*" element={<AppLayout><AdminDashboard /></AppLayout>} />
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
   );
