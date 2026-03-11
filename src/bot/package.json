@@ -1,0 +1,15 @@
+{
+  "name": "psylink-bot",
+  "version": "0.1.0",
+  "description": "PsyLink Telegram Bot - Client diary and therapist workspace",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node src/index.js",
+    "start": "NODE_ENV=production node src/index.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.65.0",
+    "dotenv": "^16.4.0",
+    "axios": "^1.6.0"
+  }
+}
