@@ -1,0 +1,174 @@
+// Authentication Routes
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { v4: uuidv4 } = require('uuid');
+const { getDatabase, saveDatabase } = require('../db/connection');
+const { logger } = require('../utils/logger');
+
+const router = express.Router();
+
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-change-in-production';
+
+// POST /api/auth/register
+router.post('/register', async (req, res) => {
+  try {
+    const { email, password, role } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    const validRoles = ['therapist', 'client', 'superadmin'];
+    const userRole = validRoles.includes(role) ? role : 'therapist';
+
+    const db = getDatabase();
+
+    // Check if user already exists
+    const existing = db.exec('SELECT id FROM users WHERE email = ?', [email]);
+    if (existing.length > 0 && existing[0].values.length > 0) {
+      return res.status(409).json({ error: 'User with this email already exists' });
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 12);
+    const inviteCode = uuidv4().slice(0, 8);
+
+    logger.info(`Registering new user: ${email} with role: ${userRole}`);
+
+    // Insert user into database
+    db.run(
+      'INSERT INTO users (email, password_hash, role, invite_code) VALUES (?, ?, ?, ?)',
+      [email, passwordHash, userRole, inviteCode]
+    );
+
+    // Save to disk after write
+    saveDatabase();
+
+    // Get the inserted user
+    const result = db.exec('SELECT id, email, role, created_at FROM users WHERE email = ?', [email]);
+    const user = result[0].values[0];
+
+    // Generate JWT
+    const token = jwt.sign(
+      { userId: user[0], email: user[1], role: user[2] },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    logger.info(`User registered successfully: id=${user[0]}, email=${user[1]}`);
+
+    res.status(201).json({
+      message: 'User registered successfully',
+      user: {
+        id: user[0],
+        email: user[1],
+        role: user[2],
+        created_at: user[3]
+      },
+      token
+    });
+  } catch (error) {
+    logger.error('Registration error:', error);
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+// POST /api/auth/login
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    const db = getDatabase();
+
+    logger.info(`Login attempt for: ${email}`);
+
+    const result = db.exec(
+      'SELECT id, email, password_hash, role FROM users WHERE email = ?',
+      [email]
+    );
+
+    if (result.length === 0 || result[0].values.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const user = result[0].values[0];
+    const isValid = await bcrypt.compare(password, user[2]);
+
+    if (!isValid) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign(
+      { userId: user[0], email: user[1], role: user[3] },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    logger.info(`User logged in: id=${user[0]}, email=${user[1]}`);
+
+    res.json({
+      message: 'Login successful',
+      user: {
+        id: user[0],
+        email: user[1],
+        role: user[3]
+      },
+      token
+    });
+  } catch (error) {
+    logger.error('Login error:', error);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// GET /api/auth/me
+router.get('/me', (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    const db = getDatabase();
+
+    logger.info(`Fetching user profile: id=${decoded.userId}`);
+
+    const result = db.exec(
+      'SELECT id, email, role, language, timezone, created_at FROM users WHERE id = ?',
+      [decoded.userId]
+    );
+
+    if (result.length === 0 || result[0].values.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = result[0].values[0];
+
+    res.json({
+      user: {
+        id: user[0],
+        email: user[1],
+        role: user[2],
+        language: user[3],
+        timezone: user[4],
+        created_at: user[5]
+      }
+    });
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+    logger.error('Auth/me error:', error);
+    res.status(500).json({ error: 'Failed to fetch user profile' });
+  }
+});
+
+module.exports = router;

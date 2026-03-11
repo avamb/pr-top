@@ -7,8 +7,9 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
-const { initDatabase } = require('./db/connection');
+const { initDatabase, saveDatabase } = require('./db/connection');
 const { logger } = require('./utils/logger');
+const authRoutes = require('./routes/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -34,17 +35,31 @@ app.use(express.urlencoded({ extended: true }));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  const dbStatus = global.db ? 'connected' : 'disconnected';
+  const db = global.db;
+  let dbStatus = 'disconnected';
+  let tableCount = 0;
+
+  if (db) {
+    try {
+      const result = db.exec("SELECT count(*) FROM sqlite_master WHERE type='table'");
+      tableCount = result[0].values[0][0];
+      dbStatus = 'connected';
+    } catch (e) {
+      dbStatus = 'error';
+    }
+  }
+
   res.json({
     status: 'ok',
     database: dbStatus,
+    tableCount,
     timestamp: new Date().toISOString(),
     version: '0.1.0'
   });
 });
 
-// TODO: Mount route handlers
-// app.use('/api/auth', require('./routes/auth'));
+// Mount route handlers
+app.use('/api/auth', authRoutes);
 // app.use('/api/clients', require('./routes/clients'));
 // app.use('/api/sessions', require('./routes/sessions'));
 // app.use('/api/exercises', require('./routes/exercises'));
