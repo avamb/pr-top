@@ -4,6 +4,7 @@
 require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
+const { t } = require('./i18n');
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
@@ -18,6 +19,30 @@ const api = axios.create({
   },
   timeout: 10000
 });
+
+// Cache for user language preferences
+const userLangCache = {};
+
+// Get user language from cache or API
+async function getUserLang(telegramId) {
+  if (userLangCache[telegramId]) return userLangCache[telegramId];
+  try {
+    const response = await api.get(`/api/bot/user/${telegramId}`);
+    const lang = response.data.user?.language || 'en';
+    userLangCache[telegramId] = lang;
+    return lang;
+  } catch {
+    return 'en';
+  }
+}
+
+// Detect language from Telegram user's language_code
+function detectLang(msg) {
+  const code = msg.from?.language_code || 'en';
+  if (code.startsWith('es')) return 'es';
+  if (code.startsWith('ru')) return 'ru';
+  return 'en';
+}
 
 if (!token || token === 'your-telegram-bot-token') {
   console.error('ERROR: TELEGRAM_BOT_TOKEN is not set. Please configure it in .env');
@@ -37,22 +62,30 @@ if (!token || token === 'your-telegram-bot-token') {
       // Check if user already exists
       const existingUser = await checkExistingUser(telegramId);
       if (existingUser) {
-        const roleLabel = existingUser.role === 'therapist' ? 'Therapist' : 'Client';
-        bot.sendMessage(chatId,
-          `Welcome back! You are registered as a ${roleLabel}.\n\nUse /help to see available commands.`
-        );
+        const lang = existingUser.language || 'en';
+        userLangCache[telegramId] = lang;
+        const welcomeBack = t(lang, 'welcomeBack');
+        bot.sendMessage(chatId, welcomeBack(existingUser.role));
         return;
       }
     } catch (err) {
       // User not found - continue with role selection
     }
 
-    bot.sendMessage(chatId, 'Welcome to PsyLink! Please choose your role:', {
+    // For new users, detect language from Telegram settings
+    const lang = detectLang(msg);
+    const msgs = {
+      chooseRole: t(lang, 'chooseRole'),
+      roleTherapist: t(lang, 'roleTherapist'),
+      roleClient: t(lang, 'roleClient')
+    };
+
+    bot.sendMessage(chatId, msgs.chooseRole, {
       reply_markup: {
         inline_keyboard: [
           [
-            { text: '🧑‍⚕️ I am a Therapist', callback_data: 'role_therapist' },
-            { text: '🙋 I am a Client', callback_data: 'role_client' }
+            { text: msgs.roleTherapist, callback_data: 'role_therapist' },
+            { text: msgs.roleClient, callback_data: 'role_client' }
           ]
         ]
       }
@@ -64,6 +97,7 @@ if (!token || token === 'your-telegram-bot-token') {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const inviteCode = match[1].trim();
+    const lang = await getUserLang(telegramId);
 
     try {
       // Step 1: Look up therapist by invite code
@@ -73,34 +107,34 @@ if (!token || token === 'your-telegram-bot-token') {
       });
 
       const { therapist } = connectResult.data;
+      const foundTherapist = t(lang, 'foundTherapist');
 
       // Step 2: Show consent prompt
       bot.sendMessage(chatId,
-        `🔗 Found therapist: *${therapist.display_name}*\n\n` +
-        `By connecting, you consent to sharing your diary entries, exercise responses, and activity data with this therapist.\n\n` +
-        `Do you want to connect?`,
+        foundTherapist(therapist.display_name),
         {
           parse_mode: 'Markdown',
           reply_markup: {
             inline_keyboard: [
               [
-                { text: '✅ Yes, I consent', callback_data: `consent_yes_${therapist.id}` },
-                { text: '❌ No, cancel', callback_data: `consent_no_${therapist.id}` }
+                { text: t(lang, 'consentYes'), callback_data: `consent_yes_${therapist.id}` },
+                { text: t(lang, 'consentNo'), callback_data: `consent_no_${therapist.id}` }
               ]
             ]
           }
         }
       );
     } catch (error) {
-      const errorMsg = error.response?.data?.error || 'Failed to process invite code. Please try again.';
+      const errorMsg = error.response?.data?.error || t(lang, 'failedInviteCode');
       bot.sendMessage(chatId, `❌ ${errorMsg}`);
     }
   });
 
   // /connect without code - show usage
   bot.onText(/^\/connect$/, async (msg) => {
+    const lang = await getUserLang(msg.from.id);
     bot.sendMessage(msg.chat.id,
-      '📋 To connect with your therapist, use:\n`/connect YOUR_CODE`\n\nReplace YOUR_CODE with the invite code your therapist gave you.',
+      t(lang, 'connectUsage'),
       { parse_mode: 'Markdown' }
     );
   });
@@ -115,6 +149,7 @@ if (!token || token === 'your-telegram-bot-token') {
     if (data.startsWith('consent_yes_') || data.startsWith('consent_no_')) {
       const consent = data.startsWith('consent_yes_');
       const therapistId = data.split('_').pop();
+      const lang = await getUserLang(telegramId);
 
       try {
         const result = await api.post('/api/bot/consent', {
@@ -124,21 +159,12 @@ if (!token || token === 'your-telegram-bot-token') {
         });
 
         if (consent && result.data.linked) {
-          bot.sendMessage(chatId,
-            '✅ You are now connected to your therapist!\n\n' +
-            'You can now:\n' +
-            '• Write diary entries by sending text messages\n' +
-            '• Send voice messages for your diary\n' +
-            '• Use /sos for emergency contact\n\n' +
-            'Use /help to see all available commands.'
-          );
+          bot.sendMessage(chatId, t(lang, 'connected'));
         } else {
-          bot.sendMessage(chatId,
-            '❌ Connection cancelled. You can try again with /connect <code>.'
-          );
+          bot.sendMessage(chatId, t(lang, 'connectionCancelled'));
         }
       } catch (error) {
-        const errorMsg = error.response?.data?.error || 'Failed to process consent. Please try again.';
+        const errorMsg = error.response?.data?.error || t(lang, 'failedConsent');
         bot.sendMessage(chatId, `❌ ${errorMsg}`);
       }
 
@@ -149,34 +175,28 @@ if (!token || token === 'your-telegram-bot-token') {
     // Handle role selection callbacks
     if (data === 'role_therapist' || data === 'role_client') {
       const role = data === 'role_therapist' ? 'therapist' : 'client';
+      // Detect language from Telegram user for new registrations
+      const lang = detectLang(callbackQuery);
 
       try {
-        const result = await registerUser(telegramId, role);
+        const result = await registerUser(telegramId, role, lang);
+        userLangCache[telegramId] = lang;
 
         if (result.already_existed) {
-          bot.sendMessage(chatId,
-            `You are already registered as a ${result.user.role}. Use /help to see available commands.`
-          );
+          const alreadyRegistered = t(lang, 'alreadyRegistered');
+          bot.sendMessage(chatId, alreadyRegistered(result.user.role));
         } else if (role === 'therapist') {
+          const welcomeTherapist = t(lang, 'welcomeTherapist');
           bot.sendMessage(chatId,
-            `✅ Welcome, Therapist! Your workspace has been set up.\n\n` +
-            `Your invite code: *${result.user.invite_code}*\n` +
-            `Share this code with your clients so they can connect with you.\n\n` +
-            `Use /help to see available commands.`,
+            welcomeTherapist(result.user.invite_code),
             { parse_mode: 'Markdown' }
           );
         } else {
-          bot.sendMessage(chatId,
-            `✅ Welcome! You've been registered as a client.\n\n` +
-            `Please enter your therapist's invite code to get started:\n` +
-            `Use /connect <code> to link with your therapist.`
-          );
+          bot.sendMessage(chatId, t(lang, 'welcomeClient'));
         }
       } catch (error) {
         console.error('Registration error:', error.message);
-        bot.sendMessage(chatId,
-          '❌ Sorry, there was an error during registration. Please try again with /start.'
-        );
+        bot.sendMessage(chatId, t(lang, 'registrationError'));
       }
 
       bot.answerCallbackQuery(callbackQuery.id);
@@ -187,6 +207,7 @@ if (!token || token === 'your-telegram-bot-token') {
   bot.on('voice', async (msg) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
+    const lang = await getUserLang(telegramId);
 
     try {
       // Get file info from Telegram
@@ -201,11 +222,9 @@ if (!token || token === 'your-telegram-bot-token') {
         file_ref: fileId
       });
 
-      bot.sendMessage(chatId,
-        '🎤 Voice diary entry saved! Your therapist will be able to listen to it.'
-      );
+      bot.sendMessage(chatId, t(lang, 'voiceSaved'));
     } catch (error) {
-      const errorMsg = error.response?.data?.error || 'Failed to save voice diary entry.';
+      const errorMsg = error.response?.data?.error || t(lang, 'failedVoiceDiary');
       bot.sendMessage(chatId, `❌ ${errorMsg}`);
     }
   });
@@ -217,6 +236,7 @@ if (!token || token === 'your-telegram-bot-token') {
 
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
+    const lang = await getUserLang(telegramId);
 
     try {
       await api.post('/api/bot/diary', {
@@ -225,9 +245,9 @@ if (!token || token === 'your-telegram-bot-token') {
         content: msg.text
       });
 
-      bot.sendMessage(chatId, '📝 Diary entry saved!');
+      bot.sendMessage(chatId, t(lang, 'diarySaved'));
     } catch (error) {
-      const errorMsg = error.response?.data?.error || 'Failed to save diary entry.';
+      const errorMsg = error.response?.data?.error || t(lang, 'failedDiary');
       bot.sendMessage(chatId, `❌ ${errorMsg}`);
     }
   });
@@ -237,11 +257,12 @@ if (!token || token === 'your-telegram-bot-token') {
 
 // Helper functions for API communication
 
-async function registerUser(telegramId, role) {
+async function registerUser(telegramId, role, language) {
   try {
     const response = await api.post('/api/bot/register', {
       telegram_id: String(telegramId),
-      role: role
+      role: role,
+      language: language || 'en'
     });
     return response.data;
   } catch (error) {
