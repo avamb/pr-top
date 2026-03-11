@@ -188,4 +188,48 @@ router.get('/activity', (req, res) => {
   }
 });
 
+// GET /api/dashboard/notifications - Get unacknowledged SOS alerts and other notifications
+router.get('/notifications', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+
+    // Get triggered (unacknowledged) SOS events
+    const sosResult = db.exec(
+      `SELECT se.id, se.client_id, se.status, se.created_at,
+              u.email, u.telegram_id
+       FROM sos_events se
+       JOIN users u ON u.id = se.client_id
+       WHERE se.therapist_id = ? AND se.status = 'triggered'
+       ORDER BY se.created_at DESC`,
+      [therapistId]
+    );
+
+    const notifications = [];
+
+    if (sosResult.length > 0 && sosResult[0].values.length > 0) {
+      for (const row of sosResult[0].values) {
+        notifications.push({
+          type: 'sos_alert',
+          id: row[0],
+          client_id: row[1],
+          client_identifier: row[4] || ('Telegram: ' + row[5]),
+          status: row[2],
+          created_at: row[3],
+          urgent: true
+        });
+      }
+    }
+
+    res.json({
+      notifications,
+      total: notifications.length,
+      has_urgent: notifications.some(n => n.urgent)
+    });
+  } catch (error) {
+    logger.error('Dashboard notifications error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
 module.exports = router;

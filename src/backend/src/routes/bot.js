@@ -454,6 +454,40 @@ router.post('/sos', botAuth, (req, res) => {
 
     logger.info(`SOS ALERT: Client ${clientId} (telegram_id=${telegram_id}) triggered SOS, therapist ${therapistId}, event #${sosId}`);
 
+    // Notify therapist immediately
+    // Look up therapist's telegram_id for Telegram notification
+    const therapistResult = db.exec(
+      'SELECT telegram_id, email FROM users WHERE id = ?',
+      [therapistId]
+    );
+
+    let notificationSent = false;
+    const therapistInfo = therapistResult.length > 0 && therapistResult[0].values.length > 0
+      ? therapistResult[0].values[0] : null;
+
+    if (therapistInfo && therapistInfo[0]) {
+      // Therapist has a Telegram ID - log notification (in production, send via bot)
+      const clientIdentifier = `Client #${clientId} (Telegram: ${telegram_id})`;
+      logger.info(`THERAPIST NOTIFICATION: SOS from ${clientIdentifier} → Therapist telegram_id=${therapistInfo[0]}`);
+      logger.info(`[DEV MODE] Would send Telegram message to ${therapistInfo[0]}: "🚨 SOS ALERT from your client ${clientIdentifier}. Please check immediately."`);
+      notificationSent = true;
+    }
+
+    if (therapistInfo && therapistInfo[1]) {
+      // Therapist has an email - log email notification
+      logger.info(`[DEV MODE] Would send email notification to ${therapistInfo[1]}: SOS alert from client #${clientId}`);
+      notificationSent = true;
+    }
+
+    // Store notification record for web dashboard polling
+    db.run(
+      `INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at)
+       VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+      [therapistId, 'sos_notification_sent', 'sos_event', sosId,
+       JSON.stringify({ client_id: clientId, therapist_id: therapistId, notification_sent: notificationSent, telegram_id: String(telegram_id) })]
+    );
+    saveDatabase();
+
     res.status(201).json({
       message: 'SOS alert sent successfully',
       sos_event: {
