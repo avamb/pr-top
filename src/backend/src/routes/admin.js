@@ -127,16 +127,48 @@ router.get('/stats/users', (req, res) => {
   try {
     const db = getDatabase();
 
-    const therapistCount = db.exec("SELECT COUNT(*) FROM users WHERE role = 'therapist'");
-    const clientCount = db.exec("SELECT COUNT(*) FROM users WHERE role = 'client'");
-    const sessionCount = db.exec("SELECT COUNT(*) FROM sessions");
-    const subscriptionCount = db.exec("SELECT COUNT(*) FROM subscriptions WHERE status = 'active'");
+    const getCount = (sql) => {
+      const r = db.exec(sql);
+      return r.length > 0 ? r[0].values[0][0] : 0;
+    };
+
+    // User counts
+    const therapists = getCount("SELECT COUNT(*) FROM users WHERE role = 'therapist'");
+    const clients = getCount("SELECT COUNT(*) FROM users WHERE role = 'client'");
+    const blockedTherapists = getCount("SELECT COUNT(*) FROM users WHERE role = 'therapist' AND blocked_at IS NOT NULL");
+
+    // Content counts
+    const sessions = getCount("SELECT COUNT(*) FROM sessions");
+    const diaryEntries = getCount("SELECT COUNT(*) FROM diary_entries");
+    const therapistNotes = getCount("SELECT COUNT(*) FROM therapist_notes");
+    const sosEvents = getCount("SELECT COUNT(*) FROM sos_events");
+
+    // Subscription breakdown
+    const activeSubscriptions = getCount("SELECT COUNT(*) FROM subscriptions WHERE status = 'active'");
+    const trialSubs = getCount("SELECT COUNT(*) FROM subscriptions WHERE plan = 'trial' AND status = 'active'");
+    const basicSubs = getCount("SELECT COUNT(*) FROM subscriptions WHERE plan = 'basic' AND status = 'active'");
+    const proSubs = getCount("SELECT COUNT(*) FROM subscriptions WHERE plan = 'pro' AND status = 'active'");
+    const premiumSubs = getCount("SELECT COUNT(*) FROM subscriptions WHERE plan = 'premium' AND status = 'active'");
+
+    // Audit log count
+    const auditLogEntries = getCount("SELECT COUNT(*) FROM audit_logs");
 
     res.json({
-      therapists: therapistCount.length > 0 ? therapistCount[0].values[0][0] : 0,
-      clients: clientCount.length > 0 ? clientCount[0].values[0][0] : 0,
-      sessions: sessionCount.length > 0 ? sessionCount[0].values[0][0] : 0,
-      subscriptions: subscriptionCount.length > 0 ? subscriptionCount[0].values[0][0] : 0
+      therapists,
+      clients,
+      blocked_therapists: blockedTherapists,
+      sessions,
+      diary_entries: diaryEntries,
+      therapist_notes: therapistNotes,
+      sos_events: sosEvents,
+      subscriptions: activeSubscriptions,
+      subscription_breakdown: {
+        trial: trialSubs,
+        basic: basicSubs,
+        pro: proSubs,
+        premium: premiumSubs
+      },
+      audit_log_entries: auditLogEntries
     });
   } catch (error) {
     logger.error('Admin stats/users error: ' + error.message);

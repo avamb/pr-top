@@ -21,12 +21,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
-    therapists: 0,
-    clients: 0,
-    sessions: 0,
-    subscriptions: 0
-  });
+  const [stats, setStats] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -62,29 +57,11 @@ export default function AdminDashboard() {
     try {
       const headers = { Authorization: `Bearer ${token}` };
 
-      // Fetch admin stats
-      const [therapistsRes, statsRes] = await Promise.allSettled([
-        fetch(`${API_URL}/admin/therapists`, { headers }),
-        fetch(`${API_URL}/admin/stats/users`, { headers })
-      ]);
-
-      let therapistCount = 0;
-      if (therapistsRes.status === 'fulfilled' && therapistsRes.value.ok) {
-        const data = await therapistsRes.value.json();
-        therapistCount = data.therapists ? data.therapists.length : 0;
+      const statsRes = await fetch(`${API_URL}/admin/stats/users`, { headers });
+      if (statsRes.ok) {
+        const data = await statsRes.json();
+        setStats(data);
       }
-
-      let userStats = {};
-      if (statsRes.status === 'fulfilled' && statsRes.value.ok) {
-        userStats = await statsRes.value.json();
-      }
-
-      setStats({
-        therapists: therapistCount,
-        clients: userStats.clients || 0,
-        sessions: userStats.sessions || 0,
-        subscriptions: userStats.subscriptions || 0
-      });
     } catch (err) {
       console.error('Failed to load admin stats:', err);
     } finally {
@@ -159,30 +136,95 @@ export default function AdminDashboard() {
           <p className="text-secondary mt-1">Platform overview and management</p>
         </div>
 
-        {/* Stats Grid */}
+        {/* User Statistics */}
+        <h3 className="text-lg font-semibold text-text mb-4">User Statistics</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatCard
             label="Therapists"
-            value={stats.therapists}
+            value={stats?.therapists ?? 0}
             icon="👨‍⚕️"
             color="bg-primary/10"
           />
           <StatCard
             label="Clients"
-            value={stats.clients}
+            value={stats?.clients ?? 0}
             icon="👥"
             color="bg-blue-50"
           />
           <StatCard
+            label="Blocked Therapists"
+            value={stats?.blocked_therapists ?? 0}
+            icon="🚫"
+            color="bg-red-50"
+          />
+          <StatCard
+            label="Audit Log Entries"
+            value={stats?.audit_log_entries ?? 0}
+            icon="📝"
+            color="bg-gray-100"
+          />
+        </div>
+
+        {/* Platform-wide Metrics */}
+        <h3 className="text-lg font-semibold text-text mb-4">Platform Metrics</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <StatCard
             label="Sessions"
-            value={stats.sessions}
+            value={stats?.sessions ?? 0}
             icon="📋"
             color="bg-green-50"
           />
           <StatCard
-            label="Subscriptions"
-            value={stats.subscriptions}
+            label="Diary Entries"
+            value={stats?.diary_entries ?? 0}
+            icon="📖"
+            color="bg-indigo-50"
+          />
+          <StatCard
+            label="Therapist Notes"
+            value={stats?.therapist_notes ?? 0}
+            icon="🗒️"
+            color="bg-yellow-50"
+          />
+          <StatCard
+            label="SOS Events"
+            value={stats?.sos_events ?? 0}
+            icon="🆘"
+            color="bg-red-50"
+          />
+        </div>
+
+        {/* Subscription Statistics */}
+        <h3 className="text-lg font-semibold text-text mb-4">Subscription Statistics</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+          <StatCard
+            label="Active Subscriptions"
+            value={stats?.subscriptions ?? 0}
             icon="💳"
+            color="bg-amber-50"
+          />
+          <StatCard
+            label="Trial"
+            value={stats?.subscription_breakdown?.trial ?? 0}
+            icon="🆓"
+            color="bg-gray-50"
+          />
+          <StatCard
+            label="Basic"
+            value={stats?.subscription_breakdown?.basic ?? 0}
+            icon="⭐"
+            color="bg-blue-50"
+          />
+          <StatCard
+            label="Pro"
+            value={stats?.subscription_breakdown?.pro ?? 0}
+            icon="🚀"
+            color="bg-purple-50"
+          />
+          <StatCard
+            label="Premium"
+            value={stats?.subscription_breakdown?.premium ?? 0}
+            icon="💎"
             color="bg-amber-50"
           />
         </div>

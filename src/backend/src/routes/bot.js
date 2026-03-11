@@ -4,6 +4,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { logger } = require('../utils/logger');
+const { encrypt } = require('../services/encryption');
 
 const router = express.Router();
 
@@ -270,6 +271,119 @@ router.post('/consent', botAuth, (req, res) => {
   } catch (error) {
     logger.error('Bot consent error: ' + error.message);
     res.status(500).json({ error: 'Consent processing failed: ' + error.message });
+  }
+});
+
+// POST /api/bot/diary - Client submits a diary entry
+router.post('/diary', botAuth, (req, res) => {
+  try {
+    const { telegram_id, content, entry_type } = req.body;
+
+    if (!telegram_id) {
+      return res.status(400).json({ error: 'telegram_id is required' });
+    }
+    if (!content || !content.trim()) {
+      return res.status(400).json({ error: 'content is required' });
+    }
+
+    const type = entry_type || 'text';
+    const validTypes = ['text', 'voice', 'video'];
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({ error: 'entry_type must be text, voice, or video' });
+    }
+
+    const db = getDatabase();
+
+    // Verify the user exists and is a client
+    const clientResult = db.exec(
+      'SELECT id, role, therapist_id, consent_therapist_access FROM users WHERE telegram_id = ?',
+      [String(telegram_id)]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found. Please register first with /start.' });
+    }
+
+    const client = clientResult[0].values[0];
+    const clientId = client[0];
+    const clientRole = client[1];
+
+    if (clientRole !== 'client') {
+      return res.status(400).json({ error: 'Only clients can submit diary entries.' });
+    }
+
+    // Encrypt the diary content (Class A data)
+    const { encrypted: contentEncrypted, keyVersion, keyId } = encrypt(content.trim());
+
+    // Insert diary entry
+    db.run(
+      `INSERT INTO diary_entries (client_id, entry_type, content_encrypted, encryption_key_id, payload_version, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+      [clientId, type, contentEncrypted, keyId, keyVersion]
+    );
+    saveDatabase();
+
+    // Get the created entry ID
+    const lastId = db.exec("SELECT id FROM diary_entries WHERE client_id = ? ORDER BY id DESC LIMIT 1", [clientId]);
+    const entryId = lastId.length > 0 ? lastId[0].values[0][0] : 0;
+
+    logger.info(`Client ${clientId} submitted ${type} diary entry #${entryId}`);
+
+    res.status(201).json({
+      message: 'Diary entry saved successfully',
+      entry: {
+        id: entryId,
+        client_id: clientId,
+        entry_type: type,
+        created_at: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    logger.error('Bot diary error: ' + error.message);
+    logger.error('Stack: ' + error.stack);
+    res.status(500).json({ error: 'Failed to save diary entry: ' + error.message });
+  }
+});
+
+// GET /api/bot/diary/:telegram_id - Get diary entries for a client
+router.get('/diary/:telegram_id', botAuth, (req, res) => {
+  try {
+    const { telegram_id } = req.params;
+    const db = getDatabase();
+
+    // Verify client exists
+    const clientResult = db.exec(
+      'SELECT id, role FROM users WHERE telegram_id = ?',
+      [String(telegram_id)]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+
+    const client = clientResult[0].values[0];
+    const clientId = client[0];
+
+    // Get diary entries (without decrypting - just metadata)
+    const result = db.exec(
+      `SELECT id, entry_type, content_encrypted, encryption_key_id, payload_version, created_at
+       FROM diary_entries WHERE client_id = ? ORDER BY created_at DESC LIMIT 50`,
+      [clientId]
+    );
+
+    const entries = (result.length > 0 ? result[0].values : []).map(row => ({
+      id: row[0],
+      entry_type: row[1],
+      content_encrypted: row[2],
+      encryption_key_id: row[3],
+      payload_version: row[4],
+      created_at: row[5]
+    }));
+
+    res.json({ entries, total: entries.length });
+  } catch (error) {
+    logger.error('Bot get diary error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch diary entries' });
   }
 });
 
