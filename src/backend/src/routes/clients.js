@@ -126,6 +126,8 @@ router.get('/:id/diary', (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page) || 25));
     const entryType = req.query.entry_type || '';
+    const dateFrom = req.query.date_from || ''; // ISO date string e.g. 2026-01-01
+    const dateTo = req.query.date_to || ''; // ISO date string e.g. 2026-12-31
     const offset = (page - 1) * perPage;
 
     // Verify client belongs to this therapist and has consent
@@ -156,6 +158,16 @@ router.get('/:id/diary', (req, res) => {
     if (entryType && ['text', 'voice', 'video'].includes(entryType)) {
       whereClause += ' AND entry_type = ?';
       params.push(entryType);
+    }
+
+    // Date range filtering
+    if (dateFrom && /^\d{4}-\d{2}-\d{2}/.test(dateFrom)) {
+      whereClause += ' AND created_at >= ?';
+      params.push(dateFrom.substring(0, 10) + 'T00:00:00');
+    }
+    if (dateTo && /^\d{4}-\d{2}-\d{2}/.test(dateTo)) {
+      whereClause += ' AND created_at <= ?';
+      params.push(dateTo.substring(0, 10) + 'T23:59:59');
     }
 
     // Get total count
@@ -362,6 +374,385 @@ router.get('/:id/notes', (req, res) => {
   } catch (error) {
     logger.error('Get client notes error: ' + error.message);
     res.status(500).json({ error: 'Failed to fetch notes' });
+  }
+});
+
+// GET /api/clients/:id/context - Get client context (anamnesis, goals, AI instructions)
+router.get('/:id/context', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+
+    // Verify client belongs to this therapist
+    const clientResult = db.exec(
+      "SELECT id, consent_therapist_access FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [clientId, therapistId]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    }
+
+    // Get context record
+    const result = db.exec(
+      `SELECT id, anamnesis_encrypted, current_goals_encrypted, contraindications_encrypted,
+              ai_instructions_encrypted, encryption_key_id, payload_version, created_at, updated_at
+       FROM client_context
+       WHERE therapist_id = ? AND client_id = ?
+       LIMIT 1`,
+      [therapistId, clientId]
+    );
+
+    if (result.length === 0 || result[0].values.length === 0) {
+      // No context yet - return empty
+      return res.json({
+        context: {
+          id: null,
+          client_id: parseInt(clientId),
+          therapist_id: therapistId,
+          anamnesis: null,
+          current_goals: null,
+          contraindications: null,
+          ai_instructions: null,
+          created_at: null,
+          updated_at: null
+        }
+      });
+    }
+
+    const row = result[0].values[0];
+
+    // Decrypt each field
+    const decryptField = (encrypted) => {
+      if (!encrypted) return null;
+      try {
+        return decrypt(encrypted);
+      } catch (e) {
+        logger.error(`Failed to decrypt context field: ${e.message}`);
+        return '[decryption error]';
+      }
+    };
+
+    const context = {
+      id: row[0],
+      client_id: parseInt(clientId),
+      therapist_id: therapistId,
+      anamnesis: decryptField(row[1]),
+      current_goals: decryptField(row[2]),
+      contraindications: decryptField(row[3]),
+      ai_instructions: decryptField(row[4]),
+      created_at: row[7],
+      updated_at: row[8]
+    };
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      [therapistId, 'read_context', 'client_context', clientId, JSON.stringify({ context_id: row[0] })]
+    );
+    saveDatabase();
+
+    res.json({ context });
+  } catch (error) {
+    logger.error('Get client context error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch client context' });
+  }
+});
+
+// PUT /api/clients/:id/context - Create or update client context (anamnesis, goals, etc.)
+router.put('/:id/context', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+    const { anamnesis, current_goals, contraindications, ai_instructions } = req.body;
+
+    // At least one field must be provided
+    if (!anamnesis && !current_goals && !contraindications && !ai_instructions) {
+      return res.status(400).json({ error: 'At least one context field is required (anamnesis, current_goals, contraindications, ai_instructions)' });
+    }
+
+    // Verify client belongs to this therapist
+    const clientResult = db.exec(
+      "SELECT id, consent_therapist_access FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [clientId, therapistId]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    }
+
+    // Encrypt each provided field (Class A data)
+    const encryptField = (value) => {
+      if (!value || typeof value !== 'string' || value.trim().length === 0) return null;
+      return encrypt(value.trim());
+    };
+
+    // Check if context already exists
+    const existing = db.exec(
+      'SELECT id, anamnesis_encrypted, current_goals_encrypted, contraindications_encrypted, ai_instructions_encrypted FROM client_context WHERE therapist_id = ? AND client_id = ?',
+      [therapistId, clientId]
+    );
+
+    let contextId;
+    const hasExisting = existing.length > 0 && existing[0].values.length > 0;
+
+    if (hasExisting) {
+      // Update existing context - merge: keep existing encrypted values for fields not provided
+      const existingRow = existing[0].values[0];
+      contextId = existingRow[0];
+
+      const anamnesisEnc = anamnesis ? encryptField(anamnesis) : null;
+      const goalsEnc = current_goals ? encryptField(current_goals) : null;
+      const contraindicationsEnc = contraindications ? encryptField(contraindications) : null;
+      const aiInstructionsEnc = ai_instructions ? encryptField(ai_instructions) : null;
+
+      // For each field: use new encrypted value if provided, else keep existing
+      const finalAnamnesis = anamnesisEnc ? anamnesisEnc.encrypted : existingRow[1];
+      const finalGoals = goalsEnc ? goalsEnc.encrypted : existingRow[2];
+      const finalContraindications = contraindicationsEnc ? contraindicationsEnc.encrypted : existingRow[3];
+      const finalAiInstructions = aiInstructionsEnc ? aiInstructionsEnc.encrypted : existingRow[4];
+
+      // Get key info from whichever field was encrypted
+      const encResult = anamnesisEnc || goalsEnc || contraindicationsEnc || aiInstructionsEnc;
+      const keyId = encResult ? encResult.keyId : null;
+      const keyVersion = encResult ? encResult.keyVersion : null;
+
+      const updateParts = [
+        'anamnesis_encrypted = ?',
+        'current_goals_encrypted = ?',
+        'contraindications_encrypted = ?',
+        'ai_instructions_encrypted = ?',
+        "updated_at = datetime('now')"
+      ];
+
+      const updateParams = [finalAnamnesis, finalGoals, finalContraindications, finalAiInstructions];
+
+      if (keyId !== null) {
+        updateParts.push('encryption_key_id = ?', 'payload_version = ?');
+        updateParams.push(keyId, keyVersion);
+      }
+
+      updateParams.push(therapistId, clientId);
+
+      db.run(
+        `UPDATE client_context SET ${updateParts.join(', ')} WHERE therapist_id = ? AND client_id = ?`,
+        updateParams
+      );
+    } else {
+      // Create new context record
+      const anamnesisEnc = encryptField(anamnesis);
+      const goalsEnc = encryptField(current_goals);
+      const contraindicationsEnc = encryptField(contraindications);
+      const aiInstructionsEnc = encryptField(ai_instructions);
+
+      // Get key info from whichever field was encrypted
+      const encResult = anamnesisEnc || goalsEnc || contraindicationsEnc || aiInstructionsEnc;
+
+      db.run(
+        `INSERT INTO client_context (therapist_id, client_id, anamnesis_encrypted, current_goals_encrypted,
+         contraindications_encrypted, ai_instructions_encrypted, encryption_key_id, payload_version,
+         created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+        [
+          therapistId, clientId,
+          anamnesisEnc ? anamnesisEnc.encrypted : null,
+          goalsEnc ? goalsEnc.encrypted : null,
+          contraindicationsEnc ? contraindicationsEnc.encrypted : null,
+          aiInstructionsEnc ? aiInstructionsEnc.encrypted : null,
+          encResult ? encResult.keyId : null,
+          encResult ? encResult.keyVersion : null
+        ]
+      );
+
+      const lastIdResult = db.exec('SELECT last_insert_rowid()');
+      contextId = lastIdResult[0].values[0][0];
+    }
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      [therapistId, hasExisting ? 'update_context' : 'create_context', 'client_context', clientId,
+       JSON.stringify({ fields: Object.keys(req.body).filter(k => req.body[k]) })]
+    );
+    saveDatabase();
+
+    logger.info(`Therapist ${therapistId} ${hasExisting ? 'updated' : 'created'} context for client ${clientId}`);
+
+    // Return the saved context (decrypted)
+    const savedResult = db.exec(
+      `SELECT id, anamnesis_encrypted, current_goals_encrypted, contraindications_encrypted,
+              ai_instructions_encrypted, created_at, updated_at
+       FROM client_context WHERE therapist_id = ? AND client_id = ?`,
+      [therapistId, clientId]
+    );
+
+    const savedRow = savedResult[0].values[0];
+    const decryptField = (encrypted) => {
+      if (!encrypted) return null;
+      try { return decrypt(encrypted); } catch (e) { return '[decryption error]'; }
+    };
+
+    res.status(hasExisting ? 200 : 201).json({
+      context: {
+        id: savedRow[0],
+        client_id: parseInt(clientId),
+        therapist_id: therapistId,
+        anamnesis: decryptField(savedRow[1]),
+        current_goals: decryptField(savedRow[2]),
+        contraindications: decryptField(savedRow[3]),
+        ai_instructions: decryptField(savedRow[4]),
+        created_at: savedRow[5],
+        updated_at: savedRow[6]
+      }
+    });
+  } catch (error) {
+    logger.error('Update client context error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update client context' });
+  }
+});
+
+// GET /api/clients/:id/timeline - Unified timeline of diary entries, notes, and sessions
+router.get('/:id/timeline', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+    const startDate = req.query.start_date || '';
+    const endDate = req.query.end_date || '';
+
+    // Verify client belongs to this therapist
+    const clientResult = db.exec(
+      "SELECT id, consent_therapist_access FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [clientId, therapistId]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    }
+
+    const client = clientResult[0].values[0];
+    if (!client[1]) {
+      return res.status(403).json({ error: 'Client has not granted consent for data access' });
+    }
+
+    // Build date filter clause
+    let dateFilter = '';
+    const dateParams = [];
+    if (startDate) {
+      dateFilter += ' AND created_at >= ?';
+      dateParams.push(startDate);
+    }
+    if (endDate) {
+      dateFilter += ' AND created_at <= ?';
+      dateParams.push(endDate);
+    }
+
+    const timeline = [];
+
+    // 1. Fetch diary entries
+    const diaryResult = db.exec(
+      `SELECT id, entry_type, content_encrypted, transcript_encrypted, created_at
+       FROM diary_entries WHERE client_id = ?${dateFilter}
+       ORDER BY created_at DESC`,
+      [clientId, ...dateParams]
+    );
+
+    if (diaryResult.length > 0 && diaryResult[0].values.length > 0) {
+      for (const row of diaryResult[0].values) {
+        let content = null;
+        let transcript = null;
+        try { if (row[2]) content = decrypt(row[2]); } catch (e) { content = '[decryption error]'; }
+        try { if (row[3]) transcript = decrypt(row[3]); } catch (e) { transcript = '[decryption error]'; }
+
+        timeline.push({
+          type: 'diary',
+          id: row[0],
+          entry_type: row[1],
+          content: content,
+          transcript: transcript,
+          created_at: row[4]
+        });
+      }
+    }
+
+    // 2. Fetch therapist notes
+    const notesResult = db.exec(
+      `SELECT id, note_encrypted, session_date, created_at
+       FROM therapist_notes WHERE therapist_id = ? AND client_id = ?${dateFilter}
+       ORDER BY created_at DESC`,
+      [therapistId, clientId, ...dateParams]
+    );
+
+    if (notesResult.length > 0 && notesResult[0].values.length > 0) {
+      for (const row of notesResult[0].values) {
+        let content = null;
+        try { if (row[1]) content = decrypt(row[1]); } catch (e) { content = '[decryption error]'; }
+
+        timeline.push({
+          type: 'note',
+          id: row[0],
+          content: content,
+          session_date: row[2],
+          created_at: row[3]
+        });
+      }
+    }
+
+    // 3. Fetch sessions
+    const sessionsResult = db.exec(
+      `SELECT id, audio_ref, transcript_encrypted, summary_encrypted, status, scheduled_at, created_at
+       FROM sessions WHERE therapist_id = ? AND client_id = ?${dateFilter}
+       ORDER BY created_at DESC`,
+      [therapistId, clientId, ...dateParams]
+    );
+
+    if (sessionsResult.length > 0 && sessionsResult[0].values.length > 0) {
+      for (const row of sessionsResult[0].values) {
+        let summary = null;
+        try { if (row[3]) summary = decrypt(row[3]); } catch (e) { summary = '[decryption error]'; }
+
+        timeline.push({
+          type: 'session',
+          id: row[0],
+          has_audio: !!row[1],
+          has_transcript: !!row[2],
+          summary: summary,
+          status: row[4],
+          scheduled_at: row[5],
+          created_at: row[6]
+        });
+      }
+    }
+
+    // Sort all items chronologically (newest first)
+    timeline.sort((a, b) => {
+      const dateA = new Date(a.created_at);
+      const dateB = new Date(b.created_at);
+      return dateB - dateA;
+    });
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      [therapistId, 'read_timeline', 'client', clientId, JSON.stringify({ items_count: timeline.length })]
+    );
+    saveDatabase();
+
+    logger.info(`Therapist ${therapistId} accessed timeline for client ${clientId} (${timeline.length} items)`);
+
+    res.json({
+      timeline,
+      total: timeline.length,
+      filters: {
+        start_date: startDate || null,
+        end_date: endDate || null
+      }
+    });
+  } catch (error) {
+    logger.error('Get client timeline error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch client timeline' });
   }
 });
 

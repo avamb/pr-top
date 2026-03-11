@@ -22,6 +22,8 @@ function ClientDetail() {
   const [error, setError] = useState('');
   const [diaryError, setDiaryError] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const token = localStorage.getItem('token');
 
   useEffect(() => {
@@ -33,7 +35,7 @@ function ClientDetail() {
     fetchDiary();
     fetchNotes();
     fetchContext();
-  }, [id, typeFilter]);
+  }, [id, typeFilter, dateFrom, dateTo]);
 
   async function fetchClient() {
     try {
@@ -52,9 +54,12 @@ function ClientDetail() {
     try {
       setLoading(true);
       setDiaryError('');
-      const url = typeFilter
-        ? `${API}/clients/${id}/diary?entry_type=${typeFilter}`
-        : `${API}/clients/${id}/diary`;
+      const params = new URLSearchParams();
+      if (typeFilter) params.set('entry_type', typeFilter);
+      if (dateFrom) params.set('date_from', dateFrom);
+      if (dateTo) params.set('date_to', dateTo);
+      const qs = params.toString();
+      const url = `${API}/clients/${id}/diary${qs ? '?' + qs : ''}`;
       const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -378,6 +383,32 @@ function ClientDetail() {
                 className={`px-3 py-1 rounded text-sm ${typeFilter === 'video' ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
               >🎥 Video</button>
             </div>
+          </div>
+
+          {/* Date Range Filter */}
+          <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-stone-50 rounded-lg">
+            <label className="text-sm font-medium text-stone-600">Date range:</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="px-3 py-1.5 border border-stone-300 rounded text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+              aria-label="Date from"
+            />
+            <span className="text-stone-400 text-sm">to</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="px-3 py-1.5 border border-stone-300 rounded text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+              aria-label="Date to"
+            />
+            {(dateFrom || dateTo) && (
+              <button
+                onClick={() => { setDateFrom(''); setDateTo(''); }}
+                className="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
+              >Clear dates</button>
+            )}
           </div>
 
           {diaryError ? (
