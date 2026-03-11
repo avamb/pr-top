@@ -38,6 +38,11 @@ function ClientDetail() {
   const [exercises, setExercises] = useState([]);
   const [exercisesTotal, setExercisesTotal] = useState(0);
   const [exercisesLoading, setExercisesLoading] = useState(false);
+  const [exerciseLibrary, setExerciseLibrary] = useState([]);
+  const [exerciseLibraryLoading, setExerciseLibraryLoading] = useState(false);
+  const [showExercisePicker, setShowExercisePicker] = useState(false);
+  const [sendingExercise, setSendingExercise] = useState(null);
+  const [exerciseSendMsg, setExerciseSendMsg] = useState('');
   const token = localStorage.getItem('token');
 
   // Sync filter state to URL query parameters
@@ -261,6 +266,44 @@ function ClientDetail() {
       console.error('Exercises fetch error:', e.message);
     } finally {
       setExercisesLoading(false);
+    }
+  }
+
+  async function fetchExerciseLibrary() {
+    if (exerciseLibrary.length > 0) return; // already loaded
+    try {
+      setExerciseLibraryLoading(true);
+      const res = await fetch(`${API}/exercises`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch exercise library');
+      const data = await res.json();
+      setExerciseLibrary(data.exercises || []);
+    } catch (e) {
+      console.error('Exercise library fetch error:', e.message);
+    } finally {
+      setExerciseLibraryLoading(false);
+    }
+  }
+
+  async function sendExercise(exerciseId) {
+    try {
+      setSendingExercise(exerciseId);
+      setExerciseSendMsg('');
+      const res = await fetch(`${API}/clients/${id}/exercises`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exercise_id: exerciseId })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send exercise');
+      setExerciseSendMsg(data.message || 'Exercise sent!');
+      setShowExercisePicker(false);
+      fetchExercises();
+    } catch (e) {
+      setExerciseSendMsg('Error: ' + e.message);
+    } finally {
+      setSendingExercise(null);
     }
   }
 
@@ -648,10 +691,53 @@ function ClientDetail() {
         {/* Exercises Tab */}
         {activeTab === 'exercises' && (
           <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6 mb-6">
-            <h3 className="text-lg font-semibold text-stone-800 mb-4">Exercises ({exercisesTotal})</h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-stone-800">Exercises ({exercisesTotal})</h3>
+              <button
+                onClick={() => { setShowExercisePicker(!showExercisePicker); fetchExerciseLibrary(); }}
+                className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
+              >
+                + Send Exercise
+              </button>
+            </div>
+            {exerciseSendMsg && (
+              <div className={`mb-4 p-3 rounded-lg text-sm ${exerciseSendMsg.startsWith('Error') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                {exerciseSendMsg}
+              </div>
+            )}
+            {showExercisePicker && (
+              <div className="mb-6 border border-teal-200 rounded-lg bg-teal-50 p-4">
+                <h4 className="font-medium text-stone-700 mb-3">Select an exercise to send:</h4>
+                {exerciseLibraryLoading ? (
+                  <p className="text-stone-500 text-center py-4">Loading exercise library...</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+                    {exerciseLibrary.map(ex => (
+                      <button
+                        key={ex.id}
+                        onClick={() => sendExercise(ex.id)}
+                        disabled={sendingExercise === ex.id}
+                        className="text-left p-3 bg-white border border-stone-200 rounded-lg hover:border-teal-400 hover:shadow-sm transition-all disabled:opacity-50"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">{ex.category}</span>
+                          <span className="font-medium text-stone-700 text-sm">{ex.title_en}</span>
+                        </div>
+                        <p className="text-xs text-stone-500 mt-1 line-clamp-1">{ex.description_en}</p>
+                        {sendingExercise === ex.id && <span className="text-xs text-teal-600 mt-1">Sending...</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button
+                  onClick={() => setShowExercisePicker(false)}
+                  className="mt-3 text-sm text-stone-500 hover:text-stone-700"
+                >Cancel</button>
+              </div>
+            )}
             {exercisesLoading ? (
               <p className="text-stone-500 text-center py-8">Loading exercises...</p>
-            ) : exercises.length === 0 ? (
+            ) : exercises.length === 0 && !showExercisePicker ? (
               <p className="text-stone-400 text-center py-8">No exercises sent to this client yet.</p>
             ) : (
               <div className="space-y-4">

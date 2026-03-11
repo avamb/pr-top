@@ -892,6 +892,87 @@ router.get('/:id/exercises', (req, res) => {
   }
 });
 
+// POST /api/clients/:id/exercises - Send an exercise to a client
+router.post('/:id/exercises', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+    const { exercise_id } = req.body;
+
+    if (!exercise_id) {
+      return res.status(400).json({ error: 'exercise_id is required' });
+    }
+
+    // Verify client belongs to this therapist
+    const clientResult = db.exec(
+      "SELECT id, telegram_id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [clientId, therapistId]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    }
+
+    const clientTelegramId = clientResult[0].values[0][1];
+
+    // Verify exercise exists
+    const exerciseResult = db.exec(
+      "SELECT id, title_en, title_ru, category, description_en FROM exercises WHERE id = ?",
+      [exercise_id]
+    );
+
+    if (exerciseResult.length === 0 || exerciseResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Exercise not found' });
+    }
+
+    const exerciseRow = exerciseResult[0].values[0];
+    const exerciseTitle = exerciseRow[1] || exerciseRow[2] || 'Exercise';
+
+    // Create exercise delivery
+    db.run(
+      "INSERT INTO exercise_deliveries (exercise_id, therapist_id, client_id, status, sent_at) VALUES (?, ?, ?, 'sent', datetime('now'))",
+      [exercise_id, therapistId, clientId]
+    );
+
+    // Get the created delivery ID
+    const lastId = db.exec("SELECT last_insert_rowid()");
+    const deliveryId = lastId[0].values[0][0];
+
+    // Create audit log entry
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'exercise_sent', 'exercise_delivery', ?, ?, datetime('now'))",
+      [therapistId, deliveryId, JSON.stringify({ exercise_id, client_id: clientId, exercise_title: exerciseTitle })]
+    );
+
+    saveDatabase();
+
+    // Notify client via Telegram (dev mode: log to console)
+    if (clientTelegramId) {
+      logger.info(`[TELEGRAM NOTIFICATION] Exercise sent to client ${clientTelegramId}: "${exerciseTitle}" (delivery #${deliveryId})`);
+      logger.info(`[TELEGRAM NOTIFICATION] Message: "Your therapist has assigned you a new exercise: ${exerciseTitle}"`);
+    }
+
+    res.status(201).json({
+      delivery: {
+        id: deliveryId,
+        exercise_id: parseInt(exercise_id),
+        client_id: parseInt(clientId),
+        therapist_id: therapistId,
+        status: 'sent',
+        exercise_title: exerciseTitle,
+        exercise_category: exerciseRow[3],
+        exercise_description: exerciseRow[4]
+      },
+      notification_sent: !!clientTelegramId,
+      message: `Exercise "${exerciseTitle}" sent to client successfully`
+    });
+  } catch (error) {
+    logger.error('Send exercise error: ' + error.message);
+    res.status(500).json({ error: 'Failed to send exercise' });
+  }
+});
+
 // POST /api/clients/link - Link a client to this therapist (via invite code)
 router.post('/link', (req, res) => {
   try {
