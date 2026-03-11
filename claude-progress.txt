@@ -190,7 +190,18 @@ TECHNICAL NOTES (Session 2):
   - Unblock button clears blocked_at, restores login access
   - Success messages shown, list auto-refreshes after action
 
-CURRENT STATUS: ~30/205 features passing (estimate, other agents also working)
+- Feature #77: Trial subscription auto-created on registration ✅
+  - Registration creates subscription plan=trial, status=active, trial_ends_at per settings
+
+- Feature #78: Plan upgrade via Stripe checkout works ✅
+  - POST /api/subscription/checkout with dev-mode auto-complete
+  - Created Subscription page with plan cards and upgrade buttons
+
+- Feature #79: Plan downgrade flow works ✅
+  - Downgrades scheduled for end of billing period via pending_plan column
+  - UI shows pending downgrade banner, current access remains active
+
+CURRENT STATUS: ~33/205 features passing (estimate, other agents also working)
 
 NEXT UP:
 - Client detail views (timeline, diary, notes)
