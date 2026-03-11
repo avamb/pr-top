@@ -830,6 +830,13 @@ router.get('/:id/sessions', (req, res) => {
       };
     });
 
+    // Audit log: reading client sessions (Class A - summaries)
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      [therapistId, 'read_sessions', 'client', clientId, JSON.stringify({ sessions_count: sessions.length, page })]
+    );
+    saveDatabase();
+
     res.json({
       sessions,
       total,

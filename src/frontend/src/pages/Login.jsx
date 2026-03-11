@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 export default function Login() {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,7 +19,7 @@ export default function Login() {
     setError('');
 
     if (!form.email || !form.password) {
-      setError('Email and password are required');
+      setError(t('auth.emailPasswordRequired'));
       return;
     }
 
@@ -40,6 +42,19 @@ export default function Login() {
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
 
+      // Fetch user profile to sync language
+      try {
+        const profileRes = await fetch('http://localhost:3001/api/settings/profile', {
+          headers: { 'Authorization': `Bearer ${data.token}` }
+        });
+        if (profileRes.ok) {
+          const profileData = await profileRes.json();
+          const lang = profileData.profile?.language || 'en';
+          i18n.changeLanguage(lang);
+          localStorage.setItem('app_language', lang);
+        }
+      } catch (e) { /* ignore - language will sync on settings page */ }
+
       // Redirect based on role
       if (data.user.role === 'superadmin') {
         navigate('/admin');
@@ -47,7 +62,7 @@ export default function Login() {
         navigate('/dashboard');
       }
     } catch (err) {
-      setError('Network error. Please try again.');
+      setError(t('auth.networkError'));
       setLoading(false);
     }
   };
@@ -55,16 +70,16 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <a href="#main-content" className="skip-to-content">
-        Skip to main content
+        {t('nav.skipToContent')}
       </a>
       <main id="main-content" className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-primary">PsyLink</h1>
-          <p className="text-secondary mt-2">Sign in to your account</p>
+          <h1 className="text-3xl font-bold text-primary">{t('brand')}</h1>
+          <p className="text-secondary mt-2">{t('auth.loginSubtitle')}</p>
         </div>
 
         <div className="bg-white rounded-lg shadow-md p-8">
-          <h2 className="text-xl font-semibold text-text mb-6">Log In</h2>
+          <h2 className="text-xl font-semibold text-text mb-6">{t('auth.loginTitle')}</h2>
 
           {error && (
             <div className="bg-red-50 border border-error text-error rounded-md p-3 mb-4 text-sm">
@@ -75,7 +90,7 @@ export default function Login() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-text mb-1">
-                Email
+                {t('auth.email')}
               </label>
               <input
                 id="email"
@@ -86,13 +101,13 @@ export default function Login() {
                 value={form.email}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                placeholder="you@example.com"
+                placeholder={t('auth.emailPlaceholder')}
               />
             </div>
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-text mb-1">
-                Password
+                {t('auth.password')}
               </label>
               <input
                 id="password"
@@ -103,7 +118,7 @@ export default function Login() {
                 value={form.password}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                placeholder="Your password"
+                placeholder={t('auth.passwordPlaceholder')}
               />
             </div>
 
@@ -112,14 +127,14 @@ export default function Login() {
               disabled={loading}
               className="w-full py-2 px-4 bg-primary text-white font-medium rounded-md hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? t('auth.signingIn') : t('auth.signIn')}
             </button>
           </form>
 
           <p className="mt-4 text-center text-sm text-secondary">
-            Don&apos;t have an account?{' '}
+            {t('auth.noAccount')}{' '}
             <Link to="/register" className="text-primary hover:text-primary-600 font-medium">
-              Register
+              {t('auth.registerTitle')}
             </Link>
           </p>
         </div>

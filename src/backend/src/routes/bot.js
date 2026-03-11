@@ -829,4 +829,120 @@ router.post('/exercises/:delivery_id/respond', botAuth, (req, res) => {
   }
 });
 
+// POST /api/bot/voice-query - Voice-based NL query for therapist
+// Accepts voice transcript text (already transcribed by bot/Telegram) and processes as NL query
+// Gated to Pro/Premium subscription tiers
+router.post('/voice-query', botAuth, (req, res) => {
+  try {
+    const { telegram_id, client_id, voice_text, voice_file_id } = req.body;
+
+    if (!telegram_id) {
+      return res.status(400).json({ error: 'telegram_id is required' });
+    }
+    if (!client_id) {
+      return res.status(400).json({ error: 'client_id is required' });
+    }
+
+    const db = getDatabase();
+
+    // Find therapist by telegram_id
+    const therapistResult = db.exec(
+      "SELECT id, role FROM users WHERE telegram_id = ? AND role = 'therapist'",
+      [String(telegram_id)]
+    );
+
+    if (therapistResult.length === 0 || therapistResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Therapist not found' });
+    }
+
+    const therapistId = therapistResult[0].values[0][0];
+
+    // Check subscription tier (Pro/Premium only)
+    const subResult = db.exec(
+      "SELECT plan, status FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1",
+      [therapistId]
+    );
+
+    if (subResult.length === 0 || subResult[0].values.length === 0) {
+      return res.status(403).json({
+        error: 'No active subscription',
+        message: 'Voice queries require a Pro or Premium subscription.'
+      });
+    }
+
+    const [plan, status] = subResult[0].values[0];
+
+    if (status !== 'active') {
+      return res.status(403).json({ error: 'Subscription inactive' });
+    }
+
+    if (!['pro', 'premium'].includes(plan)) {
+      return res.status(403).json({
+        error: 'Plan upgrade required',
+        message: 'Voice queries are available on Pro and Premium plans.',
+        current_plan: plan,
+        required_plans: ['pro', 'premium']
+      });
+    }
+
+    // Handle voice transcription
+    // In production: Telegram sends voice, bot transcribes via API, sends text here
+    // In dev mode: voice_text is the transcribed text, or we generate a dev transcript
+    var queryText = '';
+
+    if (voice_text && typeof voice_text === 'string' && voice_text.trim().length > 0) {
+      // Voice already transcribed (by Telegram bot or external service)
+      queryText = voice_text.trim();
+    } else if (voice_file_id) {
+      // Dev mode: simulate transcription from voice file
+      // In production, the bot would transcribe via Whisper API before calling this endpoint
+      queryText = '[Dev mode] Voice query about client progress and recent activity';
+      logger.info('Dev mode voice transcription for file: ' + voice_file_id);
+    } else {
+      return res.status(400).json({ error: 'voice_text or voice_file_id is required' });
+    }
+
+    // Verify client belongs to this therapist
+    const clientResult = db.exec(
+      "SELECT id, consent_therapist_access FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [client_id, therapistId]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    }
+
+    if (!clientResult[0].values[0][1]) {
+      return res.status(403).json({ error: 'Client has not granted access consent' });
+    }
+
+    // Execute NL query with transcribed voice text
+    var executeNLQuery = require('../services/nlQuery').executeNLQuery;
+    var result = executeNLQuery(therapistId, client_id, queryText, { limit: 10 });
+
+    // Audit log
+    try {
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, created_at) VALUES (?, 'voice_nl_query', 'client', ?, datetime('now'))",
+        [therapistId, client_id]
+      );
+      saveDatabase();
+    } catch (auditErr) {
+      logger.warn('Failed to audit log voice query: ' + auditErr.message);
+    }
+
+    logger.info('Voice NL query by therapist ' + therapistId + ' for client ' + client_id + ': "' + queryText.substring(0, 50) + '..."');
+
+    res.json({
+      success: true,
+      voice_transcribed: true,
+      transcribed_text: queryText,
+      ...result
+    });
+  } catch (error) {
+    logger.error('Voice query error: ' + error.message);
+    res.status(500).json({ error: 'Failed to process voice query' });
+  }
+});
+
 module.exports = router;

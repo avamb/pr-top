@@ -110,6 +110,18 @@ if (process.env.NODE_ENV !== 'production') {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
+  app.post('/api/dev/set-telegram-id', (req, res) => {
+    try {
+      const { user_id, telegram_id } = req.body;
+      if (!user_id || !telegram_id) return res.status(400).json({ error: 'user_id and telegram_id required' });
+      const { getDatabase, saveDatabase: save } = require('./db/connection');
+      const db = getDatabase();
+      db.run("UPDATE users SET telegram_id = ? WHERE id = ?", [String(telegram_id), user_id]);
+      save();
+      res.json({ updated: true, user_id, telegram_id });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
   app.post('/api/dev/update-diary-date', (req, res) => {
     try {
       const { entry_id, created_at } = req.body;

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 const API_URL = 'http://localhost:3001/api';
 
@@ -55,6 +56,7 @@ function ToggleSwitch({ checked, onChange, label, id }) {
 
 export default function Settings() {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -89,6 +91,12 @@ export default function Settings() {
       setLanguage(data.profile.language || 'en');
       setTimezone(data.profile.timezone || 'UTC');
       setEscalation({ ...DEFAULT_ESCALATION, ...(data.profile.escalation_preferences || {}) });
+      // Sync i18n language with profile
+      const lang = data.profile.language || 'en';
+      if (i18n.language !== lang) {
+        i18n.changeLanguage(lang);
+        localStorage.setItem('app_language', lang);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -126,7 +134,10 @@ export default function Settings() {
 
       const data = await res.json();
       setProfile(data.profile);
-      setSuccess('Settings saved successfully!');
+      // Switch i18n language immediately
+      i18n.changeLanguage(language);
+      localStorage.setItem('app_language', language);
+      setSuccess(t('settings.settingsSaved'));
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       setError(err.message);
@@ -165,7 +176,7 @@ export default function Settings() {
 
       const data = await res.json();
       setEscalation({ ...DEFAULT_ESCALATION, ...data.escalation_preferences });
-      setEscalationSuccess('Escalation preferences saved!');
+      setEscalationSuccess(t('settings.escalationSaved'));
       setTimeout(() => setEscalationSuccess(null), 3000);
     } catch (err) {
       setError(err.message);
@@ -187,17 +198,17 @@ export default function Settings() {
   return (
     <div className="min-h-screen bg-background">
       <a href="#main-content" className="skip-to-content">
-        Skip to main content
+        {t('nav.skipToContent')}
       </a>
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold text-teal-600">PsyLink</h1>
+            <h1 className="text-xl font-bold text-teal-600">{t('brand')}</h1>
             <nav className="flex gap-2 ml-4" aria-label="Main navigation">
-              <button onClick={() => navigate('/dashboard')} className="text-sm text-stone-600 hover:text-teal-600 px-3 py-1 rounded transition-colors">Dashboard</button>
-              <button onClick={() => navigate('/clients')} className="text-sm text-stone-600 hover:text-teal-600 px-3 py-1 rounded transition-colors">Clients</button>
-              <button onClick={() => navigate('/analytics')} className="text-sm text-stone-600 hover:text-teal-600 px-3 py-1 rounded transition-colors">Analytics</button>
-              <button className="text-sm text-teal-600 font-medium bg-teal-50 px-3 py-1 rounded">Settings</button>
+              <button onClick={() => navigate('/dashboard')} className="text-sm text-stone-600 hover:text-teal-600 px-3 py-1 rounded transition-colors">{t('nav.dashboard')}</button>
+              <button onClick={() => navigate('/clients')} className="text-sm text-stone-600 hover:text-teal-600 px-3 py-1 rounded transition-colors">{t('nav.clients')}</button>
+              <button onClick={() => navigate('/analytics')} className="text-sm text-stone-600 hover:text-teal-600 px-3 py-1 rounded transition-colors">{t('nav.analytics')}</button>
+              <button className="text-sm text-teal-600 font-medium bg-teal-50 px-3 py-1 rounded">{t('nav.settings')}</button>
             </nav>
           </div>
           <div className="flex items-center gap-4">
@@ -206,14 +217,14 @@ export default function Settings() {
               onClick={handleLogout}
               className="text-sm text-stone-500 hover:text-stone-700 transition-colors"
             >
-              Log out
+              {t('nav.logout')}
             </button>
           </div>
         </div>
       </header>
 
       <main id="main-content" className="max-w-3xl mx-auto px-4 py-8">
-        <h2 className="text-2xl font-bold text-stone-800 mb-6">Profile Settings</h2>
+        <h2 className="text-2xl font-bold text-stone-800 mb-6">{t('settings.title')}</h2>
 
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
@@ -241,18 +252,18 @@ export default function Settings() {
             <div className="bg-white rounded-lg shadow-md p-8 mb-6">
               {/* Account info (read-only) */}
               <div className="mb-8 pb-6 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-stone-700 mb-4">Account Information</h3>
+                <h3 className="text-lg font-semibold text-stone-700 mb-4">{t('settings.accountInfo')}</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-stone-500 mb-1">Email</label>
+                    <label className="block text-sm font-medium text-stone-500 mb-1">{t('settings.email')}</label>
                     <p className="text-stone-800">{profile.email}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-stone-500 mb-1">Role</label>
+                    <label className="block text-sm font-medium text-stone-500 mb-1">{t('settings.role')}</label>
                     <p className="text-stone-800 capitalize">{profile.role}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-stone-500 mb-1">Member since</label>
+                    <label className="block text-sm font-medium text-stone-500 mb-1">{t('settings.memberSince')}</label>
                     <p className="text-stone-800">{new Date(profile.created_at).toLocaleDateString()}</p>
                   </div>
                 </div>
@@ -260,11 +271,11 @@ export default function Settings() {
 
               {/* Editable settings */}
               <form onSubmit={handleSave}>
-                <h3 className="text-lg font-semibold text-stone-700 mb-4">Preferences</h3>
+                <h3 className="text-lg font-semibold text-stone-700 mb-4">{t('settings.preferences')}</h3>
                 <div className="space-y-6">
                   <div>
                     <label htmlFor="language" className="block text-sm font-medium text-stone-700 mb-2">
-                      Language
+                      {t('settings.language')}
                     </label>
                     <select
                       id="language"
@@ -280,7 +291,7 @@ export default function Settings() {
 
                   <div>
                     <label htmlFor="timezone" className="block text-sm font-medium text-stone-700 mb-2">
-                      Timezone
+                      {t('settings.timezone')}
                     </label>
                     <select
                       id="timezone"
@@ -300,7 +311,7 @@ export default function Settings() {
                       disabled={saving}
                       className="px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
                     >
-                      {saving ? 'Saving...' : 'Save Changes'}
+                      {saving ? t('settings.saving') : t('settings.saveChanges')}
                     </button>
                   </div>
                 </div>
@@ -310,8 +321,8 @@ export default function Settings() {
             {/* Escalation Preferences Section */}
             {(profile.role === 'therapist' || profile.role === 'superadmin') && (
               <div className="bg-white rounded-lg shadow-md p-8">
-                <h3 className="text-lg font-semibold text-stone-700 mb-2">SOS Escalation Preferences</h3>
-                <p className="text-sm text-stone-500 mb-6">Configure how you receive SOS alerts from clients.</p>
+                <h3 className="text-lg font-semibold text-stone-700 mb-2">{t('settings.escalationTitle')}</h3>
+                <p className="text-sm text-stone-500 mb-6">{t('settings.escalationDesc')}</p>
 
                 {escalationSuccess && (
                   <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
@@ -321,45 +332,45 @@ export default function Settings() {
 
                 <form onSubmit={handleSaveEscalation}>
                   <div className="space-y-1 mb-6">
-                    <h4 className="text-sm font-semibold text-stone-600 uppercase tracking-wide mb-2">Notification Channels</h4>
+                    <h4 className="text-sm font-semibold text-stone-600 uppercase tracking-wide mb-2">{t('settings.notificationChannels')}</h4>
                     <ToggleSwitch
                       id="sos_telegram"
-                      label="Telegram notifications"
+                      label={t('settings.telegramNotifications')}
                       checked={escalation.sos_telegram}
                       onChange={(v) => updateEscalation('sos_telegram', v)}
                     />
                     <ToggleSwitch
                       id="sos_email"
-                      label="Email notifications"
+                      label={t('settings.emailNotifications')}
                       checked={escalation.sos_email}
                       onChange={(v) => updateEscalation('sos_email', v)}
                     />
                     <ToggleSwitch
                       id="sos_web_push"
-                      label="Web push notifications"
+                      label={t('settings.webPushNotifications')}
                       checked={escalation.sos_web_push}
                       onChange={(v) => updateEscalation('sos_web_push', v)}
                     />
                     <ToggleSwitch
                       id="sos_sound_alert"
-                      label="Sound alert on dashboard"
+                      label={t('settings.soundAlert')}
                       checked={escalation.sos_sound_alert}
                       onChange={(v) => updateEscalation('sos_sound_alert', v)}
                     />
                   </div>
 
                   <div className="border-t border-gray-200 pt-6 mb-6">
-                    <h4 className="text-sm font-semibold text-stone-600 uppercase tracking-wide mb-2">Quiet Hours</h4>
+                    <h4 className="text-sm font-semibold text-stone-600 uppercase tracking-wide mb-2">{t('settings.quietHours')}</h4>
                     <ToggleSwitch
                       id="quiet_hours_enabled"
-                      label="Enable quiet hours (non-urgent notifications delayed)"
+                      label={t('settings.quietHoursEnable')}
                       checked={escalation.quiet_hours_enabled}
                       onChange={(v) => updateEscalation('quiet_hours_enabled', v)}
                     />
                     {escalation.quiet_hours_enabled && (
                       <div className="flex gap-4 mt-3">
                         <div className="flex-1">
-                          <label htmlFor="quiet_start" className="block text-xs text-stone-500 mb-1">Start</label>
+                          <label htmlFor="quiet_start" className="block text-xs text-stone-500 mb-1">{t('settings.quietStart')}</label>
                           <input
                             id="quiet_start"
                             type="time"
@@ -369,7 +380,7 @@ export default function Settings() {
                           />
                         </div>
                         <div className="flex-1">
-                          <label htmlFor="quiet_end" className="block text-xs text-stone-500 mb-1">End</label>
+                          <label htmlFor="quiet_end" className="block text-xs text-stone-500 mb-1">{t('settings.quietEnd')}</label>
                           <input
                             id="quiet_end"
                             type="time"
@@ -383,10 +394,10 @@ export default function Settings() {
                   </div>
 
                   <div className="border-t border-gray-200 pt-6 mb-6">
-                    <h4 className="text-sm font-semibold text-stone-600 uppercase tracking-wide mb-2">Escalation Delay</h4>
+                    <h4 className="text-sm font-semibold text-stone-600 uppercase tracking-wide mb-2">{t('settings.escalationDelay')}</h4>
                     <div>
                       <label htmlFor="escalation_delay" className="block text-sm text-stone-700 mb-2">
-                        Delay before escalating (minutes)
+                        {t('settings.delayLabel')}
                       </label>
                       <select
                         id="escalation_delay"
@@ -394,12 +405,12 @@ export default function Settings() {
                         onChange={(e) => updateEscalation('escalation_delay_minutes', Number(e.target.value))}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-colors bg-white text-sm"
                       >
-                        <option value={0}>Immediate (no delay)</option>
-                        <option value={5}>5 minutes</option>
-                        <option value={10}>10 minutes</option>
-                        <option value={15}>15 minutes</option>
-                        <option value={30}>30 minutes</option>
-                        <option value={60}>60 minutes</option>
+                        <option value={0}>{t('settings.delayImmediate')}</option>
+                        <option value={5}>{t('settings.delayMinutes', { count: 5 })}</option>
+                        <option value={10}>{t('settings.delayMinutes', { count: 10 })}</option>
+                        <option value={15}>{t('settings.delayMinutes', { count: 15 })}</option>
+                        <option value={30}>{t('settings.delayMinutes', { count: 30 })}</option>
+                        <option value={60}>{t('settings.delayMinutes', { count: 60 })}</option>
                       </select>
                     </div>
                   </div>
@@ -410,7 +421,7 @@ export default function Settings() {
                       disabled={savingEscalation}
                       className="px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
                     >
-                      {savingEscalation ? 'Saving...' : 'Save Escalation Preferences'}
+                      {savingEscalation ? t('settings.saving') : t('settings.saveEscalation')}
                     </button>
                   </div>
                 </form>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 const API_URL = 'http://localhost:3001/api';
 
@@ -81,6 +82,7 @@ function ClientRow({ client, onClick }) {
 
 export default function ClientList() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [clients, setClients] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -180,15 +182,15 @@ export default function ClientList() {
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold text-primary">PsyLink</h1>
+            <h1 className="text-xl font-bold text-primary">{t('brand')}</h1>
             <nav className="flex gap-2 ml-4">
-              <button onClick={() => navigate('/dashboard')} className="text-sm text-secondary hover:text-primary px-3 py-1 rounded transition-colors">Dashboard</button>
-              <button className="text-sm text-primary font-medium bg-primary/10 px-3 py-1 rounded">Clients</button>
+              <button onClick={() => navigate('/dashboard')} className="text-sm text-secondary hover:text-primary px-3 py-1 rounded transition-colors">{t('nav.dashboard')}</button>
+              <button className="text-sm text-primary font-medium bg-primary/10 px-3 py-1 rounded">{t('nav.clients')}</button>
             </nav>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-secondary">{user.email}</span>
-            <button onClick={handleLogout} className="text-sm text-secondary hover:text-text transition-colors">Log out</button>
+            <button onClick={handleLogout} className="text-sm text-secondary hover:text-text transition-colors">{t('nav.logout')}</button>
           </div>
         </div>
       </header>
@@ -197,11 +199,11 @@ export default function ClientList() {
         {/* Header with stats */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-text">Clients</h2>
+            <h2 className="text-2xl font-bold text-text">{t('clientList.title')}</h2>
             <p className="text-sm text-secondary mt-1">
-              {total} client{total !== 1 ? 's' : ''} total
-              {planInfo && planInfo.limit > 0 && ` (limit: ${planInfo.limit})`}
-              {loadTime !== null && <span className="ml-2 text-xs text-gray-400">loaded in {loadTime}ms</span>}
+              {t('clientList.totalClients', { count: total })}
+              {planInfo && planInfo.limit > 0 && ` ${t('clientList.planLimit', { limit: planInfo.limit })}`}
+              {loadTime !== null && <span className="ml-2 text-xs text-gray-400">{t('clientList.loadedIn', { ms: loadTime })}</span>}
             </p>
           </div>
           {planInfo && !planInfo.can_add && (
@@ -219,7 +221,7 @@ export default function ClientList() {
                 type="text"
                 value={searchInput}
                 onChange={handleSearchChange}
-                placeholder="Search by email or Telegram ID..."
+                placeholder={t('clientList.searchPlaceholder')}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
               />
               <svg className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -244,12 +246,12 @@ export default function ClientList() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Client</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Telegram</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Language</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Consent</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Last Activity</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Joined</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-secondary uppercase tracking-wider">{t('clientList.client')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-secondary uppercase tracking-wider">{t('clientList.telegram')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-secondary uppercase tracking-wider">{t('clientList.languageCol')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-secondary uppercase tracking-wider">{t('clientList.consent')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-secondary uppercase tracking-wider">{t('clientList.lastActivity')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-secondary uppercase tracking-wider">{t('clientList.joined')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -271,7 +273,7 @@ export default function ClientList() {
                 ) : (
                   <tr>
                     <td colSpan={6} className="px-4 py-12 text-center text-secondary">
-                      {search ? 'No clients match your search.' : 'No clients linked yet.'}
+                      {search ? t('clientList.noSearchResults') : t('clientList.noClients')}
                     </td>
                   </tr>
                 )}
@@ -291,7 +293,7 @@ export default function ClientList() {
                   disabled={page <= 1}
                   className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  Previous
+                  {t('clientList.previous')}
                 </button>
                 {/* Show page numbers */}
                 {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
@@ -324,7 +326,7 @@ export default function ClientList() {
                   disabled={page >= totalPages}
                   className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  Next
+                  {t('clientList.next')}
                 </button>
               </div>
             </div>

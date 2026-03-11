@@ -208,6 +208,13 @@ router.get('/:id', authenticate, requireRole('therapist', 'superadmin'), async (
       }
     }
 
+    // Audit log: reading session data (Class A - transcript, summary)
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'read_session', 'session', ?, ?, datetime('now'))",
+      [req.user.id, sessionId, JSON.stringify({ client_id: row[2], has_transcript: !!row[4], has_summary: !!row[5] })]
+    );
+    saveDatabase();
+
     res.json(session);
   } catch (error) {
     logger.error('Get session error: ' + error.message);

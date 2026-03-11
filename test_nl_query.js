@@ -57,8 +57,8 @@ async function main() {
   process.stdout.write('   Invite code: ' + inviteCode + '\n');
   var connRes = await request('POST', '/api/bot/connect', { telegram_id: clientTgId, invite_code: inviteCode }, null, bk);
   process.stdout.write('   Connect: ' + connRes.status + ' ' + (connRes.body.message || '') + '\n');
-  var consRes = await request('POST', '/api/bot/consent', { telegram_id: clientTgId, accept: true }, null, bk);
-  process.stdout.write('   Consent: ' + consRes.status + ' ' + (consRes.body.message || '') + '\n');
+  var consRes = await request('POST', '/api/bot/consent', { telegram_id: clientTgId, therapist_id: therapistId, consent: true }, null, bk);
+  process.stdout.write('   Consent: ' + consRes.status + ' ' + (consRes.body.message || JSON.stringify(consRes.body)) + '\n');
 
   // 5. Create diary entries
   process.stdout.write('5. Creating diary entries...\n');
@@ -78,11 +78,11 @@ async function main() {
   // 6. Create notes
   process.stdout.write('6. Creating notes...\n');
   var n1 = await request('POST', '/api/clients/' + clientUserId + '/notes', {
-    note: 'Client shows signs of generalized anxiety disorder. Recommended CBT techniques and breathing exercises. Follow up on sleep hygiene.'
+    content: 'Client shows signs of generalized anxiety disorder. Recommended CBT techniques and breathing exercises. Follow up on sleep hygiene.'
   }, token);
   process.stdout.write('   Note1: ' + n1.status + '\n');
   var n2 = await request('POST', '/api/clients/' + clientUserId + '/notes', {
-    note: 'Good progress this session. Client reports reduced panic attacks after practicing grounding techniques. Workplace stress remains a trigger.'
+    content: 'Good progress this session. Client reports reduced panic attacks after practicing grounding techniques. Workplace stress remains a trigger.'
   }, token);
   process.stdout.write('   Note2: ' + n2.status + '\n');
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 const API = 'http://localhost:3001/api';
 
@@ -28,6 +29,7 @@ function BarChart({ data, maxValue, label, color }) {
 }
 
 function ActivityTimeline({ dailyActivity, days }) {
+  const { t } = useTranslation();
   if (!dailyActivity || dailyActivity.length === 0) return null;
 
   const maxTotal = Math.max(...dailyActivity.map(d => d.total), 1);
@@ -103,15 +105,15 @@ function ActivityTimeline({ dailyActivity, days }) {
       <div className="flex gap-4 mt-3 justify-center">
         <div className="flex items-center gap-1">
           <div className="w-3 h-3 rounded bg-blue-400" />
-          <span className="text-xs text-stone-600">Diary</span>
+          <span className="text-xs text-stone-600">{t('analytics.diary')}</span>
         </div>
         <div className="flex items-center gap-1">
           <div className="w-3 h-3 rounded bg-green-400" />
-          <span className="text-xs text-stone-600">Sessions</span>
+          <span className="text-xs text-stone-600">{t('analytics.sessions')}</span>
         </div>
         <div className="flex items-center gap-1">
           <div className="w-3 h-3 rounded bg-amber-400" />
-          <span className="text-xs text-stone-600">Notes</span>
+          <span className="text-xs text-stone-600">{t('analytics.notes')}</span>
         </div>
       </div>
     </div>
@@ -120,6 +122,7 @@ function ActivityTimeline({ dailyActivity, days }) {
 
 export default function Analytics() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -161,16 +164,16 @@ export default function Analytics() {
       <header className="bg-white shadow-sm border-b border-stone-200">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold text-teal-600">PsyLink</h1>
+            <h1 className="text-xl font-bold text-teal-600">{t('brand')}</h1>
             <nav className="flex gap-2 ml-4" aria-label="Main navigation">
-              <button onClick={() => navigate('/dashboard')} className="text-sm text-stone-600 hover:text-teal-600 px-3 py-1 rounded transition-colors">Dashboard</button>
-              <button onClick={() => navigate('/clients')} className="text-sm text-stone-600 hover:text-teal-600 px-3 py-1 rounded transition-colors">Clients</button>
-              <button className="text-sm text-teal-600 font-medium bg-teal-50 px-3 py-1 rounded">Analytics</button>
+              <button onClick={() => navigate('/dashboard')} className="text-sm text-stone-600 hover:text-teal-600 px-3 py-1 rounded transition-colors">{t('nav.dashboard')}</button>
+              <button onClick={() => navigate('/clients')} className="text-sm text-stone-600 hover:text-teal-600 px-3 py-1 rounded transition-colors">{t('nav.clients')}</button>
+              <button className="text-sm text-teal-600 font-medium bg-teal-50 px-3 py-1 rounded">{t('nav.analytics')}</button>
             </nav>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-stone-500">{user.email}</span>
-            <button onClick={() => { localStorage.removeItem('token'); localStorage.removeItem('user'); navigate('/'); }} className="text-sm text-stone-500 hover:text-stone-700">Log out</button>
+            <button onClick={() => { localStorage.removeItem('token'); localStorage.removeItem('user'); navigate('/'); }} className="text-sm text-stone-500 hover:text-stone-700">{t('nav.logout')}</button>
           </div>
         </div>
       </header>
@@ -178,8 +181,8 @@ export default function Analytics() {
       <main className="max-w-7xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-stone-800">Analytics</h2>
-            <p className="text-sm text-stone-500 mt-1">Client activity overview</p>
+            <h2 className="text-2xl font-bold text-stone-800">{t('analytics.title')}</h2>
+            <p className="text-sm text-stone-500 mt-1">{t('analytics.subtitle')}</p>
           </div>
           <div className="flex gap-2">
             {[7, 14, 30, 60].map(d => (
@@ -201,7 +204,7 @@ export default function Analytics() {
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             {error}
-            <button onClick={fetchAnalytics} className="ml-2 underline">Retry</button>
+            <button onClick={fetchAnalytics} className="ml-2 underline">{t('analytics.retry')}</button>
           </div>
         )}
 
@@ -219,40 +222,40 @@ export default function Analytics() {
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
               <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-5">
-                <p className="text-sm text-stone-500 mb-1">Total Activity</p>
+                <p className="text-sm text-stone-500 mb-1">{t('analytics.totalActivity')}</p>
                 <p className="text-3xl font-bold text-stone-800">{analytics.totals.total}</p>
-                <p className="text-xs text-stone-400 mt-1">Last {days} days</p>
+                <p className="text-xs text-stone-400 mt-1">{t('analytics.lastDays', { days })}</p>
               </div>
               <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-5">
-                <p className="text-sm text-stone-500 mb-1">Diary Entries</p>
+                <p className="text-sm text-stone-500 mb-1">{t('analytics.diaryEntries')}</p>
                 <p className="text-3xl font-bold text-blue-600">{analytics.totals.diary_entries}</p>
-                <p className="text-xs text-stone-400 mt-1">From clients</p>
+                <p className="text-xs text-stone-400 mt-1">{t('analytics.fromClients')}</p>
               </div>
               <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-5">
-                <p className="text-sm text-stone-500 mb-1">Sessions</p>
+                <p className="text-sm text-stone-500 mb-1">{t('analytics.sessions')}</p>
                 <p className="text-3xl font-bold text-green-600">{analytics.totals.sessions}</p>
-                <p className="text-xs text-stone-400 mt-1">Recorded</p>
+                <p className="text-xs text-stone-400 mt-1">{t('analytics.recorded')}</p>
               </div>
               <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-5">
-                <p className="text-sm text-stone-500 mb-1">Notes</p>
+                <p className="text-sm text-stone-500 mb-1">{t('analytics.notes')}</p>
                 <p className="text-3xl font-bold text-amber-600">{analytics.totals.notes}</p>
-                <p className="text-xs text-stone-400 mt-1">Created</p>
+                <p className="text-xs text-stone-400 mt-1">{t('analytics.created')}</p>
               </div>
             </div>
 
             {/* Activity Timeline Chart */}
             <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6 mb-8">
-              <h3 className="text-lg font-semibold text-stone-800 mb-4">Daily Activity (Last {days} days)</h3>
+              <h3 className="text-lg font-semibold text-stone-800 mb-4">{t('analytics.dailyActivity', { days })}</h3>
               {analytics.daily_activity.some(d => d.total > 0) ? (
                 <ActivityTimeline dailyActivity={analytics.daily_activity} days={days} />
               ) : (
-                <p className="text-stone-400 text-center py-12">No activity recorded in this period</p>
+                <p className="text-stone-400 text-center py-12">{t('analytics.noActivityPeriod')}</p>
               )}
             </div>
 
             {/* Client Activity Breakdown */}
             <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6">
-              <h3 className="text-lg font-semibold text-stone-800 mb-4">Client Activity Breakdown</h3>
+              <h3 className="text-lg font-semibold text-stone-800 mb-4">{t('analytics.clientBreakdown')}</h3>
               {analytics.client_activity.length > 0 ? (
                 <div className="space-y-6">
                   {/* Horizontal bar chart for each client */}
@@ -270,12 +273,12 @@ export default function Analytics() {
                     <table className="w-full">
                       <thead className="bg-stone-50 border-b border-stone-200">
                         <tr>
-                          <th className="px-4 py-2 text-left text-xs font-semibold text-stone-500 uppercase">Client</th>
-                          <th className="px-4 py-2 text-right text-xs font-semibold text-stone-500 uppercase">Diary</th>
-                          <th className="px-4 py-2 text-right text-xs font-semibold text-stone-500 uppercase">Sessions</th>
-                          <th className="px-4 py-2 text-right text-xs font-semibold text-stone-500 uppercase">Notes</th>
-                          <th className="px-4 py-2 text-right text-xs font-semibold text-stone-500 uppercase">Total</th>
-                          <th className="px-4 py-2 text-right text-xs font-semibold text-stone-500 uppercase">Last Active</th>
+                          <th className="px-4 py-2 text-left text-xs font-semibold text-stone-500 uppercase">{t('analytics.client')}</th>
+                          <th className="px-4 py-2 text-right text-xs font-semibold text-stone-500 uppercase">{t('analytics.diary')}</th>
+                          <th className="px-4 py-2 text-right text-xs font-semibold text-stone-500 uppercase">{t('analytics.sessions')}</th>
+                          <th className="px-4 py-2 text-right text-xs font-semibold text-stone-500 uppercase">{t('analytics.notes')}</th>
+                          <th className="px-4 py-2 text-right text-xs font-semibold text-stone-500 uppercase">{t('analytics.total')}</th>
+                          <th className="px-4 py-2 text-right text-xs font-semibold text-stone-500 uppercase">{t('analytics.lastActive')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -315,7 +318,7 @@ export default function Analytics() {
                             <td className="px-4 py-3 text-sm text-right text-stone-400">
                               {client.last_activity
                                 ? new Date(client.last_activity).toLocaleDateString()
-                                : 'No activity'}
+                                : t('clientList.noActivity')}
                             </td>
                           </tr>
                         ))}
@@ -324,7 +327,7 @@ export default function Analytics() {
                   </div>
                 </div>
               ) : (
-                <p className="text-stone-400 text-center py-12">No clients linked yet</p>
+                <p className="text-stone-400 text-center py-12">{t('analytics.noClientsLinked')}</p>
               )}
             </div>
           </>
