@@ -801,3 +801,21 @@ NEXT UP:
 - Admin settings and audit logs pages
 - Multilingual support
 - Additional exercise features (custom exercises, response viewing)
+
+=== Session 2026-03-11_23:42 ===
+
+- Feature #109: Diary entry persists after page refresh ✅
+  - Created diary entry REFRESH_TEST_11111 via bot API
+  - Verified appears in diary list and timeline
+  - Refreshed page, entry still present
+  - Real database persistence confirmed, zero console errors
+
+- Feature #110: Deleted diary entry disappears from all views ✅
+  - Created DELETE /api/clients/:id/diary/:entryId endpoint
+  - Added delete button with confirm dialog to diary tab in ClientDetail
+  - On delete: removes entry + vector embeddings, audit logged
+  - Verified gone from diary list, timeline, and search results
+  - Browser automation: click Delete, confirm, verify removal
+  - Zero console errors
+
+CURRENT STATUS: ~126/205 features passing
