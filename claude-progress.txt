@@ -536,7 +536,33 @@ TECHNICAL NOTES (Timeline Session):
   - Data persists across server restart (verified)
   - No mock data patterns found
 
-CURRENT STATUS: ~78/205 features passing (estimate, other agents also working)
+- Feature #98: Vector DB embeddings from session transcripts ✅
+  - Created vectorStore.js service: TF-IDF embedding generation, cosine similarity search
+  - Auto-embeds session transcripts after transcription pipeline completes
+  - Auto-embeds session summaries after summarization pipeline completes
+  - POST /api/search endpoint for semantic search across embedded documents
+  - GET /api/search/embedding/:sourceType/:sourceId to check embedding status
+  - GET /api/search/stats for vector store statistics
+  - Sparse vector format stored in SQLite vector_embeddings table
+  - Search returns results ranked by cosine similarity with threshold filtering
+  - Verified: transcript embedded (74 tokens), summary embedded (93 tokens)
+  - Semantic search for "anxiety breathing" returns 2 results (transcript + summary)
+  - Data persists across server restart
+
+- Feature #15: Therapist onboarding flow completes via Telegram ✅
+  - POST /api/bot/register with role=therapist creates therapist record
+  - Invite code auto-generated (8-char hex) on registration
+  - Bot code shows welcome message with invite code and instructions
+  - Repeated /start returns already_existed=true gracefully
+  - Verified: register, invite code present, DB record correct, idempotent
+
+- Feature #17: Invite code is unique per therapist ✅
+  - Tested 8 therapists (5 web + 3 bot): all codes unique
+  - Database schema has UNIQUE constraint on invite_code column
+  - Codes are 8-char lowercase hex, generated via crypto randomBytes
+  - Each therapist gets exactly one invite code, refreshable via regenerate
+
+CURRENT STATUS: ~81/205 features passing (estimate, other agents also working)
 
 NEXT UP:
 - More Stripe features (cancellation, expiry)
