@@ -1,0 +1,11 @@
+Login: FAIL 500
+
+GET /api/admin/settings: 401
+Settings keys: []
+trial_duration_days: undefined
+Error: read ECONNRESET
+    at TCP.onStreamRead (node:internal/stream_base_commons:216:20) {
+  errno: -4077,
+  code: 'ECONNRESET',
+  syscall: 'read'
+}

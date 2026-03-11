@@ -14,6 +14,7 @@ import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminTherapists from './pages/AdminTherapists';
+import AdminSettings from './pages/AdminSettings';
 
 function App() {
   return (
@@ -36,6 +37,7 @@ function App() {
         <Route path="/subscription/success" element={<AppLayout><Subscription /></AppLayout>} />
         <Route path="/admin" element={<AppLayout><AdminDashboard /></AppLayout>} />
         <Route path="/admin/therapists" element={<AppLayout><AdminTherapists /></AppLayout>} />
+        <Route path="/admin/settings" element={<AppLayout><AdminSettings /></AppLayout>} />
         <Route path="/admin/*" element={<AppLayout><AdminDashboard /></AppLayout>} />
 
         <Route path="*" element={<Navigate to="/" replace />} />

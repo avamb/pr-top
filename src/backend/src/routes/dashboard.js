@@ -341,10 +341,61 @@ router.get('/analytics', (req, res) => {
     const totalSessions = Object.values(sessionsByDay).reduce((a, b) => a + b, 0);
     const totalNotes = Object.values(notesByDay).reduce((a, b) => a + b, 0);
 
+    // Session frequency metrics
+    const weeks = Math.max(days / 7, 1);
+    const sessionsPerWeek = +(totalSessions / weeks).toFixed(1);
+
+    // Weekly session breakdown
+    const weeklySessionData = [];
+    for (let i = 0; i < Math.ceil(days / 7); i++) {
+      const weekStart = new Date(startDate);
+      weekStart.setDate(weekStart.getDate() + i * 7);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      if (weekEnd > endDate) weekEnd.setTime(endDate.getTime());
+
+      let weekSessions = 0;
+      for (let d = new Date(weekStart); d <= weekEnd; d.setDate(d.getDate() + 1)) {
+        const dayStr = d.toISOString().split('T')[0];
+        weekSessions += sessionsByDay[dayStr] || 0;
+      }
+
+      const weekLabel = `${weekStart.toISOString().split('T')[0]}`;
+      weeklySessionData.push({
+        week_start: weekLabel,
+        week_end: weekEnd.toISOString().split('T')[0],
+        sessions: weekSessions
+      });
+    }
+
+    // Per-client session frequency
+    const clientSessionFrequency = (clientActivityResult.length > 0 ? clientActivityResult[0].values : [])
+      .filter(row => row[4] > 0) // only clients with sessions
+      .map(row => ({
+        id: row[0],
+        name: row[1] || row[2] || `Client #${row[0]}`,
+        sessions: row[4],
+        sessions_per_week: +(row[4] / weeks).toFixed(1)
+      }))
+      .sort((a, b) => b.sessions - a.sessions);
+
+    // Days with sessions vs total days
+    const daysWithSessions = Object.keys(sessionsByDay).length;
+
+    const sessionFrequency = {
+      total_sessions: totalSessions,
+      sessions_per_week: sessionsPerWeek,
+      days_with_sessions: daysWithSessions,
+      total_days: days,
+      weekly_breakdown: weeklySessionData,
+      per_client: clientSessionFrequency
+    };
+
     res.json({
       period: { days, start_date: startDateStr, end_date: endDate.toISOString().split('T')[0] },
       daily_activity: dailyActivity,
       client_activity: clientActivity,
+      session_frequency: sessionFrequency,
       totals: {
         diary_entries: totalDiary,
         sessions: totalSessions,

@@ -234,6 +234,110 @@ export default function Analytics() {
               )}
             </div>
 
+            {/* Session Frequency */}
+            {analytics.session_frequency && (
+              <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6 mb-8">
+                <h3 className="text-lg font-semibold text-stone-800 mb-4">
+                  {t('analytics.sessionFrequency', 'Session Frequency')}
+                </h3>
+
+                {/* Session frequency summary cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-green-50 rounded-lg p-4 border border-green-100">
+                    <p className="text-sm text-green-700 mb-1">{t('analytics.totalSessionsPeriod', 'Total Sessions')}</p>
+                    <p className="text-2xl font-bold text-green-800">{analytics.session_frequency.total_sessions}</p>
+                    <p className="text-xs text-green-600 mt-1">{t('analytics.lastDays', { days })}</p>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-4 border border-green-100">
+                    <p className="text-sm text-green-700 mb-1">{t('analytics.sessionsPerWeek', 'Sessions / Week')}</p>
+                    <p className="text-2xl font-bold text-green-800">{analytics.session_frequency.sessions_per_week}</p>
+                    <p className="text-xs text-green-600 mt-1">{t('analytics.average', 'average')}</p>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-4 border border-green-100">
+                    <p className="text-sm text-green-700 mb-1">{t('analytics.daysWithSessions', 'Days with Sessions')}</p>
+                    <p className="text-2xl font-bold text-green-800">
+                      {analytics.session_frequency.days_with_sessions}/{analytics.session_frequency.total_days}
+                    </p>
+                    <p className="text-xs text-green-600 mt-1">{t('analytics.daysRatio', 'days')}</p>
+                  </div>
+                </div>
+
+                {/* Weekly session bar chart */}
+                {analytics.session_frequency.weekly_breakdown.length > 0 && (
+                  <div className="mb-6">
+                    <h4 className="text-sm font-medium text-stone-600 mb-3">{t('analytics.weeklyBreakdown', 'Weekly Breakdown')}</h4>
+                    <div className="flex items-end gap-2" style={{ height: '150px' }}>
+                      {analytics.session_frequency.weekly_breakdown.map((week, i) => {
+                        const maxWeekSessions = Math.max(
+                          ...analytics.session_frequency.weekly_breakdown.map(w => w.sessions),
+                          1
+                        );
+                        const height = (week.sessions / maxWeekSessions) * 100;
+                        return (
+                          <div
+                            key={i}
+                            className="flex-1 flex flex-col items-center justify-end group relative"
+                          >
+                            {/* Tooltip */}
+                            <div className="hidden group-hover:block absolute bottom-full mb-2 bg-stone-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10">
+                              <div>{week.week_start} — {week.week_end}</div>
+                              <div>{week.sessions} {week.sessions === 1 ? 'session' : 'sessions'}</div>
+                            </div>
+                            <div
+                              className="bg-green-400 hover:bg-green-500 rounded-t w-full transition-colors"
+                              style={{ height: `${Math.max(height, week.sessions > 0 ? 4 : 0)}%`, minHeight: week.sessions > 0 ? '4px' : '0' }}
+                            />
+                            <span className="text-xs text-stone-400 mt-1 truncate w-full text-center" title={week.week_start}>
+                              {week.week_start.slice(5)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Per-client session frequency */}
+                {analytics.session_frequency.per_client.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium text-stone-600 mb-3">{t('analytics.perClientFrequency', 'Per-Client Session Frequency')}</h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-stone-50 border-b border-stone-200">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-xs font-semibold text-stone-500 uppercase">{t('analytics.client', 'Client')}</th>
+                            <th className="px-4 py-2 text-right text-xs font-semibold text-stone-500 uppercase">{t('analytics.sessions', 'Sessions')}</th>
+                            <th className="px-4 py-2 text-right text-xs font-semibold text-stone-500 uppercase">{t('analytics.perWeek', 'Per Week')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {analytics.session_frequency.per_client.map(client => (
+                            <tr
+                              key={client.id}
+                              className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer transition-colors"
+                              onClick={() => navigate(`/clients/${client.id}`)}
+                            >
+                              <td className="px-4 py-3 text-sm font-medium text-teal-600 hover:underline">{client.name}</td>
+                              <td className="px-4 py-3 text-sm text-right">
+                                <span className="inline-block bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-medium">
+                                  {client.sessions}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right text-stone-600">{client.sessions_per_week}/wk</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {analytics.session_frequency.total_sessions === 0 && (
+                  <p className="text-stone-400 text-center py-8">{t('analytics.noSessionsPeriod', 'No sessions recorded in this period')}</p>
+                )}
+              </div>
+            )}
+
             {/* Client Activity Breakdown */}
             <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6">
               <h3 className="text-lg font-semibold text-stone-800 mb-4">{t('analytics.clientBreakdown')}</h3>

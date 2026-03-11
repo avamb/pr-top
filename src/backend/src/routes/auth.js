@@ -10,6 +10,29 @@ const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-change-in-production';
 
+// Secure cookie configuration
+const SESSION_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'Strict',
+  maxAge: 24 * 60 * 60 * 1000, // 24 hours (matches JWT expiry)
+  path: '/'
+};
+
+// Helper: extract token from Authorization header or session cookie
+function extractToken(req) {
+  // 1. Check Authorization header first (API clients)
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.split(' ')[1];
+  }
+  // 2. Fall back to HttpOnly session cookie (browser clients)
+  if (req.cookies && req.cookies.session_token) {
+    return req.cookies.session_token;
+  }
+  return null;
+}
+
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
   try {
@@ -84,6 +107,9 @@ router.post('/register', async (req, res) => {
 
     logger.info(`User registered successfully: id=${userId}, email=${user[1]}`);
 
+    // Set secure HttpOnly session cookie
+    res.cookie('session_token', token, SESSION_COOKIE_OPTIONS);
+
     res.status(201).json({
       message: 'User registered successfully',
       user: {
@@ -144,6 +170,9 @@ router.post('/login', async (req, res) => {
 
     logger.info(`User logged in: id=${user[0]}, email=${user[1]}`);
 
+    // Set secure HttpOnly session cookie
+    res.cookie('session_token', token, SESSION_COOKIE_OPTIONS);
+
     res.json({
       message: 'Login successful',
       user: {
@@ -159,15 +188,29 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// POST /api/auth/logout - Clear session cookie and invalidate token
+router.post('/logout', (req, res) => {
+  // Clear the session cookie
+  res.clearCookie('session_token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'Strict',
+    path: '/'
+  });
+
+  logger.info('User logged out, session cookie cleared');
+
+  res.json({ message: 'Logged out successfully' });
+});
+
 // GET /api/auth/me
 router.get('/me', (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const token = extractToken(req);
+    if (!token) {
       return res.status(401).json({ error: 'No token provided' });
     }
 
-    const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET);
 
     const db = getDatabase();
@@ -208,5 +251,8 @@ router.get('/me', (req, res) => {
     res.status(500).json({ error: 'Failed to fetch user profile' });
   }
 });
+
+// Export the extractToken helper for use by other modules
+router.extractToken = extractToken;
 
 module.exports = router;

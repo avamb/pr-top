@@ -231,4 +231,122 @@ router.get('/logs/audit', (req, res) => {
   }
 });
 
+// GET /api/admin/settings - Get all platform settings
+router.get('/settings', (req, res) => {
+  try {
+    const db = getDatabase();
+    const result = db.exec('SELECT key, value, updated_by, updated_at FROM platform_settings ORDER BY key');
+
+    const settings = {};
+    if (result.length > 0) {
+      for (const row of result[0].values) {
+        settings[row[0]] = {
+          value: row[1],
+          updated_by: row[2],
+          updated_at: row[3]
+        };
+      }
+    }
+
+    res.json({ settings });
+  } catch (error) {
+    logger.error('Admin get settings error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch platform settings' });
+  }
+});
+
+// PUT /api/admin/settings - Update platform settings
+router.put('/settings', (req, res) => {
+  try {
+    const { settings } = req.body;
+    if (!settings || typeof settings !== 'object') {
+      return res.status(400).json({ error: 'settings object required' });
+    }
+
+    const db = getDatabase();
+
+    // Allowed setting keys and their validation
+    const allowedKeys = {
+      trial_duration_days: { min: 1, max: 365, type: 'integer' },
+      trial_client_limit: { min: 1, max: 1000, type: 'integer' },
+      trial_session_limit: { min: 1, max: 10000, type: 'integer' },
+      basic_client_limit: { min: 1, max: 1000, type: 'integer' },
+      basic_session_limit: { min: 1, max: 10000, type: 'integer' },
+      pro_client_limit: { min: 1, max: 10000, type: 'integer' },
+      pro_session_limit: { min: 1, max: 100000, type: 'integer' },
+      basic_price_monthly: { min: 100, max: 100000, type: 'integer' },
+      pro_price_monthly: { min: 100, max: 100000, type: 'integer' },
+      premium_price_monthly: { min: 100, max: 100000, type: 'integer' }
+    };
+
+    const updated = [];
+    const errors = [];
+
+    for (const [key, value] of Object.entries(settings)) {
+      if (!allowedKeys[key]) {
+        errors.push(`Unknown setting: ${key}`);
+        continue;
+      }
+
+      const rule = allowedKeys[key];
+      const numVal = parseInt(value, 10);
+
+      if (isNaN(numVal)) {
+        errors.push(`${key} must be a number`);
+        continue;
+      }
+
+      if (numVal < rule.min || numVal > rule.max) {
+        errors.push(`${key} must be between ${rule.min} and ${rule.max}`);
+        continue;
+      }
+
+      // Upsert the setting
+      db.run(
+        `INSERT INTO platform_settings (key, value, updated_by, updated_at)
+         VALUES (?, ?, ?, datetime('now'))
+         ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')`,
+        [key, String(numVal), req.user.id, String(numVal), req.user.id]
+      );
+      updated.push({ key, value: numVal });
+    }
+
+    if (updated.length > 0) {
+      saveDatabase();
+
+      // Audit log
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'update_platform_settings', 'platform_settings', NULL, ?, datetime('now'))",
+        [req.user.id, JSON.stringify({ updated: updated.map(u => u.key) })]
+      );
+      saveDatabase();
+    }
+
+    logger.info(`Superadmin ${req.user.id} updated platform settings: ${updated.map(u => `${u.key}=${u.value}`).join(', ')}`);
+
+    // Return all current settings
+    const result = db.exec('SELECT key, value, updated_by, updated_at FROM platform_settings ORDER BY key');
+    const allSettings = {};
+    if (result.length > 0) {
+      for (const row of result[0].values) {
+        allSettings[row[0]] = {
+          value: row[1],
+          updated_by: row[2],
+          updated_at: row[3]
+        };
+      }
+    }
+
+    res.json({
+      message: errors.length > 0 ? 'Settings partially updated' : 'Settings updated successfully',
+      updated,
+      errors: errors.length > 0 ? errors : undefined,
+      settings: allSettings
+    });
+  } catch (error) {
+    logger.error('Admin update settings error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update platform settings' });
+  }
+});
+
 module.exports = router;
