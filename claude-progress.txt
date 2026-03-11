@@ -1,5 +1,25 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-11 (features #89, #90) ===
+
+- Feature #89: Spanish language fully supported ✅
+  - Created es.json with full Spanish translations for all UI sections
+  - Registered Spanish in i18n/index.js config
+  - Created bot i18n.js module with EN/RU/ES message translations
+  - Updated bot index.js to use i18n system with user language detection
+  - All UI elements verified in Spanish via browser automation
+  - Zero console errors
+
+- Feature #90: Language preference persists across sessions ✅
+  - Set language to Russian via Settings page
+  - Verified UI in Russian after save
+  - Refreshed page - language still Russian (localStorage persistence)
+  - Logged out and logged back in - language still Russian (database + profile sync)
+  - Login flow fetches profile and syncs i18n language from database
+  - Zero console errors throughout flow
+
+CURRENT STATUS: ~114/205 features passing (estimate)
+
 === Session 2026-03-11 (feature #88) ===
 
 - Feature #88: English language fully supported ✅
