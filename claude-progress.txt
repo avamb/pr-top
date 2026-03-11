@@ -910,3 +910,27 @@ CURRENT STATUS: ~128/205 features passing
   - Verified via browser automation with zero console errors
 
 CURRENT STATUS: ~136/205 features passing (134 + 2 new)
+
+=== Session 2026-03-12_batch_122_123 ===
+
+- Feature #122: Consent revocation immediately blocks all access ✅
+  - Full E2E workflow: register therapist → link client → consent → submit diary
+  - Therapist verifies diary access works pre-revoke
+  - Client revokes consent via bot API
+  - Therapist immediately blocked from diary (403), notes (404), timeline (404)
+  - Client disappears from therapist's client list (0 clients)
+  - Direct URL access to client detail shows "Failed to fetch client"
+  - Audit log records consent_revoked event
+  - API test: all 13 checks passing
+  - Browser test: verified pre/post revoke states with zero console errors
+
+- Feature #123: Registration with invalid email shows error ✅
+  - Added client-side email validation regex in Register.jsx
+  - Added noValidate to form to use custom validation over HTML5 native
+  - Added server-side email validation in auth.js register endpoint (400 response)
+  - Entering 'not-an-email' shows "Please enter a valid email address" error banner
+  - Form stays on /register, not submitted
+  - Valid email registration still works (redirects to /dashboard)
+  - No mock data patterns, zero console errors
+
+CURRENT STATUS: ~138/205 features passing (136 + 2 new)
