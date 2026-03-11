@@ -115,7 +115,7 @@ router.post('/login', async (req, res) => {
     logger.info(`Login attempt for: ${email}`);
 
     const result = db.exec(
-      'SELECT id, email, password_hash, role FROM users WHERE email = ?',
+      'SELECT id, email, password_hash, role, blocked_at FROM users WHERE email = ?',
       [email]
     );
 
@@ -128,6 +128,12 @@ router.post('/login', async (req, res) => {
 
     if (!isValid) {
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Check if user is blocked
+    if (user[4]) {
+      logger.warn(`Blocked user attempted login: id=${user[0]}, email=${user[1]}`);
+      return res.status(403).json({ error: 'Your account has been blocked. Please contact support.' });
     }
 
     const token = jwt.sign(
@@ -169,7 +175,7 @@ router.get('/me', (req, res) => {
     logger.info(`Fetching user profile: id=${decoded.userId}`);
 
     const result = db.exec(
-      'SELECT id, email, role, language, timezone, created_at FROM users WHERE id = ?',
+      'SELECT id, email, role, language, timezone, created_at, blocked_at FROM users WHERE id = ?',
       [decoded.userId]
     );
 
@@ -178,6 +184,11 @@ router.get('/me', (req, res) => {
     }
 
     const user = result[0].values[0];
+
+    // Check if user is blocked
+    if (user[6]) {
+      return res.status(403).json({ error: 'Your account has been blocked. Please contact support.' });
+    }
 
     res.json({
       user: {
