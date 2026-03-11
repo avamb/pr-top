@@ -316,7 +316,23 @@ TECHNICAL NOTES (Timeline Session):
   - Error banners shown alongside existing data, not replacing it
   - Retry button added to dashboard error banner
 
-CURRENT STATUS: ~46/205 features passing (estimate, other agents also working)
+- Feature #30: Diary entries filterable by date ✅
+  - Backend: added date_from/date_to query params to GET /api/clients/:id/diary
+  - Frontend: added date picker inputs in ClientDetail diary tab with Clear button
+  - Tested with entries across Jan/Feb/Mar, all date range combinations work correctly
+
+- Feature #183: Landing page responsive at mobile (375px) ✅
+  - Verified at 375px: hero stacks vertically, features single column, pricing single column
+  - Added min-h-[44px] to navbar, hero CTA, and pricing CTA buttons for tap targets
+  - No horizontal scroll, all text readable, footer stacks vertically
+
+- Feature #162: Double-click submit on registration prevented ✅
+  - Added loading guard at top of handleSubmit (if loading return)
+  - Button disabled during submission via existing loading state
+  - Backend rejects duplicate emails with 409 error
+  - Double-click creates exactly one account, redirects to dashboard
+
+CURRENT STATUS: ~49/205 features passing (estimate, other agents also working)
 
 NEXT UP:
 - Client consent revocation flow
