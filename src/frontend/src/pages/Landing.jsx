@@ -145,12 +145,12 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
           <span className="text-xl font-bold text-primary tracking-tight">PsyLink</span>
           <div className="flex items-center gap-4">
-            <Link to="/login" className="text-sm font-medium text-secondary hover:text-text transition-colors">
+            <Link to="/login" className="text-sm font-medium text-secondary hover:text-text transition-colors min-h-[44px] flex items-center">
               Log in
             </Link>
             <Link
               to="/register"
-              className="text-sm font-semibold px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary-600 transition-colors"
+              className="text-sm font-semibold px-4 py-2.5 rounded-lg bg-primary text-white hover:bg-primary-600 transition-colors min-h-[44px] flex items-center"
             >
               Get Started
             </Link>
@@ -279,7 +279,7 @@ export default function Landing() {
                 </ul>
                 <Link
                   to="/register"
-                  className={`mt-8 block text-center py-2.5 rounded-lg font-semibold text-sm transition-colors ${
+                  className={`mt-8 block text-center py-2.5 min-h-[44px] flex items-center justify-center rounded-lg font-semibold text-sm transition-colors ${
                     tier.highlight
                       ? 'bg-white text-primary hover:bg-white/90'
                       : 'bg-primary text-white hover:bg-primary-600'
