@@ -276,6 +276,14 @@ function applySchema(db) {
     // Column already exists, ignore
   }
 
+  // Add escalation_preferences column for SOS notification preferences (migration)
+  try {
+    db.run("ALTER TABLE users ADD COLUMN escalation_preferences TEXT DEFAULT '{}'");
+    logger.info('Added escalation_preferences column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
   // Create indexes for performance
   db.run('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
   db.run('CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)');

@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { encrypt } = require('../services/encryption');
+const { processDiaryTranscription } = require('../services/diaryTranscription');
 
 const router = express.Router();
 
@@ -420,6 +421,19 @@ router.post('/diary', botAuth, (req, res) => {
 
     logger.info(`Client ${clientId} submitted ${type} diary entry #${entryId}${file_ref ? ' with audio file' : ''}`);
 
+    // Auto-transcribe voice/video diary entries asynchronously
+    if ((type === 'voice' || type === 'video') && entryId) {
+      processDiaryTranscription(entryId).then(function(result) {
+        if (result.success) {
+          logger.info(`Auto-transcription completed for diary entry #${entryId}`);
+        } else {
+          logger.warn(`Auto-transcription failed for diary entry #${entryId}: ${result.error}`);
+        }
+      }).catch(function(err) {
+        logger.warn(`Auto-transcription error for diary entry #${entryId}: ${err.message}`);
+      });
+    }
+
     res.status(201).json({
       message: 'Diary entry saved successfully',
       entry: {
@@ -434,6 +448,22 @@ router.post('/diary', botAuth, (req, res) => {
     logger.error('Bot diary error: ' + error.message);
     logger.error('Stack: ' + error.stack);
     res.status(500).json({ error: 'Failed to save diary entry: ' + error.message });
+  }
+});
+
+// POST /api/bot/transcribe-diary/:entry_id - Manually trigger transcription for a diary entry
+router.post('/transcribe-diary/:entry_id', botAuth, async (req, res) => {
+  try {
+    const entryId = parseInt(req.params.entry_id);
+    const result = await processDiaryTranscription(entryId);
+    if (result.success) {
+      res.json({ message: 'Transcription completed', entry_id: entryId, result: result });
+    } else {
+      res.status(400).json({ error: 'Transcription failed', entry_id: entryId, details: result.error });
+    }
+  } catch (error) {
+    logger.error('Manual diary transcription error: ' + error.message);
+    res.status(500).json({ error: 'Transcription failed: ' + error.message });
   }
 });
 
@@ -546,10 +576,9 @@ router.post('/sos', botAuth, (req, res) => {
 
     logger.info(`SOS ALERT: Client ${clientId} (telegram_id=${telegram_id}) triggered SOS, therapist ${therapistId}, event #${sosId}`);
 
-    // Notify therapist immediately
-    // Look up therapist's telegram_id for Telegram notification
+    // Notify therapist based on escalation preferences
     const therapistResult = db.exec(
-      'SELECT telegram_id, email FROM users WHERE id = ?',
+      'SELECT telegram_id, email, escalation_preferences FROM users WHERE id = ?',
       [therapistId]
     );
 
@@ -557,18 +586,34 @@ router.post('/sos', botAuth, (req, res) => {
     const therapistInfo = therapistResult.length > 0 && therapistResult[0].values.length > 0
       ? therapistResult[0].values[0] : null;
 
-    if (therapistInfo && therapistInfo[0]) {
-      // Therapist has a Telegram ID - log notification (in production, send via bot)
-      const clientIdentifier = `Client #${clientId} (Telegram: ${telegram_id})`;
+    // Parse escalation preferences
+    let escalationPrefs = { sos_telegram: true, sos_email: true, sos_web_push: true, sos_sound_alert: true, quiet_hours_enabled: false, quiet_hours_start: '22:00', quiet_hours_end: '08:00', escalation_delay_minutes: 0 };
+    try {
+      if (therapistInfo && therapistInfo[2]) {
+        escalationPrefs = { ...escalationPrefs, ...JSON.parse(therapistInfo[2]) };
+      }
+    } catch (e) {
+      logger.warn('Failed to parse escalation preferences for therapist ' + therapistId);
+    }
+
+    const clientIdentifier = `Client #${clientId} (Telegram: ${telegram_id})`;
+    logger.info(`SOS escalation preferences for therapist ${therapistId}: ${JSON.stringify(escalationPrefs)}`);
+
+    if (therapistInfo && therapistInfo[0] && escalationPrefs.sos_telegram) {
+      // Therapist has a Telegram ID and Telegram notifications enabled
       logger.info(`THERAPIST NOTIFICATION: SOS from ${clientIdentifier} → Therapist telegram_id=${therapistInfo[0]}`);
       logger.info(`[DEV MODE] Would send Telegram message to ${therapistInfo[0]}: "🚨 SOS ALERT from your client ${clientIdentifier}. Please check immediately."`);
       notificationSent = true;
+    } else if (therapistInfo && therapistInfo[0] && !escalationPrefs.sos_telegram) {
+      logger.info(`SOS Telegram notification SKIPPED for therapist ${therapistId} (disabled in preferences)`);
     }
 
-    if (therapistInfo && therapistInfo[1]) {
-      // Therapist has an email - log email notification
+    if (therapistInfo && therapistInfo[1] && escalationPrefs.sos_email) {
+      // Therapist has an email and email notifications enabled
       logger.info(`[DEV MODE] Would send email notification to ${therapistInfo[1]}: SOS alert from client #${clientId}`);
       notificationSent = true;
+    } else if (therapistInfo && therapistInfo[1] && !escalationPrefs.sos_email) {
+      logger.info(`SOS email notification SKIPPED for therapist ${therapistId} (disabled in preferences)`);
     }
 
     // Store notification record for web dashboard polling
