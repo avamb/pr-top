@@ -171,4 +171,46 @@ router.get('/current', requireAuth, (req, res) => {
   }
 });
 
+// GET /api/subscription/payments
+// Get payment history for authenticated user
+router.get('/payments', requireAuth, (req, res) => {
+  try {
+    const db = getDatabase();
+    const userId = req.user.userId;
+
+    // Get subscription first
+    const subResult = db.exec(
+      'SELECT id FROM subscriptions WHERE therapist_id = ?',
+      [userId]
+    );
+
+    if (subResult.length === 0 || subResult[0].values.length === 0) {
+      return res.json({ payments: [] });
+    }
+
+    const subscriptionId = subResult[0].values[0][0];
+
+    const result = db.exec(
+      `SELECT id, stripe_payment_intent_id, amount, currency, status, created_at
+       FROM payments WHERE subscription_id = ?
+       ORDER BY created_at DESC`,
+      [subscriptionId]
+    );
+
+    const payments = (result.length > 0 ? result[0].values : []).map(row => ({
+      id: row[0],
+      stripe_payment_intent_id: row[1],
+      amount: row[2],
+      currency: row[3],
+      status: row[4],
+      created_at: row[5]
+    }));
+
+    res.json({ payments });
+  } catch (error) {
+    logger.error('Get payments error: ' + error.message);
+    res.status(500).json({ error: 'Failed to get payments' });
+  }
+});
+
 module.exports = router;

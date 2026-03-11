@@ -15,6 +15,8 @@ const botRoutes = require('./routes/bot');
 const subscriptionRoutes = require('./routes/subscription');
 const webhookRoutes = require('./routes/webhooks');
 const adminRoutes = require('./routes/admin');
+const dashboardRoutes = require('./routes/dashboard');
+const encryptionRoutes = require('./routes/encryption');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -75,6 +77,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/bot', botRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/encryption', encryptionRoutes);
 // app.use('/api/clients', require('./routes/clients'));
 // app.use('/api/sessions', require('./routes/sessions'));
 // app.use('/api/exercises', require('./routes/exercises'));
