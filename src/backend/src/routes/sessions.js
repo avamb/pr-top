@@ -10,6 +10,7 @@ const { getDatabase, saveDatabase } = require('../db/connection');
 const { encrypt, decrypt } = require('../services/encryption');
 const { processSessionTranscription } = require('../services/transcription');
 const { processSessionSummary } = require('../services/summarization');
+const { checkSessionLimit } = require('../utils/planLimits');
 const { logger } = require('../utils/logger');
 
 // Configure multer for audio file uploads
@@ -82,6 +83,21 @@ router.post('/', authenticate, requireRole('therapist', 'superadmin'), upload.si
     }
 
     const db = getDatabase();
+
+    // Check session upload limit based on subscription tier
+    const sessionCheck = checkSessionLimit(therapistId);
+    if (!sessionCheck.allowed) {
+      // Clean up uploaded file if limit reached
+      if (req.file) {
+        fs.unlinkSync(req.file.path);
+      }
+      return res.status(403).json({
+        error: sessionCheck.message,
+        current: sessionCheck.current,
+        limit: sessionCheck.limit,
+        plan: sessionCheck.plan
+      });
+    }
 
     // Verify the client belongs to this therapist
     const clientCheck = db.exec(

@@ -99,10 +99,65 @@ function checkClientLimit(therapistId) {
   return { allowed, current, limit, plan, message };
 }
 
+/**
+ * Get current month's session count for a therapist
+ */
+function getSessionCount(therapistId) {
+  const db = getDatabase();
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const result = db.exec(
+    "SELECT COUNT(*) FROM sessions WHERE therapist_id = ? AND created_at >= ?",
+    [therapistId, monthStart]
+  );
+  return result.length > 0 ? result[0].values[0][0] : 0;
+}
+
+/**
+ * Check if therapist can upload more sessions based on their subscription
+ * Returns { allowed, current, limit, plan, message }
+ */
+function checkSessionLimit(therapistId) {
+  const db = getDatabase();
+
+  // Get current subscription
+  const subResult = db.exec(
+    'SELECT plan, status FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
+    [therapistId]
+  );
+
+  if (subResult.length === 0 || subResult[0].values.length === 0) {
+    return { allowed: false, current: 0, limit: 0, plan: null, message: 'No active subscription' };
+  }
+
+  const plan = subResult[0].values[0][0];
+  const status = subResult[0].values[0][1];
+
+  if (status !== 'active') {
+    return { allowed: false, current: 0, limit: 0, plan, message: 'Subscription is not active' };
+  }
+
+  const limit = getSessionLimit(plan);
+  const current = getSessionCount(therapistId);
+
+  if (plan === 'premium') {
+    return { allowed: true, current, limit: -1, plan, message: 'Unlimited sessions on Premium plan' };
+  }
+
+  const allowed = current < limit;
+  const message = allowed
+    ? `${current}/${limit} sessions used this month`
+    : `Session limit reached (${current}/${limit}). Upgrade your plan to upload more sessions.`;
+
+  return { allowed, current, limit, plan, message };
+}
+
 module.exports = {
   getClientLimit,
   getSessionLimit,
   getClientCount,
+  getSessionCount,
   checkClientLimit,
+  checkSessionLimit,
   DEFAULT_LIMITS
 };
