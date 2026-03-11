@@ -373,7 +373,33 @@ TECHNICAL NOTES (Timeline Session):
   - Client data preserved (user record, diary entries intact)
   - Pre-existing auth middleware checks blocked_at on every request
 
-CURRENT STATUS: ~55/205 features passing (estimate, other agents also working)
+- Feature #62: Last activity indicators on client list ✅
+  - Backend: GET /api/clients now includes last_activity via UNION ALL subquery
+  - Subquery checks diary_entries, therapist_notes, sessions for most recent timestamp
+  - Frontend: ActivityIndicator component with color-coded dots
+  - Green (<1d), teal (<7d), amber (<30d), gray (>30d), no dot (never)
+  - formatRelativeTime() for human-readable time display
+  - Added "Last Activity" column to client list table
+
+- Feature #63: Sessions and exercises tabs on client detail ✅
+  - GET /api/clients/:id/sessions - paginated sessions with decrypted summaries
+  - GET /api/clients/:id/exercises - exercise deliveries with exercise metadata
+  - Sessions tab (🎧) shows recording info, transcript/summary availability
+  - Exercises tab (💪) shows delivery status, exercise details
+  - 6 tabs total: Timeline, Diary, Notes, Sessions, Exercises, Context
+
+- Feature #66: Therapist analytics: client activity graphs ✅
+  - GET /api/dashboard/analytics endpoint with period support (7d/14d/30d/60d)
+  - Returns daily_activity array, client_activity breakdown, totals
+  - Analytics.jsx page with summary cards (Total Activity, Diary, Sessions, Notes)
+  - ActivityTimeline stacked bar chart (blue=diary, green=sessions, amber=notes)
+  - Hover tooltips on chart bars showing daily breakdown
+  - Client Activity Breakdown with horizontal bar chart and detailed table
+  - Period selector buttons (7d/14d/30d/60d) with active state
+  - Navigation header with Dashboard, Clients, Analytics links
+  - Zero console errors, all data from real database
+
+CURRENT STATUS: ~58/205 features passing (estimate, other agents also working)
 
 NEXT UP:
 - More Stripe features (cancellation, expiry)
