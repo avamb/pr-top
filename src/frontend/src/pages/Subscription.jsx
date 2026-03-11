@@ -131,20 +131,12 @@ export default function Subscription() {
   const pendingPlan = subscription?.pending_plan;
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div>
       {/* Header */}
       <header className="bg-white border-b border-stone-200 px-6 py-4">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-stone-900">Subscription</h1>
-            <p className="text-stone-500 text-sm">Manage your PsyLink plan</p>
-          </div>
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="text-teal-600 hover:text-teal-700 font-medium"
-          >
-            ← Back to Dashboard
-          </button>
+        <div className="max-w-6xl mx-auto">
+          <h1 className="text-2xl font-bold text-stone-900">Subscription</h1>
+          <p className="text-stone-500 text-sm">Manage your PsyLink plan</p>
         </div>
       </header>
 

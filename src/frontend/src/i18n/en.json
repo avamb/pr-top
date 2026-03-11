@@ -12,7 +12,12 @@
     "register": "Get Started",
     "skipToContent": "Skip to main content",
     "backToClients": "← Back to Clients",
-    "backToDashboard": "← Dashboard"
+    "backToDashboard": "← Dashboard",
+    "adminSection": "Administration",
+    "adminOverview": "Overview",
+    "adminTherapists": "Therapists",
+    "adminSettings": "Settings",
+    "adminLogs": "Audit Logs"
   },
   "landing": {
     "heroTitle1": "Your Between-Session",

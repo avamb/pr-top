@@ -167,23 +167,14 @@ function ExerciseLibrary() {
   const totalExercises = Object.values(grouped).reduce((sum, arr) => sum + arr.length, 0);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div>
       {/* Header */}
-      <nav className="bg-white shadow-sm border-b border-gray-200">
+      <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="text-secondary hover:text-text transition-colors"
-              aria-label={t('nav.backToDashboard')}
-            >
-              {t('nav.backToDashboard')}
-            </button>
-            <h1 className="text-xl font-bold text-text">{t('exerciseLibrary.title')}</h1>
-          </div>
+          <h1 className="text-xl font-bold text-text">{t('exerciseLibrary.title')}</h1>
           <span className="text-sm text-secondary">{t('exerciseLibrary.exerciseCount', { count: totalExercises })}</span>
         </div>
-      </nav>
+      </header>
 
       <main className="max-w-6xl mx-auto px-4 py-6">
         {/* Category filter */}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import AppLayout from './components/AppLayout';
 import Landing from './pages/Landing';
 import Register from './pages/Register';
 import Login from './pages/Login';
@@ -18,21 +19,25 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Public routes - no sidebar */}
         <Route path="/" element={<Landing />} />
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/clients" element={<ClientList />} />
-        <Route path="/clients/:id" element={<ClientDetail />} />
-        <Route path="/sessions/:id" element={<SessionDetail />} />
-        <Route path="/exercises" element={<ExerciseLibrary />} />
-        <Route path="/analytics" element={<Analytics />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/subscription" element={<Subscription />} />
-        <Route path="/subscription/success" element={<Subscription />} />
-        <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/admin/therapists" element={<AdminTherapists />} />
-        <Route path="/admin/*" element={<AdminDashboard />} />
+
+        {/* Authenticated routes - with sidebar */}
+        <Route path="/dashboard" element={<AppLayout><Dashboard /></AppLayout>} />
+        <Route path="/clients" element={<AppLayout><ClientList /></AppLayout>} />
+        <Route path="/clients/:id" element={<AppLayout><ClientDetail /></AppLayout>} />
+        <Route path="/sessions/:id" element={<AppLayout><SessionDetail /></AppLayout>} />
+        <Route path="/exercises" element={<AppLayout><ExerciseLibrary /></AppLayout>} />
+        <Route path="/analytics" element={<AppLayout><Analytics /></AppLayout>} />
+        <Route path="/settings" element={<AppLayout><Settings /></AppLayout>} />
+        <Route path="/subscription" element={<AppLayout><Subscription /></AppLayout>} />
+        <Route path="/subscription/success" element={<AppLayout><Subscription /></AppLayout>} />
+        <Route path="/admin" element={<AppLayout><AdminDashboard /></AppLayout>} />
+        <Route path="/admin/therapists" element={<AppLayout><AdminTherapists /></AppLayout>} />
+        <Route path="/admin/*" element={<AppLayout><AdminDashboard /></AppLayout>} />
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

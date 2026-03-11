@@ -157,27 +157,8 @@ export default function Analytics() {
     }
   }
 
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-
   return (
-    <div className="min-h-screen bg-stone-50">
-      <header className="bg-white shadow-sm border-b border-stone-200">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold text-teal-600">{t('brand')}</h1>
-            <nav className="flex gap-2 ml-4" aria-label="Main navigation">
-              <button onClick={() => navigate('/dashboard')} className="text-sm text-stone-600 hover:text-teal-600 px-3 py-1 rounded transition-colors">{t('nav.dashboard')}</button>
-              <button onClick={() => navigate('/clients')} className="text-sm text-stone-600 hover:text-teal-600 px-3 py-1 rounded transition-colors">{t('nav.clients')}</button>
-              <button className="text-sm text-teal-600 font-medium bg-teal-50 px-3 py-1 rounded">{t('nav.analytics')}</button>
-            </nav>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-stone-500">{user.email}</span>
-            <button onClick={() => { localStorage.removeItem('token'); localStorage.removeItem('user'); navigate('/'); }} className="text-sm text-stone-500 hover:text-stone-700">{t('nav.logout')}</button>
-          </div>
-        </div>
-      </header>
-
+    <div>
       <main className="max-w-7xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>

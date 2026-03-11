@@ -261,16 +261,10 @@ export default function Dashboard() {
     }
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    navigate('/');
-  };
-
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div>
       <a href="#main-content" className="skip-to-content">
         {t('nav.skipToContent')}
       </a>
@@ -279,13 +273,6 @@ export default function Dashboard() {
           <h1 className="text-xl font-bold text-primary">{t('dashboard.title')}</h1>
           <div className="flex items-center gap-4">
             {stats?.subscription && <SubscriptionBadge subscription={stats.subscription} t={t} />}
-            <span className="text-sm text-secondary">{user.email}</span>
-            <button
-              onClick={handleLogout}
-              className="text-sm text-secondary hover:text-text transition-colors"
-            >
-              {t('nav.logout')}
-            </button>
           </div>
         </div>
       </header>
@@ -360,3 +347,5 @@ export default function Dashboard() {
     </div>
   );
 }
+
+export { getTimeAgo };

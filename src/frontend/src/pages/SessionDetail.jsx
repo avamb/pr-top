@@ -48,20 +48,8 @@ function SessionDetail() {
   };
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div>
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 bg-teal-600 text-white px-4 py-2 rounded z-50">Skip to main content</a>
-      <header className="bg-white shadow-sm border-b border-stone-200">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold text-stone-800">PsyLink</h1>
-            <nav className="flex gap-2" aria-label="Main navigation">
-              <button onClick={() => navigate('/dashboard')} className="px-3 py-1 rounded text-sm text-stone-600 hover:bg-stone-100">Dashboard</button>
-              <button onClick={() => navigate('/clients')} className="px-3 py-1 rounded text-sm text-stone-600 hover:bg-stone-100">Clients</button>
-            </nav>
-          </div>
-          <button onClick={() => { localStorage.removeItem('token'); localStorage.removeItem('user'); navigate('/'); }} className="text-sm text-stone-500 hover:text-stone-700">Log out</button>
-        </div>
-      </header>
 
       <main id="main-content" className="max-w-6xl mx-auto px-6 py-8">
         {loading ? (

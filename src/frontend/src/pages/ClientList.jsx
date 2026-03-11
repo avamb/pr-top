@@ -169,32 +169,8 @@ export default function ClientList() {
     debouncedSearch(e.target.value);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    navigate('/');
-  };
-
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-
   return (
-    <div className="min-h-screen bg-background">
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold text-primary">{t('brand')}</h1>
-            <nav className="flex gap-2 ml-4">
-              <button onClick={() => navigate('/dashboard')} className="text-sm text-secondary hover:text-primary px-3 py-1 rounded transition-colors">{t('nav.dashboard')}</button>
-              <button className="text-sm text-primary font-medium bg-primary/10 px-3 py-1 rounded">{t('nav.clients')}</button>
-            </nav>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-secondary">{user.email}</span>
-            <button onClick={handleLogout} className="text-sm text-secondary hover:text-text transition-colors">{t('nav.logout')}</button>
-          </div>
-        </div>
-      </header>
-
+    <div>
       <main className="max-w-7xl mx-auto px-4 py-8">
         {/* Header with stats */}
         <div className="flex items-center justify-between mb-6">

@@ -102,66 +102,19 @@ export default function AdminTherapists() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    navigate('/');
-  };
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex items-center justify-center py-20">
         <p className="text-secondary text-lg">Loading therapist management...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div>
       <a href="#main-content" className="skip-to-content">
         Skip to main content
       </a>
-
-      {/* Admin Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-primary">PsyLink</h1>
-            <span className="bg-red-100 text-red-700 text-xs font-semibold px-2 py-1 rounded-full uppercase">
-              Admin
-            </span>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-secondary">{user?.email}</span>
-            <button
-              onClick={handleLogout}
-              className="text-sm text-secondary hover:text-error transition-colors"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Admin Navigation */}
-      <nav aria-label="Admin navigation" className="bg-white border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex gap-6 py-3">
-            <Link to="/admin" className="text-secondary hover:text-primary transition-colors pb-3 -mb-px">
-              Overview
-            </Link>
-            <span className="text-primary font-medium border-b-2 border-primary pb-3 -mb-px">
-              Therapists
-            </span>
-            <Link to="/admin/settings" className="text-secondary hover:text-primary transition-colors pb-3 -mb-px">
-              Settings
-            </Link>
-            <Link to="/admin/logs" className="text-secondary hover:text-primary transition-colors pb-3 -mb-px">
-              Audit Logs
-            </Link>
-          </div>
-        </div>
-      </nav>
 
       <main id="main-content" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6 flex items-center justify-between">

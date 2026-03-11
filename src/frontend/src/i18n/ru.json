@@ -12,7 +12,12 @@
     "register": "Начать",
     "skipToContent": "Перейти к основному содержанию",
     "backToClients": "← Назад к клиентам",
-    "backToDashboard": "← Панель"
+    "backToDashboard": "← Панель",
+    "adminSection": "Администрирование",
+    "adminOverview": "Обзор",
+    "adminTherapists": "Терапевты",
+    "adminSettings": "Настройки",
+    "adminLogs": "Журнал аудита"
   },
   "landing": {
     "heroTitle1": "Ваш помощник для работы",
