@@ -248,8 +248,28 @@ export default function ClientList() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-secondary">
-                      {search ? t('clientList.noSearchResults') : t('clientList.noClients')}
+                    <td colSpan={6} className="px-4 py-16 text-center">
+                      {search ? (
+                        <div>
+                          <div className="text-4xl mb-3">🔍</div>
+                          <h3 className="text-lg font-medium text-secondary mb-1">{t('clientList.noSearchResults')}</h3>
+                          <p className="text-sm text-gray-400">{t('clientList.noSearchResultsHint', 'Try adjusting your search query.')}</p>
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="text-4xl mb-3">👥</div>
+                          <h3 className="text-lg font-medium text-secondary mb-1">{t('clientList.noClients')}</h3>
+                          <p className="text-sm text-gray-400 max-w-md mx-auto mb-4">
+                            {t('clientList.noClientsHint', 'Share your invite code with clients so they can connect with you via the Telegram bot.')}
+                          </p>
+                          <button
+                            onClick={() => navigate('/dashboard')}
+                            className="px-4 py-2 text-sm bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg transition-colors font-medium"
+                          >
+                            {t('clientList.viewInviteCode', 'View Invite Code')}
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 )}

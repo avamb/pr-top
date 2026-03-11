@@ -808,7 +808,15 @@ function ClientDetail() {
             {sessionsLoading ? (
               <p className="text-stone-500 text-center py-8">Loading sessions...</p>
             ) : sessions.length === 0 ? (
-              <p className="text-stone-400 text-center py-8">No sessions recorded yet.</p>
+              <div className="text-center py-12">
+                <div className="text-5xl mb-4">🎧</div>
+                <h3 className="text-lg font-medium text-stone-600 mb-2">
+                  {t('no_sessions_yet', 'No sessions recorded yet')}
+                </h3>
+                <p className="text-sm text-stone-400 max-w-sm mx-auto">
+                  {t('no_sessions_hint', 'Session recordings will appear here once you upload audio files for this client.')}
+                </p>
+              </div>
             ) : (
               <div className="space-y-4">
                 {sessions.map(session => (
