@@ -304,8 +304,14 @@ export default function Dashboard() {
 
       <main id="main-content" className="max-w-7xl mx-auto px-4 py-8">
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-            Failed to load dashboard data: {error}
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center justify-between">
+            <span>Failed to load dashboard data: {error}</span>
+            <button
+              onClick={() => fetchDashboardData(localStorage.getItem('token'))}
+              className="ml-4 px-3 py-1 bg-red-100 hover:bg-red-200 text-red-800 rounded text-xs font-medium"
+            >
+              Retry
+            </button>
           </div>
         )}
 
@@ -319,7 +325,7 @@ export default function Dashboard() {
         {/* Quick Stats Section */}
         <section className="mb-8">
           <h2 className="text-lg font-semibold text-text mb-4">Quick Stats</h2>
-          {loading ? (
+          {loading && !stats ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {[1, 2, 3, 4].map(i => (
                 <div key={i} className="bg-white rounded-lg shadow-md p-6 animate-pulse">
@@ -362,7 +368,7 @@ export default function Dashboard() {
         <section>
           <h2 className="text-lg font-semibold text-text mb-4">Recent Activity</h2>
           <div className="bg-white rounded-lg shadow-md p-6">
-            {loading ? (
+            {loading && activities.length === 0 ? (
               <div className="space-y-4 animate-pulse">
                 {[1, 2, 3].map(i => (
                   <div key={i} className="flex items-center gap-3">
