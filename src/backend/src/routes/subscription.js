@@ -4,7 +4,7 @@
 const express = require('express');
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { logger } = require('../utils/logger');
-const { createCustomer, getCustomer, isConfigured, isDevMode, getStripeClient } = require('../services/stripe');
+const { createCustomer, getCustomer, createCheckoutSession, isConfigured, isDevMode, getStripeClient, PLAN_PRICES } = require('../services/stripe');
 const { getClientLimit, getClientCount, checkClientLimit } = require('../utils/planLimits');
 const jwt = require('jsonwebtoken');
 
@@ -322,6 +322,139 @@ router.get('/limits', requireAuth, (req, res) => {
   } catch (error) {
     logger.error('Get limits error: ' + error.message);
     res.status(500).json({ error: 'Failed to get plan limits' });
+  }
+});
+
+// GET /api/subscription/plans
+// Get available plans and pricing
+router.get('/plans', (req, res) => {
+  const plans = Object.entries(PLAN_PRICES).map(([key, config]) => ({
+    id: key,
+    name: config.name,
+    amount: config.amount,
+    currency: config.currency,
+    interval: config.interval,
+    display_price: `$${(config.amount / 100).toFixed(0)}/mo`
+  }));
+  res.json({ plans });
+});
+
+// POST /api/subscription/checkout
+// Create a Stripe checkout session for plan upgrade
+router.post('/checkout', requireAuth, async (req, res) => {
+  try {
+    const db = getDatabase();
+    const userId = req.user.userId;
+    const { plan } = req.body;
+
+    const validPlans = ['basic', 'pro', 'premium'];
+    if (!plan || !validPlans.includes(plan)) {
+      return res.status(400).json({ error: 'Invalid plan. Must be one of: ' + validPlans.join(', ') });
+    }
+
+    // Check current subscription
+    const subResult = db.exec(
+      'SELECT id, plan, status, stripe_customer_id FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
+      [userId]
+    );
+
+    if (subResult.length === 0 || subResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'No subscription found. Please register first.' });
+    }
+
+    const currentPlan = subResult[0].values[0][1];
+    const currentStatus = subResult[0].values[0][2];
+    let customerId = subResult[0].values[0][3];
+
+    if (currentPlan === plan) {
+      return res.status(400).json({ error: 'Already on this plan' });
+    }
+
+    // Get user email for customer creation
+    const userResult = db.exec('SELECT email FROM users WHERE id = ?', [userId]);
+    const userEmail = userResult[0].values[0][0];
+
+    // Create Stripe customer if needed
+    if (!customerId) {
+      const customer = await createCustomer({ email: userEmail, userId });
+      customerId = customer.id;
+      db.run(
+        'UPDATE subscriptions SET stripe_customer_id = ?, updated_at = datetime(\'now\') WHERE therapist_id = ?',
+        [customerId, userId]
+      );
+      saveDatabase();
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const session = await createCheckoutSession({
+      customerId,
+      plan,
+      userId,
+      successUrl: `${frontendUrl}/subscription/success`,
+      cancelUrl: `${frontendUrl}/subscription`
+    });
+
+    // In dev mode, automatically complete the upgrade
+    if (isDevMode()) {
+      const now = new Date();
+      const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      db.run(
+        `UPDATE subscriptions SET plan = ?, status = 'active', stripe_subscription_id = ?,
+         current_period_start = ?, current_period_end = ?, updated_at = datetime('now')
+         WHERE therapist_id = ?`,
+        [plan, session.id, now.toISOString(), periodEnd.toISOString(), userId]
+      );
+      saveDatabase();
+      logger.info(`Dev mode: auto-completed upgrade to ${plan} for user ${userId}`);
+    }
+
+    res.json({
+      checkout_url: session.url,
+      session_id: session.id,
+      plan,
+      dev_mode: isDevMode(),
+      auto_completed: isDevMode()
+    });
+  } catch (error) {
+    logger.error('Checkout error: ' + error.message);
+    res.status(500).json({ error: 'Failed to create checkout session: ' + error.message });
+  }
+});
+
+// POST /api/subscription/cancel
+// Cancel subscription
+router.post('/cancel', requireAuth, (req, res) => {
+  try {
+    const db = getDatabase();
+    const userId = req.user.userId;
+
+    const subResult = db.exec(
+      'SELECT id, plan, status FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
+      [userId]
+    );
+
+    if (subResult.length === 0 || subResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'No subscription found' });
+    }
+
+    const subId = subResult[0].values[0][0];
+    const currentStatus = subResult[0].values[0][2];
+
+    if (currentStatus === 'canceled') {
+      return res.status(400).json({ error: 'Subscription already canceled' });
+    }
+
+    db.run(
+      `UPDATE subscriptions SET status = 'canceled', updated_at = datetime('now') WHERE id = ?`,
+      [subId]
+    );
+    saveDatabase();
+
+    logger.info(`Subscription canceled for user ${userId}`);
+    res.json({ message: 'Subscription canceled successfully' });
+  } catch (error) {
+    logger.error('Cancel error: ' + error.message);
+    res.status(500).json({ error: 'Failed to cancel subscription' });
   }
 });
 

@@ -85,6 +85,30 @@ app.use('/api/invite-code', require('./routes/inviteCode'));
 // app.use('/api/exercises', require('./routes/exercises'));
 // app.use('/api/search', require('./routes/search'));
 
+// Dev-only seed endpoint for testing with large datasets
+if (process.env.NODE_ENV !== 'production') {
+  const bcrypt = require('bcryptjs');
+  app.post('/api/dev/seed-clients', async (req, res) => {
+    try {
+      const { therapist_id, count } = req.body;
+      if (!therapist_id || !count) return res.status(400).json({ error: 'therapist_id and count required' });
+      const { getDatabase, saveDatabase: save } = require('./db/connection');
+      const db = getDatabase();
+      const hash = await bcrypt.hash('TestPass123', 4);
+      const ts = Date.now();
+      let created = 0;
+      for (let i = 1; i <= count; i++) {
+        db.run("INSERT INTO users (email, password_hash, role, therapist_id, consent_therapist_access, language) VALUES (?, ?, 'client', ?, 1, 'en')",
+          [`seed${i}_${ts}@t.com`, hash, therapist_id]);
+        created++;
+      }
+      save();
+      const total = db.exec("SELECT COUNT(*) FROM users WHERE therapist_id = ? AND role = 'client'", [therapist_id]);
+      res.json({ created, total: total[0].values[0][0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+}
+
 // 404 handler
 app.use('/api/*', (req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });

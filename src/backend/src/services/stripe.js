@@ -187,6 +187,82 @@ async function getCustomer(customerId) {
 }
 
 /**
+ * Plan pricing configuration (in cents)
+ */
+const PLAN_PRICES = {
+  basic: { amount: 1900, currency: 'usd', name: 'Basic Plan', interval: 'month' },
+  pro: { amount: 4900, currency: 'usd', name: 'Pro Plan', interval: 'month' },
+  premium: { amount: 9900, currency: 'usd', name: 'Premium Plan', interval: 'month' }
+};
+
+/**
+ * Create a Stripe Checkout session for plan upgrade
+ * In dev mode, simulates a checkout session with a dev URL
+ * In production, creates a real Stripe checkout session
+ */
+async function createCheckoutSession({ customerId, plan, userId, successUrl, cancelUrl }) {
+  if (!stripeConfigured) {
+    throw new Error('Stripe is not configured. Call initStripe() first.');
+  }
+
+  const planConfig = PLAN_PRICES[plan];
+  if (!planConfig) {
+    throw new Error(`Invalid plan: ${plan}. Must be one of: ${Object.keys(PLAN_PRICES).join(', ')}`);
+  }
+
+  if (devMode) {
+    // Development mode: simulate a checkout session
+    const devSessionId = 'cs_dev_' + uuidv4().replace(/-/g, '').slice(0, 24);
+    logger.info(`Stripe dev mode: created checkout session ${devSessionId} for user ${userId}, plan ${plan}`);
+    return {
+      id: devSessionId,
+      object: 'checkout.session',
+      url: successUrl + (successUrl.includes('?') ? '&' : '?') + 'session_id=' + devSessionId,
+      payment_status: 'unpaid',
+      status: 'open',
+      customer: customerId,
+      metadata: {
+        psylink_user_id: String(userId),
+        plan: plan
+      },
+      _dev_mode: true
+    };
+  }
+
+  try {
+    const session = await stripeClient.checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      line_items: [{
+        price_data: {
+          currency: planConfig.currency,
+          product_data: {
+            name: planConfig.name,
+            description: `PsyLink ${planConfig.name} - Monthly Subscription`
+          },
+          unit_amount: planConfig.amount,
+          recurring: { interval: planConfig.interval }
+        },
+        quantity: 1
+      }],
+      mode: 'subscription',
+      success_url: successUrl + '?session_id={CHECKOUT_SESSION_ID}',
+      cancel_url: cancelUrl,
+      metadata: {
+        psylink_user_id: String(userId),
+        plan: plan
+      }
+    });
+
+    logger.info(`Stripe checkout session created: ${session.id} for user ${userId}, plan ${plan}`);
+    return session;
+  } catch (error) {
+    logger.error(`Failed to create checkout session for user ${userId}: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
  * Check if Stripe is configured (synchronous check)
  */
 function isConfigured() {
@@ -199,6 +275,8 @@ module.exports = {
   getStripeStatus,
   createCustomer,
   getCustomer,
+  createCheckoutSession,
   isConfigured,
-  isDevMode
+  isDevMode,
+  PLAN_PRICES
 };
