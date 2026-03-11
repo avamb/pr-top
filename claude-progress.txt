@@ -1,5 +1,23 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-11 (features #104, #105) ===
+
+- Feature #104: 404 page displayed for unknown routes ✅
+  - Created NotFound.jsx with large 404 heading, path display, helpful message
+  - Link to home (unauthenticated) or dashboard (authenticated)
+  - Updated App.jsx catch-all route from Navigate redirect to NotFound component
+  - Professional teal design consistent with app design system
+  - Zero console errors
+
+- Feature #105: Post-login redirect to intended page ✅
+  - AppLayout passes intended path (location.pathname + search) via state when redirecting to /login
+  - Login.jsx reads location.state.from and redirects there after successful auth
+  - Falls back to role-based default (/admin or /dashboard) when no intended path
+  - Tested with /clients and /analytics - both redirect correctly after login
+  - Zero console errors
+
+CURRENT STATUS: ~122/205 features passing
+
 === Session 2026-03-11 (features #102, #103) ===
 
 - Feature #102: Dashboard sidebar navigation works for all sections ✅
