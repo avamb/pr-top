@@ -886,3 +886,27 @@ CURRENT STATUS: ~128/205 features passing
   - Settings page shows email, role=therapist, member since date
   - Subscription page shows Trial plan, status active, ends 3/26/2026
   - Zero console errors throughout
+
+=== Session 2026-03-12_batch_119_121 ===
+
+- Feature #119: End-to-end client linking and diary flow ✅
+  - Full flow verified: register therapist → get invite code → register client via bot
+  - Client connects with invite code → consent accepted → client linked
+  - Client submits text diary entry via bot API
+  - Therapist sees client in client list with "Consented" status
+  - Therapist navigates to client detail → diary tab shows entry
+  - Content decrypted and readable (E2E_DIARY_TEST_* matches exactly)
+  - Timeline tab also shows diary entry
+  - Zero console errors, no mock data patterns
+
+- Feature #121: End-to-end exercise send and completion ✅
+  - Therapist browses exercise library (16 exercises, 6 categories)
+  - Therapist sends "Behavioral Activation" exercise to linked client
+  - Client receives exercise via bot API (status: 'sent')
+  - Client responds to exercise with response_text
+  - Delivery status updates to 'completed' with encrypted response
+  - Response stored encrypted in DB: AES-256-GCM format (version:iv:authTag:ciphertext)
+  - Therapist sees completed delivery in client exercises tab
+  - Verified via browser automation with zero console errors
+
+CURRENT STATUS: ~136/205 features passing (134 + 2 new)
