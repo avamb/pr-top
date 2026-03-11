@@ -12,17 +12,43 @@ router.use(authenticate);
 router.use(requireRole('therapist', 'superadmin'));
 
 // GET /api/clients - List therapist's linked clients
+// Supports: ?search=term&page=1&per_page=25&language=en
 router.get('/', (req, res) => {
   try {
     const db = getDatabase();
     const therapistId = req.user.id;
+    const search = req.query.search || '';
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page) || 25));
+    const languageFilter = req.query.language || '';
 
+    // Build query with optional filters
+    let whereClause = "therapist_id = ? AND role = 'client'";
+    const params = [therapistId];
+
+    if (search) {
+      whereClause += " AND (email LIKE ? OR telegram_id LIKE ?)";
+      params.push(`%${search}%`, `%${search}%`);
+    }
+
+    if (languageFilter) {
+      whereClause += " AND language = ?";
+      params.push(languageFilter);
+    }
+
+    // Get total count
+    const countResult = db.exec(`SELECT COUNT(*) FROM users WHERE ${whereClause}`, params);
+    const total = countResult.length > 0 ? countResult[0].values[0][0] : 0;
+
+    // Get paginated results
+    const offset = (page - 1) * perPage;
     const result = db.exec(
       `SELECT id, telegram_id, email, consent_therapist_access, language, created_at, updated_at
        FROM users
-       WHERE therapist_id = ? AND role = 'client'
-       ORDER BY created_at DESC`,
-      [therapistId]
+       WHERE ${whereClause}
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, perPage, offset]
     );
 
     const clients = (result.length > 0 ? result[0].values : []).map(row => ({
@@ -40,7 +66,10 @@ router.get('/', (req, res) => {
 
     res.json({
       clients,
-      total: clients.length,
+      total,
+      page,
+      per_page: perPage,
+      total_pages: Math.ceil(total / perPage),
       limit: limitCheck.limit,
       can_add: limitCheck.allowed,
       plan: limitCheck.plan,
