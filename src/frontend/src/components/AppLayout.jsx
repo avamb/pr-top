@@ -21,7 +21,7 @@ export default function AppLayout({ children }) {
     const token = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
     if (!token || !storedUser) {
-      navigate('/login');
+      navigate('/login', { state: { from: location.pathname + location.search } });
       return;
     }
     let parsedUser;
@@ -29,7 +29,7 @@ export default function AppLayout({ children }) {
       parsedUser = JSON.parse(storedUser);
       setUser(parsedUser);
     } catch {
-      navigate('/login');
+      navigate('/login', { state: { from: location.pathname + location.search } });
       return;
     }
 

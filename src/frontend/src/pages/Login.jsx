@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useCsrfToken } from '../hooks/useCsrfToken';
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t, i18n } = useTranslation();
   const csrfToken = useCsrfToken();
+  const redirectTo = location.state?.from || null;
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -61,8 +63,10 @@ export default function Login() {
         }
       } catch (e) { /* ignore - language will sync on settings page */ }
 
-      // Redirect based on role
-      if (data.user.role === 'superadmin') {
+      // Redirect to intended page, or default based on role
+      if (redirectTo) {
+        navigate(redirectTo);
+      } else if (data.user.role === 'superadmin') {
         navigate('/admin');
       } else {
         navigate('/dashboard');
