@@ -1,5 +1,18 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-11 (feature #82) ===
+
+- Feature #82: Paywall enforces client count limit per tier ✅
+  - Trial therapist (3 client limit): first 3 clients link, 4th blocked with 403
+  - Error message: "Client limit reached (3/3). Upgrade your plan to add more clients."
+  - After upgrade to Basic (10 limit), 4th client links successfully
+  - Both bot consent (/api/bot/consent) and web link (/api/clients/link) enforce limits
+  - UI shows limit info: "0 client(s) total (limit: 3)"
+  - checkClientLimit reads from real subscriptions table, falls back to DEFAULT_LIMITS
+  - Zero console errors, no mock data patterns
+
+CURRENT STATUS: ~110/205 features passing (53.7%)
+
 === Session 2026-03-11 (batch #67, #71, #72) ===
 
 - Feature #67: Therapist analytics: session frequency ✅
