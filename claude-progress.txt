@@ -87,10 +87,33 @@ TECHNICAL NOTES (Session 2):
   - After unblock, therapist can login again
   - Superadmin role required for admin endpoints
 
-CURRENT STATUS: 11/205 features passing
+- Feature #76: Stripe integration initialized correctly ✅
+  - Stripe SDK loaded (dev mode with placeholder keys, real mode with sk_test_/sk_live_)
+  - Health check includes Stripe status: /api/health returns stripe.status
+  - Customer creation endpoint: POST /api/subscription/create-customer
+  - Dev mode generates cus_dev_ customer IDs, real mode calls Stripe API
+  - Subscription record created in DB with stripe_customer_id
+
+- Feature #85: Stripe webhook handles payment events ✅
+  - POST /api/webhooks/stripe endpoint mounted before JSON body parser
+  - payment_intent.succeeded: records payment, updates subscription to active
+  - payment_intent.payment_failed: records failed payment, sets subscription past_due
+  - Audit log entries created for both success and failure events
+  - Notification logged for payment failures (console in dev mode)
+  - Supports signature verification with STRIPE_WEBHOOK_SECRET when configured
+
+- Feature #51: Encryption key versioning supported ✅
+  - Encryption service: AES-256-GCM with PBKDF2 key derivation
+  - Key version embedded in encrypted data format: version:iv:authTag:ciphertext
+  - POST /api/encryption/rotate creates new key version, marks old as 'rotated'
+  - New data uses latest active key version
+  - Old data encrypted with previous versions still decryptable
+  - API routes: GET /keys, POST /rotate, POST /encrypt, POST /decrypt
+
+CURRENT STATUS: 14/205 features passing
 
 NEXT UP:
 - Continue with web panel features (superadmin login, dashboard views)
-- Encryption/security features
 - Client management endpoints
-- More admin panel features
+- More Stripe features (subscription creation, plan changes)
+- More encryption features (re-encryption migration)
