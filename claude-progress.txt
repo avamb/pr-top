@@ -332,10 +332,31 @@ TECHNICAL NOTES (Timeline Session):
   - Backend rejects duplicate emails with 409 error
   - Double-click creates exactly one account, redirects to dashboard
 
-CURRENT STATUS: ~49/205 features passing (estimate, other agents also working)
+- Feature #43: Client SOS button available and functional ✅
+  - POST /api/bot/sos endpoint creates SOS event in sos_events table
+  - SOS message encrypted with AES-256-GCM (Class A data)
+  - Validates client role, therapist connection required
+  - Status set to 'triggered', audit log records sos_triggered events
+  - Persistence verified across server restart
+
+- Feature #57: Audit log records SOS events ✅
+  - GET /api/clients/:id/sos lists SOS events with decrypted messages
+  - PUT /api/clients/:id/sos/:sosId/acknowledge updates status
+  - Audit log records sos_triggered (client action) and sos_acknowledged (therapist action)
+  - Both event types verified in database
+
+- Feature #44: SOS immediately notifies linked therapist ✅
+  - SOS trigger looks up therapist's telegram_id and email for notification
+  - Dev mode: logs notification to console (production: sends Telegram message)
+  - GET /api/dashboard/notifications returns unacknowledged SOS alerts
+  - Dashboard shows Active SOS count and SOS events in activity feed
+  - Audit log records sos_notification_sent events
+  - Zero console errors in browser verification
+
+CURRENT STATUS: ~52/205 features passing (estimate, other agents also working)
 
 NEXT UP:
 - Client consent revocation flow
 - More Stripe features (cancellation, expiry)
-- Exercise library and SOS features
+- Exercise library features
 - Admin settings and audit logs pages
