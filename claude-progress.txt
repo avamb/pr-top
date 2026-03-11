@@ -865,3 +865,24 @@ NEXT UP:
   - Real database persistence confirmed, zero console errors
 
 CURRENT STATUS: ~128/205 features passing
+
+=== Session 2026-03-12_batch_117_118 ===
+
+- Feature #117: Unexpected data in UI flagged as mock data ✅
+  - Registered fresh therapist (fresh_test_117@example.com)
+  - Dashboard: Clients 0, Sessions 0, Notes 0, Active SOS 0
+  - Recent Activity: 'No recent activity'
+  - Clients page: 0 clients, empty state shown
+  - Analytics: all zeros, 'No activity recorded'
+  - Grep for mock patterns in src/: no hits (isDevMode only for Stripe)
+  - Zero console errors
+
+- Feature #118: End-to-end therapist registration to dashboard ✅
+  - Register at /register with email/password
+  - Auto-redirects to /dashboard after registration
+  - Trial subscription created (14 days, active)
+  - Logout and re-login with same credentials works
+  - Dashboard shows correct therapist email and invite code
+  - Settings page shows email, role=therapist, member since date
+  - Subscription page shows Trial plan, status active, ends 3/26/2026
+  - Zero console errors throughout
