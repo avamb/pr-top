@@ -1,5 +1,24 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-11 (features #107, #108) ===
+
+- Feature #107: Breadcrumb navigation works on client detail pages ✅
+  - Created reusable Breadcrumb.jsx component with semantic <nav aria-label="Breadcrumb">
+  - Shows Dashboard > Clients > [Client Name] hierarchy
+  - Dashboard and Clients are teal-colored links, current page in dark text
+  - Clicking Clients breadcrumb navigates to /clients
+  - Clicking Dashboard breadcrumb navigates to /dashboard
+  - Zero console errors
+
+- Feature #108: Create unique diary entry and verify in UI ✅
+  - Created diary entry via bot API with content 'VERIFY_DATA_TEST_67890'
+  - Entry stored encrypted in database (AES-256-GCM)
+  - Verified entry appears in client diary tab with correct content
+  - Diary count shows (1), entry type shows text with timestamp
+  - No mock data patterns in codebase, zero console errors
+
+CURRENT STATUS: ~124/205 features passing (estimate, other agents also working)
+
 === Session 2026-03-11 (features #104, #105) ===
 
 - Feature #104: 404 page displayed for unknown routes ✅
