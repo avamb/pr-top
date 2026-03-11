@@ -387,4 +387,88 @@ router.get('/diary/:telegram_id', botAuth, (req, res) => {
   }
 });
 
+// POST /api/bot/sos - Client triggers SOS alert
+router.post('/sos', botAuth, (req, res) => {
+  try {
+    const { telegram_id, message } = req.body;
+
+    if (!telegram_id) {
+      return res.status(400).json({ error: 'telegram_id is required' });
+    }
+
+    const db = getDatabase();
+
+    // Verify the user exists and is a client
+    const clientResult = db.exec(
+      'SELECT id, role, therapist_id, consent_therapist_access FROM users WHERE telegram_id = ?',
+      [String(telegram_id)]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found. Please register first with /start.' });
+    }
+
+    const client = clientResult[0].values[0];
+    const clientId = client[0];
+    const clientRole = client[1];
+    const therapistId = client[2];
+
+    if (clientRole !== 'client') {
+      return res.status(400).json({ error: 'Only clients can trigger SOS alerts.' });
+    }
+
+    if (!therapistId) {
+      return res.status(400).json({ error: 'You are not connected to a therapist. Please connect first with /connect <code>.' });
+    }
+
+    // Encrypt the SOS message if provided (Class A data)
+    let messageEncrypted = null;
+    let keyId = null;
+    let keyVersion = null;
+    if (message && message.trim()) {
+      const encResult = encrypt(message.trim());
+      messageEncrypted = encResult.encrypted;
+      keyId = encResult.keyId;
+      keyVersion = encResult.keyVersion;
+    }
+
+    // Insert SOS event
+    db.run(
+      `INSERT INTO sos_events (client_id, therapist_id, message_encrypted, encryption_key_id, status, created_at)
+       VALUES (?, ?, ?, ?, 'triggered', datetime('now'))`,
+      [clientId, therapistId, messageEncrypted, keyId]
+    );
+    saveDatabase();
+
+    // Get the created SOS event ID
+    const lastId = db.exec("SELECT id, created_at FROM sos_events WHERE client_id = ? ORDER BY id DESC LIMIT 1", [clientId]);
+    const sosId = lastId.length > 0 ? lastId[0].values[0][0] : 0;
+    const createdAt = lastId.length > 0 ? lastId[0].values[0][1] : new Date().toISOString();
+
+    // Record in audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      [clientId, 'sos_triggered', 'sos_event', sosId, JSON.stringify({ client_id: clientId, therapist_id: therapistId })]
+    );
+    saveDatabase();
+
+    logger.info(`SOS ALERT: Client ${clientId} (telegram_id=${telegram_id}) triggered SOS, therapist ${therapistId}, event #${sosId}`);
+
+    res.status(201).json({
+      message: 'SOS alert sent successfully',
+      sos_event: {
+        id: sosId,
+        client_id: clientId,
+        therapist_id: therapistId,
+        status: 'triggered',
+        created_at: createdAt
+      }
+    });
+  } catch (error) {
+    logger.error('Bot SOS error: ' + error.message);
+    logger.error('Stack: ' + error.stack);
+    res.status(500).json({ error: 'Failed to send SOS alert: ' + error.message });
+  }
+});
+
 module.exports = router;
