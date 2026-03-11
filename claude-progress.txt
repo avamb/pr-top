@@ -1,0 +1,47 @@
+== PsyLink Progress Notes ==
+
+=== Session 2026-03-11 ===
+
+COMPLETED:
+- Feature #1: Database connection established ✅
+  - Backend connects to SQLite via sql.js (pure WASM, no native compilation needed)
+  - Health endpoint GET /api/health returns database status
+  - 14 tables created with indexes and default platform settings
+
+- Feature #2: Database schema applied correctly ✅
+  - All 14 tables verified with correct columns matching app_spec.txt
+  - users, diary_entries, therapist_notes, sessions, client_context, exercises,
+    exercise_deliveries, sos_events, subscriptions, payments, audit_logs,
+    encryption_keys, platform_settings (+ sqlite_sequence)
+
+- Feature #3: Data persists across server restart ✅
+  - Registered test user, killed server, restarted, logged in successfully
+  - sql.js saves to file on disk (src/backend/data/psylink.db)
+  - Periodic auto-save every 5 seconds + save on write operations
+
+TECHNICAL NOTES:
+- Switched from better-sqlite3 to sql.js because Node v25 lacks prebuilt binaries
+- sql.js uses WebAssembly SQLite - works on all platforms without compilation
+- Auth routes implemented: POST /register, POST /login, GET /me
+- JWT-based authentication with bcryptjs password hashing
+- Backend runs on port 3001, frontend configured for port 3000
+
+- Feature #4: No mock data patterns in codebase ✅
+  - All grep checks passed: no globalThis, devStore, mockData, testData, fakeData,
+    sampleData, dummyData, STUB, MOCK, isDev patterns found in src/
+  - No json-server, miragejs, or msw in package.json
+  - Only global.db is the real SQLite database connection reference
+
+- Feature #5: Backend API queries real database ✅
+  - GET /api/health executes real SQL: SELECT count(*) FROM sqlite_master
+  - POST /api/auth/register executes real INSERT INTO users
+  - POST /api/auth/login executes real SELECT from users + bcrypt compare
+  - GET /api/auth/me executes real SELECT from users with JWT verification
+  - Server restart persistence test passed
+
+CURRENT STATUS: 5/205 features passing (all infrastructure features complete)
+
+NEXT UP:
+- Continue with encryption/security features
+- Build frontend authentication pages
+- Implement therapist dashboard

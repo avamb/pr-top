@@ -69,8 +69,9 @@ router.post('/register', async (req, res) => {
       token
     });
   } catch (error) {
-    logger.error('Registration error:', error);
-    res.status(500).json({ error: 'Registration failed' });
+    logger.error('Registration error: ' + error.message);
+    logger.error('Stack: ' + error.stack);
+    res.status(500).json({ error: 'Registration failed: ' + error.message });
   }
 });
 
