@@ -39,9 +39,35 @@ TECHNICAL NOTES:
   - GET /api/auth/me executes real SELECT from users with JWT verification
   - Server restart persistence test passed
 
-CURRENT STATUS: 5/205 features passing (all infrastructure features complete)
+- Feature #6: App loads without errors ✅
+  - Frontend loads at http://localhost:3000 with HTTP 200
+  - Zero JavaScript errors in console
+  - Page renders visible content (PsyLink heading, subtitle)
+  - Design system colors applied (teal primary, warm background)
+
+- Feature #9: Therapist can register via web panel ✅
+  - Registration page at /register with email, password, confirm password
+  - Backend creates user with role 'therapist' and generates JWT
+  - Trial subscription automatically created (14 days, from platform_settings)
+  - Redirects to /dashboard after successful registration
+  - Subscription verified via GET /api/subscription/current
+
+- Feature #10: Therapist can login via web panel ✅
+  - Login page at /login with email/password form
+  - Successful login stores token in localStorage, redirects to /dashboard
+  - GET /api/auth/me returns correct therapist data with token
+  - Zero console errors throughout flow
+
+TECHNICAL NOTES (Session 2):
+- React Router set up with routes: /, /register, /login, /dashboard
+- Registration creates trial subscription in subscriptions table
+- Trial duration read from platform_settings (trial_duration_days)
+- Subscription route already existed at /api/subscription/current
+- Other agents concurrently built: Telegram bot features (#13, #14), Stripe integration, admin routes
+
+CURRENT STATUS: 8/205 features passing
 
 NEXT UP:
-- Continue with encryption/security features
-- Build frontend authentication pages
-- Implement therapist dashboard
+- Continue with web panel features (superadmin login, dashboard views)
+- Encryption/security features
+- Client management endpoints
