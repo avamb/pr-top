@@ -232,4 +232,130 @@ router.get('/notifications', (req, res) => {
   }
 });
 
+// GET /api/dashboard/analytics - Get client activity analytics data for charts
+router.get('/analytics', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+    const days = Math.min(parseInt(req.query.days) || 30, 90);
+
+    // Calculate date range
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    const startDateStr = startDate.toISOString().split('T')[0];
+
+    // Get diary entries per day
+    const diaryResult = db.exec(
+      `SELECT DATE(de.created_at) as day, COUNT(*) as count
+       FROM diary_entries de
+       JOIN users u ON u.id = de.client_id
+       WHERE u.therapist_id = ? AND de.created_at >= ?
+       GROUP BY DATE(de.created_at)
+       ORDER BY day ASC`,
+      [therapistId, startDateStr]
+    );
+    const diaryByDay = {};
+    if (diaryResult.length > 0) {
+      for (const row of diaryResult[0].values) {
+        diaryByDay[row[0]] = row[1];
+      }
+    }
+
+    // Get sessions per day
+    const sessionsResult = db.exec(
+      `SELECT DATE(s.created_at) as day, COUNT(*) as count
+       FROM sessions s
+       WHERE s.therapist_id = ? AND s.created_at >= ?
+       GROUP BY DATE(s.created_at)
+       ORDER BY day ASC`,
+      [therapistId, startDateStr]
+    );
+    const sessionsByDay = {};
+    if (sessionsResult.length > 0) {
+      for (const row of sessionsResult[0].values) {
+        sessionsByDay[row[0]] = row[1];
+      }
+    }
+
+    // Get notes per day
+    const notesResult = db.exec(
+      `SELECT DATE(tn.created_at) as day, COUNT(*) as count
+       FROM therapist_notes tn
+       WHERE tn.therapist_id = ? AND tn.created_at >= ?
+       GROUP BY DATE(tn.created_at)
+       ORDER BY day ASC`,
+      [therapistId, startDateStr]
+    );
+    const notesByDay = {};
+    if (notesResult.length > 0) {
+      for (const row of notesResult[0].values) {
+        notesByDay[row[0]] = row[1];
+      }
+    }
+
+    // Build daily timeline
+    const dailyActivity = [];
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+      const dayStr = d.toISOString().split('T')[0];
+      dailyActivity.push({
+        date: dayStr,
+        diary_entries: diaryByDay[dayStr] || 0,
+        sessions: sessionsByDay[dayStr] || 0,
+        notes: notesByDay[dayStr] || 0,
+        total: (diaryByDay[dayStr] || 0) + (sessionsByDay[dayStr] || 0) + (notesByDay[dayStr] || 0)
+      });
+    }
+
+    // Get per-client activity summary
+    const clientActivityResult = db.exec(
+      `SELECT u.id, u.email, u.telegram_id,
+              (SELECT COUNT(*) FROM diary_entries WHERE client_id = u.id) as diary_count,
+              (SELECT COUNT(*) FROM sessions WHERE client_id = u.id AND therapist_id = ?) as session_count,
+              (SELECT COUNT(*) FROM therapist_notes WHERE client_id = u.id AND therapist_id = ?) as note_count,
+              (SELECT MAX(created_at) FROM (
+                SELECT created_at FROM diary_entries WHERE client_id = u.id
+                UNION ALL
+                SELECT created_at FROM sessions WHERE client_id = u.id
+                UNION ALL
+                SELECT created_at FROM therapist_notes WHERE client_id = u.id
+              )) as last_activity
+       FROM users u
+       WHERE u.therapist_id = ? AND u.role = 'client'
+       ORDER BY last_activity DESC NULLS LAST`,
+      [therapistId, therapistId, therapistId]
+    );
+
+    const clientActivity = (clientActivityResult.length > 0 ? clientActivityResult[0].values : []).map(row => ({
+      id: row[0],
+      name: row[1] || row[2] || `Client #${row[0]}`,
+      diary_entries: row[3],
+      sessions: row[4],
+      notes: row[5],
+      total: row[3] + row[4] + row[5],
+      last_activity: row[6]
+    }));
+
+    // Summary totals
+    const totalDiary = Object.values(diaryByDay).reduce((a, b) => a + b, 0);
+    const totalSessions = Object.values(sessionsByDay).reduce((a, b) => a + b, 0);
+    const totalNotes = Object.values(notesByDay).reduce((a, b) => a + b, 0);
+
+    res.json({
+      period: { days, start_date: startDateStr, end_date: endDate.toISOString().split('T')[0] },
+      daily_activity: dailyActivity,
+      client_activity: clientActivity,
+      totals: {
+        diary_entries: totalDiary,
+        sessions: totalSessions,
+        notes: totalNotes,
+        total: totalDiary + totalSessions + totalNotes
+      }
+    });
+  } catch (error) {
+    logger.error('Dashboard analytics error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch analytics data' });
+  }
+});
+
 module.exports = router;

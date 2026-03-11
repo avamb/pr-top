@@ -1,0 +1,335 @@
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+const API = 'http://localhost:3001/api';
+
+function BarChart({ data, maxValue, label, color }) {
+  if (!data || data.length === 0) return null;
+  const max = maxValue || Math.max(...data.map(d => d.value), 1);
+
+  return (
+    <div className="space-y-1">
+      {data.map((item, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <span className="text-xs text-stone-500 w-20 text-right truncate" title={item.label}>
+            {item.label}
+          </span>
+          <div className="flex-1 bg-stone-100 rounded-full h-5 relative overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${color}`}
+              style={{ width: `${Math.max((item.value / max) * 100, item.value > 0 ? 2 : 0)}%` }}
+            />
+          </div>
+          <span className="text-xs font-medium text-stone-700 w-8 text-right">{item.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ActivityTimeline({ dailyActivity, days }) {
+  if (!dailyActivity || dailyActivity.length === 0) return null;
+
+  const maxTotal = Math.max(...dailyActivity.map(d => d.total), 1);
+  // Show last N days in the chart
+  const recentDays = dailyActivity.slice(-Math.min(days, 30));
+
+  return (
+    <div className="relative">
+      {/* Y-axis labels */}
+      <div className="flex items-end gap-px" style={{ height: '200px' }}>
+        {recentDays.map((day, i) => {
+          const height = (day.total / maxTotal) * 100;
+          const diaryHeight = day.diary_entries > 0 ? (day.diary_entries / day.total) * height : 0;
+          const sessionHeight = day.sessions > 0 ? (day.sessions / day.total) * height : 0;
+          const noteHeight = day.notes > 0 ? (day.notes / day.total) * height : 0;
+
+          return (
+            <div
+              key={i}
+              className="flex-1 flex flex-col justify-end group relative"
+              title={`${day.date}\nDiary: ${day.diary_entries}\nSessions: ${day.sessions}\nNotes: ${day.notes}`}
+            >
+              {/* Tooltip on hover */}
+              <div className="hidden group-hover:block absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-stone-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10">
+                <div className="font-medium">{day.date}</div>
+                <div>Diary: {day.diary_entries}</div>
+                <div>Sessions: {day.sessions}</div>
+                <div>Notes: {day.notes}</div>
+              </div>
+
+              {/* Stacked bar */}
+              {day.total > 0 ? (
+                <div className="flex flex-col w-full">
+                  {day.notes > 0 && (
+                    <div
+                      className="bg-amber-400 rounded-t-sm w-full"
+                      style={{ height: `${noteHeight}%`, minHeight: '2px' }}
+                    />
+                  )}
+                  {day.sessions > 0 && (
+                    <div
+                      className="bg-green-400 w-full"
+                      style={{ height: `${sessionHeight}%`, minHeight: '2px' }}
+                    />
+                  )}
+                  {day.diary_entries > 0 && (
+                    <div
+                      className="bg-blue-400 rounded-b-sm w-full"
+                      style={{ height: `${diaryHeight}%`, minHeight: '2px' }}
+                    />
+                  )}
+                </div>
+              ) : (
+                <div className="bg-stone-100 rounded-sm w-full" style={{ height: '2px' }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* X-axis labels - show every 7th day */}
+      <div className="flex gap-px mt-1">
+        {recentDays.map((day, i) => (
+          <div key={i} className="flex-1 text-center">
+            {i % 7 === 0 ? (
+              <span className="text-xs text-stone-400">{day.date.slice(5)}</span>
+            ) : null}
+          </div>
+        ))}
+      </div>
+
+      {/* Legend */}
+      <div className="flex gap-4 mt-3 justify-center">
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-3 rounded bg-blue-400" />
+          <span className="text-xs text-stone-600">Diary</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-3 rounded bg-green-400" />
+          <span className="text-xs text-stone-600">Sessions</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-3 rounded bg-amber-400" />
+          <span className="text-xs text-stone-600">Notes</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function Analytics() {
+  const navigate = useNavigate();
+  const [analytics, setAnalytics] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [days, setDays] = useState(30);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) { navigate('/login'); return; }
+    fetchAnalytics();
+  }, [days]);
+
+  async function fetchAnalytics() {
+    const token = localStorage.getItem('token');
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API}/dashboard/analytics?days=${days}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/login');
+        return;
+      }
+      if (!res.ok) throw new Error('Failed to fetch analytics');
+      const data = await res.json();
+      setAnalytics(data);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+  return (
+    <div className="min-h-screen bg-stone-50">
+      <header className="bg-white shadow-sm border-b border-stone-200">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <h1 className="text-xl font-bold text-teal-600">PsyLink</h1>
+            <nav className="flex gap-2 ml-4" aria-label="Main navigation">
+              <button onClick={() => navigate('/dashboard')} className="text-sm text-stone-600 hover:text-teal-600 px-3 py-1 rounded transition-colors">Dashboard</button>
+              <button onClick={() => navigate('/clients')} className="text-sm text-stone-600 hover:text-teal-600 px-3 py-1 rounded transition-colors">Clients</button>
+              <button className="text-sm text-teal-600 font-medium bg-teal-50 px-3 py-1 rounded">Analytics</button>
+            </nav>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-stone-500">{user.email}</span>
+            <button onClick={() => { localStorage.removeItem('token'); localStorage.removeItem('user'); navigate('/login'); }} className="text-sm text-stone-500 hover:text-stone-700">Log out</button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 py-8">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-stone-800">Analytics</h2>
+            <p className="text-sm text-stone-500 mt-1">Client activity overview</p>
+          </div>
+          <div className="flex gap-2">
+            {[7, 14, 30, 60].map(d => (
+              <button
+                key={d}
+                onClick={() => setDays(d)}
+                className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
+                  days === d
+                    ? 'bg-teal-600 text-white'
+                    : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-50'
+                }`}
+              >
+                {d}d
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            {error}
+            <button onClick={fetchAnalytics} className="ml-2 underline">Retry</button>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="bg-white rounded-lg shadow-sm border border-stone-200 p-6 animate-pulse">
+                <div className="h-4 bg-stone-200 rounded w-24 mb-2" />
+                <div className="h-8 bg-stone-200 rounded w-16" />
+              </div>
+            ))}
+          </div>
+        ) : analytics ? (
+          <>
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+              <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-5">
+                <p className="text-sm text-stone-500 mb-1">Total Activity</p>
+                <p className="text-3xl font-bold text-stone-800">{analytics.totals.total}</p>
+                <p className="text-xs text-stone-400 mt-1">Last {days} days</p>
+              </div>
+              <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-5">
+                <p className="text-sm text-stone-500 mb-1">Diary Entries</p>
+                <p className="text-3xl font-bold text-blue-600">{analytics.totals.diary_entries}</p>
+                <p className="text-xs text-stone-400 mt-1">From clients</p>
+              </div>
+              <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-5">
+                <p className="text-sm text-stone-500 mb-1">Sessions</p>
+                <p className="text-3xl font-bold text-green-600">{analytics.totals.sessions}</p>
+                <p className="text-xs text-stone-400 mt-1">Recorded</p>
+              </div>
+              <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-5">
+                <p className="text-sm text-stone-500 mb-1">Notes</p>
+                <p className="text-3xl font-bold text-amber-600">{analytics.totals.notes}</p>
+                <p className="text-xs text-stone-400 mt-1">Created</p>
+              </div>
+            </div>
+
+            {/* Activity Timeline Chart */}
+            <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6 mb-8">
+              <h3 className="text-lg font-semibold text-stone-800 mb-4">Daily Activity (Last {days} days)</h3>
+              {analytics.daily_activity.some(d => d.total > 0) ? (
+                <ActivityTimeline dailyActivity={analytics.daily_activity} days={days} />
+              ) : (
+                <p className="text-stone-400 text-center py-12">No activity recorded in this period</p>
+              )}
+            </div>
+
+            {/* Client Activity Breakdown */}
+            <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6">
+              <h3 className="text-lg font-semibold text-stone-800 mb-4">Client Activity Breakdown</h3>
+              {analytics.client_activity.length > 0 ? (
+                <div className="space-y-6">
+                  {/* Horizontal bar chart for each client */}
+                  <BarChart
+                    data={analytics.client_activity.map(c => ({
+                      label: c.name.split('@')[0],
+                      value: c.total
+                    }))}
+                    color="bg-teal-500"
+                    label="Total Activity"
+                  />
+
+                  {/* Detailed table */}
+                  <div className="overflow-x-auto mt-6">
+                    <table className="w-full">
+                      <thead className="bg-stone-50 border-b border-stone-200">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-semibold text-stone-500 uppercase">Client</th>
+                          <th className="px-4 py-2 text-right text-xs font-semibold text-stone-500 uppercase">Diary</th>
+                          <th className="px-4 py-2 text-right text-xs font-semibold text-stone-500 uppercase">Sessions</th>
+                          <th className="px-4 py-2 text-right text-xs font-semibold text-stone-500 uppercase">Notes</th>
+                          <th className="px-4 py-2 text-right text-xs font-semibold text-stone-500 uppercase">Total</th>
+                          <th className="px-4 py-2 text-right text-xs font-semibold text-stone-500 uppercase">Last Active</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {analytics.client_activity.map(client => (
+                          <tr
+                            key={client.id}
+                            className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer transition-colors"
+                            onClick={() => navigate(`/clients/${client.id}`)}
+                          >
+                            <td className="px-4 py-3 text-sm font-medium text-teal-600 hover:underline">
+                              {client.name}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-right text-stone-600">
+                              {client.diary_entries > 0 && (
+                                <span className="inline-block bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">
+                                  {client.diary_entries}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-right text-stone-600">
+                              {client.sessions > 0 && (
+                                <span className="inline-block bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-medium">
+                                  {client.sessions}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-right text-stone-600">
+                              {client.notes > 0 && (
+                                <span className="inline-block bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-xs font-medium">
+                                  {client.notes}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-right font-semibold text-stone-800">
+                              {client.total}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-right text-stone-400">
+                              {client.last_activity
+                                ? new Date(client.last_activity).toLocaleDateString()
+                                : 'No activity'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-stone-400 text-center py-12">No clients linked yet</p>
+              )}
+            </div>
+          </>
+        ) : null}
+      </main>
+    </div>
+  );
+}
