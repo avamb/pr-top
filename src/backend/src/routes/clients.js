@@ -1151,4 +1151,223 @@ router.put('/:id/sos/:sosId/acknowledge', (req, res) => {
   }
 });
 
+// POST /api/clients/:id/import - Import data (notes/diary) from JSON file
+// Accepts JSON with { type: "notes"|"diary", entries: [...] }
+const multer = require('multer');
+const importUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/json' || file.originalname.endsWith('.json')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only JSON files are accepted for import'), false);
+    }
+  }
+});
+
+router.post('/:id/import', (req, res, next) => {
+  importUpload.single('file')(req, res, (err) => {
+    if (err) {
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ error: 'File too large. Maximum size is 5MB.' });
+        }
+        return res.status(400).json({ error: 'File upload error: ' + err.message });
+      }
+      return res.status(400).json({ error: err.message });
+    }
+
+    try {
+      const db = getDatabase();
+      const therapistId = req.user.id;
+      const clientId = req.params.id;
+
+      // Verify client belongs to this therapist
+      const clientResult = db.exec(
+        "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+        [clientId, therapistId]
+      );
+
+      if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+        return res.status(404).json({ error: 'Client not found or not linked to you' });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded. Please provide a JSON file.' });
+      }
+
+      // Parse JSON content
+      let fileContent;
+      try {
+        const rawText = req.file.buffer.toString('utf8');
+        fileContent = JSON.parse(rawText);
+      } catch (parseErr) {
+        logger.warn(`Import parse error for client ${clientId}: ${parseErr.message}`);
+        return res.status(400).json({
+          error: 'Malformed JSON file. Please check the file format and try again.',
+          details: parseErr.message
+        });
+      }
+
+      // Validate structure
+      if (!fileContent || typeof fileContent !== 'object') {
+        return res.status(400).json({
+          error: 'Invalid file structure. Expected a JSON object with "type" and "entries" fields.'
+        });
+      }
+
+      const importType = fileContent.type;
+      if (!importType || !['notes', 'diary'].includes(importType)) {
+        return res.status(400).json({
+          error: 'Invalid import type. Must be "notes" or "diary".',
+          details: 'The "type" field must be either "notes" or "diary".'
+        });
+      }
+
+      if (!Array.isArray(fileContent.entries)) {
+        return res.status(400).json({
+          error: 'Invalid file structure. "entries" must be an array.',
+          details: 'Expected "entries" to be an array of objects.'
+        });
+      }
+
+      if (fileContent.entries.length === 0) {
+        return res.status(400).json({
+          error: 'No entries found in the import file.',
+          details: 'The "entries" array is empty.'
+        });
+      }
+
+      if (fileContent.entries.length > 500) {
+        return res.status(400).json({
+          error: 'Too many entries. Maximum 500 entries per import.',
+          details: `Found ${fileContent.entries.length} entries.`
+        });
+      }
+
+      // Count records before import for verification
+      let countBefore;
+      if (importType === 'notes') {
+        const countResult = db.exec(
+          'SELECT COUNT(*) FROM therapist_notes WHERE client_id = ? AND therapist_id = ?',
+          [clientId, therapistId]
+        );
+        countBefore = countResult.length > 0 ? countResult[0].values[0][0] : 0;
+      } else {
+        const countResult = db.exec(
+          'SELECT COUNT(*) FROM diary_entries WHERE client_id = ?',
+          [clientId]
+        );
+        countBefore = countResult.length > 0 ? countResult[0].values[0][0] : 0;
+      }
+
+      // Validate and import entries
+      const errors = [];
+      let imported = 0;
+
+      for (let i = 0; i < fileContent.entries.length; i++) {
+        const entry = fileContent.entries[i];
+
+        if (!entry || typeof entry !== 'object') {
+          errors.push({ index: i, error: 'Entry must be an object' });
+          continue;
+        }
+
+        if (importType === 'notes') {
+          // Validate note entry
+          if (!entry.content || typeof entry.content !== 'string' || entry.content.trim().length === 0) {
+            errors.push({ index: i, error: 'Note must have non-empty "content" string' });
+            continue;
+          }
+
+          if (entry.content.length > 50000) {
+            errors.push({ index: i, error: 'Note content exceeds 50000 character limit' });
+            continue;
+          }
+
+          // Encrypt and insert
+          const { encrypted: noteEncrypted, keyId } = encrypt(entry.content.trim());
+          const createdAt = entry.created_at || new Date().toISOString();
+
+          db.run(
+            `INSERT INTO therapist_notes (therapist_id, client_id, note_encrypted, encryption_key_id, payload_version, created_at, updated_at)
+             VALUES (?, ?, ?, ?, 1, ?, datetime('now'))`,
+            [therapistId, clientId, noteEncrypted, keyId, createdAt]
+          );
+          imported++;
+
+        } else if (importType === 'diary') {
+          // Validate diary entry
+          if (!entry.content || typeof entry.content !== 'string' || entry.content.trim().length === 0) {
+            errors.push({ index: i, error: 'Diary entry must have non-empty "content" string' });
+            continue;
+          }
+
+          if (entry.content.length > 50000) {
+            errors.push({ index: i, error: 'Diary content exceeds 50000 character limit' });
+            continue;
+          }
+
+          const entryType = entry.entry_type || 'text';
+          if (!['text', 'voice', 'video'].includes(entryType)) {
+            errors.push({ index: i, error: 'entry_type must be "text", "voice", or "video"' });
+            continue;
+          }
+
+          // Encrypt and insert
+          const { encrypted: contentEncrypted, keyId } = encrypt(entry.content.trim());
+          const createdAt = entry.created_at || new Date().toISOString();
+
+          db.run(
+            `INSERT INTO diary_entries (client_id, entry_type, content_encrypted, encryption_key_id, payload_version, created_at, updated_at)
+             VALUES (?, ?, ?, ?, 1, ?, datetime('now'))`,
+            [clientId, entryType, contentEncrypted, keyId, createdAt]
+          );
+          imported++;
+        }
+      }
+
+      if (imported > 0) {
+        saveDatabase();
+      }
+
+      // Audit log
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+        [therapistId, 'data_import', 'user', clientId, JSON.stringify({
+          import_type: importType,
+          total_entries: fileContent.entries.length,
+          imported: imported,
+          errors: errors.length
+        })]
+      );
+      saveDatabase();
+
+      logger.info(`Therapist ${therapistId} imported ${imported}/${fileContent.entries.length} ${importType} for client ${clientId}`);
+
+      // If ALL entries failed validation, return error
+      if (imported === 0 && errors.length > 0) {
+        return res.status(400).json({
+          error: 'All entries failed validation. No data was imported.',
+          validation_errors: errors,
+          imported: 0,
+          total: fileContent.entries.length
+        });
+      }
+
+      res.json({
+        message: `Successfully imported ${imported} ${importType}`,
+        imported: imported,
+        total: fileContent.entries.length,
+        errors: errors.length > 0 ? errors : undefined
+      });
+
+    } catch (error) {
+      logger.error('Import error: ' + error.message);
+      res.status(500).json({ error: 'Failed to import data: ' + error.message });
+    }
+  });
+});
+
 module.exports = router;
