@@ -8,6 +8,14 @@ const path = require('path');
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { encrypt, decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
+// Lazy-loaded to avoid circular dependency
+let summarizationService = null;
+function getSummarizationService() {
+  if (!summarizationService) {
+    summarizationService = require('./summarization');
+  }
+  return summarizationService;
+}
 
 const TRANSCRIPTION_API_KEY = process.env.TRANSCRIPTION_API_KEY;
 const UPLOAD_DIR = path.resolve(__dirname, '../../data/sessions');
@@ -145,6 +153,20 @@ async function processSessionTranscription(sessionId) {
     saveDatabase();
 
     logger.info(`Transcription complete for session ${sessionId}`);
+
+    // Chain summary generation after transcription
+    try {
+      const { processSessionSummary } = getSummarizationService();
+      const summaryResult = await processSessionSummary(sessionId);
+      if (summaryResult.success) {
+        logger.info(`Auto-summary generated for session ${sessionId}`);
+      } else {
+        logger.warn(`Auto-summary failed for session ${sessionId}: ${summaryResult.error}`);
+      }
+    } catch (summaryErr) {
+      logger.warn(`Summary generation error for session ${sessionId}: ${summaryErr.message}`);
+      // Don't fail the transcription if summary fails
+    }
 
     return { success: true, sessionId };
   } catch (error) {

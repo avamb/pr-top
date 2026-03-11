@@ -9,6 +9,7 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { encrypt, decrypt } = require('../services/encryption');
 const { processSessionTranscription } = require('../services/transcription');
+const { processSessionSummary } = require('../services/summarization');
 const { logger } = require('../utils/logger');
 
 // Configure multer for audio file uploads
@@ -249,6 +250,107 @@ router.post('/:id/transcribe', authenticate, requireRole('therapist', 'superadmi
   } catch (error) {
     logger.error('Manual transcription error: ' + error.message);
     res.status(500).json({ error: 'Transcription failed' });
+  }
+});
+
+// POST /api/sessions/:id/summarize - Manually trigger summary generation
+router.post('/:id/summarize', authenticate, requireRole('therapist', 'superadmin'), async (req, res) => {
+  try {
+    const db = getDatabase();
+    const sessionId = req.params.id;
+
+    const result = db.exec(
+      'SELECT id, therapist_id, transcript_encrypted FROM sessions WHERE id = ?',
+      [sessionId]
+    );
+
+    if (result.length === 0 || result[0].values.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const row = result[0].values[0];
+    if (req.user.role !== 'superadmin' && row[1] !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!row[2]) {
+      return res.status(400).json({ error: 'No transcript available. Transcribe the session first.' });
+    }
+
+    const summaryResult = await processSessionSummary(parseInt(sessionId));
+
+    if (summaryResult.success) {
+      res.json({ message: 'Summary generated successfully', session_id: parseInt(sessionId) });
+    } else {
+      res.status(500).json({ error: 'Summary generation failed', details: summaryResult.error });
+    }
+  } catch (error) {
+    logger.error('Manual summary error: ' + error.message);
+    res.status(500).json({ error: 'Summary generation failed' });
+  }
+});
+
+// GET /api/sessions/:id/summary - Get just the summary
+router.get('/:id/summary', authenticate, requireRole('therapist', 'superadmin'), async (req, res) => {
+  try {
+    const db = getDatabase();
+    const sessionId = req.params.id;
+
+    const result = db.exec(
+      'SELECT therapist_id, summary_encrypted FROM sessions WHERE id = ?',
+      [sessionId]
+    );
+
+    if (result.length === 0 || result[0].values.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const row = result[0].values[0];
+    if (req.user.role !== 'superadmin' && row[0] !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!row[1]) {
+      return res.status(404).json({ error: 'No summary available for this session' });
+    }
+
+    const summary = decrypt(row[1]);
+    res.json({ session_id: parseInt(sessionId), summary });
+  } catch (error) {
+    logger.error('Get summary error: ' + error.message);
+    res.status(500).json({ error: 'Failed to retrieve summary' });
+  }
+});
+
+// GET /api/sessions/:id/transcript - Get just the transcript
+router.get('/:id/transcript', authenticate, requireRole('therapist', 'superadmin'), async (req, res) => {
+  try {
+    const db = getDatabase();
+    const sessionId = req.params.id;
+
+    const result = db.exec(
+      'SELECT therapist_id, transcript_encrypted FROM sessions WHERE id = ?',
+      [sessionId]
+    );
+
+    if (result.length === 0 || result[0].values.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const row = result[0].values[0];
+    if (req.user.role !== 'superadmin' && row[0] !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!row[1]) {
+      return res.status(404).json({ error: 'No transcript available for this session' });
+    }
+
+    const transcript = decrypt(row[1]);
+    res.json({ session_id: parseInt(sessionId), transcript });
+  } catch (error) {
+    logger.error('Get transcript error: ' + error.message);
+    res.status(500).json({ error: 'Failed to retrieve transcript' });
   }
 });
 
