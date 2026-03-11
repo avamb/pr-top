@@ -462,7 +462,28 @@ TECHNICAL NOTES (Timeline Session):
   - Red error banner shown in UI for malformed files
   - Verified through both API tests and browser automation with screenshots
 
-CURRENT STATUS: ~67/205 features passing (estimate, other agents also working)
+- Feature #25: Client can submit video diary entry ✅
+  - Video diary entries work via POST /api/bot/diary with entry_type=video
+  - file_ref encrypted with AES-256-GCM before storage
+  - Content encrypted, therapist can view in web UI
+  - Verified via browser automation with zero console errors
+
+- Feature #27: Video content is transcribed automatically ✅
+  - Created diaryTranscription service with dev mode transcript generation
+  - Auto-transcription triggered async after video/voice diary submission
+  - Transcripts encrypted with AES-256-GCM before storage
+  - Manual transcription trigger endpoint at POST /api/bot/transcribe-diary/:id
+  - Verified transcript appears in therapist web UI diary tab
+
+- Feature #54: Audit log records sensitive data reads ✅
+  - All Class A data reads now logged: read_diary, read_notes, read_timeline, read_context, read_sessions, read_session
+  - Added read_session audit log to GET /api/sessions/:id
+  - Added read_sessions audit log to GET /api/clients/:id/sessions
+  - actor_id, target_type, target_id correctly recorded
+  - Details include metadata (entries_count, page, context_id)
+  - Verified via admin audit log API
+
+CURRENT STATUS: ~70/205 features passing (estimate, other agents also working)
 
 NEXT UP:
 - More Stripe features (cancellation, expiry)
