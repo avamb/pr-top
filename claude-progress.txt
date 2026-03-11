@@ -1,5 +1,19 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-11 (feature #88) ===
+
+- Feature #88: English language fully supported ✅
+  - All UI elements verified in English across all pages
+  - i18n setup with react-i18next, en.json has comprehensive translations
+  - Landing, login, register, dashboard, settings, admin pages all in English
+  - Bot messages (start, connect, consent, diary, voice) all in English
+  - Language selector defaults to English, shows English selected
+  - No hardcoded non-English strings in frontend (only "Русский" label for language selector)
+  - Backend exercises have both title_en and title_ru (proper multilingual data)
+  - Zero console errors across all pages
+
+CURRENT STATUS: ~112/205 features passing (54.1%)
+
 === Session 2026-03-11 (feature #86) ===
 
 - Feature #86: Expired trial restricts access ✅
