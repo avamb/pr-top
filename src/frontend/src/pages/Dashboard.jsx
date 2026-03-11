@@ -245,6 +245,12 @@ export default function Dashboard() {
         return;
       }
 
+      // Handle expired subscription - redirect to subscription page
+      if (statsRes.status === 402 || activityRes.status === 402) {
+        navigate('/subscription', { state: { expired: true } });
+        return;
+      }
+
       if (!statsRes.ok) throw new Error(`Stats request failed: ${statsRes.status}`);
       if (!activityRes.ok) throw new Error(`Activity request failed: ${activityRes.status}`);
 
