@@ -274,6 +274,70 @@ router.post('/consent', botAuth, (req, res) => {
   }
 });
 
+// POST /api/bot/revoke-consent - Client revokes consent and disconnects from therapist
+router.post('/revoke-consent', botAuth, (req, res) => {
+  try {
+    const { telegram_id } = req.body;
+
+    if (!telegram_id) {
+      return res.status(400).json({ error: 'telegram_id is required' });
+    }
+
+    const db = getDatabase();
+
+    // Verify client exists
+    const clientResult = db.exec(
+      'SELECT id, role, therapist_id, consent_therapist_access FROM users WHERE telegram_id = ?',
+      [String(telegram_id)]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+
+    const client = clientResult[0].values[0];
+    const clientId = client[0];
+    const clientRole = client[1];
+    const therapistId = client[2];
+    const hasConsent = client[3];
+
+    if (clientRole !== 'client') {
+      return res.status(400).json({ error: 'Only clients can revoke consent' });
+    }
+
+    if (!therapistId && !hasConsent) {
+      return res.status(400).json({ error: 'You are not connected to any therapist' });
+    }
+
+    // Immediately revoke consent and unlink therapist
+    db.run(
+      "UPDATE users SET therapist_id = NULL, consent_therapist_access = 0, updated_at = datetime('now') WHERE id = ?",
+      [clientId]
+    );
+
+    // Record consent revocation in audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      [clientId, 'consent_revoked', 'user', therapistId || 0, JSON.stringify({ client_id: clientId, therapist_id: therapistId, telegram_id: String(telegram_id) })]
+    );
+
+    saveDatabase();
+
+    logger.info(`Client ${clientId} (telegram_id=${telegram_id}) revoked consent for therapist ${therapistId}`);
+
+    res.json({
+      message: 'Consent revoked successfully. You are no longer connected to your therapist.',
+      revoked: true,
+      client_id: clientId,
+      previous_therapist_id: therapistId
+    });
+  } catch (error) {
+    logger.error('Bot revoke-consent error: ' + error.message);
+    logger.error('Stack: ' + error.stack);
+    res.status(500).json({ error: 'Failed to revoke consent: ' + error.message });
+  }
+});
+
 // POST /api/bot/diary - Client submits a diary entry
 router.post('/diary', botAuth, (req, res) => {
   try {
