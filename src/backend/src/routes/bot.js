@@ -341,19 +341,25 @@ router.post('/revoke-consent', botAuth, (req, res) => {
 // POST /api/bot/diary - Client submits a diary entry
 router.post('/diary', botAuth, (req, res) => {
   try {
-    const { telegram_id, content, entry_type } = req.body;
+    const { telegram_id, content, entry_type, file_ref } = req.body;
 
     if (!telegram_id) {
       return res.status(400).json({ error: 'telegram_id is required' });
-    }
-    if (!content || !content.trim()) {
-      return res.status(400).json({ error: 'content is required' });
     }
 
     const type = entry_type || 'text';
     const validTypes = ['text', 'voice', 'video'];
     if (!validTypes.includes(type)) {
       return res.status(400).json({ error: 'entry_type must be text, voice, or video' });
+    }
+
+    // For voice/video entries, content can be a transcript or placeholder; file_ref should be set
+    if (type === 'text' && (!content || !content.trim())) {
+      return res.status(400).json({ error: 'content is required for text entries' });
+    }
+    // Voice/video entries need either content or file_ref
+    if ((type === 'voice' || type === 'video') && !content && !file_ref) {
+      return res.status(400).json({ error: 'Voice/video entries require content or file_ref' });
     }
 
     const db = getDatabase();
@@ -376,14 +382,35 @@ router.post('/diary', botAuth, (req, res) => {
       return res.status(400).json({ error: 'Only clients can submit diary entries.' });
     }
 
-    // Encrypt the diary content (Class A data)
-    const { encrypted: contentEncrypted, keyVersion, keyId } = encrypt(content.trim());
+    // Encrypt the diary content (Class A data) - content may be empty for voice/video pending transcription
+    const contentText = content ? content.trim() : '';
+    let contentEncrypted = null;
+    let keyVersion = null;
+    let keyId = null;
 
-    // Insert diary entry
+    if (contentText) {
+      const encResult = encrypt(contentText);
+      contentEncrypted = encResult.encrypted;
+      keyVersion = encResult.keyVersion;
+      keyId = encResult.keyId;
+    }
+
+    // If file_ref provided, encrypt it for storage
+    let encryptedFileRef = null;
+    if (file_ref) {
+      const fileRefEnc = encrypt(file_ref);
+      encryptedFileRef = fileRefEnc.encrypted;
+      if (!keyId) {
+        keyId = fileRefEnc.keyId;
+        keyVersion = fileRefEnc.keyVersion;
+      }
+    }
+
+    // Insert diary entry with file_ref
     db.run(
-      `INSERT INTO diary_entries (client_id, entry_type, content_encrypted, encryption_key_id, payload_version, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-      [clientId, type, contentEncrypted, keyId, keyVersion]
+      `INSERT INTO diary_entries (client_id, entry_type, content_encrypted, file_ref, encryption_key_id, payload_version, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+      [clientId, type, contentEncrypted, encryptedFileRef, keyId, keyVersion]
     );
     saveDatabase();
 
@@ -391,7 +418,7 @@ router.post('/diary', botAuth, (req, res) => {
     const lastId = db.exec("SELECT id FROM diary_entries WHERE client_id = ? ORDER BY id DESC LIMIT 1", [clientId]);
     const entryId = lastId.length > 0 ? lastId[0].values[0][0] : 0;
 
-    logger.info(`Client ${clientId} submitted ${type} diary entry #${entryId}`);
+    logger.info(`Client ${clientId} submitted ${type} diary entry #${entryId}${file_ref ? ' with audio file' : ''}`);
 
     res.status(201).json({
       message: 'Diary entry saved successfully',
@@ -399,6 +426,7 @@ router.post('/diary', botAuth, (req, res) => {
         id: entryId,
         client_id: clientId,
         entry_type: type,
+        has_file: !!file_ref,
         created_at: new Date().toISOString()
       }
     });
@@ -566,6 +594,193 @@ router.post('/sos', botAuth, (req, res) => {
     logger.error('Bot SOS error: ' + error.message);
     logger.error('Stack: ' + error.stack);
     res.status(500).json({ error: 'Failed to send SOS alert: ' + error.message });
+  }
+});
+
+// GET /api/bot/exercises/:telegram_id - Get exercises sent to a client
+router.get('/exercises/:telegram_id', botAuth, (req, res) => {
+  try {
+    const db = getDatabase();
+    const telegramId = req.params.telegram_id;
+
+    // Find client by telegram_id
+    const userResult = db.exec(
+      "SELECT id FROM users WHERE telegram_id = ? AND role = 'client'",
+      [telegramId]
+    );
+
+    if (userResult.length === 0 || userResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+
+    const clientId = userResult[0].values[0][0];
+
+    // Get exercise deliveries for this client
+    const result = db.exec(
+      `SELECT ed.id, ed.exercise_id, ed.status, ed.sent_at, ed.completed_at,
+              e.title_en, e.title_ru, e.title_es, e.category,
+              e.description_en, e.description_ru,
+              e.instructions_en, e.instructions_ru
+       FROM exercise_deliveries ed
+       LEFT JOIN exercises e ON ed.exercise_id = e.id
+       WHERE ed.client_id = ?
+       ORDER BY ed.sent_at DESC`,
+      [clientId]
+    );
+
+    const exercises = (result.length > 0 ? result[0].values : []).map(function(row) {
+      return {
+        delivery_id: row[0],
+        exercise_id: row[1],
+        status: row[2],
+        sent_at: row[3],
+        completed_at: row[4],
+        title_en: row[5],
+        title_ru: row[6],
+        title_es: row[7],
+        category: row[8],
+        description_en: row[9],
+        description_ru: row[10],
+        instructions_en: row[11],
+        instructions_ru: row[12]
+      };
+    });
+
+    const pending = exercises.filter(function(e) { return e.status === 'sent'; });
+
+    res.json({
+      exercises: exercises,
+      pending: pending,
+      total: exercises.length,
+      pending_count: pending.length
+    });
+  } catch (error) {
+    logger.error('Bot get exercises error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch exercises' });
+  }
+});
+
+// POST /api/bot/exercises/:delivery_id/acknowledge - Client acknowledges exercise
+router.post('/exercises/:delivery_id/acknowledge', botAuth, (req, res) => {
+  try {
+    const db = getDatabase();
+    const deliveryId = req.params.delivery_id;
+    const { telegram_id } = req.body;
+
+    if (!telegram_id) {
+      return res.status(400).json({ error: 'telegram_id is required' });
+    }
+
+    // Find client by telegram_id
+    const userResult = db.exec(
+      "SELECT id FROM users WHERE telegram_id = ? AND role = 'client'",
+      [telegram_id]
+    );
+
+    if (userResult.length === 0 || userResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+
+    const clientId = userResult[0].values[0][0];
+
+    // Verify delivery belongs to this client
+    const deliveryResult = db.exec(
+      "SELECT id, status FROM exercise_deliveries WHERE id = ? AND client_id = ?",
+      [deliveryId, clientId]
+    );
+
+    if (deliveryResult.length === 0 || deliveryResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Exercise delivery not found' });
+    }
+
+    // Update status to acknowledged
+    db.run(
+      "UPDATE exercise_deliveries SET status = 'acknowledged' WHERE id = ?",
+      [deliveryId]
+    );
+
+    saveDatabase();
+
+    res.json({
+      delivery_id: parseInt(deliveryId),
+      status: 'acknowledged',
+      message: 'Exercise acknowledged'
+    });
+  } catch (error) {
+    logger.error('Bot acknowledge exercise error: ' + error.message);
+    res.status(500).json({ error: 'Failed to acknowledge exercise' });
+  }
+});
+
+// POST /api/bot/exercises/:delivery_id/respond - Client responds/completes exercise
+router.post('/exercises/:delivery_id/respond', botAuth, (req, res) => {
+  try {
+    const db = getDatabase();
+    const deliveryId = req.params.delivery_id;
+    const { telegram_id, response_text } = req.body;
+
+    if (!telegram_id) {
+      return res.status(400).json({ error: 'telegram_id is required' });
+    }
+
+    if (!response_text || !response_text.trim()) {
+      return res.status(400).json({ error: 'response_text is required' });
+    }
+
+    // Find client by telegram_id
+    const userResult = db.exec(
+      "SELECT id FROM users WHERE telegram_id = ? AND role = 'client'",
+      [telegram_id]
+    );
+
+    if (userResult.length === 0 || userResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+
+    const clientId = userResult[0].values[0][0];
+
+    // Verify delivery belongs to this client
+    const deliveryResult = db.exec(
+      "SELECT id, status, therapist_id FROM exercise_deliveries WHERE id = ? AND client_id = ?",
+      [deliveryId, clientId]
+    );
+
+    if (deliveryResult.length === 0 || deliveryResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Exercise delivery not found' });
+    }
+
+    const therapistId = deliveryResult[0].values[0][2];
+
+    // Encrypt the response (Class A sensitive data)
+    const encrypted = encrypt(response_text.trim());
+
+    // Update delivery: set status to completed, store encrypted response
+    db.run(
+      "UPDATE exercise_deliveries SET status = 'completed', response_encrypted = ?, completed_at = datetime('now') WHERE id = ?",
+      [encrypted.encrypted, deliveryId]
+    );
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'exercise_completed', 'exercise_delivery', ?, ?, datetime('now'))",
+      [clientId, deliveryId, JSON.stringify({ client_id: clientId, therapist_id: therapistId })]
+    );
+
+    saveDatabase();
+
+    // Notify therapist (dev mode: log to console)
+    logger.info(`[TELEGRAM NOTIFICATION] Client ${telegram_id} completed exercise delivery #${deliveryId}`);
+    logger.info(`[TELEGRAM NOTIFICATION] Therapist ${therapistId} should be notified`);
+
+    res.json({
+      delivery_id: parseInt(deliveryId),
+      status: 'completed',
+      response_encrypted: true,
+      message: 'Exercise response recorded and encrypted'
+    });
+  } catch (error) {
+    logger.error('Bot respond exercise error: ' + error.message);
+    res.status(500).json({ error: 'Failed to record exercise response' });
   }
 });
 
