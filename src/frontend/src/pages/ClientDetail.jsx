@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 
 const API = 'http://localhost:3001/api';
 
 function ClientDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Initialize filter state from URL query parameters
   const [client, setClient] = useState(null);
   const [diary, setDiary] = useState([]);
   const [diaryTotal, setDiaryTotal] = useState(0);
@@ -17,18 +20,18 @@ function ClientDetail() {
   const [contextForm, setContextForm] = useState({ anamnesis: '', current_goals: '', contraindications: '', ai_instructions: '' });
   const [contextSaving, setContextSaving] = useState(false);
   const [contextMsg, setContextMsg] = useState('');
-  const [activeTab, setActiveTab] = useState('timeline');
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'timeline');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [diaryError, setDiaryError] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [typeFilter, setTypeFilter] = useState(searchParams.get('type') || '');
+  const [dateFrom, setDateFrom] = useState(searchParams.get('date_from') || '');
+  const [dateTo, setDateTo] = useState(searchParams.get('date_to') || '');
   const [timeline, setTimeline] = useState([]);
   const [timelineTotal, setTimelineTotal] = useState(0);
   const [timelineLoading, setTimelineLoading] = useState(false);
-  const [timelineStartDate, setTimelineStartDate] = useState('');
-  const [timelineEndDate, setTimelineEndDate] = useState('');
+  const [timelineStartDate, setTimelineStartDate] = useState(searchParams.get('tl_start') || '');
+  const [timelineEndDate, setTimelineEndDate] = useState(searchParams.get('tl_end') || '');
   const [sessions, setSessions] = useState([]);
   const [sessionsTotal, setSessionsTotal] = useState(0);
   const [sessionsLoading, setSessionsLoading] = useState(false);
@@ -36,6 +39,18 @@ function ClientDetail() {
   const [exercisesTotal, setExercisesTotal] = useState(0);
   const [exercisesLoading, setExercisesLoading] = useState(false);
   const token = localStorage.getItem('token');
+
+  // Sync filter state to URL query parameters
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (activeTab && activeTab !== 'timeline') params.set('tab', activeTab);
+    if (typeFilter) params.set('type', typeFilter);
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
+    if (timelineStartDate) params.set('tl_start', timelineStartDate);
+    if (timelineEndDate) params.set('tl_end', timelineEndDate);
+    setSearchParams(params, { replace: true });
+  }, [activeTab, typeFilter, dateFrom, dateTo, timelineStartDate, timelineEndDate]);
 
   useEffect(() => {
     if (!token) {
