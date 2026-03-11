@@ -32,6 +32,7 @@ function ClientDetail() {
     fetchClient();
     fetchDiary();
     fetchNotes();
+    fetchContext();
   }, [id, typeFilter]);
 
   async function fetchClient() {
@@ -109,6 +110,64 @@ function ClientDetail() {
     }
   }
 
+  async function fetchContext() {
+    try {
+      const res = await fetch(`${API}/clients/${id}/context`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch context');
+      const data = await res.json();
+      setContext(data.context);
+      setContextForm({
+        anamnesis: data.context.anamnesis || '',
+        current_goals: data.context.current_goals || '',
+        contraindications: data.context.contraindications || '',
+        ai_instructions: data.context.ai_instructions || ''
+      });
+    } catch (e) {
+      console.error('Context fetch error:', e.message);
+    }
+  }
+
+  async function handleSaveContext(e) {
+    e.preventDefault();
+    setContextSaving(true);
+    setContextMsg('');
+    try {
+      const body = {};
+      if (contextForm.anamnesis.trim()) body.anamnesis = contextForm.anamnesis.trim();
+      if (contextForm.current_goals.trim()) body.current_goals = contextForm.current_goals.trim();
+      if (contextForm.contraindications.trim()) body.contraindications = contextForm.contraindications.trim();
+      if (contextForm.ai_instructions.trim()) body.ai_instructions = contextForm.ai_instructions.trim();
+
+      if (Object.keys(body).length === 0) {
+        setContextMsg('Please fill in at least one field.');
+        setContextSaving(false);
+        return;
+      }
+
+      const res = await fetch(`${API}/clients/${id}/context`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to save context');
+      }
+      const data = await res.json();
+      setContext(data.context);
+      setContextMsg('Context saved successfully!');
+    } catch (e) {
+      setContextMsg('Error: ' + e.message);
+    } finally {
+      setContextSaving(false);
+    }
+  }
+
   const typeIcon = (type) => {
     switch(type) {
       case 'text': return '📝';
@@ -175,6 +234,10 @@ function ClientDetail() {
             onClick={() => setActiveTab('notes')}
             className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'notes' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >🗒️ Notes ({notesTotal})</button>
+          <button
+            onClick={() => setActiveTab('context')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'context' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+          >🧠 Context</button>
         </div>
 
         {/* Notes Tab */}
@@ -224,6 +287,72 @@ function ClientDetail() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Context Tab */}
+        {activeTab === 'context' && (
+          <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6 mb-6">
+            <h3 className="text-lg font-semibold text-stone-800 mb-4">Client Context</h3>
+            {contextMsg && (
+              <div className={`mb-4 p-3 rounded-lg text-sm ${contextMsg.startsWith('Error') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                {contextMsg}
+              </div>
+            )}
+            <form onSubmit={handleSaveContext} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-stone-700 mb-1">Anamnesis / History</label>
+                <textarea
+                  value={contextForm.anamnesis}
+                  onChange={(e) => setContextForm(f => ({ ...f, anamnesis: e.target.value }))}
+                  placeholder="Patient history, background, relevant medical/psychological information..."
+                  className="w-full border border-stone-300 rounded-lg p-3 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  rows={4}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-stone-700 mb-1">Current Goals</label>
+                <textarea
+                  value={contextForm.current_goals}
+                  onChange={(e) => setContextForm(f => ({ ...f, current_goals: e.target.value }))}
+                  placeholder="Current therapy goals and objectives..."
+                  className="w-full border border-stone-300 rounded-lg p-3 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  rows={3}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-stone-700 mb-1">Contraindications</label>
+                <textarea
+                  value={contextForm.contraindications}
+                  onChange={(e) => setContextForm(f => ({ ...f, contraindications: e.target.value }))}
+                  placeholder="Any contraindications or precautions..."
+                  className="w-full border border-stone-300 rounded-lg p-3 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  rows={3}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-stone-700 mb-1">AI Instructions / Boundaries</label>
+                <textarea
+                  value={contextForm.ai_instructions}
+                  onChange={(e) => setContextForm(f => ({ ...f, ai_instructions: e.target.value }))}
+                  placeholder="Instructions for AI when processing this client's data..."
+                  className="w-full border border-stone-300 rounded-lg p-3 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  rows={3}
+                />
+              </div>
+              <div className="flex justify-between items-center">
+                {context && context.updated_at && (
+                  <span className="text-xs text-stone-400">Last updated: {new Date(context.updated_at).toLocaleString()}</span>
+                )}
+                <button
+                  type="submit"
+                  disabled={contextSaving}
+                  className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {contextSaving ? 'Saving...' : 'Save Context'}
+                </button>
+              </div>
+            </form>
           </div>
         )}
 
