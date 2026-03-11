@@ -34,6 +34,7 @@ function ClientDetail() {
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineStartDate, setTimelineStartDate] = useState(searchParams.get('tl_start') || '');
   const [timelineEndDate, setTimelineEndDate] = useState(searchParams.get('tl_end') || '');
+  const [timelineTypeFilter, setTimelineTypeFilter] = useState(searchParams.get('tl_type') || '');
   const [sessions, setSessions] = useState([]);
   const [sessionsTotal, setSessionsTotal] = useState(0);
   const [sessionsLoading, setSessionsLoading] = useState(false);

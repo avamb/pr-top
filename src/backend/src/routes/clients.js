@@ -138,18 +138,32 @@ router.get('/:id/diary', (req, res) => {
     const dateTo = req.query.date_to || ''; // ISO date string e.g. 2026-12-31
     const offset = (page - 1) * perPage;
 
-    // Verify client belongs to this therapist and has consent
-    const clientResult = db.exec(
-      "SELECT id, consent_therapist_access FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
-      [clientId, therapistId]
+    // Verify client exists
+    const clientExistsResult = db.exec(
+      "SELECT id, therapist_id, consent_therapist_access FROM users WHERE id = ? AND role = 'client'",
+      [clientId]
     );
 
-    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
-      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    if (clientExistsResult.length === 0 || clientExistsResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found' });
     }
 
-    const client = clientResult[0].values[0];
-    if (!client[1]) {
+    const clientRow = clientExistsResult[0].values[0];
+    const clientTherapistId = clientRow[1];
+    const hasConsent = clientRow[2];
+
+    // Check if client is linked to this therapist (use == for type coercion since sql.js may return different types)
+    if (!clientTherapistId || String(clientTherapistId) !== String(therapistId)) {
+      // Record access denial in audit log
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+        [therapistId, 'access_denied', 'diary', clientId, JSON.stringify({ reason: 'not_linked_therapist' })]
+      );
+      saveDatabase();
+      return res.status(403).json({ error: 'You are not authorized to access this client\'s data' });
+    }
+
+    if (!hasConsent) {
       // Record access denial in audit log
       db.run(
         "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
@@ -643,6 +657,7 @@ router.get('/:id/timeline', (req, res) => {
     const clientId = req.params.id;
     const startDate = req.query.start_date || '';
     const endDate = req.query.end_date || '';
+    const sourceType = req.query.type || ''; // Filter by source type: diary, note, session
 
     // Verify client belongs to this therapist
     const clientResult = db.exec(
@@ -671,80 +686,90 @@ router.get('/:id/timeline', (req, res) => {
       dateParams.push(endDate);
     }
 
+    // Validate source type filter
+    const validTypes = ['diary', 'note', 'session'];
+    const filterByType = sourceType && validTypes.includes(sourceType) ? sourceType : '';
+
     const timeline = [];
 
-    // 1. Fetch diary entries
-    const diaryResult = db.exec(
-      `SELECT id, entry_type, content_encrypted, transcript_encrypted, created_at
-       FROM diary_entries WHERE client_id = ?${dateFilter}
-       ORDER BY created_at DESC`,
-      [clientId, ...dateParams]
-    );
+    // 1. Fetch diary entries (if not filtering or filtering by diary)
+    if (!filterByType || filterByType === 'diary') {
+      const diaryResult = db.exec(
+        `SELECT id, entry_type, content_encrypted, transcript_encrypted, created_at
+         FROM diary_entries WHERE client_id = ?${dateFilter}
+         ORDER BY created_at DESC`,
+        [clientId, ...dateParams]
+      );
 
-    if (diaryResult.length > 0 && diaryResult[0].values.length > 0) {
-      for (const row of diaryResult[0].values) {
-        let content = null;
-        let transcript = null;
-        try { if (row[2]) content = decrypt(row[2]); } catch (e) { content = '[decryption error]'; }
-        try { if (row[3]) transcript = decrypt(row[3]); } catch (e) { transcript = '[decryption error]'; }
+      if (diaryResult.length > 0 && diaryResult[0].values.length > 0) {
+        for (const row of diaryResult[0].values) {
+          let content = null;
+          let transcript = null;
+          try { if (row[2]) content = decrypt(row[2]); } catch (e) { content = '[decryption error]'; }
+          try { if (row[3]) transcript = decrypt(row[3]); } catch (e) { transcript = '[decryption error]'; }
 
-        timeline.push({
-          type: 'diary',
-          id: row[0],
-          entry_type: row[1],
-          content: content,
-          transcript: transcript,
-          created_at: row[4]
-        });
+          timeline.push({
+            type: 'diary',
+            id: row[0],
+            entry_type: row[1],
+            content: content,
+            transcript: transcript,
+            created_at: row[4]
+          });
+        }
       }
     }
 
-    // 2. Fetch therapist notes
-    const notesResult = db.exec(
-      `SELECT id, note_encrypted, session_date, created_at
-       FROM therapist_notes WHERE therapist_id = ? AND client_id = ?${dateFilter}
-       ORDER BY created_at DESC`,
-      [therapistId, clientId, ...dateParams]
-    );
+    // 2. Fetch therapist notes (if not filtering or filtering by note)
+    if (!filterByType || filterByType === 'note') {
+      const notesResult = db.exec(
+        `SELECT id, note_encrypted, session_date, created_at
+         FROM therapist_notes WHERE therapist_id = ? AND client_id = ?${dateFilter}
+         ORDER BY created_at DESC`,
+        [therapistId, clientId, ...dateParams]
+      );
 
-    if (notesResult.length > 0 && notesResult[0].values.length > 0) {
-      for (const row of notesResult[0].values) {
-        let content = null;
-        try { if (row[1]) content = decrypt(row[1]); } catch (e) { content = '[decryption error]'; }
+      if (notesResult.length > 0 && notesResult[0].values.length > 0) {
+        for (const row of notesResult[0].values) {
+          let content = null;
+          try { if (row[1]) content = decrypt(row[1]); } catch (e) { content = '[decryption error]'; }
 
-        timeline.push({
-          type: 'note',
-          id: row[0],
-          content: content,
-          session_date: row[2],
-          created_at: row[3]
-        });
+          timeline.push({
+            type: 'note',
+            id: row[0],
+            content: content,
+            session_date: row[2],
+            created_at: row[3]
+          });
+        }
       }
     }
 
-    // 3. Fetch sessions
-    const sessionsResult = db.exec(
-      `SELECT id, audio_ref, transcript_encrypted, summary_encrypted, status, scheduled_at, created_at
-       FROM sessions WHERE therapist_id = ? AND client_id = ?${dateFilter}
-       ORDER BY created_at DESC`,
-      [therapistId, clientId, ...dateParams]
-    );
+    // 3. Fetch sessions (if not filtering or filtering by session)
+    if (!filterByType || filterByType === 'session') {
+      const sessionsResult = db.exec(
+        `SELECT id, audio_ref, transcript_encrypted, summary_encrypted, status, scheduled_at, created_at
+         FROM sessions WHERE therapist_id = ? AND client_id = ?${dateFilter}
+         ORDER BY created_at DESC`,
+        [therapistId, clientId, ...dateParams]
+      );
 
-    if (sessionsResult.length > 0 && sessionsResult[0].values.length > 0) {
-      for (const row of sessionsResult[0].values) {
-        let summary = null;
-        try { if (row[3]) summary = decrypt(row[3]); } catch (e) { summary = '[decryption error]'; }
+      if (sessionsResult.length > 0 && sessionsResult[0].values.length > 0) {
+        for (const row of sessionsResult[0].values) {
+          let summary = null;
+          try { if (row[3]) summary = decrypt(row[3]); } catch (e) { summary = '[decryption error]'; }
 
-        timeline.push({
-          type: 'session',
-          id: row[0],
-          has_audio: !!row[1],
-          has_transcript: !!row[2],
-          summary: summary,
-          status: row[4],
-          scheduled_at: row[5],
-          created_at: row[6]
-        });
+          timeline.push({
+            type: 'session',
+            id: row[0],
+            has_audio: !!row[1],
+            has_transcript: !!row[2],
+            summary: summary,
+            status: row[4],
+            scheduled_at: row[5],
+            created_at: row[6]
+          });
+        }
       }
     }
 
@@ -769,7 +794,8 @@ router.get('/:id/timeline', (req, res) => {
       total: timeline.length,
       filters: {
         start_date: startDate || null,
-        end_date: endDate || null
+        end_date: endDate || null,
+        type: filterByType || null
       }
     });
   } catch (error) {
