@@ -349,4 +349,119 @@ router.put('/settings', (req, res) => {
   }
 });
 
+// GET /api/admin/stats/subscriptions - Subscription and payment analytics
+router.get('/stats/subscriptions', (req, res) => {
+  try {
+    const db = getDatabase();
+
+    const getCount = (sql, params = []) => {
+      const r = db.exec(sql, params);
+      return r.length > 0 ? r[0].values[0][0] : 0;
+    };
+
+    const getVal = (sql, params = []) => {
+      const r = db.exec(sql, params);
+      return r.length > 0 && r[0].values.length > 0 ? r[0].values[0][0] : null;
+    };
+
+    // Plan distribution (all subscriptions)
+    const planDistResult = db.exec(
+      `SELECT plan, status, COUNT(*) as count
+       FROM subscriptions
+       GROUP BY plan, status
+       ORDER BY plan, status`
+    );
+    const planDistribution = {};
+    if (planDistResult.length > 0) {
+      for (const row of planDistResult[0].values) {
+        const plan = row[0];
+        const status = row[1];
+        if (!planDistribution[plan]) planDistribution[plan] = {};
+        planDistribution[plan][status] = row[2];
+      }
+    }
+
+    // Active subscriptions by plan
+    const activeTrial = getCount("SELECT COUNT(*) FROM subscriptions WHERE plan = 'trial' AND status = 'active'");
+    const activeBasic = getCount("SELECT COUNT(*) FROM subscriptions WHERE plan = 'basic' AND status = 'active'");
+    const activePro = getCount("SELECT COUNT(*) FROM subscriptions WHERE plan = 'pro' AND status = 'active'");
+    const activePremium = getCount("SELECT COUNT(*) FROM subscriptions WHERE plan = 'premium' AND status = 'active'");
+    const totalActive = activeTrial + activeBasic + activePro + activePremium;
+
+    // Canceled and past_due
+    const canceledCount = getCount("SELECT COUNT(*) FROM subscriptions WHERE status = 'canceled'");
+    const pastDueCount = getCount("SELECT COUNT(*) FROM subscriptions WHERE status = 'past_due'");
+    const expiredCount = getCount("SELECT COUNT(*) FROM subscriptions WHERE status = 'expired'");
+
+    // Revenue metrics from payments
+    const totalRevenue = getVal("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE status = 'succeeded'") || 0;
+    const totalPayments = getCount("SELECT COUNT(*) FROM payments WHERE status = 'succeeded'");
+    const failedPayments = getCount("SELECT COUNT(*) FROM payments WHERE status = 'failed'");
+    const refundedPayments = getCount("SELECT COUNT(*) FROM payments WHERE status = 'refunded'");
+    const totalPaymentAttempts = totalPayments + failedPayments;
+    const successRate = totalPaymentAttempts > 0 ? +((totalPayments / totalPaymentAttempts) * 100).toFixed(1) : 100;
+
+    // Monthly Recurring Revenue (MRR) estimate based on active paid plans
+    // Prices: Basic $19, Pro $49, Premium $99 (in cents)
+    const mrr = (activeBasic * 1900 + activePro * 4900 + activePremium * 9900);
+
+    // Recent payments (last 10)
+    const recentPaymentsResult = db.exec(
+      `SELECT p.id, p.amount, p.currency, p.status, p.created_at,
+              s.plan, s.therapist_id, u.email
+       FROM payments p
+       JOIN subscriptions s ON s.id = p.subscription_id
+       JOIN users u ON u.id = s.therapist_id
+       ORDER BY p.created_at DESC
+       LIMIT 10`
+    );
+    const recentPayments = (recentPaymentsResult.length > 0 ? recentPaymentsResult[0].values : []).map(row => ({
+      id: row[0],
+      amount: row[1],
+      currency: row[2],
+      status: row[3],
+      created_at: row[4],
+      plan: row[5],
+      therapist_id: row[6],
+      therapist_email: row[7]
+    }));
+
+    // Trials expiring soon (within 7 days)
+    const trialsExpiringSoon = getCount(
+      "SELECT COUNT(*) FROM subscriptions WHERE plan = 'trial' AND status = 'active' AND trial_ends_at IS NOT NULL AND trial_ends_at <= datetime('now', '+7 days')"
+    );
+
+    res.json({
+      plan_distribution: {
+        trial: { active: activeTrial },
+        basic: { active: activeBasic },
+        pro: { active: activePro },
+        premium: { active: activePremium },
+        detailed: planDistribution
+      },
+      totals: {
+        active: totalActive,
+        canceled: canceledCount,
+        past_due: pastDueCount,
+        expired: expiredCount
+      },
+      revenue: {
+        total_revenue_cents: totalRevenue,
+        total_revenue_formatted: '$' + (totalRevenue / 100).toFixed(2),
+        mrr_cents: mrr,
+        mrr_formatted: '$' + (mrr / 100).toFixed(2),
+        total_payments: totalPayments,
+        failed_payments: failedPayments,
+        refunded_payments: refundedPayments,
+        success_rate: successRate
+      },
+      recent_payments: recentPayments,
+      trials_expiring_soon: trialsExpiringSoon
+    });
+  } catch (error) {
+    logger.error('Admin subscription stats error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch subscription statistics' });
+  }
+});
+
 module.exports = router;
