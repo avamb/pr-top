@@ -15,7 +15,7 @@ export default function Subscription() {
   const location = useLocation();
   const [subscription, setSubscription] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [upgrading, setUpgrading] = useState(null);
+  const [processing, setProcessing] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -28,7 +28,6 @@ export default function Subscription() {
     }
     fetchSubscription();
 
-    // Check for success redirect
     if (location.pathname === '/subscription/success') {
       setSuccess('Your plan has been upgraded successfully!');
     }
@@ -49,7 +48,7 @@ export default function Subscription() {
   };
 
   const handleUpgrade = async (plan) => {
-    setUpgrading(plan);
+    setProcessing(plan);
     setError('');
     setSuccess('');
     try {
@@ -69,17 +68,54 @@ export default function Subscription() {
       }
 
       if (data.auto_completed) {
-        // Dev mode: upgrade was auto-completed
         setSuccess(`Successfully upgraded to ${plan.charAt(0).toUpperCase() + plan.slice(1)} plan!`);
         fetchSubscription();
       } else if (data.checkout_url) {
-        // Production: redirect to Stripe checkout
         window.location.href = data.checkout_url;
       }
     } catch (err) {
       setError('Network error. Please try again.');
     } finally {
-      setUpgrading(null);
+      setProcessing(null);
+    }
+  };
+
+  const handleDowngrade = async (plan) => {
+    setProcessing(plan);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await fetch('/api/subscription/change-plan', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ plan })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to change plan');
+        return;
+      }
+
+      if (data.subscription?.scheduled) {
+        const effectiveDate = new Date(data.subscription.effective_date).toLocaleDateString();
+        setSuccess(`Downgrade to ${plan.charAt(0).toUpperCase() + plan.slice(1)} scheduled. Your current access continues until ${effectiveDate}.`);
+      } else {
+        setSuccess(data.message);
+      }
+
+      if (data.downgrade_warning) {
+        setError(data.downgrade_warning.message);
+      }
+
+      fetchSubscription();
+    } catch (err) {
+      setError('Network error. Please try again.');
+    } finally {
+      setProcessing(null);
     }
   };
 
@@ -92,6 +128,7 @@ export default function Subscription() {
   }
 
   const currentPlan = subscription?.plan || 'trial';
+  const pendingPlan = subscription?.pending_plan;
 
   return (
     <div className="min-h-screen bg-stone-50">
@@ -127,7 +164,7 @@ export default function Subscription() {
         {/* Current Plan */}
         <div className="mb-8 p-6 bg-white rounded-xl border border-stone-200 shadow-sm">
           <h2 className="text-lg font-semibold text-stone-900 mb-2">Current Plan</h2>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-teal-100 text-teal-800 capitalize">
               {currentPlan}
             </span>
@@ -141,7 +178,19 @@ export default function Subscription() {
                 Trial ends: {new Date(subscription.trial_ends_at).toLocaleDateString()}
               </span>
             )}
+            {subscription?.current_period_end && currentPlan !== 'trial' && (
+              <span className="text-stone-500">
+                Period ends: {new Date(subscription.current_period_end).toLocaleDateString()}
+              </span>
+            )}
           </div>
+          {pendingPlan && (
+            <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
+              Downgrade to <span className="font-semibold capitalize">{pendingPlan}</span> scheduled for end of current billing period
+              ({subscription?.current_period_end ? new Date(subscription.current_period_end).toLocaleDateString() : 'end of period'}).
+              Your current {currentPlan} access remains active until then.
+            </div>
+          )}
         </div>
 
         {/* Plan Cards */}
@@ -151,6 +200,7 @@ export default function Subscription() {
             const isCurrent = planKey === currentPlan;
             const isUpgrade = PLAN_ORDER[planKey] > PLAN_ORDER[currentPlan];
             const isDowngrade = PLAN_ORDER[planKey] < PLAN_ORDER[currentPlan];
+            const isPending = planKey === pendingPlan;
 
             return (
               <div
@@ -158,6 +208,8 @@ export default function Subscription() {
                 className={`p-6 rounded-xl border-2 ${
                   isCurrent
                     ? 'border-teal-500 bg-teal-50'
+                    : isPending
+                    ? 'border-amber-400 bg-amber-50'
                     : 'border-stone-200 bg-white hover:border-stone-300'
                 } shadow-sm transition-all`}
               >
@@ -183,21 +235,28 @@ export default function Subscription() {
                     >
                       Current Plan
                     </button>
+                  ) : isPending ? (
+                    <button
+                      disabled
+                      className="w-full py-2 px-4 rounded-lg bg-amber-500 text-white font-medium opacity-70 cursor-not-allowed"
+                    >
+                      Downgrade Scheduled
+                    </button>
                   ) : isUpgrade ? (
                     <button
                       onClick={() => handleUpgrade(planKey)}
-                      disabled={upgrading === planKey}
+                      disabled={processing === planKey}
                       className="w-full py-2 px-4 rounded-lg bg-teal-600 text-white font-medium hover:bg-teal-700 transition-colors disabled:opacity-50"
                     >
-                      {upgrading === planKey ? 'Processing...' : `Upgrade to ${plan.name}`}
+                      {processing === planKey ? 'Processing...' : `Upgrade to ${plan.name}`}
                     </button>
                   ) : isDowngrade && planKey !== 'trial' ? (
                     <button
-                      onClick={() => handleUpgrade(planKey)}
-                      disabled={upgrading === planKey}
+                      onClick={() => handleDowngrade(planKey)}
+                      disabled={processing === planKey}
                       className="w-full py-2 px-4 rounded-lg border border-stone-300 text-stone-600 font-medium hover:bg-stone-50 transition-colors disabled:opacity-50"
                     >
-                      {upgrading === planKey ? 'Processing...' : `Downgrade to ${plan.name}`}
+                      {processing === planKey ? 'Processing...' : `Downgrade to ${plan.name}`}
                     </button>
                   ) : null}
                 </div>

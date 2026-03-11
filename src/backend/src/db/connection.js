@@ -6,6 +6,8 @@ const path = require('path');
 const fs = require('fs');
 const { logger } = require('../utils/logger');
 
+const bcrypt = require('bcryptjs');
+
 let db = null;
 let dbPath = null;
 
@@ -266,6 +268,14 @@ function applySchema(db) {
     )
   `);
 
+  // Add pending_plan column for scheduled downgrades (migration)
+  try {
+    db.run('ALTER TABLE subscriptions ADD COLUMN pending_plan TEXT');
+    logger.info('Added pending_plan column to subscriptions');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
   // Create indexes for performance
   db.run('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
   db.run('CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)');
@@ -303,7 +313,32 @@ function applySchema(db) {
   // Insert initial encryption key
   db.run('INSERT OR IGNORE INTO encryption_keys (key_version, status) VALUES (?, ?)', [1, 'active']);
 
+  // Seed default superadmin account if not exists
+  seedSuperadmin(db);
+
   logger.info('Database schema applied successfully');
+}
+
+function seedSuperadmin(db) {
+  const email = process.env.SUPERADMIN_EMAIL || 'admin@psylink.app';
+  const password = process.env.SUPERADMIN_PASSWORD || 'Admin123!';
+
+  // Check if superadmin already exists
+  const existing = db.exec("SELECT id FROM users WHERE role = 'superadmin' AND email = ?", [email]);
+  if (existing.length > 0 && existing[0].values.length > 0) {
+    logger.debug('Superadmin account already exists');
+    return;
+  }
+
+  // Hash password synchronously for seed (bcryptjs supports sync)
+  const passwordHash = bcrypt.hashSync(password, 12);
+
+  db.run(
+    "INSERT OR IGNORE INTO users (email, password_hash, role, language) VALUES (?, ?, 'superadmin', 'en')",
+    [email, passwordHash]
+  );
+
+  logger.info(`Superadmin account seeded: ${email}`);
 }
 
 function getDatabase() {

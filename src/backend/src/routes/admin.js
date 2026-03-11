@@ -122,4 +122,81 @@ router.put('/therapists/:id/unblock', (req, res) => {
   }
 });
 
+// GET /api/admin/stats/users - Platform user statistics
+router.get('/stats/users', (req, res) => {
+  try {
+    const db = getDatabase();
+
+    const therapistCount = db.exec("SELECT COUNT(*) FROM users WHERE role = 'therapist'");
+    const clientCount = db.exec("SELECT COUNT(*) FROM users WHERE role = 'client'");
+    const sessionCount = db.exec("SELECT COUNT(*) FROM sessions");
+    const subscriptionCount = db.exec("SELECT COUNT(*) FROM subscriptions WHERE status = 'active'");
+
+    res.json({
+      therapists: therapistCount.length > 0 ? therapistCount[0].values[0][0] : 0,
+      clients: clientCount.length > 0 ? clientCount[0].values[0][0] : 0,
+      sessions: sessionCount.length > 0 ? sessionCount[0].values[0][0] : 0,
+      subscriptions: subscriptionCount.length > 0 ? subscriptionCount[0].values[0][0] : 0
+    });
+  } catch (error) {
+    logger.error('Admin stats/users error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch user statistics' });
+  }
+});
+
+// GET /api/admin/logs/audit - View audit logs
+router.get('/logs/audit', (req, res) => {
+  try {
+    const db = getDatabase();
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page) || 50));
+    const action = req.query.action || '';
+    const offset = (page - 1) * perPage;
+
+    let whereClause = '1=1';
+    const params = [];
+
+    if (action) {
+      whereClause += ' AND a.action = ?';
+      params.push(action);
+    }
+
+    // Get total count
+    const countResult = db.exec(`SELECT COUNT(*) FROM audit_logs a WHERE ${whereClause}`, params);
+    const total = countResult.length > 0 ? countResult[0].values[0][0] : 0;
+
+    // Get paginated results
+    const result = db.exec(
+      `SELECT a.id, a.actor_id, a.action, a.target_type, a.target_id, a.details_encrypted, a.ip_address, a.created_at
+       FROM audit_logs a
+       WHERE ${whereClause}
+       ORDER BY a.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, perPage, offset]
+    );
+
+    const logs = (result.length > 0 ? result[0].values : []).map(row => ({
+      id: row[0],
+      actor_id: row[1],
+      action: row[2],
+      target_type: row[3],
+      target_id: row[4],
+      details: row[5],
+      ip_address: row[6],
+      created_at: row[7]
+    }));
+
+    res.json({
+      logs,
+      total,
+      page,
+      per_page: perPage,
+      total_pages: Math.ceil(total / perPage)
+    });
+  } catch (error) {
+    logger.error('Admin audit logs error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch audit logs' });
+  }
+});
+
 module.exports = router;

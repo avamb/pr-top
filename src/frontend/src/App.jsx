@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ClientList from './pages/ClientList';
 import Subscription from './pages/Subscription';
+import AdminDashboard from './pages/AdminDashboard';
 
 function App() {
   return (
@@ -18,6 +19,8 @@ function App() {
         <Route path="/clients" element={<ClientList />} />
         <Route path="/subscription" element={<Subscription />} />
         <Route path="/subscription/success" element={<Subscription />} />
+        <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/admin/*" element={<AdminDashboard />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

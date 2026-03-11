@@ -141,12 +141,25 @@ router.get('/current', requireAuth, (req, res) => {
     const db = getDatabase();
     const userId = req.user.userId;
 
-    const result = db.exec(
-      `SELECT id, stripe_customer_id, stripe_subscription_id, plan, status,
-              trial_ends_at, current_period_start, current_period_end, created_at
-       FROM subscriptions WHERE therapist_id = ?`,
-      [userId]
-    );
+    // Try with pending_plan column, fall back without it
+    let result;
+    let hasPendingPlan = true;
+    try {
+      result = db.exec(
+        `SELECT id, stripe_customer_id, stripe_subscription_id, plan, status,
+                trial_ends_at, current_period_start, current_period_end, created_at, pending_plan
+         FROM subscriptions WHERE therapist_id = ?`,
+        [userId]
+      );
+    } catch (e) {
+      hasPendingPlan = false;
+      result = db.exec(
+        `SELECT id, stripe_customer_id, stripe_subscription_id, plan, status,
+                trial_ends_at, current_period_start, current_period_end, created_at
+         FROM subscriptions WHERE therapist_id = ?`,
+        [userId]
+      );
+    }
 
     if (result.length === 0 || result[0].values.length === 0) {
       return res.json({ subscription: null });
@@ -163,7 +176,8 @@ router.get('/current', requireAuth, (req, res) => {
         trial_ends_at: sub[5],
         current_period_start: sub[6],
         current_period_end: sub[7],
-        created_at: sub[8]
+        created_at: sub[8],
+        pending_plan: hasPendingPlan ? (sub[9] || null) : null
       }
     });
   } catch (error) {
@@ -216,22 +230,31 @@ router.get('/payments', requireAuth, (req, res) => {
 
 // POST /api/subscription/change-plan
 // Change subscription plan (upgrade or downgrade)
+// Upgrades take effect immediately. Downgrades are scheduled for end of current period.
 router.post('/change-plan', requireAuth, (req, res) => {
   try {
     const db = getDatabase();
     const userId = req.user.userId;
     const { plan: newPlan } = req.body;
 
-    const validPlans = ['trial', 'basic', 'pro', 'premium'];
+    const validPlans = ['basic', 'pro', 'premium'];
     if (!newPlan || !validPlans.includes(newPlan)) {
       return res.status(400).json({ error: 'Invalid plan. Must be one of: ' + validPlans.join(', ') });
     }
 
     // Get current subscription
-    const subResult = db.exec(
-      'SELECT id, plan, status FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
-      [userId]
-    );
+    let subResult;
+    try {
+      subResult = db.exec(
+        'SELECT id, plan, status, current_period_end, pending_plan FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
+        [userId]
+      );
+    } catch (e) {
+      subResult = db.exec(
+        'SELECT id, plan, status, current_period_end FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
+        [userId]
+      );
+    }
 
     if (subResult.length === 0 || subResult[0].values.length === 0) {
       return res.status(404).json({ error: 'No subscription found' });
@@ -240,6 +263,7 @@ router.post('/change-plan', requireAuth, (req, res) => {
     const subId = subResult[0].values[0][0];
     const currentPlan = subResult[0].values[0][1];
     const currentStatus = subResult[0].values[0][2];
+    const currentPeriodEnd = subResult[0].values[0][3];
 
     if (currentStatus !== 'active') {
       return res.status(400).json({ error: 'Subscription is not active' });
@@ -253,9 +277,13 @@ router.post('/change-plan', requireAuth, (req, res) => {
     const planOrder = { trial: 0, basic: 1, pro: 2, premium: 3 };
     const isDowngrade = planOrder[newPlan] < planOrder[currentPlan];
 
-    // For downgrade, check if current usage exceeds new plan limits
-    let downgradeWarning = null;
+    const now = new Date();
+
     if (isDowngrade) {
+      // Downgrade: schedule for end of current period, keep current access
+      const periodEnd = currentPeriodEnd || new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+      let downgradeWarning = null;
       const currentClients = getClientCount(userId);
       const newLimit = getClientLimit(newPlan);
 
@@ -267,36 +295,58 @@ router.post('/change-plan', requireAuth, (req, res) => {
           excess: currentClients - newLimit
         };
       }
-    }
 
-    // Update the subscription plan
-    const now = new Date();
-    const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
+      // Schedule the downgrade - current plan stays active until period end
+      db.run(
+        `UPDATE subscriptions SET pending_plan = ?, updated_at = datetime('now') WHERE id = ?`,
+        [newPlan, subId]
+      );
+      saveDatabase();
 
-    db.run(
-      `UPDATE subscriptions SET plan = ?, current_period_start = ?, current_period_end = ?, updated_at = datetime('now') WHERE id = ?`,
-      [newPlan, now.toISOString(), periodEnd.toISOString(), subId]
-    );
-    saveDatabase();
+      logger.info(`User ${userId} scheduled downgrade from ${currentPlan} to ${newPlan}, effective at ${periodEnd}`);
 
-    logger.info(`User ${userId} changed plan from ${currentPlan} to ${newPlan}${isDowngrade ? ' (downgrade)' : ' (upgrade)'}`);
+      const response = {
+        message: `Downgrade to ${newPlan} scheduled. Your ${currentPlan} access continues until ${new Date(periodEnd).toLocaleDateString()}.`,
+        subscription: {
+          plan: currentPlan,
+          pending_plan: newPlan,
+          previous_plan: currentPlan,
+          is_downgrade: true,
+          scheduled: true,
+          effective_date: periodEnd,
+          current_period_end: periodEnd
+        }
+      };
 
-    const response = {
-      message: `Plan changed from ${currentPlan} to ${newPlan} successfully`,
-      subscription: {
-        plan: newPlan,
-        previous_plan: currentPlan,
-        is_downgrade: isDowngrade,
-        current_period_start: now.toISOString(),
-        current_period_end: periodEnd.toISOString()
+      if (downgradeWarning) {
+        response.downgrade_warning = downgradeWarning;
       }
-    };
 
-    if (downgradeWarning) {
-      response.downgrade_warning = downgradeWarning;
+      res.json(response);
+    } else {
+      // Upgrade: takes effect immediately
+      const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+      db.run(
+        `UPDATE subscriptions SET plan = ?, pending_plan = NULL, current_period_start = ?, current_period_end = ?, updated_at = datetime('now') WHERE id = ?`,
+        [newPlan, now.toISOString(), periodEnd.toISOString(), subId]
+      );
+      saveDatabase();
+
+      logger.info(`User ${userId} upgraded from ${currentPlan} to ${newPlan} (immediate)`);
+
+      res.json({
+        message: `Upgraded to ${newPlan} successfully! New features are available immediately.`,
+        subscription: {
+          plan: newPlan,
+          previous_plan: currentPlan,
+          is_downgrade: false,
+          scheduled: false,
+          current_period_start: now.toISOString(),
+          current_period_end: periodEnd.toISOString()
+        }
+      });
     }
-
-    res.json(response);
   } catch (error) {
     logger.error('Change plan error: ' + error.message);
     res.status(500).json({ error: 'Failed to change plan' });

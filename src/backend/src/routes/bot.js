@@ -235,6 +235,12 @@ router.post('/consent', botAuth, (req, res) => {
     }
 
     if (consent === false) {
+      // Record consent decline in audit log
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+        [client[0], 'consent_declined', 'user', therapist_id, JSON.stringify({ client_id: client[0], therapist_id: parseInt(therapist_id), telegram_id: String(telegram_id) })]
+      );
+      saveDatabase();
       logger.info(`Client ${client[0]} declined consent for therapist ${therapist_id}`);
       return res.json({ message: 'Consent declined. No connection was made.', linked: false });
     }
@@ -244,6 +250,13 @@ router.post('/consent', botAuth, (req, res) => {
       "UPDATE users SET therapist_id = ?, consent_therapist_access = 1, updated_at = datetime('now') WHERE id = ?",
       [therapist_id, client[0]]
     );
+
+    // Record consent grant in audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      [client[0], 'consent_granted', 'user', therapist_id, JSON.stringify({ client_id: client[0], therapist_id: parseInt(therapist_id), telegram_id: String(telegram_id) })]
+    );
+
     saveDatabase();
 
     logger.info(`Client ${client[0]} consented and linked to therapist ${therapist_id}`);
