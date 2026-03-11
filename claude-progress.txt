@@ -422,7 +422,23 @@ TECHNICAL NOTES (Timeline Session):
   - Audit logging for exercise_completed events
   - Data persists across server restart
 
-CURRENT STATUS: ~61/205 features passing (estimate, other agents also working)
+- Feature #11: Therapist can logout ✅
+  - Verified existing logout button clears localStorage (token + user)
+  - Redirects properly, /dashboard inaccessible after logout
+  - Zero console errors throughout flow
+
+- Feature #106: Post-logout redirect to landing page ✅
+  - Changed all handleLogout across 7 pages to redirect to / instead of /login
+  - Also fixed ClientDetail and SessionDetail logout to clear 'user' from localStorage
+
+- Feature #24: Client can submit voice message diary entry ✅
+  - Updated POST /api/bot/diary to accept file_ref parameter
+  - file_ref encrypted with AES-256-GCM before storage
+  - Added voice message handler + text diary handler to Telegram bot
+  - Verified: entry_type='voice', file_ref stored, content encrypted
+  - Persistence verified across server restart
+
+CURRENT STATUS: ~64/205 features passing (estimate, other agents also working)
 
 NEXT UP:
 - More Stripe features (cancellation, expiry)
