@@ -473,6 +473,19 @@ router.put('/:id/context', (req, res) => {
       return res.status(400).json({ error: 'At least one context field is required (anamnesis, current_goals, contraindications, ai_instructions)' });
     }
 
+    // Validate max length for each field (50,000 chars max per field)
+    const MAX_FIELD_LENGTH = 50000;
+    const fields = { anamnesis, current_goals, contraindications, ai_instructions };
+    for (const [name, value] of Object.entries(fields)) {
+      if (value && typeof value === 'string' && value.length > MAX_FIELD_LENGTH) {
+        return res.status(400).json({
+          error: `Field '${name}' exceeds maximum length of ${MAX_FIELD_LENGTH} characters (received ${value.length})`,
+          field: name,
+          max_length: MAX_FIELD_LENGTH
+        });
+      }
+    }
+
     // Verify client belongs to this therapist
     const clientResult = db.exec(
       "SELECT id, consent_therapist_access FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",

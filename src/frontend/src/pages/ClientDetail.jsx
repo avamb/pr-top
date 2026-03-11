@@ -17,13 +17,18 @@ function ClientDetail() {
   const [contextForm, setContextForm] = useState({ anamnesis: '', current_goals: '', contraindications: '', ai_instructions: '' });
   const [contextSaving, setContextSaving] = useState(false);
   const [contextMsg, setContextMsg] = useState('');
-  const [activeTab, setActiveTab] = useState('diary');
+  const [activeTab, setActiveTab] = useState('timeline');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [diaryError, setDiaryError] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [timeline, setTimeline] = useState([]);
+  const [timelineTotal, setTimelineTotal] = useState(0);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const [timelineStartDate, setTimelineStartDate] = useState('');
+  const [timelineEndDate, setTimelineEndDate] = useState('');
   const token = localStorage.getItem('token');
 
   useEffect(() => {
@@ -35,7 +40,8 @@ function ClientDetail() {
     fetchDiary();
     fetchNotes();
     fetchContext();
-  }, [id, typeFilter, dateFrom, dateTo]);
+    fetchTimeline();
+  }, [id, typeFilter, dateFrom, dateTo, timelineStartDate, timelineEndDate]);
 
   async function fetchClient() {
     try {
@@ -173,6 +179,52 @@ function ClientDetail() {
     }
   }
 
+  async function fetchTimeline() {
+    try {
+      setTimelineLoading(true);
+      const params = new URLSearchParams();
+      if (timelineStartDate) params.set('start_date', timelineStartDate);
+      if (timelineEndDate) params.set('end_date', timelineEndDate);
+      const qs = params.toString();
+      const url = `${API}/clients/${id}/timeline${qs ? '?' + qs : ''}`;
+      const res = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.error('Timeline error:', data.error);
+        setTimeline([]);
+        setTimelineTotal(0);
+        return;
+      }
+      const data = await res.json();
+      setTimeline(data.timeline);
+      setTimelineTotal(data.total);
+    } catch (e) {
+      console.error('Timeline fetch error:', e.message);
+    } finally {
+      setTimelineLoading(false);
+    }
+  }
+
+  const timelineTypeIcon = (item) => {
+    switch(item.type) {
+      case 'diary': return item.entry_type === 'voice' ? '🎤' : item.entry_type === 'video' ? '🎥' : '📝';
+      case 'note': return '🗒️';
+      case 'session': return '🎧';
+      default: return '📄';
+    }
+  };
+
+  const timelineTypeBadge = (item) => {
+    switch(item.type) {
+      case 'diary': return { label: `Diary (${item.entry_type})`, color: 'bg-blue-100 text-blue-800' };
+      case 'note': return { label: 'Therapist Note', color: 'bg-amber-100 text-amber-800' };
+      case 'session': return { label: `Session (${item.status})`, color: 'bg-green-100 text-green-800' };
+      default: return { label: item.type, color: 'bg-gray-100 text-gray-800' };
+    }
+  };
+
   const typeIcon = (type) => {
     switch(type) {
       case 'text': return '📝';
@@ -232,6 +284,10 @@ function ClientDetail() {
         {/* Tab Navigation */}
         <div className="flex gap-2 mb-6">
           <button
+            onClick={() => setActiveTab('timeline')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'timeline' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+          >📊 Timeline ({timelineTotal})</button>
+          <button
             onClick={() => setActiveTab('diary')}
             className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'diary' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >📝 Diary ({diaryTotal})</button>
@@ -244,6 +300,109 @@ function ClientDetail() {
             className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'context' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >🧠 Context</button>
         </div>
+
+        {/* Timeline Tab */}
+        {activeTab === 'timeline' && (
+          <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6 mb-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-stone-800">Unified Timeline ({timelineTotal})</h3>
+            </div>
+
+            {/* Date Range Filter */}
+            <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-stone-50 rounded-lg">
+              <label className="text-sm font-medium text-stone-600">Filter by date:</label>
+              <input
+                type="date"
+                value={timelineStartDate}
+                onChange={(e) => setTimelineStartDate(e.target.value)}
+                className="px-3 py-1.5 border border-stone-300 rounded text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                aria-label="Timeline start date"
+              />
+              <span className="text-stone-400 text-sm">to</span>
+              <input
+                type="date"
+                value={timelineEndDate}
+                onChange={(e) => setTimelineEndDate(e.target.value)}
+                className="px-3 py-1.5 border border-stone-300 rounded text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                aria-label="Timeline end date"
+              />
+              {(timelineStartDate || timelineEndDate) && (
+                <button
+                  onClick={() => { setTimelineStartDate(''); setTimelineEndDate(''); }}
+                  className="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
+                >Clear dates</button>
+              )}
+            </div>
+
+            {timelineLoading ? (
+              <p className="text-stone-500 text-center py-8">Loading timeline...</p>
+            ) : timeline.length === 0 ? (
+              <p className="text-stone-400 text-center py-8">No timeline items found{(timelineStartDate || timelineEndDate) ? ' for the selected date range' : ''}</p>
+            ) : (
+              <div className="space-y-4">
+                {timeline.map((item, idx) => {
+                  const badge = timelineTypeBadge(item);
+                  return (
+                    <div key={`${item.type}-${item.id}`} className="border border-stone-200 rounded-lg p-4 relative">
+                      {/* Timeline line connector */}
+                      {idx < timeline.length - 1 && (
+                        <div className="absolute left-8 top-full w-0.5 h-4 bg-stone-200" />
+                      )}
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-lg">{timelineTypeIcon(item)}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.color}`}>
+                          {badge.label}
+                        </span>
+                        <span className="text-xs text-stone-400 ml-auto">
+                          {new Date(item.created_at).toLocaleString()}
+                        </span>
+                      </div>
+
+                      {/* Content based on type */}
+                      {item.type === 'diary' && (
+                        <div>
+                          <p className="text-stone-700 whitespace-pre-wrap">{item.content}</p>
+                          {item.transcript && (
+                            <div className="mt-2 p-2 bg-stone-50 rounded text-sm text-stone-600">
+                              <span className="font-medium">Transcript:</span> {item.transcript}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {item.type === 'note' && (
+                        <div>
+                          <p className="text-stone-700 whitespace-pre-wrap">{item.content}</p>
+                          {item.session_date && (
+                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full mt-2 inline-block">
+                              Session: {item.session_date}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {item.type === 'session' && (
+                        <div>
+                          <div className="flex gap-3 text-xs text-stone-500 mb-2">
+                            <span>{item.has_audio ? '🔊 Audio' : '❌ No audio'}</span>
+                            <span>{item.has_transcript ? '📄 Transcript' : '❌ No transcript'}</span>
+                            <span>{item.summary ? '📋 Summary' : '❌ No summary'}</span>
+                          </div>
+                          {item.summary && (
+                            <div className="p-3 bg-green-50 rounded-lg text-sm text-stone-700">
+                              <p className="font-medium text-green-800 mb-1">Session Summary</p>
+                              <p className="whitespace-pre-wrap">{item.summary.length > 300 ? item.summary.substring(0, 300) + '...' : item.summary}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Notes Tab */}
         {activeTab === 'notes' && (
@@ -313,7 +472,9 @@ function ClientDetail() {
                   placeholder="Patient history, background, relevant medical/psychological information..."
                   className="w-full border border-stone-300 rounded-lg p-3 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   rows={4}
+                  maxLength={50000}
                 />
+                <span className="text-xs text-stone-400">{contextForm.anamnesis.length}/50000</span>
               </div>
               <div>
                 <label className="block text-sm font-medium text-stone-700 mb-1">Current Goals</label>
@@ -323,7 +484,9 @@ function ClientDetail() {
                   placeholder="Current therapy goals and objectives..."
                   className="w-full border border-stone-300 rounded-lg p-3 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   rows={3}
+                  maxLength={50000}
                 />
+                <span className="text-xs text-stone-400">{contextForm.current_goals.length}/50000</span>
               </div>
               <div>
                 <label className="block text-sm font-medium text-stone-700 mb-1">Contraindications</label>
@@ -333,7 +496,9 @@ function ClientDetail() {
                   placeholder="Any contraindications or precautions..."
                   className="w-full border border-stone-300 rounded-lg p-3 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   rows={3}
+                  maxLength={50000}
                 />
+                <span className="text-xs text-stone-400">{contextForm.contraindications.length}/50000</span>
               </div>
               <div>
                 <label className="block text-sm font-medium text-stone-700 mb-1">AI Instructions / Boundaries</label>
@@ -343,7 +508,9 @@ function ClientDetail() {
                   placeholder="Instructions for AI when processing this client's data..."
                   className="w-full border border-stone-300 rounded-lg p-3 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   rows={3}
+                  maxLength={50000}
                 />
+                <span className="text-xs text-stone-400">{contextForm.ai_instructions.length}/50000</span>
               </div>
               <div className="flex justify-between items-center">
                 {context && context.updated_at && (
