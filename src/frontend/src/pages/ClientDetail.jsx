@@ -686,7 +686,25 @@ function ClientDetail() {
 
             {/* Notes List */}
             {notes.length === 0 ? (
-              <p className="text-stone-400 text-center py-8">No notes yet. Write your first note above.</p>
+              <div className="text-center py-12">
+                <div className="text-5xl mb-4">{notesSearch ? '🔍' : '🗒️'}</div>
+                <h3 className="text-lg font-medium text-stone-600 mb-2">
+                  {notesSearch ? t('no_notes_filtered', 'No notes match your search') : t('no_notes_yet', 'No notes yet')}
+                </h3>
+                <p className="text-sm text-stone-400 max-w-sm mx-auto">
+                  {notesSearch
+                    ? t('no_notes_filtered_hint', 'Try adjusting your search query to find more notes.')
+                    : t('no_notes_hint', 'Use the form above to create your first therapist note for this client.')}
+                </p>
+                {notesSearch && (
+                  <button
+                    onClick={() => { setNotesSearch(''); fetchNotes(''); }}
+                    className="mt-4 px-4 py-2 text-sm bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg transition-colors"
+                  >
+                    {t('clear_search', 'Clear search')}
+                  </button>
+                )}
+              </div>
             ) : (
               <div className="space-y-4">
                 {notes.map(note => (
@@ -996,7 +1014,25 @@ function ClientDetail() {
           ) : loading && diary.length === 0 ? (
             <p className="text-stone-500">Loading diary entries...</p>
           ) : diary.length === 0 ? (
-            <p className="text-stone-400 text-center py-8">No diary entries found</p>
+            <div className="text-center py-12">
+              <div className="text-5xl mb-4">{(typeFilter || dateFrom || dateTo) ? '🔍' : '📓'}</div>
+              <h3 className="text-lg font-medium text-stone-600 mb-2">
+                {(typeFilter || dateFrom || dateTo) ? t('no_diary_filtered', 'No diary entries match your filters') : t('no_diary_entries', 'No diary entries yet')}
+              </h3>
+              <p className="text-sm text-stone-400 max-w-sm mx-auto">
+                {(typeFilter || dateFrom || dateTo)
+                  ? t('no_diary_filtered_hint', 'Try adjusting or clearing your filters to see more entries.')
+                  : t('no_diary_hint', 'Diary entries will appear here once the client submits them via the Telegram bot.')}
+              </p>
+              {(typeFilter || dateFrom || dateTo) && (
+                <button
+                  onClick={() => { setTypeFilter(''); setDateFrom(''); setDateTo(''); }}
+                  className="mt-4 px-4 py-2 text-sm bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg transition-colors"
+                >
+                  {t('clear_filters', 'Clear all filters')}
+                </button>
+              )}
+            </div>
           ) : (
             <div className="space-y-4">
               {diary.map(entry => (
