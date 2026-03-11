@@ -1,16 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 const API_URL = 'http://localhost:3001/api';
-
-const categoryLabels = {
-  breathing: 'Breathing & Relaxation',
-  mindfulness: 'Mindfulness',
-  cognitive: 'Cognitive (CBT)',
-  journaling: 'Journaling',
-  behavioral: 'Behavioral',
-  'self-compassion': 'Self-Compassion'
-};
 
 const categoryIcons = {
   breathing: '\u{1F32C}\uFE0F',
@@ -30,6 +22,15 @@ const categoryColors = {
   'self-compassion': 'bg-purple-50 border-purple-200 text-purple-700'
 };
 
+const categoryI18nKeys = {
+  breathing: 'exerciseLibrary.breathing',
+  mindfulness: 'exerciseLibrary.mindfulness',
+  cognitive: 'exerciseLibrary.cognitive',
+  journaling: 'exerciseLibrary.journaling',
+  behavioral: 'exerciseLibrary.behavioral',
+  'self-compassion': 'exerciseLibrary.selfCompassion'
+};
+
 function ExerciseCard({ exercise, onClick }) {
   return (
     <div
@@ -45,7 +46,7 @@ function ExerciseCard({ exercise, onClick }) {
   );
 }
 
-function ExerciseModal({ exercise, onClose }) {
+function ExerciseModal({ exercise, onClose, t }) {
   if (!exercise) return null;
 
   return (
@@ -57,7 +58,7 @@ function ExerciseModal({ exercise, onClose }) {
         <div className="flex justify-between items-start mb-4">
           <div>
             <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium border mb-2 ${categoryColors[exercise.category] || 'bg-gray-50 border-gray-200 text-gray-700'}`}>
-              {categoryIcons[exercise.category] || ''} {categoryLabels[exercise.category] || exercise.category}
+              {categoryIcons[exercise.category] || ''} {categoryI18nKeys[exercise.category] ? t(categoryI18nKeys[exercise.category]) : exercise.category}
             </span>
             <h2 className="text-xl font-bold text-text">{exercise.title_en}</h2>
             {exercise.title_ru && (
@@ -67,26 +68,26 @@ function ExerciseModal({ exercise, onClose }) {
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
-            aria-label="Close"
+            aria-label={t('exerciseLibrary.close')}
           >
             &times;
           </button>
         </div>
 
         <div className="mb-4">
-          <h3 className="text-sm font-semibold text-secondary uppercase tracking-wide mb-1">Description</h3>
+          <h3 className="text-sm font-semibold text-secondary uppercase tracking-wide mb-1">{t('exerciseLibrary.description')}</h3>
           <p className="text-text">{exercise.description_en}</p>
         </div>
 
         <div className="mb-4">
-          <h3 className="text-sm font-semibold text-secondary uppercase tracking-wide mb-2">Instructions</h3>
+          <h3 className="text-sm font-semibold text-secondary uppercase tracking-wide mb-2">{t('exerciseLibrary.instructions')}</h3>
           <div className="bg-gray-50 rounded-lg p-4">
             {exercise.instructions_en ? (
               exercise.instructions_en.split('\n').map((line, i) => (
                 <p key={i} className="text-text text-sm mb-1 last:mb-0">{line}</p>
               ))
             ) : (
-              <p className="text-secondary text-sm">No instructions available</p>
+              <p className="text-secondary text-sm">{t('exerciseLibrary.noInstructions')}</p>
             )}
           </div>
         </div>
@@ -94,7 +95,7 @@ function ExerciseModal({ exercise, onClose }) {
         {exercise.instructions_ru && (
           <details className="mb-4">
             <summary className="text-sm font-semibold text-secondary uppercase tracking-wide cursor-pointer">
-              Instructions (Russian)
+              {t('exerciseLibrary.instructionsRu')}
             </summary>
             <div className="bg-gray-50 rounded-lg p-4 mt-2">
               {exercise.instructions_ru.split('\n').map((line, i) => (
@@ -108,7 +109,7 @@ function ExerciseModal({ exercise, onClose }) {
           onClick={onClose}
           className="w-full mt-2 bg-primary text-white rounded-lg py-2 hover:bg-primary/90 transition-colors"
         >
-          Close
+          {t('exerciseLibrary.close')}
         </button>
       </div>
     </div>
@@ -117,6 +118,7 @@ function ExerciseModal({ exercise, onClose }) {
 
 function ExerciseLibrary() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [grouped, setGrouped] = useState({});
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -173,13 +175,13 @@ function ExerciseLibrary() {
             <button
               onClick={() => navigate('/dashboard')}
               className="text-secondary hover:text-text transition-colors"
-              aria-label="Back to dashboard"
+              aria-label={t('nav.backToDashboard')}
             >
-              &larr; Dashboard
+              {t('nav.backToDashboard')}
             </button>
-            <h1 className="text-xl font-bold text-text">Exercise Library</h1>
+            <h1 className="text-xl font-bold text-text">{t('exerciseLibrary.title')}</h1>
           </div>
-          <span className="text-sm text-secondary">{totalExercises} exercises</span>
+          <span className="text-sm text-secondary">{t('exerciseLibrary.exerciseCount', { count: totalExercises })}</span>
         </div>
       </nav>
 
@@ -194,7 +196,7 @@ function ExerciseLibrary() {
                 : 'bg-white text-secondary border-gray-300 hover:border-primary hover:text-primary'
             }`}
           >
-            All Categories
+            {t('exerciseLibrary.allCategories')}
           </button>
           {categories.map(cat => (
             <button
@@ -206,27 +208,27 @@ function ExerciseLibrary() {
                   : `${categoryColors[cat] || 'bg-white text-secondary border-gray-300'} hover:opacity-80`
               }`}
             >
-              {categoryIcons[cat] || ''} {categoryLabels[cat] || cat}
+              {categoryIcons[cat] || ''} {categoryI18nKeys[cat] ? t(categoryI18nKeys[cat]) : cat}
             </button>
           ))}
         </div>
 
         {/* Loading */}
         {loading && (
-          <div className="text-center py-12 text-secondary">Loading exercises...</div>
+          <div className="text-center py-12 text-secondary">{t('exerciseLibrary.loading')}</div>
         )}
 
         {/* Error */}
         {error && (
           <div className="bg-red-50 text-red-700 p-4 rounded-lg mb-4">
             {error}
-            <button onClick={() => fetchExercises()} className="ml-2 underline">Retry</button>
+            <button onClick={() => fetchExercises()} className="ml-2 underline">{t('analytics.retry')}</button>
           </div>
         )}
 
         {/* Exercise groups */}
         {!loading && !error && Object.keys(grouped).length === 0 && (
-          <div className="text-center py-12 text-secondary">No exercises found.</div>
+          <div className="text-center py-12 text-secondary">{t('exerciseLibrary.noExercises')}</div>
         )}
 
         {!loading && Object.entries(grouped).map(([category, exercises]) => (
@@ -234,7 +236,7 @@ function ExerciseLibrary() {
             <div className="flex items-center gap-2 mb-3">
               <span className="text-xl">{categoryIcons[category] || ''}</span>
               <h2 className="text-lg font-bold text-text">
-                {categoryLabels[category] || category}
+                {categoryI18nKeys[category] ? t(categoryI18nKeys[category]) : category}
               </h2>
               <span className="text-sm text-secondary">({exercises.length})</span>
             </div>
@@ -255,6 +257,7 @@ function ExerciseLibrary() {
       <ExerciseModal
         exercise={selectedExercise}
         onClose={() => setSelectedExercise(null)}
+        t={t}
       />
     </div>
   );

@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 const API = 'http://localhost:3001/api';
 
 function ClientDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Initialize filter state from URL query parameters
@@ -392,25 +394,25 @@ function ClientDetail() {
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-bold text-stone-800">PsyLink</h1>
             <nav className="flex gap-2" aria-label="Main navigation">
-              <button onClick={() => navigate('/dashboard')} className="px-3 py-1 rounded text-sm text-stone-600 hover:bg-stone-100">Dashboard</button>
-              <button onClick={() => navigate('/clients')} className="px-3 py-1 rounded text-sm text-stone-600 hover:bg-stone-100">Clients</button>
+              <button onClick={() => navigate('/dashboard')} className="px-3 py-1 rounded text-sm text-stone-600 hover:bg-stone-100">{t('nav.dashboard')}</button>
+              <button onClick={() => navigate('/clients')} className="px-3 py-1 rounded text-sm text-stone-600 hover:bg-stone-100">{t('nav.clients')}</button>
             </nav>
           </div>
-          <button onClick={() => { localStorage.removeItem('token'); localStorage.removeItem('user'); navigate('/'); }} className="text-sm text-stone-500 hover:text-stone-700">Log out</button>
+          <button onClick={() => { localStorage.removeItem('token'); localStorage.removeItem('user'); navigate('/'); }} className="text-sm text-stone-500 hover:text-stone-700">{t('nav.logout')}</button>
         </div>
       </header>
 
       <main id="main-content" className="max-w-6xl mx-auto px-6 py-8">
         {client && (
           <div className="mb-6">
-            <button onClick={() => navigate('/clients')} className="text-teal-600 hover:text-teal-700 text-sm mb-2 inline-block">&larr; Back to Clients</button>
+            <button onClick={() => navigate('/clients')} className="text-teal-600 hover:text-teal-700 text-sm mb-2 inline-block">{t('nav.backToClients')}</button>
             <h2 className="text-2xl font-bold text-stone-800">
               Client: {client.email || client.telegram_id || `#${client.id}`}
             </h2>
             <div className="flex gap-4 mt-2 text-sm text-stone-500">
-              <span>Language: {(client.language || 'en').toUpperCase()}</span>
-              <span>Consent: {client.consent_therapist_access ? '✅ Granted' : '❌ Not granted'}</span>
-              <span>Joined: {new Date(client.created_at).toLocaleDateString()}</span>
+              <span>{t('clientDetail.language')}: {(client.language || 'en').toUpperCase()}</span>
+              <span>{t('clientDetail.consent')}: {client.consent_therapist_access ? t('clientDetail.consentGranted') : t('clientDetail.consentNotGranted')}</span>
+              <span>{t('clientDetail.joined')}: {new Date(client.created_at).toLocaleDateString()}</span>
             </div>
           </div>
         )}
@@ -420,39 +422,39 @@ function ClientDetail() {
           <button
             onClick={() => setActiveTab('timeline')}
             className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'timeline' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
-          >📊 Timeline ({timelineTotal})</button>
+          >📊 {t('clientDetail.timeline')} ({timelineTotal})</button>
           <button
             onClick={() => setActiveTab('diary')}
             className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'diary' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
-          >📝 Diary ({diaryTotal})</button>
+          >📝 {t('clientDetail.diary')} ({diaryTotal})</button>
           <button
             onClick={() => setActiveTab('notes')}
             className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'notes' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
-          >🗒️ Notes ({notesTotal})</button>
+          >🗒️ {t('clientDetail.notesTab')} ({notesTotal})</button>
           <button
             onClick={() => setActiveTab('sessions')}
             className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'sessions' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
-          >🎧 Sessions ({sessionsTotal})</button>
+          >🎧 {t('clientDetail.sessionsTab')} ({sessionsTotal})</button>
           <button
             onClick={() => setActiveTab('exercises')}
             className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'exercises' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
-          >💪 Exercises ({exercisesTotal})</button>
+          >💪 {t('clientDetail.exercisesTab')} ({exercisesTotal})</button>
           <button
             onClick={() => setActiveTab('context')}
             className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'context' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
-          >🧠 Context</button>
+          >🧠 {t('clientDetail.contextTab')}</button>
         </div>
 
         {/* Timeline Tab */}
         {activeTab === 'timeline' && (
           <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6 mb-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-stone-800">Unified Timeline ({timelineTotal})</h3>
+              <h3 className="text-lg font-semibold text-stone-800">{t('clientDetail.unifiedTimeline', { count: timelineTotal })}</h3>
             </div>
 
             {/* Date Range Filter */}
             <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-stone-50 rounded-lg">
-              <label className="text-sm font-medium text-stone-600">Filter by date:</label>
+              <label className="text-sm font-medium text-stone-600">{t('clientDetail.filterByDate')}</label>
               <input
                 type="date"
                 value={timelineStartDate}
@@ -554,7 +556,7 @@ function ClientDetail() {
         {activeTab === 'notes' && (
           <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6 mb-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-stone-800">Therapist Notes</h3>
+              <h3 className="text-lg font-semibold text-stone-800">{t('clientDetail.therapistNotes')}</h3>
               <label className="px-3 py-1.5 bg-stone-100 text-stone-600 rounded-lg text-sm font-medium hover:bg-stone-200 cursor-pointer border border-stone-200">
                 {importLoading ? 'Importing...' : 'Import JSON'}
                 <input
@@ -626,7 +628,7 @@ function ClientDetail() {
         {/* Context Tab */}
         {activeTab === 'context' && (
           <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6 mb-6">
-            <h3 className="text-lg font-semibold text-stone-800 mb-4">Client Context</h3>
+            <h3 className="text-lg font-semibold text-stone-800 mb-4">{t('clientDetail.clientContext')}</h3>
             {contextMsg && (
               <div className={`mb-4 p-3 rounded-lg text-sm ${contextMsg.startsWith('Error') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
                 {contextMsg}
@@ -700,7 +702,7 @@ function ClientDetail() {
         {/* Sessions Tab */}
         {activeTab === 'sessions' && (
           <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6 mb-6">
-            <h3 className="text-lg font-semibold text-stone-800 mb-4">Session History ({sessionsTotal})</h3>
+            <h3 className="text-lg font-semibold text-stone-800 mb-4">{t('clientDetail.sessionHistory', { count: sessionsTotal })}</h3>
             {sessionsLoading ? (
               <p className="text-stone-500 text-center py-8">Loading sessions...</p>
             ) : sessions.length === 0 ? (
@@ -845,7 +847,7 @@ function ClientDetail() {
             </div>
           )}
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold text-stone-800">Diary Entries ({diaryTotal})</h3>
+            <h3 className="text-lg font-semibold text-stone-800">{t('clientDetail.diaryEntries', { count: diaryTotal })}</h3>
             <div className="flex gap-2">
               <label className="px-3 py-1 bg-stone-100 text-stone-600 rounded text-sm hover:bg-stone-200 cursor-pointer border border-stone-200">
                 {importLoading ? 'Importing...' : 'Import JSON'}
