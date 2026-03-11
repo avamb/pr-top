@@ -110,7 +110,25 @@ TECHNICAL NOTES (Session 2):
   - Old data encrypted with previous versions still decryptable
   - API routes: GET /keys, POST /rotate, POST /encrypt, POST /decrypt
 
-CURRENT STATUS: 14/205 features passing
+- Feature #7: Landing page renders with correct design system ✅
+  - Full landing page: hero, features (6 cards), pricing (4 tiers), footer
+  - Teal primary (#0D9488), warm white background (#FAFAF9), Inter font
+  - Responsive layout, all CTAs link to /register or /login
+  - Zero console errors
+
+- Feature #192: Screen reader compatible navigation ✅
+  - Added semantic HTML: <nav>, <main>, <footer> landmarks on all pages
+  - Skip-to-content link on every page
+  - Proper heading hierarchy (h1 > h2 > h3) verified
+  - aria-label attributes on navigation and section elements
+
+- Feature #144: Landing pricing section shows 4 tier cards ✅
+  - Trial (Free/14 days), Basic ($19/mo), Pro ($49/mo), Premium ($99/mo)
+  - Each card lists 7 key features with checkmarks
+  - Pro card highlighted with "Most Popular" badge
+  - CTA buttons on each card
+
+CURRENT STATUS: 16/205 features passing
 
 NEXT UP:
 - Continue with web panel features (superadmin login, dashboard views)
