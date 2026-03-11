@@ -15,6 +15,7 @@ import Settings from './pages/Settings';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminTherapists from './pages/AdminTherapists';
 import AdminSettings from './pages/AdminSettings';
+import AdminAuditLogs from './pages/AdminAuditLogs';
 
 function App() {
   return (
@@ -38,6 +39,7 @@ function App() {
         <Route path="/admin" element={<AppLayout><AdminDashboard /></AppLayout>} />
         <Route path="/admin/therapists" element={<AppLayout><AdminTherapists /></AppLayout>} />
         <Route path="/admin/settings" element={<AppLayout><AdminSettings /></AppLayout>} />
+        <Route path="/admin/logs" element={<AppLayout><AdminAuditLogs /></AppLayout>} />
         <Route path="/admin/*" element={<AppLayout><AdminDashboard /></AppLayout>} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
