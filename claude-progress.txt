@@ -1,5 +1,26 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-11 (features #96, #99) ===
+
+- Feature #96: Exercises support multiple languages ✅
+  - Updated ExerciseLibrary frontend to use i18n language for exercise content
+  - ExerciseCard and ExerciseModal now show localized title/description/instructions
+  - API language param passed based on user's selected language (en/ru/es)
+  - All 16 exercises have complete RU/EN/ES translations
+  - Verified via browser: EN, RU, ES all display correctly with zero console errors
+
+- Feature #99: Semantic search works for client history retrieval ✅
+  - Verified TF-IDF embeddings auto-generated on diary creation
+  - POST /api/search with semantic queries returns relevant results
+  - Sleep/insomnia, depression, mindfulness queries all find correct entries
+  - Results ranked by cosine similarity (descending order)
+  - Results span multiple data types (diary_entry + session_summary)
+  - Client_id and source_type filters work correctly
+  - Edge cases: empty query (400), long query (400), no auth (401), invalid type (400)
+  - 30/30 test assertions passing
+
+CURRENT STATUS: ~116/205 features passing (estimate)
+
 === Session 2026-03-11 (features #89, #90) ===
 
 - Feature #89: Spanish language fully supported ✅
