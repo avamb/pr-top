@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useCsrfToken } from '../hooks/useCsrfToken';
 
 export default function Register() {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const csrfToken = useCsrfToken();
   const [form, setForm] = useState({ email: '', password: '', confirmPassword: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -36,9 +38,13 @@ export default function Register() {
 
     setLoading(true);
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (csrfToken) {
+        headers['X-CSRF-Token'] = csrfToken;
+      }
       const res = await fetch('/api/auth/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           email: form.email,
           password: form.password,

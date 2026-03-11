@@ -10,6 +10,7 @@ const path = require('path');
 const { initDatabase, saveDatabase } = require('./db/connection');
 const { logger } = require('./utils/logger');
 const { initStripe, getStripeStatus, isConfigured: isStripeConfigured } = require('./services/stripe');
+const { csrfProtection, csrfTokenEndpoint } = require('./middleware/csrf');
 const authRoutes = require('./routes/auth');
 const botRoutes = require('./routes/bot');
 const subscriptionRoutes = require('./routes/subscription');
@@ -70,6 +71,10 @@ app.use('/api/webhooks', webhookRoutes);
 // Body parsing (after webhooks which need raw body)
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// CSRF Protection
+app.get('/api/csrf-token', csrfTokenEndpoint);
+app.use('/api/', csrfProtection);
 
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
