@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import Breadcrumb from '../components/Breadcrumb';
 
 const API = 'http://localhost:3001/api';
 
@@ -400,7 +401,11 @@ function ClientDetail() {
       <main id="main-content" className="max-w-6xl mx-auto px-6 py-8">
         {client && (
           <div className="mb-6">
-            <button onClick={() => navigate('/clients')} className="text-teal-600 hover:text-teal-700 text-sm mb-2 inline-block">{t('nav.backToClients')}</button>
+            <Breadcrumb items={[
+              { label: t('nav.dashboard'), to: '/dashboard' },
+              { label: t('nav.clients'), to: '/clients' },
+              { label: client.email || client.telegram_id || `#${client.id}` }
+            ]} />
             <h2 className="text-2xl font-bold text-stone-800">
               Client: {client.email || client.telegram_id || `#${client.id}`}
             </h2>
