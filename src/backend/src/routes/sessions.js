@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { encrypt, decrypt } = require('../services/encryption');
+const { processSessionTranscription } = require('../services/transcription');
 const { logger } = require('../utils/logger');
 
 // Configure multer for audio file uploads
@@ -120,6 +121,17 @@ router.post('/', authenticate, requireRole('therapist', 'superadmin'), upload.si
 
     logger.info(`Session audio uploaded: session_id=${sessionId}, therapist=${therapistId}, client=${clientId}`);
 
+    // Trigger transcription asynchronously (don't block the response)
+    processSessionTranscription(sessionId).then(result => {
+      if (result.success) {
+        logger.info(`Auto-transcription completed for session ${sessionId}`);
+      } else {
+        logger.warn(`Auto-transcription failed for session ${sessionId}: ${result.error}`);
+      }
+    }).catch(err => {
+      logger.error(`Auto-transcription error for session ${sessionId}: ${err.message}`);
+    });
+
     res.status(201).json({
       id: sessionId,
       therapist_id: therapistId,
@@ -199,6 +211,44 @@ router.get('/:id', authenticate, requireRole('therapist', 'superadmin'), async (
   } catch (error) {
     logger.error('Get session error: ' + error.message);
     res.status(500).json({ error: 'Failed to retrieve session' });
+  }
+});
+
+// POST /api/sessions/:id/transcribe - Manually trigger transcription
+router.post('/:id/transcribe', authenticate, requireRole('therapist', 'superadmin'), async (req, res) => {
+  try {
+    const db = getDatabase();
+    const sessionId = req.params.id;
+
+    // Verify session exists and belongs to therapist
+    const result = db.exec(
+      'SELECT id, therapist_id, audio_ref, transcript_encrypted FROM sessions WHERE id = ?',
+      [sessionId]
+    );
+
+    if (result.length === 0 || result[0].values.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const row = result[0].values[0];
+    if (req.user.role !== 'superadmin' && row[1] !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!row[2]) {
+      return res.status(400).json({ error: 'No audio file to transcribe' });
+    }
+
+    const transcriptionResult = await processSessionTranscription(parseInt(sessionId));
+
+    if (transcriptionResult.success) {
+      res.json({ message: 'Transcription completed successfully', session_id: parseInt(sessionId) });
+    } else {
+      res.status(500).json({ error: 'Transcription failed', details: transcriptionResult.error });
+    }
+  } catch (error) {
+    logger.error('Manual transcription error: ' + error.message);
+    res.status(500).json({ error: 'Transcription failed' });
   }
 });
 
