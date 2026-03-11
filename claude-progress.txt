@@ -510,7 +510,33 @@ TECHNICAL NOTES (Timeline Session):
   - No horizontal scroll at 768px viewport
   - Zero console errors
 
-CURRENT STATUS: ~75/205 features passing (estimate, other agents also working)
+- Feature #91: NL text query returns relevant client info ✅
+  - POST /api/query endpoint for natural language text queries
+  - TF-IDF relevance scoring with synonym expansion for therapy concepts
+  - Searches diary entries, therapist notes, and session transcripts/summaries
+  - Tier gating: only Pro/Premium plans (403 for trial/basic)
+  - Expanded terms include anxiety→worried/nervous/panic, stress→overwhelmed/burnout, etc.
+  - Audit logging for all NL query operations
+  - All 6 tests passing: anxiety query, sleep query, semantic search, tier gating, auth, validation
+
+- Feature #92: NL voice query returns relevant client info ✅
+  - POST /api/bot/voice-query endpoint for Telegram voice queries
+  - Accepts voice_text (pre-transcribed) or voice_file_id (dev mode)
+  - Uses same NL engine (executeNLQuery) for semantic search
+  - Tier gating: Pro/Premium only, same as text queries
+  - Dev mode generates placeholder transcript for voice_file_id
+  - Verified via API: voice text processed through NL engine returns relevant results
+
+- Feature #97: Vector DB embeddings from diary entries ✅
+  - Added embedDiaryEntry() to vectorStore service
+  - Auto-generates TF-IDF embedding when diary entry is created
+  - embedding_ref column set on diary_entries table (e.g., "emb_diary_47_v4")
+  - Embedding stored in vector_embeddings table with source_type='diary_entry'
+  - Semantic search verified: "insomnia nightmares" finds relevant entries
+  - Data persists across server restart (verified)
+  - No mock data patterns found
+
+CURRENT STATUS: ~78/205 features passing (estimate, other agents also working)
 
 NEXT UP:
 - More Stripe features (cancellation, expiry)
