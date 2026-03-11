@@ -1,7 +1,7 @@
 // Admin Routes - Superadmin platform management
 const express = require('express');
 const { getDatabase, saveDatabase } = require('../db/connection');
-const { logger } = require('../utils/logger');
+const { logger, getSystemLogs } = require('../utils/logger');
 const { authenticate, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
@@ -253,6 +253,35 @@ router.get('/logs/audit', (req, res) => {
   } catch (error) {
     logger.error('Admin audit logs error: ' + error.message);
     res.status(500).json({ error: 'Failed to fetch audit logs' });
+  }
+});
+
+// GET /api/admin/logs/system - View system logs (from in-memory ring buffer)
+router.get('/logs/system', (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page) || 50));
+    const level = req.query.level || '';
+    const search = req.query.search || '';
+    const offset = (page - 1) * perPage;
+
+    const { logs, total } = getSystemLogs({
+      level: level || undefined,
+      search: search || undefined,
+      limit: perPage,
+      offset
+    });
+
+    res.json({
+      logs,
+      total,
+      page,
+      per_page: perPage,
+      total_pages: Math.ceil(total / perPage)
+    });
+  } catch (error) {
+    logger.error('Admin system logs error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch system logs' });
   }
 });
 

@@ -141,24 +141,35 @@ router.get('/current', requireAuth, (req, res) => {
     const db = getDatabase();
     const userId = req.user.userId;
 
-    // Try with pending_plan column, fall back without it
+    // Try with pending_plan and canceled_at columns, fall back gracefully
     let result;
     let hasPendingPlan = true;
+    let hasCanceledAt = true;
     try {
       result = db.exec(
         `SELECT id, stripe_customer_id, stripe_subscription_id, plan, status,
-                trial_ends_at, current_period_start, current_period_end, created_at, pending_plan
+                trial_ends_at, current_period_start, current_period_end, created_at, pending_plan, canceled_at
          FROM subscriptions WHERE therapist_id = ?`,
         [userId]
       );
     } catch (e) {
-      hasPendingPlan = false;
-      result = db.exec(
-        `SELECT id, stripe_customer_id, stripe_subscription_id, plan, status,
-                trial_ends_at, current_period_start, current_period_end, created_at
-         FROM subscriptions WHERE therapist_id = ?`,
-        [userId]
-      );
+      hasCanceledAt = false;
+      try {
+        result = db.exec(
+          `SELECT id, stripe_customer_id, stripe_subscription_id, plan, status,
+                  trial_ends_at, current_period_start, current_period_end, created_at, pending_plan
+           FROM subscriptions WHERE therapist_id = ?`,
+          [userId]
+        );
+      } catch (e2) {
+        hasPendingPlan = false;
+        result = db.exec(
+          `SELECT id, stripe_customer_id, stripe_subscription_id, plan, status,
+                  trial_ends_at, current_period_start, current_period_end, created_at
+           FROM subscriptions WHERE therapist_id = ?`,
+          [userId]
+        );
+      }
     }
 
     if (result.length === 0 || result[0].values.length === 0) {
@@ -177,7 +188,8 @@ router.get('/current', requireAuth, (req, res) => {
         current_period_start: sub[6],
         current_period_end: sub[7],
         created_at: sub[8],
-        pending_plan: hasPendingPlan ? (sub[9] || null) : null
+        pending_plan: hasPendingPlan ? (sub[9] || null) : null,
+        canceled_at: hasCanceledAt ? (sub[10] || null) : null
       }
     });
   } catch (error) {
@@ -472,36 +484,67 @@ router.post('/checkout', requireAuth, async (req, res) => {
 });
 
 // POST /api/subscription/cancel
-// Cancel subscription
+// Cancel subscription - access continues until end of current billing period
 router.post('/cancel', requireAuth, (req, res) => {
   try {
     const db = getDatabase();
     const userId = req.user.userId;
 
-    const subResult = db.exec(
-      'SELECT id, plan, status FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
-      [userId]
-    );
+    let subResult;
+    try {
+      subResult = db.exec(
+        'SELECT id, plan, status, current_period_end, pending_plan FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
+        [userId]
+      );
+    } catch (e) {
+      subResult = db.exec(
+        'SELECT id, plan, status, current_period_end FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
+        [userId]
+      );
+    }
 
     if (subResult.length === 0 || subResult[0].values.length === 0) {
       return res.status(404).json({ error: 'No subscription found' });
     }
 
     const subId = subResult[0].values[0][0];
+    const currentPlan = subResult[0].values[0][1];
     const currentStatus = subResult[0].values[0][2];
+    const currentPeriodEnd = subResult[0].values[0][3];
 
     if (currentStatus === 'canceled') {
       return res.status(400).json({ error: 'Subscription already canceled' });
     }
 
+    const now = new Date();
+    // Access continues until end of current period (or 30 days from now if no period set)
+    const accessUntil = currentPeriodEnd || new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Ensure canceled_at column exists
+    try {
+      db.run(`ALTER TABLE subscriptions ADD COLUMN canceled_at TEXT`);
+    } catch (e) {
+      // Column already exists, ignore
+    }
+
     db.run(
-      `UPDATE subscriptions SET status = 'canceled', updated_at = datetime('now') WHERE id = ?`,
-      [subId]
+      `UPDATE subscriptions SET status = 'canceled', canceled_at = ?, pending_plan = NULL, updated_at = datetime('now') WHERE id = ?`,
+      [now.toISOString(), subId]
     );
     saveDatabase();
 
-    logger.info(`Subscription canceled for user ${userId}`);
-    res.json({ message: 'Subscription canceled successfully' });
+    logger.info(`Subscription canceled for user ${userId}. Access continues until ${accessUntil}`);
+
+    res.json({
+      message: 'Subscription canceled successfully. Your access continues until the end of your current billing period.',
+      subscription: {
+        plan: currentPlan,
+        status: 'canceled',
+        canceled_at: now.toISOString(),
+        access_until: accessUntil,
+        current_period_end: accessUntil
+      }
+    });
   } catch (error) {
     logger.error('Cancel error: ' + error.message);
     res.status(500).json({ error: 'Failed to cancel subscription' });

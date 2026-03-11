@@ -80,6 +80,43 @@ export default function Subscription() {
     }
   };
 
+  const handleCancel = async () => {
+    if (!window.confirm('Are you sure you want to cancel your subscription? Your access will continue until the end of your current billing period.')) {
+      return;
+    }
+    setProcessing('cancel');
+    setError('');
+    setSuccess('');
+    try {
+      const res = await fetch('/api/subscription/cancel', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to cancel subscription');
+        return;
+      }
+
+      if (data.subscription?.access_until) {
+        const accessDate = new Date(data.subscription.access_until).toLocaleDateString();
+        setSuccess(`Subscription canceled. Your access continues until ${accessDate}.`);
+      } else {
+        setSuccess(data.message);
+      }
+
+      fetchSubscription();
+    } catch (err) {
+      setError('Network error. Please try again.');
+    } finally {
+      setProcessing(null);
+    }
+  };
+
   const handleDowngrade = async (plan) => {
     setProcessing(plan);
     setError('');
@@ -181,6 +218,28 @@ export default function Subscription() {
               Downgrade to <span className="font-semibold capitalize">{pendingPlan}</span> scheduled for end of current billing period
               ({subscription?.current_period_end ? new Date(subscription.current_period_end).toLocaleDateString() : 'end of period'}).
               Your current {currentPlan} access remains active until then.
+            </div>
+          )}
+          {subscription?.status === 'canceled' && (
+            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+              Your subscription has been canceled.
+              {subscription?.current_period_end && (
+                <> Your access continues until <span className="font-semibold">{new Date(subscription.current_period_end).toLocaleDateString()}</span>.</>
+              )}
+              {subscription?.canceled_at && (
+                <> Canceled on {new Date(subscription.canceled_at).toLocaleDateString()}.</>
+              )}
+            </div>
+          )}
+          {subscription?.status === 'active' && currentPlan !== 'trial' && !pendingPlan && (
+            <div className="mt-3">
+              <button
+                onClick={handleCancel}
+                disabled={processing === 'cancel'}
+                className="text-sm text-red-600 hover:text-red-700 underline disabled:opacity-50"
+              >
+                {processing === 'cancel' ? 'Canceling...' : 'Cancel subscription'}
+              </button>
             </div>
           )}
         </div>

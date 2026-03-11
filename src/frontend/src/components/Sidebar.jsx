@@ -66,6 +66,12 @@ const AuditLogIcon = () => (
   </svg>
 );
 
+const SystemLogIcon = () => (
+  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
+  </svg>
+);
+
 const LogoutIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
@@ -87,6 +93,7 @@ const adminNavItems = [
   { key: 'admin-therapists', path: '/admin/therapists', icon: AdminTherapistsIcon, labelKey: 'nav.adminTherapists', section: 'admin' },
   { key: 'admin-settings', path: '/admin/settings', icon: AdminSettingsIcon, labelKey: 'nav.adminSettings', section: 'admin' },
   { key: 'admin-logs', path: '/admin/logs', icon: AuditLogIcon, labelKey: 'nav.adminLogs', section: 'admin' },
+  { key: 'admin-system-logs', path: '/admin/system-logs', icon: SystemLogIcon, labelKey: 'nav.adminSystemLogs', section: 'admin' },
 ];
 
 /* ── Helper: is active? ───────────────────────────────── */

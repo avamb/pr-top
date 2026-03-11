@@ -17,7 +17,8 @@
     "adminOverview": "Обзор",
     "adminTherapists": "Терапевты",
     "adminSettings": "Настройки",
-    "adminLogs": "Журнал аудита"
+    "adminLogs": "Журнал аудита",
+    "adminSystemLogs": "Системные логи"
   },
   "landing": {
     "heroTitle1": "Ваш помощник для работы",

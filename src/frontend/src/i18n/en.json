@@ -17,7 +17,8 @@
     "adminOverview": "Overview",
     "adminTherapists": "Therapists",
     "adminSettings": "Settings",
-    "adminLogs": "Audit Logs"
+    "adminLogs": "Audit Logs",
+    "adminSystemLogs": "System Logs"
   },
   "landing": {
     "heroTitle1": "Your Between-Session",
