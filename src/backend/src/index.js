@@ -31,7 +31,7 @@ app.use(cors({
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: process.env.NODE_ENV === 'development' ? 10000 : 100, // limit each IP to N requests per windowMs
   message: { error: 'Too many requests, please try again later.' }
 });
 app.use('/api/', limiter);
@@ -82,7 +82,7 @@ app.use('/api/encryption', encryptionRoutes);
 app.use('/api/clients', require('./routes/clients'));
 app.use('/api/invite-code', require('./routes/inviteCode'));
 app.use('/api/sessions', require('./routes/sessions'));
-// app.use('/api/exercises', require('./routes/exercises'));
+app.use('/api/exercises', require('./routes/exercises'));
 // app.use('/api/search', require('./routes/search'));
 
 // Dev-only seed endpoint for testing with large datasets

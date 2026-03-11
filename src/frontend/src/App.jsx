@@ -8,6 +8,8 @@ import ClientList from './pages/ClientList';
 import Subscription from './pages/Subscription';
 import ClientDetail from './pages/ClientDetail';
 import SessionDetail from './pages/SessionDetail';
+import ExerciseLibrary from './pages/ExerciseLibrary';
+import Analytics from './pages/Analytics';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminTherapists from './pages/AdminTherapists';
 
@@ -22,6 +24,8 @@ function App() {
         <Route path="/clients" element={<ClientList />} />
         <Route path="/clients/:id" element={<ClientDetail />} />
         <Route path="/sessions/:id" element={<SessionDetail />} />
+        <Route path="/exercises" element={<ExerciseLibrary />} />
+        <Route path="/analytics" element={<Analytics />} />
         <Route path="/subscription" element={<Subscription />} />
         <Route path="/subscription/success" element={<Subscription />} />
         <Route path="/admin" element={<AdminDashboard />} />
