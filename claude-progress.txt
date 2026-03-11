@@ -438,7 +438,31 @@ TECHNICAL NOTES (Timeline Session):
   - Verified: entry_type='voice', file_ref stored, content encrypted
   - Persistence verified across server restart
 
-CURRENT STATUS: ~64/205 features passing (estimate, other agents also working)
+- Feature #48: Encryption service encrypts text payloads before DB write ✅
+  - Verified diary entry content_encrypted column does NOT contain plaintext
+  - encryption_key_id properly set (key version 2, key ID 19)
+  - Encrypted blob format valid: version:iv:authTag:ciphertext (4 parts)
+  - IV is 12 bytes, auth tag is 16 bytes (AES-256-GCM standard)
+  - Notes also verified encrypted with correct format
+
+- Feature #49: Encryption service decrypts on authorized read ✅
+  - Full round-trip: create encrypted diary → read via authorized API → plaintext matches
+  - Created therapist, linked client, submitted diary 'DECRYPT_TEST_12345'
+  - GET /api/clients/:id/diary returns decrypted content transparently
+  - Decryption is invisible to API consumer (returns plain content field)
+
+- Feature #203: Import data with malformed file shows error ✅
+  - Created POST /api/clients/:id/import endpoint with multer file upload
+  - Accepts JSON files with { type: "notes"|"diary", entries: [...] }
+  - Malformed JSON returns 400 with "Malformed JSON file" error + details
+  - Invalid structure, missing type, empty entries, content validation all return 400
+  - No partial data imported on validation failures (verified note count unchanged)
+  - Valid imports encrypt data with AES-256-GCM before storage
+  - Import JSON button added to Notes and Diary tabs in ClientDetail UI
+  - Red error banner shown in UI for malformed files
+  - Verified through both API tests and browser automation with screenshots
+
+CURRENT STATUS: ~67/205 features passing (estimate, other agents also working)
 
 NEXT UP:
 - More Stripe features (cancellation, expiry)
