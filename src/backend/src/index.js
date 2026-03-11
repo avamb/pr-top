@@ -85,6 +85,7 @@ app.use('/api/sessions', require('./routes/sessions'));
 app.use('/api/exercises', require('./routes/exercises'));
 app.use('/api/settings', require('./routes/settings'));
 // app.use('/api/search', require('./routes/search'));
+app.use('/api/query', require('./routes/query'));
 
 // Dev-only seed endpoint for testing with large datasets
 if (process.env.NODE_ENV !== 'production') {
