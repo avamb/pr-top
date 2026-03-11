@@ -183,6 +183,55 @@ if (!token || token === 'your-telegram-bot-token') {
     }
   });
 
+  // Handle voice messages - save as diary entries
+  bot.on('voice', async (msg) => {
+    const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+
+    try {
+      // Get file info from Telegram
+      const fileId = msg.voice.file_id;
+      const duration = msg.voice.duration;
+
+      // Submit voice diary entry via backend API
+      const result = await api.post('/api/bot/diary', {
+        telegram_id: String(telegramId),
+        entry_type: 'voice',
+        content: `[Voice message, duration: ${duration}s]`,
+        file_ref: fileId
+      });
+
+      bot.sendMessage(chatId,
+        '🎤 Voice diary entry saved! Your therapist will be able to listen to it.'
+      );
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || 'Failed to save voice diary entry.';
+      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+    }
+  });
+
+  // Handle text messages as diary entries (non-command messages)
+  bot.on('message', async (msg) => {
+    // Skip commands and non-text messages
+    if (!msg.text || msg.text.startsWith('/') || msg.voice || msg.video) return;
+
+    const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+
+    try {
+      await api.post('/api/bot/diary', {
+        telegram_id: String(telegramId),
+        entry_type: 'text',
+        content: msg.text
+      });
+
+      bot.sendMessage(chatId, '📝 Diary entry saved!');
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || 'Failed to save diary entry.';
+      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+    }
+  });
+
   console.log('PsyLink Telegram Bot is running.');
 }
 

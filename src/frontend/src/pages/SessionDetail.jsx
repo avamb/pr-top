@@ -59,7 +59,7 @@ function SessionDetail() {
               <button onClick={() => navigate('/clients')} className="px-3 py-1 rounded text-sm text-stone-600 hover:bg-stone-100">Clients</button>
             </nav>
           </div>
-          <button onClick={() => { localStorage.removeItem('token'); navigate('/login'); }} className="text-sm text-stone-500 hover:text-stone-700">Log out</button>
+          <button onClick={() => { localStorage.removeItem('token'); localStorage.removeItem('user'); navigate('/'); }} className="text-sm text-stone-500 hover:text-stone-700">Log out</button>
         </div>
       </header>
 

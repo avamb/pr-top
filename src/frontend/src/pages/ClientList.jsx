@@ -170,7 +170,7 @@ export default function ClientList() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    navigate('/login');
+    navigate('/');
   };
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');

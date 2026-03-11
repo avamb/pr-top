@@ -170,7 +170,7 @@ export default function Analytics() {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-stone-500">{user.email}</span>
-            <button onClick={() => { localStorage.removeItem('token'); localStorage.removeItem('user'); navigate('/login'); }} className="text-sm text-stone-500 hover:text-stone-700">Log out</button>
+            <button onClick={() => { localStorage.removeItem('token'); localStorage.removeItem('user'); navigate('/'); }} className="text-sm text-stone-500 hover:text-stone-700">Log out</button>
           </div>
         </div>
       </header>

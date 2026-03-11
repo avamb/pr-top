@@ -43,6 +43,9 @@ function ClientDetail() {
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [sendingExercise, setSendingExercise] = useState(null);
   const [exerciseSendMsg, setExerciseSendMsg] = useState('');
+  const [importLoading, setImportLoading] = useState(false);
+  const [importMsg, setImportMsg] = useState('');
+  const [importError, setImportError] = useState('');
   const token = localStorage.getItem('token');
 
   // Sync filter state to URL query parameters
@@ -146,6 +149,37 @@ function ClientDetail() {
       setError(e.message);
     } finally {
       setCreatingNote(false);
+    }
+  }
+
+  async function handleImportFile(e, importType) {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = ''; // Reset file input
+    setImportLoading(true);
+    setImportMsg('');
+    setImportError('');
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`${API}/clients/${id}/import`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setImportError(data.error + (data.details ? ' (' + data.details + ')' : ''));
+        return;
+      }
+      setImportMsg(`Imported ${data.imported}/${data.total} ${importType} successfully.` +
+        (data.errors ? ` ${data.errors.length} entries had errors.` : ''));
+      if (importType === 'notes') fetchNotes();
+      else fetchDiary();
+    } catch (err) {
+      setImportError('Import failed: ' + err.message);
+    } finally {
+      setImportLoading(false);
     }
   }
 
@@ -362,7 +396,7 @@ function ClientDetail() {
               <button onClick={() => navigate('/clients')} className="px-3 py-1 rounded text-sm text-stone-600 hover:bg-stone-100">Clients</button>
             </nav>
           </div>
-          <button onClick={() => { localStorage.removeItem('token'); navigate('/login'); }} className="text-sm text-stone-500 hover:text-stone-700">Log out</button>
+          <button onClick={() => { localStorage.removeItem('token'); localStorage.removeItem('user'); navigate('/'); }} className="text-sm text-stone-500 hover:text-stone-700">Log out</button>
         </div>
       </header>
 
@@ -519,7 +553,30 @@ function ClientDetail() {
         {/* Notes Tab */}
         {activeTab === 'notes' && (
           <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6 mb-6">
-            <h3 className="text-lg font-semibold text-stone-800 mb-4">Therapist Notes</h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-stone-800">Therapist Notes</h3>
+              <label className="px-3 py-1.5 bg-stone-100 text-stone-600 rounded-lg text-sm font-medium hover:bg-stone-200 cursor-pointer border border-stone-200">
+                {importLoading ? 'Importing...' : 'Import JSON'}
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  className="hidden"
+                  disabled={importLoading}
+                  onChange={(e) => handleImportFile(e, 'notes')}
+                />
+              </label>
+            </div>
+
+            {importError && (
+              <div className="mb-4 p-3 rounded-lg text-sm bg-red-50 text-red-700 border border-red-200">
+                {importError}
+              </div>
+            )}
+            {importMsg && (
+              <div className="mb-4 p-3 rounded-lg text-sm bg-green-50 text-green-700 border border-green-200">
+                {importMsg}
+              </div>
+            )}
 
             {/* Create Note Form */}
             <form onSubmit={handleCreateNote} className="mb-6">
@@ -777,9 +834,29 @@ function ClientDetail() {
 
         {/* Diary Tab */}
         {activeTab === 'diary' && <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6">
+          {importError && (
+            <div className="mb-4 p-3 rounded-lg text-sm bg-red-50 text-red-700 border border-red-200">
+              {importError}
+            </div>
+          )}
+          {importMsg && (
+            <div className="mb-4 p-3 rounded-lg text-sm bg-green-50 text-green-700 border border-green-200">
+              {importMsg}
+            </div>
+          )}
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-semibold text-stone-800">Diary Entries ({diaryTotal})</h3>
             <div className="flex gap-2">
+              <label className="px-3 py-1 bg-stone-100 text-stone-600 rounded text-sm hover:bg-stone-200 cursor-pointer border border-stone-200">
+                {importLoading ? 'Importing...' : 'Import JSON'}
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  className="hidden"
+                  disabled={importLoading}
+                  onChange={(e) => handleImportFile(e, 'diary')}
+                />
+              </label>
               <button
                 onClick={() => setTypeFilter('')}
                 className={`px-3 py-1 rounded text-sm ${!typeFilter ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
