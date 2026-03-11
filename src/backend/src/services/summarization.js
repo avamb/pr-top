@@ -9,6 +9,13 @@
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { encrypt, decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
+let vectorStoreService = null;
+function getVectorStoreService() {
+  if (!vectorStoreService) {
+    vectorStoreService = require('./vectorStore');
+  }
+  return vectorStoreService;
+}
 
 const AI_API_KEY = process.env.AI_API_KEY;
 
@@ -189,6 +196,17 @@ async function processSessionSummary(sessionId) {
     saveDatabase();
 
     logger.info(`Summary generated for session ${sessionId}`);
+
+    // Generate vector embedding from summary
+    try {
+      const vectorStore = getVectorStoreService();
+      const embedResult = vectorStore.embedSessionSummary(sessionId, summary, clientId, therapistId);
+      if (embedResult.success) {
+        logger.info(`Vector embedding generated for session ${sessionId} summary (${embedResult.token_count} tokens)`);
+      }
+    } catch (embedErr) {
+      logger.warn(`Vector embedding error for session ${sessionId} summary: ${embedErr.message}`);
+    }
 
     return { success: true, sessionId };
   } catch (error) {

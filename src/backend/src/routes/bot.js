@@ -421,6 +421,23 @@ router.post('/diary', botAuth, (req, res) => {
 
     logger.info(`Client ${clientId} submitted ${type} diary entry #${entryId}${file_ref ? ' with audio file' : ''}`);
 
+    // Generate vector embedding for text diary entries (async, non-blocking)
+    if (contentText && entryId) {
+      try {
+        var vectorStore = require('../services/vectorStore');
+        var therapistIdForEmbed = client[2]; // therapist_id from client record
+        var embedResult = vectorStore.embedDiaryEntry(entryId, contentText, clientId, therapistIdForEmbed);
+        if (embedResult.success) {
+          logger.info('Embedded diary entry #' + entryId + ': ref=' + embedResult.embedding_ref);
+        } else {
+          logger.warn('Failed to embed diary entry #' + entryId + ': ' + (embedResult.error || 'unknown'));
+        }
+      } catch (embedErr) {
+        logger.warn('Embedding error for diary entry #' + entryId + ': ' + embedErr.message);
+        // Non-fatal: diary entry is saved even if embedding fails
+      }
+    }
+
     // Auto-transcribe voice/video diary entries asynchronously
     if ((type === 'voice' || type === 'video') && entryId) {
       processDiaryTranscription(entryId).then(function(result) {
@@ -434,6 +451,10 @@ router.post('/diary', botAuth, (req, res) => {
       });
     }
 
+    // Get embedding_ref if it was set
+    var embRefResult = db.exec('SELECT embedding_ref FROM diary_entries WHERE id = ?', [entryId]);
+    var embRef = (embRefResult.length > 0 && embRefResult[0].values.length > 0) ? embRefResult[0].values[0][0] : null;
+
     res.status(201).json({
       message: 'Diary entry saved successfully',
       entry: {
@@ -441,6 +462,7 @@ router.post('/diary', botAuth, (req, res) => {
         client_id: clientId,
         entry_type: type,
         has_file: !!file_ref,
+        embedding_ref: embRef,
         created_at: new Date().toISOString()
       }
     });

@@ -16,6 +16,13 @@ function getSummarizationService() {
   }
   return summarizationService;
 }
+let vectorStoreService = null;
+function getVectorStoreService() {
+  if (!vectorStoreService) {
+    vectorStoreService = require('./vectorStore');
+  }
+  return vectorStoreService;
+}
 
 const TRANSCRIPTION_API_KEY = process.env.TRANSCRIPTION_API_KEY;
 const UPLOAD_DIR = path.resolve(__dirname, '../../data/sessions');
@@ -153,6 +160,20 @@ async function processSessionTranscription(sessionId) {
     saveDatabase();
 
     logger.info(`Transcription complete for session ${sessionId}`);
+
+    // Generate vector embedding from transcript
+    try {
+      const vectorStore = getVectorStoreService();
+      const embedResult = vectorStore.embedSessionTranscript(sessionId, transcript, clientId, therapistId);
+      if (embedResult.success) {
+        logger.info(`Vector embedding generated for session ${sessionId} transcript (${embedResult.token_count} tokens)`);
+      } else {
+        logger.warn(`Vector embedding failed for session ${sessionId}: ${embedResult.error}`);
+      }
+    } catch (embedErr) {
+      logger.warn(`Vector embedding error for session ${sessionId}: ${embedErr.message}`);
+      // Don't fail the transcription if embedding fails
+    }
 
     // Chain summary generation after transcription
     try {
