@@ -107,6 +107,18 @@ if (process.env.NODE_ENV !== 'production') {
       res.json({ created, total: total[0].values[0][0] });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
+
+  app.post('/api/dev/update-diary-date', (req, res) => {
+    try {
+      const { entry_id, created_at } = req.body;
+      if (!entry_id || !created_at) return res.status(400).json({ error: 'entry_id and created_at required' });
+      const { getDatabase, saveDatabase: save } = require('./db/connection');
+      const db = getDatabase();
+      db.run("UPDATE diary_entries SET created_at = ?, updated_at = ? WHERE id = ?", [created_at, created_at, entry_id]);
+      save();
+      res.json({ updated: true, entry_id, created_at });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
 }
 
 // 404 handler
