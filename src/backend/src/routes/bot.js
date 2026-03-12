@@ -13,6 +13,10 @@ const router = express.Router();
 // Bot API key for authenticating bot requests
 const BOT_API_KEY = process.env.BOT_API_KEY || 'dev-bot-api-key';
 
+// SOS deduplication: track recent SOS triggers per client (in-memory lock)
+const recentSosClients = new Map(); // clientId -> timestamp
+const SOS_DEDUP_WINDOW_MS = 30000; // 30 seconds
+
 // Middleware to verify bot API key
 function botAuth(req, res, next) {
   const apiKey = req.headers['x-bot-api-key'];
@@ -588,6 +592,42 @@ router.post('/sos', botAuth, (req, res) => {
       messageEncrypted = encResult.encrypted;
       keyId = encResult.keyId;
       keyVersion = encResult.keyVersion;
+    }
+
+    // Idempotency: in-memory lock to prevent race conditions with concurrent requests
+    const now = Date.now();
+    const lastSosTime = recentSosClients.get(clientId);
+    if (lastSosTime && (now - lastSosTime) < SOS_DEDUP_WINDOW_MS) {
+      // Duplicate rapid click - find the existing SOS event
+      const recentSos = db.exec(
+        `SELECT id, created_at FROM sos_events
+         WHERE client_id = ? AND status = 'triggered'
+         ORDER BY id DESC LIMIT 1`,
+        [clientId]
+      );
+      const existingSosId = recentSos.length > 0 && recentSos[0].values.length > 0 ? recentSos[0].values[0][0] : 0;
+      const existingCreatedAt = recentSos.length > 0 && recentSos[0].values.length > 0 ? recentSos[0].values[0][1] : new Date().toISOString();
+      logger.info(`SOS DEDUPLICATED: Client ${clientId} rapid SOS click ignored, existing event #${existingSosId}`);
+      return res.status(200).json({
+        message: 'SOS alert already active',
+        deduplicated: true,
+        sos_event: {
+          id: existingSosId,
+          client_id: clientId,
+          therapist_id: therapistId,
+          status: 'triggered',
+          created_at: existingCreatedAt
+        }
+      });
+    }
+    // Set the lock immediately to prevent concurrent requests
+    recentSosClients.set(clientId, now);
+
+    // Clean up old entries periodically
+    if (recentSosClients.size > 100) {
+      for (const [cid, t] of recentSosClients) {
+        if (now - t > SOS_DEDUP_WINDOW_MS) recentSosClients.delete(cid);
+      }
     }
 
     // Insert SOS event
