@@ -1036,3 +1036,24 @@ CURRENT STATUS: ~146/205 features passing (144 + 2 new)
   - i18n translations present for en/ru/es
 
 CURRENT STATUS: ~148/205 features passing (146 + 2 new)
+
+=== Session 2026-03-12_batch_136_137 ===
+
+- Feature #136: Loading state shown during API calls ✅
+  - ClientList shows skeleton rows with animate-pulse before data loads
+  - Dashboard shows skeleton stat cards and activity items during loading
+  - Loading starts as true, preventing flash of empty state
+  - Fixed CSS build error: replaced @apply focus:bg-primary with plain CSS
+  - Zero console errors, verified via browser automation
+
+- Feature #137: Server 500 error shows user-friendly message ✅
+  - Backend global error handler: returns "Something went wrong. Please try again later."
+  - Removed error.message from 500 responses in auth, subscription, clients, encryption routes
+  - Frontend: "Failed to fetch" mapped to "Unable to connect to server. Please check your connection..."
+  - Dashboard and ClientList both show styled red error banners with friendly messages
+  - No stack traces or technical details exposed to users
+  - Verified with backend down: dashboard shows "Failed to load dashboard data: Unable to connect..."
+  - Retry button available on dashboard error
+  - Zero console errors when backend is running
+
+CURRENT STATUS: ~150/205 features passing (148 + 2 new)
