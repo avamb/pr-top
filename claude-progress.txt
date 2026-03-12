@@ -934,3 +934,24 @@ CURRENT STATUS: ~136/205 features passing (134 + 2 new)
   - No mock data patterns, zero console errors
 
 CURRENT STATUS: ~138/205 features passing (136 + 2 new)
+
+=== Session 2026-03-12_batch_124_125 ===
+
+- Feature #124: Registration with weak password shows error ✅
+  - Added password strength validation (min 8 chars, uppercase, lowercase, number)
+  - Client-side validation in Register.jsx with specific requirement messages
+  - Server-side validation in auth.js register endpoint (400 response)
+  - i18n translations added for en/ru/es
+  - Password '123' shows: "At least 8 characters, At least one uppercase letter, At least one lowercase letter"
+  - Password 'Abcdefgh' shows: "At least one number"
+  - Valid password 'StrongPwd1' succeeds, redirects to /dashboard
+  - Zero console errors
+
+- Feature #125: Registration with duplicate email shows error ✅
+  - Registered duplicate125@test.com successfully first time
+  - Second registration attempt shows "User with this email already exists"
+  - Database verified: only 1 user row with that email (no duplicates)
+  - 409 HTTP response correctly handled by frontend
+  - Zero console errors
+
+CURRENT STATUS: ~140/205 features passing (138 + 2 new)
