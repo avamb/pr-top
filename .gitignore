@@ -16,3 +16,5 @@ build/
 *.log
 src/backend/data/
 src/backend/uploads/
+cookies*.txt
+test_regression_*.js
