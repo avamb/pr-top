@@ -1,5 +1,33 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-12_batch_200_201_202 ===
+
+- Feature #200: Late API response doesn't corrupt current view ✅
+  - Added AbortController to Dashboard, Analytics, Settings, ClientDetail, ClientList
+  - All fetch requests cancelled on component unmount or navigation
+  - Rapid navigation between pages: no data leaks between views
+  - Zero console errors after multiple rapid page switches
+
+- Feature #201: Export diary entries to file ✅
+  - Added GET /api/clients/:id/diary/export endpoint
+  - Returns all diary entries as downloadable JSON with decrypted content
+  - Content-Disposition header with proper filename (diary_export_{client}_{date}.json)
+  - Added "Export JSON" button in diary tab (disabled when no entries)
+  - Auth required (401), consent checked (403), audit logged
+  - API: 3 entries exported with all content decrypted, proper filename in header
+  - Browser: download triggered, file contains decrypted content
+  - Zero console errors
+
+- Feature #202: Export handles encrypted data correctly ✅
+  - Created 3 entries with known content, exported via API
+  - All content matches original plaintext exactly (PASS)
+  - No encrypted blobs (version:iv:tag:ciphertext format) in export (PASS)
+  - Each entry has id, entry_type, content (decrypted), transcript, created_at
+  - Downloaded file via browser: verified JSON structure and decrypted content
+  - Zero console errors
+
+CURRENT STATUS: ~199/205 features passing
+
 === Session 2026-03-12_batch_197_198_199 ===
 
 - Feature #197: Concurrent edits to client context handled ✅
@@ -1572,3 +1600,18 @@ CURRENT STATUS: ~178/205 features passing (176 + 2 new)
   - Zero console errors
 
 CURRENT STATUS: 202/205 features passing (98.5%)
+
+=== Session 2026-03-12_feature_204 ===
+
+- Feature #204: Page load time under 3 seconds for dashboard ✅
+  - Dashboard API response times: /stats 6ms, /activity 4ms
+  - Both API calls execute in parallel in the frontend
+  - Estimated total load time (API + render): ~500ms, well under 3 seconds
+  - Only 2 API requests made (stats + activity) - no excessive network calls
+  - Full page navigation via browser automation confirms fast render
+  - Dashboard fully renders: sidebar, Quick Stats, Invite Code, Recent Activity
+  - Zero JS console errors (only React Router future flag warnings)
+  - No mock data patterns found in dashboard code
+  - Verified with both API timing test and browser automation screenshot
+
+CURRENT STATUS: ~201/205 features passing
