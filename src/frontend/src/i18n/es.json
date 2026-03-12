@@ -1,5 +1,5 @@
 {
-  "brand": "PsyLink",
+  "brand": "PR-TOP",
   "nav": {
     "dashboard": "Panel",
     "clients": "Clientes",
@@ -21,13 +21,13 @@
     "adminSystemLogs": "Registros del sistema"
   },
   "landing": {
-    "heroTitle1": "Tu asistente de terapia",
-    "heroTitle2": "entre sesiones",
-    "heroDesc": "PsyLink ayuda a los psicólogos en ejercicio a preservar el contexto del cliente, reducir la doble documentación y trabajar más profundamente entre sesiones, manteniendo el control del terapeuta.",
+    "heroTitle1": "Mantén tu práctica",
+    "heroTitle2": "en lo más alto",
+    "heroDesc": "PR-TOP es un asistente de práctica con IA para psicólogos y terapeutas — diseñado para reducir la rutina, apoyar la continuidad entre sesiones y mantener la atención humana.",
     "startTrial": "Prueba gratuita",
-    "learnMore": "Saber más",
+    "learnMore": "Cómo funciona",
     "featuresTitle": "Diseñado para terapeutas, no para tecnólogos",
-    "featuresDesc": "Cada función está diseñada en torno al flujo de trabajo del terapeuta, desde la preparación de sesiones hasta el seguimiento entre consultas.",
+    "featuresDesc": "Cada función está diseñada en torno al flujo de trabajo real de psicólogos y terapeutas: comunicación más clara, mejor continuidad y menos fricción diaria.",
     "pricingTitle": "Precios simples y transparentes",
     "pricingDesc": "Comienza con una prueba gratuita. Amplía a medida que crece tu práctica.",
     "mostPopular": "Más popular",
@@ -46,19 +46,19 @@
     "dataSovereignty": "Soberanía de datos",
     "privacyPolicy": "Política de privacidad",
     "termsOfService": "Términos de servicio",
-    "copyright": "© {{year}} PsyLink. Todos los derechos reservados.",
-    "feature1Title": "Preservar el contexto del cliente",
-    "feature1Desc": "Nunca pierdas de vista el progreso del cliente. Resúmenes con IA e historial consultable, todo al alcance de tu mano.",
+    "copyright": "© {{year}} PR-TOP. Todos los derechos reservados.",
+    "feature1Title": "Continuidad entre sesiones",
+    "feature1Desc": "Mantén el contexto del cliente organizado y fácil de revisar. Nunca pierdas de vista el progreso entre sesiones.",
     "feature2Title": "Cifrado de extremo a extremo",
     "feature2Desc": "Todos los datos sensibles del cliente se cifran a nivel de aplicación. La privacidad de tus clientes es nuestra máxima prioridad.",
-    "feature3Title": "Resúmenes con IA",
-    "feature3Desc": "Transcripción y resumen automático de sesiones. Concéntrate en la terapia, no en tomar notas.",
+    "feature3Title": "Comunicación más inteligente",
+    "feature3Desc": "Redacta seguimientos, recordatorios y mensajes de apoyo más rápido. Enfócate en la terapia, no en la administración.",
     "feature4Title": "Flujo de cliente nativo en Telegram",
     "feature4Desc": "Los clientes interactúan a través de Telegram — sin aplicaciones nuevas que instalar. Diario, ejercicios y alertas SOS en su mensajero habitual.",
-    "feature5Title": "Analítica e información",
-    "feature5Desc": "Rastrea la participación del cliente, patrones de sesiones y progreso terapéutico con paneles visuales.",
-    "feature6Title": "Reducir la doble documentación",
-    "feature6Desc": "Un solo lugar para notas de sesión, entradas de diario y contexto. Deja de copiar entre sistemas."
+    "feature5Title": "Apoyo para tu práctica",
+    "feature5Desc": "Más claridad y estructura en tu práctica privada diaria con paneles visuales y analítica.",
+    "feature6Title": "Menos rutina administrativa",
+    "feature6Desc": "Reduce tareas repetitivas para que más tiempo y energía se dediquen a lo que importa — atención, presencia y cuidado."
   },
   "auth": {
     "loginTitle": "Iniciar sesión",
@@ -92,7 +92,7 @@
     "fillRequiredFields": "Por favor, complete todos los campos obligatorios"
   },
   "dashboard": {
-    "title": "Panel de PsyLink",
+    "title": "Panel de PR-TOP",
     "quickStats": "Estadísticas rápidas",
     "clients": "Clientes",
     "sessions": "Sesiones",
@@ -288,11 +288,11 @@
   },
   "subscription": {
     "title": "Suscripción",
-    "subtitle": "Gestiona tu plan de PsyLink",
+    "subtitle": "Gestiona tu plan de PR-TOP",
     "loadingSubscription": "Cargando suscripción...",
     "failedToLoad": "Error al cargar la suscripción",
     "trialExpiredTitle": "Tu período de prueba ha expirado",
-    "trialExpiredDesc": "Selecciona un plan a continuación para seguir usando PsyLink. Tus datos están seguros y estarán disponibles una vez que te suscribas.",
+    "trialExpiredDesc": "Selecciona un plan a continuación para seguir usando PR-TOP. Tus datos están seguros y estarán disponibles una vez que te suscribas.",
     "currentPlan": "Plan actual",
     "status": "Estado",
     "trialEnds": "Prueba finaliza: {{date}}",

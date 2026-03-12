@@ -1,5 +1,5 @@
 {
-  "brand": "PsyLink",
+  "brand": "PR-TOP",
   "nav": {
     "dashboard": "Dashboard",
     "clients": "Clients",
@@ -21,13 +21,13 @@
     "adminSystemLogs": "System Logs"
   },
   "landing": {
-    "heroTitle1": "Your Between-Session",
-    "heroTitle2": "Therapy Assistant",
-    "heroDesc": "PsyLink helps practicing psychologists preserve client context, reduce double documentation, and work deeper between sessions — while keeping the therapist in control.",
+    "heroTitle1": "Keep Your Practice",
+    "heroTitle2": "on Top",
+    "heroDesc": "PR-TOP is an AI-powered practice assistant for psychologists and therapists — built to reduce routine, support continuity between sessions, and keep care human.",
     "startTrial": "Start Free Trial",
-    "learnMore": "Learn More",
+    "learnMore": "See How It Works",
     "featuresTitle": "Built for Therapists, Not Technologists",
-    "featuresDesc": "Every feature is designed around the therapist workflow — from session preparation to between-session client engagement.",
+    "featuresDesc": "Every feature is designed around the real workflow of psychologists and therapists: clearer communication, better continuity, and less daily friction.",
     "pricingTitle": "Simple, Transparent Pricing",
     "pricingDesc": "Start with a free trial. Upgrade as your practice grows.",
     "mostPopular": "Most Popular",
@@ -46,19 +46,19 @@
     "dataSovereignty": "Data sovereignty",
     "privacyPolicy": "Privacy Policy",
     "termsOfService": "Terms of Service",
-    "copyright": "© {{year}} PsyLink. All rights reserved.",
-    "feature1Title": "Preserve Client Context",
-    "feature1Desc": "Never lose track of client progress. AI-powered summaries and searchable history keep everything at your fingertips.",
+    "copyright": "© {{year}} PR-TOP. All rights reserved.",
+    "feature1Title": "Between-Session Continuity",
+    "feature1Desc": "Keep important client context organized and easier to revisit. Never lose track of progress between sessions.",
     "feature2Title": "End-to-End Encryption",
     "feature2Desc": "All sensitive client data is encrypted at the application layer. Your clients' privacy is our top priority.",
-    "feature3Title": "AI-Powered Summaries",
-    "feature3Desc": "Automatic session transcription and summarization. Focus on therapy, not note-taking.",
+    "feature3Title": "Smarter Communication",
+    "feature3Desc": "Draft thoughtful follow-ups, reminders, and support messages faster. Focus on therapy, not admin.",
     "feature4Title": "Telegram-Native Client Flow",
     "feature4Desc": "Clients interact through Telegram — no new apps to install. Diary entries, exercises, and SOS alerts in their existing messenger.",
-    "feature5Title": "Analytics & Insights",
-    "feature5Desc": "Track client engagement, session patterns, and therapeutic progress with visual dashboards.",
-    "feature6Title": "Reduce Double Documentation",
-    "feature6Desc": "One place for session notes, diary entries, and context. Stop copying between systems."
+    "feature5Title": "Practice Support",
+    "feature5Desc": "Bring more clarity and structure to your day-to-day private practice with visual dashboards and analytics.",
+    "feature6Title": "Less Routine Admin",
+    "feature6Desc": "Reduce repeated tasks so more time and energy stay with the work that matters — attention, presence, and care."
   },
   "auth": {
     "loginTitle": "Log In",
@@ -92,7 +92,7 @@
     "fillRequiredFields": "Please fill in all required fields"
   },
   "dashboard": {
-    "title": "PsyLink Dashboard",
+    "title": "PR-TOP Dashboard",
     "quickStats": "Quick Stats",
     "clients": "Clients",
     "sessions": "Sessions",
@@ -288,11 +288,11 @@
   },
   "subscription": {
     "title": "Subscription",
-    "subtitle": "Manage your PsyLink plan",
+    "subtitle": "Manage your PR-TOP plan",
     "loadingSubscription": "Loading subscription...",
     "failedToLoad": "Failed to load subscription",
     "trialExpiredTitle": "Your trial has expired",
-    "trialExpiredDesc": "Please select a plan below to continue using PsyLink. Your data is safe and will be available once you subscribe.",
+    "trialExpiredDesc": "Please select a plan below to continue using PR-TOP. Your data is safe and will be available once you subscribe.",
     "currentPlan": "Current Plan",
     "status": "Status",
     "trialEnds": "Trial ends: {{date}}",
