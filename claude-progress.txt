@@ -1,5 +1,28 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-12_batch_155_157 ===
+
+- Feature #155: Unsaved changes warning on navigation away ✅
+  - Created UnsavedChangesContext for cross-component dirty state tracking
+  - Created useNavigationBlocker hook (combines context-based SPA blocking + beforeunload)
+  - Sidebar uses safeNavigate() which calls confirmNavigation() before route changes
+  - Note: useBlocker requires data router, so used context-based approach instead
+  - Tested: edit anamnesis → click Dashboard → confirm dialog appears
+  - Cancel: stays on page with form data intact (UNSAVED_TEST_DATA_12345 preserved)
+  - Accept: navigates to dashboard successfully
+  - Also triggers for unsaved note content
+  - Zero console errors, no mock data patterns
+
+- Feature #157: Direct URL access to /dashboard requires auth ✅
+  - Navigating to /dashboard without auth → redirected to /login (verified)
+  - Return URL preserved via location.state.from
+  - After login, redirected back to /dashboard (not default route)
+  - Also verified with /clients: redirects to /login, after login goes to /clients
+  - AppLayout already had this logic; Login already reads redirectTo from state
+  - Zero console errors
+
+CURRENT STATUS: ~166/205 features passing (164 + 2 new)
+
 === Session 2026-03-12_batch_153_154 ===
 
 - Feature #153: Multi-tab session consistency ✅
