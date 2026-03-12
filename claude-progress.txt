@@ -1183,3 +1183,23 @@ CURRENT STATUS: ~158/205 features passing (156 + 2 new)
   - Browser verified: zero console errors, Load More works end-to-end
 
 CURRENT STATUS: ~160/205 features passing (158 + 2 new)
+
+=== Session 2026-03-12_batch_151_152 ===
+
+- Feature #151: Form data preserved on refresh mid-edit ✅
+  - Created useBeforeUnload hook (src/frontend/src/hooks/useBeforeUnload.js)
+  - Applied to ClientDetail: note creation form and context form
+  - Tracks contextDirty state, reset on save/load from server
+  - newNoteContent.trim() !== '' triggers warning for unsaved notes
+  - Browser shows native 'Are you sure you want to leave?' dialog
+  - Zero console errors, no mock data patterns
+
+- Feature #152: Back button after form submission doesn't resubmit ✅
+  - SPA fetch-based form submission inherently safe (no page reload)
+  - e.preventDefault() blocks default HTML form POST behavior
+  - No pushState/replaceState after form submit (stays on same page)
+  - Verified: created note, navigated to dashboard and back
+  - API confirms exactly 1 note (no duplicates)
+  - Zero console errors
+
+CURRENT STATUS: ~162/205 features passing (160 + 2 new)
