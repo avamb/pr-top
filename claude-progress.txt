@@ -1,5 +1,29 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-12_batch_176_177 ===
+
+- Feature #176: Reset button clears all form filters ✅
+  - Added "Reset all filters" button to timeline tab filter bar
+  - Added "Reset all filters" button to diary tab filter bar
+  - Button appears only when filters are active (type, date, search)
+  - Clicking reset clears: type filter, date from, date to (to today default), search query, pagination
+  - URL params update accordingly (filtered params removed)
+  - Full unfiltered data shown after reset
+  - Also updated diary "Clear all filters" in empty state to include search
+  - Zero console errors
+
+- Feature #177: Empty search query returns all results ✅
+  - Added diary search box with search/clear buttons
+  - Added backend search support for diary entries (post-decryption filtering for encrypted content)
+  - Empty search query (clicking Search with empty box) returns all diary entries
+  - No error message shown for empty search
+  - Search "FILTER_TEXT" → 1 result, empty search → 2 results (all entries)
+  - Search also matches transcript content
+  - Updated CORS config to allow any localhost port in development mode
+  - Zero console errors, no mock data patterns
+
+CURRENT STATUS: ~182/205 features passing (180 + 2 new)
+
 === Session 2026-03-12_batch_174_175 ===
 
 - Feature #174: Filter reset when switching clients ✅
