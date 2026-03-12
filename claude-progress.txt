@@ -1,5 +1,34 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-12_batch_185_186_187 ===
+
+- Feature #185: Dashboard responsive at tablet (768px) ✅
+  - Sidebar collapses to hamburger menu below lg (1024px) breakpoint
+  - Hamburger button with PsyLink brand shown at top on mobile/tablet
+  - Dark overlay when sidebar is open on small screens
+  - Sidebar auto-closes on navigation and logout
+  - Desktop layout unchanged (sidebar always visible at lg+)
+  - All dashboard content fills available width, stat cards in 2-column grid
+  - Zero console errors
+
+- Feature #186: Dashboard responsive at mobile (375px) ✅
+  - Dashboard header stacks vertically on small screens (flex-col sm:flex-row)
+  - Client list header and search bar stack on mobile
+  - Client table has min-width for proper horizontal scrolling
+  - Settings form fully usable at 375px
+  - All pages verified with no horizontal scroll, zero console errors
+
+- Feature #187: Client detail tabs work on mobile ✅
+  - Tab navigation has overflow-x-auto for horizontal scrolling
+  - All tab buttons have whitespace-nowrap and min-h-[44px] touch targets
+  - Client info wraps on small screens (flex-wrap)
+  - Reduced main padding on mobile (px-4 sm:px-6)
+  - Verified all 6 tabs (Timeline, Diary, Notes, Sessions, Exercises, Context) accessible
+  - Tab content renders fully at 375px
+  - Zero console errors
+
+CURRENT STATUS: ~189/205 features passing
+
 === Session 2026-03-12_batch_178_179 ===
 
 - Feature #178: Whitespace-only search handled gracefully ✅
