@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { formatUserDate, formatUserDateOnly } from '../utils/formatDate';
 
 const API_URL = 'http://localhost:3001/api';
 
@@ -26,7 +27,7 @@ function formatRelativeTime(dateStr) {
   if (diffHours < 24) return `${diffHours}h ago`;
   if (diffDays < 7) return `${diffDays}d ago`;
   if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
-  return date.toLocaleDateString();
+  return formatUserDateOnly(date);
 }
 
 function ActivityIndicator({ lastActivity }) {
@@ -47,7 +48,7 @@ function ActivityIndicator({ lastActivity }) {
   return (
     <div className="flex items-center gap-2">
       <span className={`inline-block w-2 h-2 rounded-full ${dotColor}`}></span>
-      <span className="text-sm text-secondary" title={date.toLocaleString()}>
+      <span className="text-sm text-secondary" title={formatUserDate(lastActivity)}>
         {formatRelativeTime(lastActivity)}
       </span>
     </div>
@@ -60,7 +61,6 @@ function ClientRow({ client, onClick }) {
     : 'bg-gray-100 text-gray-600';
   const consentLabel = client.consent_therapist_access ? 'Consented' : 'No Consent';
   const displayName = client.email || client.telegram_id || `Client #${client.id}`;
-  const date = new Date(client.created_at);
 
   return (
     <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer" onClick={onClick}>
@@ -75,7 +75,7 @@ function ClientRow({ client, onClick }) {
       <td className="px-4 py-3">
         <ActivityIndicator lastActivity={client.last_activity} />
       </td>
-      <td className="px-4 py-3 text-sm text-secondary">{date.toLocaleDateString()}</td>
+      <td className="px-4 py-3 text-sm text-secondary">{formatUserDateOnly(client.created_at)}</td>
     </tr>
   );
 }
@@ -177,7 +177,7 @@ export default function ClientList() {
     <div>
       <main className="max-w-7xl mx-auto px-4 py-8">
         {/* Header with stats */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <div>
             <h2 className="text-2xl font-bold text-text">{t('clientList.title')}</h2>
             <p className="text-sm text-secondary mt-1">
@@ -195,7 +195,7 @@ export default function ClientList() {
 
         {/* Search and filters */}
         <div className="bg-white rounded-lg shadow-md p-4 mb-6">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
             <div className="flex-1 relative">
               <input
                 type="text"
@@ -209,7 +209,7 @@ export default function ClientList() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            <span className="text-sm text-secondary">
+            <span className="text-sm text-secondary whitespace-nowrap">
               Page {page} of {totalPages}
             </span>
           </div>
@@ -224,7 +224,7 @@ export default function ClientList() {
         {/* Client table */}
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[600px]">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-secondary uppercase tracking-wider">{t('clientList.client')}</th>

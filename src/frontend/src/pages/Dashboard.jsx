@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { formatUserDateOnly } from '../utils/formatDate';
 
 const API_URL = 'http://localhost:3001/api';
 
@@ -70,7 +71,7 @@ function getTimeAgo(date, t) {
   if (hours < 24) return t('dashboard.hoursAgo', { count: hours });
   const days = Math.floor(hours / 24);
   if (days < 7) return t('dashboard.daysAgo', { count: days });
-  return date.toLocaleDateString();
+  return formatUserDateOnly(date);
 }
 
 function SubscriptionBadge({ subscription, t }) {
@@ -281,7 +282,7 @@ export default function Dashboard() {
         {t('nav.skipToContent')}
       </a>
       <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <h1 className="text-xl font-bold text-primary">{t('dashboard.title')}</h1>
           <div className="flex items-center gap-4">
             {stats?.subscription && <SubscriptionBadge subscription={stats.subscription} t={t} />}
