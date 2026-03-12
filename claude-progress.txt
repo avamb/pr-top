@@ -1,5 +1,24 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-12_batch_153_154 ===
+
+- Feature #153: Multi-tab session consistency ✅
+  - Added cross-tab storage event listener in AppLayout
+  - When token/user removed in one tab, other tabs auto-redirect to /login
+  - User data updates in one tab sync state in other tabs
+  - Verified: login → authenticated state → logout → refresh redirects to /login
+  - Zero console errors, no mock data patterns
+
+- Feature #154: Session token expires after configured timeout ✅
+  - JWT configured with 24h expiry (expiresIn: '24h')
+  - Backend auth middleware handles TokenExpiredError with 401
+  - API test: 3/3 endpoints return 401 for expired tokens
+  - Added 401 handling to ClientDetail, Subscription, SessionDetail pages
+  - All major pages now redirect to /login on expired token
+  - Zero console errors, no mock data patterns
+
+CURRENT STATUS: ~164/205 features passing (162 + 2 new)
+
 === Session 2026-03-12_batch_128_131 ===
 
 - Feature #128: Empty required fields show validation errors ✅
