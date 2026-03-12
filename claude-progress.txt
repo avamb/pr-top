@@ -1538,3 +1538,37 @@ CURRENT STATUS: ~174/205 features passing (172 + 2 new)
   - Zero console errors, verified via browser automation
 
 CURRENT STATUS: ~178/205 features passing (176 + 2 new)
+
+=== Session 2026-03-12_batch_194_196 ===
+
+- Feature #194: Date sorting works across timezone boundaries ✅
+  - Added convertLocalDateToUTC utility function to backend (clients.js)
+  - Diary and timeline endpoints now accept `timezone` query param
+  - Frontend passes user timezone from localStorage when filtering
+  - Fixed timeline endpoint: was not normalizing date strings (raw comparison failed)
+  - Tested with Asia/Tokyo (UTC+9): entries at UTC midnight boundary correctly
+    appear/excluded based on user's local date
+  - Entry A (March 11 23:55 UTC = March 12 08:55 Tokyo) correctly appears on March 12 filter
+  - Entry E (March 12 15:01 UTC = March 13 00:01 Tokyo) correctly excluded from March 12 filter
+  - Sort order maintained (newest first by UTC timestamp)
+  - Zero console errors
+
+- Feature #195: Created/updated timestamps accurate ✅
+  - Added PUT /api/clients/:id/notes/:noteId endpoint for note editing
+  - created_at uses datetime('now') at creation, never changes on update
+  - updated_at set to datetime('now') on each update
+  - Frontend shows "Created: [date]" and "| Updated: [date]" when different
+  - Added inline Edit/Cancel/Save UI for notes
+  - Verified: created_at stays 9:44:50 PM after update, updated_at becomes 9:46:59 PM
+  - Zero console errors
+
+- Feature #196: Trial end date calculation correct ✅
+  - Registration reads trial_duration_days from platform_settings (default 14)
+  - Registered therapist with 14-day setting: trial_ends_at = exactly 14 days later ✅
+  - Changed setting to 30 days via admin API
+  - Registered another therapist: trial_ends_at = exactly 30 days later ✅
+  - Restored setting back to 14 days
+  - Browser verified: Subscription page shows "Trial ends: 4/11/2026" (30 days from March 12)
+  - Zero console errors
+
+CURRENT STATUS: 202/205 features passing (98.5%)
