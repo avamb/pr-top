@@ -1,5 +1,27 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-12_batch_168_170 ===
+
+- Feature #168: Consent revocation cascades to hide all client data ✅
+  - Modified notes GET endpoint to allow therapist access to own notes after consent revocation
+  - Notes endpoint checks if therapist has existing notes for client when client is unlinked
+  - Pre-revoke: diary, notes, timeline, client list all accessible
+  - Post-revoke: diary blocked (403), timeline blocked (404), client removed from list
+  - Therapist's own notes STILL accessible (200) - therapist intellectual property preserved
+  - Browser verified: client list shows 0 after revoke, client detail shows "Client Unavailable"
+  - 18/18 API tests passing, zero JS console errors
+
+- Feature #170: Statistics update after data deletion ✅
+  - Added DELETE /api/sessions/:id endpoint with auth, ownership check, audit logging
+  - Session deletion cleans up audio files and vector embeddings
+  - Dashboard stats (live SQL queries) correctly reflect deleted data
+  - Session count: 1→0 after deletion, notes and clients unchanged
+  - Also verified diary deletion decreases diary count correctly
+  - Browser verified: dashboard Quick Stats shows updated counts
+  - 14/14 API tests passing, zero JS console errors
+
+CURRENT STATUS: ~176/205 features passing (174 + 2 new)
+
 === Session 2026-03-12_batch_164_165 ===
 
 - Feature #164: Rapid SOS button clicks handled idempotently ✅
