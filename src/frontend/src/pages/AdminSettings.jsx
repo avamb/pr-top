@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const API_URL = 'http://localhost:3001/api';
 
@@ -248,6 +249,7 @@ export default function AdminSettings() {
             disabled={saving}
             className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 font-medium"
           >
+            {saving && <LoadingSpinner size={16} className="mr-2" />}
             {saving ? t('admin.savingSettings') : t('admin.saveSettings')}
           </button>
         </div>

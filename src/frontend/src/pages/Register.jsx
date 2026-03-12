@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useCsrfToken } from '../hooks/useCsrfToken';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -220,6 +221,7 @@ export default function Register() {
               disabled={loading}
               className="w-full py-2 px-4 bg-primary text-white font-medium rounded-md hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
+              {loading && <LoadingSpinner size={16} className="mr-2" />}
               {loading ? t('auth.creatingAccount') : t('auth.createAccount')}
             </button>
           </form>

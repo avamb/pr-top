@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const API_URL = 'http://localhost:3001/api';
 
@@ -282,6 +283,7 @@ export default function Settings() {
                       disabled={saving}
                       className="px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
                     >
+                      {saving && <LoadingSpinner size={16} className="mr-2" />}
                       {saving ? t('settings.saving') : t('settings.saveChanges')}
                     </button>
                   </div>
@@ -392,6 +394,7 @@ export default function Settings() {
                       disabled={savingEscalation}
                       className="px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
                     >
+                      {savingEscalation && <LoadingSpinner size={16} className="mr-2" />}
                       {savingEscalation ? t('settings.saving') : t('settings.saveEscalation')}
                     </button>
                   </div>

@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Breadcrumb from '../components/Breadcrumb';
 import useNavigationBlocker from '../hooks/useNavigationBlocker';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const API = 'http://localhost:3001/api';
 
@@ -762,6 +763,7 @@ function ClientDetail() {
                   disabled={creatingNote || !newNoteContent.trim()}
                   className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
+                  {creatingNote && <LoadingSpinner size={16} className="mr-2" />}
                   {creatingNote ? 'Saving...' : 'Save Note'}
                 </button>
               </div>
@@ -877,6 +879,7 @@ function ClientDetail() {
                   disabled={contextSaving}
                   className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
+                  {contextSaving && <LoadingSpinner size={16} className="mr-2" />}
                   {contextSaving ? 'Saving...' : 'Save Context'}
                 </button>
               </div>

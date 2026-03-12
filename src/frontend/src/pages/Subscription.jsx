@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const PLAN_DETAILS = {
   trial: { name: 'Trial', price: 'Free', clients: 3, sessions: 5, features: ['Basic dashboard', 'Timeline view', 'SOS alerts'] },
@@ -294,6 +295,7 @@ export default function Subscription() {
                 disabled={processing === 'cancel'}
                 className="text-sm text-red-600 hover:text-red-700 underline disabled:opacity-50"
               >
+                {processing === 'cancel' && <LoadingSpinner size={14} className="mr-1" />}
                 {processing === 'cancel' ? t('subscription.canceling') : t('subscription.cancelSubscription')}
               </button>
             </div>
@@ -355,6 +357,7 @@ export default function Subscription() {
                       disabled={processing === planKey}
                       className="w-full py-2 px-4 rounded-lg bg-teal-600 text-white font-medium hover:bg-teal-700 transition-colors disabled:opacity-50"
                     >
+                      {processing === planKey && <LoadingSpinner size={16} className="mr-2" />}
                       {processing === planKey ? t('subscription.processing') : t('subscription.upgradeTo', { plan: plan.name })}
                     </button>
                   ) : isDowngrade && planKey !== 'trial' ? (
@@ -363,6 +366,7 @@ export default function Subscription() {
                       disabled={processing === planKey}
                       className="w-full py-2 px-4 rounded-lg border border-stone-300 text-stone-600 font-medium hover:bg-stone-50 transition-colors disabled:opacity-50"
                     >
+                      {processing === planKey && <LoadingSpinner size={16} className="mr-2" />}
                       {processing === planKey ? t('subscription.processing') : t('subscription.downgradeTo', { plan: plan.name })}
                     </button>
                   ) : null}

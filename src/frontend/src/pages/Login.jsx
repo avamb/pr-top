@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useCsrfToken } from '../hooks/useCsrfToken';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -33,6 +34,7 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     setError('');
     setFieldErrors({});
 
@@ -174,6 +176,7 @@ export default function Login() {
               disabled={loading}
               className="w-full py-2 px-4 bg-primary text-white font-medium rounded-md hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
+              {loading && <LoadingSpinner size={16} className="mr-2" />}
               {loading ? t('auth.signingIn') : t('auth.signIn')}
             </button>
           </form>
