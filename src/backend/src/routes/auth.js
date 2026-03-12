@@ -38,8 +38,15 @@ router.post('/register', async (req, res) => {
   try {
     const { email, password, role, utm_source, utm_medium, utm_campaign, utm_content, utm_term } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    // Validate required fields individually
+    const missingFields = [];
+    if (!email) missingFields.push('email');
+    if (!password) missingFields.push('password');
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        error: 'Missing required fields: ' + missingFields.join(', '),
+        missing_fields: missingFields
+      });
     }
 
     // Validate email format
@@ -148,8 +155,15 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    // Validate required fields individually
+    const missingFields = [];
+    if (!email) missingFields.push('email');
+    if (!password) missingFields.push('password');
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        error: 'Missing required fields: ' + missingFields.join(', '),
+        missing_fields: missingFields
+      });
     }
 
     const db = getDatabase();
