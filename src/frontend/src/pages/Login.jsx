@@ -9,8 +9,9 @@ export default function Login() {
   const { t, i18n } = useTranslation();
   const csrfToken = useCsrfToken();
   const redirectTo = location.state?.from || null;
+  const accessDenied = location.state?.accessDenied || false;
   const [form, setForm] = useState({ email: '', password: '' });
-  const [error, setError] = useState('');
+  const [error, setError] = useState(accessDenied ? t('auth.clientAccessDenied', 'Access denied. The web panel is for therapists only. Clients should use the Telegram bot.') : '');
   const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
@@ -58,6 +59,13 @@ export default function Login() {
 
       if (!res.ok) {
         setError(data.error || 'Login failed');
+        setLoading(false);
+        return;
+      }
+
+      // Block client role from accessing web panel
+      if (data.user.role === 'client') {
+        setError(t('auth.clientAccessDenied', 'Access denied. The web panel is for therapists only. Clients should use the Telegram bot.'));
         setLoading(false);
         return;
       }

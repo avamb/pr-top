@@ -33,6 +33,14 @@ export default function AppLayout({ children }) {
       return;
     }
 
+    // Client role cannot access the web panel - redirect to login with error
+    if (parsedUser.role === 'client') {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      navigate('/login', { state: { accessDenied: true } });
+      return;
+    }
+
     // Check subscription status for therapists (not on subscription page itself)
     if (parsedUser.role === 'therapist' && !location.pathname.startsWith('/subscription')) {
       fetch(`${API_URL}/dashboard/stats`, {
