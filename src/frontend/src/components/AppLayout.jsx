@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 
@@ -8,6 +8,7 @@ const API_URL = 'http://localhost:3001/api';
  * AppLayout wraps authenticated pages with the Sidebar.
  * It reads the user from localStorage and redirects to /login if not authenticated.
  * Checks subscription status and redirects expired trials to /subscription.
+ * Listens for cross-tab storage events to maintain session consistency.
  * The children receive the full viewport minus the sidebar width.
  */
 export default function AppLayout({ children }) {
@@ -16,6 +17,37 @@ export default function AppLayout({ children }) {
   const [user, setUser] = useState(null);
   const [checked, setChecked] = useState(false);
   const [subscriptionExpired, setSubscriptionExpired] = useState(false);
+
+  // Cross-tab session sync: listen for localStorage changes from other tabs
+  const handleStorageChange = useCallback((e) => {
+    // If token or user was removed in another tab, redirect to login
+    if (e.key === 'token' && !e.newValue) {
+      setUser(null);
+      setChecked(false);
+      navigate('/login');
+      return;
+    }
+    if (e.key === 'user' && !e.newValue) {
+      setUser(null);
+      setChecked(false);
+      navigate('/login');
+      return;
+    }
+    // If user data was updated in another tab, sync the state
+    if (e.key === 'user' && e.newValue) {
+      try {
+        const updatedUser = JSON.parse(e.newValue);
+        setUser(updatedUser);
+      } catch {
+        // Ignore parse errors
+      }
+    }
+  }, [navigate]);
+
+  useEffect(() => {
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [handleStorageChange]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
