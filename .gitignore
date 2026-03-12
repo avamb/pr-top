@@ -18,3 +18,7 @@ src/backend/data/
 src/backend/uploads/
 cookies*.txt
 test_regression_*.js
+test_*.js
+verify_*.js
+_test_*.js
+setup_*test*.js
