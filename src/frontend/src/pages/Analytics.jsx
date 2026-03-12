@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { formatUserDateOnly } from '../utils/formatDate';
 
 const API = 'http://localhost:3001/api';
 
@@ -402,7 +403,7 @@ export default function Analytics() {
                             </td>
                             <td className="px-4 py-3 text-sm text-right text-stone-400">
                               {client.last_activity
-                                ? new Date(client.last_activity).toLocaleDateString()
+                                ? formatUserDateOnly(client.last_activity)
                                 : t('clientList.noActivity')}
                             </td>
                           </tr>

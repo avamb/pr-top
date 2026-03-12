@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { formatUserDateOnly } from '../utils/formatDate';
 
 const PLAN_DETAILS = {
   trial: { name: 'Trial', price: 'Free', clients: 3, sessions: 5, features: ['Basic dashboard', 'Timeline view', 'SOS alerts'] },
@@ -150,7 +151,7 @@ export default function Subscription() {
       }
 
       if (data.subscription?.access_until) {
-        const accessDate = new Date(data.subscription.access_until).toLocaleDateString();
+        const accessDate = formatUserDateOnly(data.subscription.access_until);
         setSuccess(t('subscription.cancelSuccess', { date: accessDate }));
       } else {
         setSuccess(data.message);
@@ -185,7 +186,7 @@ export default function Subscription() {
       }
 
       if (data.subscription?.scheduled) {
-        const effectiveDate = new Date(data.subscription.effective_date).toLocaleDateString();
+        const effectiveDate = formatUserDateOnly(data.subscription.effective_date);
         setSuccess(t('subscription.downgradeSuccess', { plan: plan.charAt(0).toUpperCase() + plan.slice(1), date: effectiveDate }));
       } else {
         setSuccess(data.message);
@@ -259,12 +260,12 @@ export default function Subscription() {
             </span>
             {subscription?.trial_ends_at && currentPlan === 'trial' && (
               <span className="text-stone-500">
-                {t('subscription.trialEnds', { date: new Date(subscription.trial_ends_at).toLocaleDateString() })}
+                {t('subscription.trialEnds', { date: formatUserDateOnly(subscription.trial_ends_at) })}
               </span>
             )}
             {subscription?.current_period_end && currentPlan !== 'trial' && (
               <span className="text-stone-500">
-                {t('subscription.periodEnds', { date: new Date(subscription.current_period_end).toLocaleDateString() })}
+                {t('subscription.periodEnds', { date: formatUserDateOnly(subscription.current_period_end) })}
               </span>
             )}
           </div>
@@ -272,7 +273,7 @@ export default function Subscription() {
             <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
               {t('subscription.downgradeScheduled', {
                 plan: pendingPlan,
-                date: subscription?.current_period_end ? new Date(subscription.current_period_end).toLocaleDateString() : '',
+                date: subscription?.current_period_end ? formatUserDateOnly(subscription.current_period_end) : '',
                 currentPlan: currentPlan
               })}
             </div>
@@ -281,10 +282,10 @@ export default function Subscription() {
             <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
               {t('subscription.subscriptionCanceled')}
               {subscription?.current_period_end && (
-                <> {t('subscription.accessUntil', { date: new Date(subscription.current_period_end).toLocaleDateString() })}</>
+                <> {t('subscription.accessUntil', { date: formatUserDateOnly(subscription.current_period_end) })}</>
               )}
               {subscription?.canceled_at && (
-                <> {t('subscription.canceledOn', { date: new Date(subscription.canceled_at).toLocaleDateString() })}</>
+                <> {t('subscription.canceledOn', { date: formatUserDateOnly(subscription.canceled_at) })}</>
               )}
             </div>
           )}
@@ -398,9 +399,7 @@ export default function Subscription() {
                   {payments.map((payment) => (
                     <tr key={payment.id} className="hover:bg-stone-50">
                       <td className="px-6 py-4 text-sm text-stone-900">
-                        {new Date(payment.created_at).toLocaleDateString(undefined, {
-                          year: 'numeric', month: 'short', day: 'numeric'
-                        })}
+                        {formatUserDateOnly(payment.created_at)}
                       </td>
                       <td className="px-6 py-4 text-sm font-medium text-stone-900">
                         {formatAmount(payment.amount, payment.currency)}

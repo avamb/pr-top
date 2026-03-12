@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { formatUserDateOnly } from '../utils/formatDate';
 
 const API_URL = 'http://localhost:3001/api';
 
@@ -138,6 +139,12 @@ export default function Settings() {
       // Switch i18n language immediately
       i18n.changeLanguage(language);
       localStorage.setItem('app_language', language);
+      // Update user timezone in localStorage for formatDate utility
+      try {
+        var storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+        storedUser.timezone = timezone;
+        localStorage.setItem('user', JSON.stringify(storedUser));
+      } catch (e) { /* ignore */ }
       setSuccess(t('settings.settingsSaved'));
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
@@ -236,7 +243,7 @@ export default function Settings() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-stone-500 mb-1">{t('settings.memberSince')}</label>
-                    <p className="text-stone-800">{new Date(profile.created_at).toLocaleDateString()}</p>
+                    <p className="text-stone-800">{formatUserDateOnly(profile.created_at)}</p>
                   </div>
                 </div>
               </div>

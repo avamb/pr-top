@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { formatUserDateOnly } from '../utils/formatDate';
 
 const API_URL = 'http://localhost:3001/api';
 
@@ -225,7 +226,7 @@ export default function AdminDashboard() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-sm text-right text-stone-500">
-                            {new Date(payment.created_at).toLocaleDateString()}
+                            {formatUserDateOnly(payment.created_at)}
                           </td>
                         </tr>
                       ))}

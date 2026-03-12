@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { formatUserDateOnly } from '../utils/formatDate';
 
 const API_URL = 'http://localhost:3001/api';
 
@@ -164,7 +165,7 @@ export default function AdminTherapists() {
                     )}
                   </td>
                   <td className="px-6 py-4 text-sm text-secondary">
-                    {therapist.created_at ? new Date(therapist.created_at).toLocaleDateString() : '—'}
+                    {therapist.created_at ? formatUserDateOnly(therapist.created_at) : '—'}
                   </td>
                   <td className="px-6 py-4">
                     {therapist.is_blocked ? (

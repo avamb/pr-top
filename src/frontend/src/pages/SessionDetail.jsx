@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { formatUserDate } from '../utils/formatDate';
 
 const API = 'http://localhost:3001/api';
 
@@ -82,8 +83,8 @@ function SessionDetail() {
 
             <div className="flex gap-4 mb-6 text-sm text-stone-500">
               <span>{t('sessionDetail.clientId', { id: session.client_id })}</span>
-              <span>{t('sessionDetail.created', { date: new Date(session.created_at).toLocaleString() })}</span>
-              {session.scheduled_at && <span>{t('sessionDetail.scheduled', { date: new Date(session.scheduled_at).toLocaleString() })}</span>}
+              <span>{t('sessionDetail.created', { date: formatUserDate(session.created_at) })}</span>
+              {session.scheduled_at && <span>{t('sessionDetail.scheduled', { date: formatUserDate(session.scheduled_at) })}</span>}
             </div>
 
             {/* Audio Player Section */}

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { formatUserDate } from '../utils/formatDate';
 
 const API_URL = 'http://localhost:3001/api';
 
@@ -115,11 +116,7 @@ export default function AdminSystemLogs() {
 
   const formatTimestamp = (ts) => {
     if (!ts) return 'N/A';
-    try {
-      return new Date(ts).toLocaleString();
-    } catch (e) {
-      return ts;
-    }
+    return formatUserDate(ts) || ts;
   };
 
   if (loading && logs.length === 0) {

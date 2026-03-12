@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { formatUserDateOnly } from '../utils/formatDate';
 
 const API_URL = 'http://localhost:3001/api';
 
@@ -233,7 +234,7 @@ export default function AdminSettings() {
                     </div>
                     {settings[field.key]?.updated_at && (
                       <p className="text-xs text-secondary mt-1">
-                        {t('admin.lastUpdated', { date: new Date(settings[field.key].updated_at).toLocaleDateString() })}
+                        {t('admin.lastUpdated', { date: formatUserDateOnly(settings[field.key].updated_at) })}
                       </p>
                     )}
                   </div>

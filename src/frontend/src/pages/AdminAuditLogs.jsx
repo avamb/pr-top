@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { formatUserDate } from '../utils/formatDate';
 
 const API_URL = 'http://localhost:3001/api';
 
@@ -139,11 +140,11 @@ export default function AdminAuditLogs() {
     loadLogs(null, newPage);
   };
 
-  const formatDate = (dateStr) => {
+  const formatDateLocal = (dateStr) => {
     if (!dateStr) return 'N/A';
     try {
-      const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'Z'));
-      return d.toLocaleString();
+      const adjusted = dateStr + (dateStr.includes('T') ? '' : 'Z');
+      return formatUserDate(adjusted);
     } catch (e) {
       return dateStr;
     }
@@ -245,7 +246,7 @@ export default function AdminAuditLogs() {
                   logs.map(log => (
                     <tr key={log.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm text-secondary">#{log.id}</td>
-                      <td className="px-4 py-3 text-sm text-text whitespace-nowrap">{formatDate(log.created_at)}</td>
+                      <td className="px-4 py-3 text-sm text-text whitespace-nowrap">{formatDateLocal(log.created_at)}</td>
                       <td className="px-4 py-3 text-sm text-text">
                         {log.actor_id ? t('admin.userPrefix', { id: log.actor_id }) : t('admin.system')}
                       </td>

@@ -144,7 +144,8 @@ router.post('/register', async (req, res) => {
         id: userId,
         email: user[1],
         role: user[2],
-        created_at: user[3]
+        created_at: user[3],
+        timezone: userTimezone
       },
       token
     });
@@ -176,7 +177,7 @@ router.post('/login', async (req, res) => {
     logger.info(`Login attempt for: ${email}`);
 
     const result = db.exec(
-      'SELECT id, email, password_hash, role, blocked_at FROM users WHERE email = ?',
+      'SELECT id, email, password_hash, role, blocked_at, timezone FROM users WHERE email = ?',
       [email]
     );
 
@@ -213,7 +214,8 @@ router.post('/login', async (req, res) => {
       user: {
         id: user[0],
         email: user[1],
-        role: user[3]
+        role: user[3],
+        timezone: user[5] || 'UTC'
       },
       token
     });
