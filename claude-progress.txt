@@ -1309,3 +1309,24 @@ CURRENT STATUS: ~162/205 features passing (160 + 2 new)
   - Zero console errors
 
 CURRENT STATUS: ~170/205 features passing
+
+=== Session 2026-03-12_batch_166_167 ===
+
+- Feature #166: Submit button disabled during processing ✅
+  - Created reusable LoadingSpinner component (animated SVG spinner)
+  - Added spinner + disabled state to all 8 form buttons across 6 pages:
+    Login, Register, Settings (profile+escalation), ClientDetail (notes+context), AdminSettings, Subscription
+  - Added if(loading) return guard to Login handleSubmit
+  - Browser verified: button disabled during request, re-enables after error response
+  - Zero console errors, no mock data patterns
+
+- Feature #167: Deleting diary entry removes from timeline and search ✅
+  - Created diary entry 'CASCADE_DEL_55555' via bot API
+  - Verified present in diary list (1), timeline (1), and search results (1)
+  - Deleted entry via API and browser UI (confirm dialog)
+  - Verified removed from diary (0), timeline (0), and search (0)
+  - Vector embeddings also cascade-deleted from vector_embeddings table
+  - Browser E2E: Diary(1)→delete→Diary(0), Timeline(1)→Timeline(0)
+  - Zero JS console errors
+
+CURRENT STATUS: ~174/205 features passing (172 + 2 new)
