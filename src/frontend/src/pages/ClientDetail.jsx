@@ -75,9 +75,17 @@ function ClientDetail() {
     setSearchParams(params, { replace: true });
   }, [activeTab, typeFilter, dateFrom, dateTo, timelineStartDate, timelineEndDate, timelineTypeFilter]);
 
+  // Validate client ID is a positive integer
+  const isValidId = /^\d+$/.test(id) && Number(id) > 0;
+
   useEffect(() => {
     if (!token) {
       navigate('/login');
+      return;
+    }
+    if (!isValidId) {
+      setError('Invalid client ID');
+      setLoading(false);
       return;
     }
     fetchClient();
@@ -445,7 +453,15 @@ function ClientDetail() {
   if (error) {
     return (
       <div className="min-h-screen bg-stone-50 flex items-center justify-center">
-        <div className="text-red-600">{error}</div>
+        <div className="text-center">
+          <div className="text-red-600 text-lg mb-4">{error}</div>
+          <button
+            onClick={() => navigate('/clients')}
+            className="px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700"
+          >
+            {t('nav.clients', 'Back to Clients')}
+          </button>
+        </div>
       </div>
     );
   }
