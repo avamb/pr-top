@@ -17,6 +17,9 @@ function ClientDetail() {
   const [client, setClient] = useState(null);
   const [diary, setDiary] = useState([]);
   const [diaryTotal, setDiaryTotal] = useState(0);
+  const [diaryPage, setDiaryPage] = useState(1);
+  const [diaryHasMore, setDiaryHasMore] = useState(false);
+  const [diaryLoadingMore, setDiaryLoadingMore] = useState(false);
   const [notes, setNotes] = useState([]);
   const [notesTotal, setNotesTotal] = useState(0);
   const [newNoteContent, setNewNoteContent] = useState('');
@@ -80,6 +83,8 @@ function ClientDetail() {
       setTimelineEndDate(new Date().toISOString().split('T')[0]);
       setTimelineTypeFilter('');
       // Reset pagination
+      setDiaryPage(1);
+      setDiaryHasMore(false);
       setTimelinePage(1);
       setTimelineHasMore(false);
       // Reset notes search
@@ -179,14 +184,22 @@ function ClientDetail() {
     }
   }
 
-  async function fetchDiary() {
+  async function fetchDiary(loadMore = false) {
     try {
-      setLoading(true);
+      if (loadMore) {
+        setDiaryLoadingMore(true);
+      } else {
+        setLoading(true);
+        setDiaryPage(1);
+      }
       setDiaryError('');
+      const currentPage = loadMore ? diaryPage + 1 : 1;
       const params = new URLSearchParams();
       if (typeFilter) params.set('entry_type', typeFilter);
       if (dateFrom) params.set('date_from', dateFrom);
       if (dateTo) params.set('date_to', dateTo);
+      params.set('page', currentPage);
+      params.set('per_page', '25');
       const qs = params.toString();
       const url = `${API}/clients/${id}/diary${qs ? '?' + qs : ''}`;
       const res = await fetch(url, {
@@ -198,12 +211,19 @@ function ClientDetail() {
         return;
       }
       const data = await res.json();
-      setDiary(data.entries);
+      if (loadMore) {
+        setDiary(prev => [...prev, ...data.entries]);
+        setDiaryPage(currentPage);
+      } else {
+        setDiary(data.entries);
+      }
       setDiaryTotal(data.total);
+      setDiaryHasMore(currentPage < (data.total_pages || 1));
     } catch (e) {
       setDiaryError(e.message);
     } finally {
       setLoading(false);
+      setDiaryLoadingMore(false);
     }
   }
 
@@ -1199,6 +1219,21 @@ function ClientDetail() {
                   )}
                 </div>
               ))}
+              {/* Diary Pagination */}
+              <div className="mt-4 text-center">
+                <p className="text-sm text-stone-500 mb-2">
+                  Showing {diary.length} of {diaryTotal} entries
+                </p>
+                {diaryHasMore && (
+                  <button
+                    onClick={() => fetchDiary(true)}
+                    disabled={diaryLoadingMore}
+                    className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
+                  >
+                    {diaryLoadingMore ? 'Loading...' : 'Load More'}
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>}
