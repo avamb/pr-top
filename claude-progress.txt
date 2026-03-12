@@ -955,3 +955,22 @@ CURRENT STATUS: ~138/205 features passing (136 + 2 new)
   - Zero console errors
 
 CURRENT STATUS: ~140/205 features passing (138 + 2 new)
+
+=== Session 2026-03-12_batch_126_127 ===
+
+- Feature #126: Login with wrong password shows error ✅
+  - Registered user, then attempted login with wrong password
+  - Backend returns 401 with "Invalid credentials" (generic message)
+  - No token/session created
+  - Error banner displayed in UI, form stays on /login
+  - Verified via API test and browser automation with screenshot
+
+- Feature #127: Login with non-existent email shows error ✅
+  - Attempted login with totally_nonexistent_user@example.com
+  - Backend returns 401 with same "Invalid credentials" message
+  - No email enumeration possible (same error for both cases - security best practice)
+  - No token/session created
+  - Error banner displayed in UI, form stays on /login
+  - Verified via API test and browser automation with screenshot
+
+CURRENT STATUS: ~142/205 features passing (140 + 2 new)
