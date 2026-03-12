@@ -1,5 +1,28 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-12_batch_128_131 ===
+
+- Feature #128: Empty required fields show validation errors ✅
+  - Registration form: per-field "This field is required" messages under each empty field
+  - Login form: same per-field validation with red borders on empty fields
+  - Added noValidate to login form for custom validation (was using HTML5 native)
+  - Banner error "Please fill in all required fields" shown at top
+  - Red border on invalid fields, clears when user starts typing
+  - i18n translations added for en/ru/es (fieldRequired, fillRequiredFields)
+  - Form stays on page, not submitted when empty
+  - Zero console errors (verified via browser automation)
+
+- Feature #131: API returns 404 for non-existent client ✅
+  - GET /api/clients/99999 → 404 {"error":"Client not found or not linked to you"}
+  - GET /api/clients/0 → 404 (same helpful message)
+  - GET /api/clients/abc → 404 (non-numeric ID handled gracefully)
+  - No auth → 401 (unauthorized properly handled)
+  - No server crash or 500 on any invalid client ID
+  - UI shows "Failed to fetch client" message on non-existent client page
+  - Verified via API tests and browser automation
+
+CURRENT STATUS: ~144/205 features passing (142 + 2 new)
+
 === Session 2026-03-11_22:54 (features #115, #116) ===
 
 - Feature #115: Empty state shown when no sessions exist ✅
