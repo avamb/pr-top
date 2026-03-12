@@ -59,6 +59,16 @@ router.post('/register', async (req, res) => {
       return res.status(409).json({ error: 'User with this email already exists' });
     }
 
+    // Validate password strength
+    const pwdErrors = [];
+    if (password.length < 8) pwdErrors.push('at least 8 characters');
+    if (!/[A-Z]/.test(password)) pwdErrors.push('at least one uppercase letter');
+    if (!/[a-z]/.test(password)) pwdErrors.push('at least one lowercase letter');
+    if (!/[0-9]/.test(password)) pwdErrors.push('at least one number');
+    if (pwdErrors.length > 0) {
+      return res.status(400).json({ error: 'Password does not meet requirements: ' + pwdErrors.join(', ') });
+    }
+
     // Hash password
     const passwordHash = await bcrypt.hash(password, 12);
     const inviteCode = uuidv4().slice(0, 8);

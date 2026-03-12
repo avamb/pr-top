@@ -81,7 +81,13 @@
     "networkError": "Ошибка сети. Попробуйте снова.",
     "emailPasswordRequired": "Требуется электронная почта и пароль",
     "passwordMinLength": "Пароль должен содержать не менее 6 символов",
-    "passwordMismatch": "Пароли не совпадают"
+    "passwordMismatch": "Пароли не совпадают",
+    "passwordWeak": "Пароль не соответствует требованиям",
+    "passwordReqLength": "Минимум 8 символов",
+    "passwordReqUppercase": "Минимум одна заглавная буква",
+    "passwordReqLowercase": "Минимум одна строчная буква",
+    "passwordReqNumber": "Минимум одна цифра",
+    "passwordStrengthPlaceholder": "Мин. 8 символов, заглавная, строчная, цифра"
   },
   "dashboard": {
     "title": "Панель PsyLink",

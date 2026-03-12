@@ -81,7 +81,13 @@
     "networkError": "Error de red. Inténtalo de nuevo.",
     "emailPasswordRequired": "Se requiere correo electrónico y contraseña",
     "passwordMinLength": "La contraseña debe tener al menos 6 caracteres",
-    "passwordMismatch": "Las contraseñas no coinciden"
+    "passwordMismatch": "Las contraseñas no coinciden",
+    "passwordWeak": "La contraseña no cumple los requisitos",
+    "passwordReqLength": "Al menos 8 caracteres",
+    "passwordReqUppercase": "Al menos una letra mayúscula",
+    "passwordReqLowercase": "Al menos una letra minúscula",
+    "passwordReqNumber": "Al menos un número",
+    "passwordStrengthPlaceholder": "Mín. 8 car., mayúscula, minúscula, número"
   },
   "dashboard": {
     "title": "Panel de PsyLink",

@@ -43,8 +43,22 @@ export default function Register() {
       return;
     }
 
-    if (form.password.length < 6) {
-      setError(t('auth.passwordMinLength'));
+    // Password strength validation
+    const passwordErrors = [];
+    if (form.password.length < 8) {
+      passwordErrors.push(t('auth.passwordReqLength', 'At least 8 characters'));
+    }
+    if (!/[A-Z]/.test(form.password)) {
+      passwordErrors.push(t('auth.passwordReqUppercase', 'At least one uppercase letter'));
+    }
+    if (!/[a-z]/.test(form.password)) {
+      passwordErrors.push(t('auth.passwordReqLowercase', 'At least one lowercase letter'));
+    }
+    if (!/[0-9]/.test(form.password)) {
+      passwordErrors.push(t('auth.passwordReqNumber', 'At least one number'));
+    }
+    if (passwordErrors.length > 0) {
+      setError(t('auth.passwordWeak', 'Password does not meet requirements') + ': ' + passwordErrors.join(', '));
       return;
     }
 
@@ -141,7 +155,7 @@ export default function Register() {
                 value={form.password}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                placeholder={t('auth.passwordMinPlaceholder')}
+                placeholder={t('auth.passwordStrengthPlaceholder', 'Min 8 chars, upper, lower, number')}
               />
             </div>
 

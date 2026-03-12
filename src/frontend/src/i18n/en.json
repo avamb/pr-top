@@ -81,7 +81,13 @@
     "networkError": "Network error. Please try again.",
     "emailPasswordRequired": "Email and password are required",
     "passwordMinLength": "Password must be at least 6 characters",
-    "passwordMismatch": "Passwords do not match"
+    "passwordMismatch": "Passwords do not match",
+    "passwordWeak": "Password does not meet requirements",
+    "passwordReqLength": "At least 8 characters",
+    "passwordReqUppercase": "At least one uppercase letter",
+    "passwordReqLowercase": "At least one lowercase letter",
+    "passwordReqNumber": "At least one number",
+    "passwordStrengthPlaceholder": "Min 8 chars, upper, lower, number"
   },
   "dashboard": {
     "title": "PsyLink Dashboard",
