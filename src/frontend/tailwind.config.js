@@ -8,7 +8,7 @@ export default {
     extend: {
       colors: {
         primary: {
-          DEFAULT: '#0D9488',
+          DEFAULT: '#0F766E',  // WCAG AA: 5.47:1 contrast with white
           50: '#F0FDFA',
           100: '#CCFBF1',
           200: '#99F6E4',
@@ -25,7 +25,7 @@ export default {
         background: '#FAFAF9',
         surface: '#F5F5F4',
         text: '#1C1917',
-        error: '#EF4444',
+        error: '#DC2626',  // WCAG AA: 4.62:1 contrast on light bg (was #EF4444 at 3.60:1)
         success: '#10B981',
       },
       fontFamily: {
