@@ -45,6 +45,12 @@ export default function Subscription() {
       const res = await fetch('/api/subscription/current', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      if (res.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        navigate('/login');
+        return;
+      }
       const data = await res.json();
       setSubscription(data.subscription);
     } catch (err) {

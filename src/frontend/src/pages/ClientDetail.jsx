@@ -94,6 +94,12 @@ function ClientDetail() {
       const res = await fetch(`${API}/clients/${id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      if (res.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        navigate('/login');
+        return;
+      }
       if (!res.ok) throw new Error('Failed to fetch client');
       const data = await res.json();
       setClient(data.client);
