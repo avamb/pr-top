@@ -559,7 +559,7 @@ function ClientDetail() {
 
   return (
     <div>
-      <main id="main-content" className="max-w-6xl mx-auto px-6 py-8">
+      <main id="main-content" className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {client && (
           <div className="mb-6">
             <Breadcrumb items={[
@@ -570,7 +570,7 @@ function ClientDetail() {
             <h2 className="text-2xl font-bold text-stone-800">
               Client: {client.email || client.telegram_id || `#${client.id}`}
             </h2>
-            <div className="flex gap-4 mt-2 text-sm text-stone-500">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-stone-500">
               <span>{t('clientDetail.language')}: {(client.language || 'en').toUpperCase()}</span>
               <span>{t('clientDetail.consent')}: {client.consent_therapist_access ? t('clientDetail.consentGranted') : t('clientDetail.consentNotGranted')}</span>
               <span>{t('clientDetail.joined')}: {formatUserDateOnly(client.created_at)}</span>
@@ -579,30 +579,30 @@ function ClientDetail() {
         )}
 
         {/* Tab Navigation */}
-        <div className="flex gap-2 mb-6">
+        <div className="flex gap-2 mb-6 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-thin">
           <button
             onClick={() => setActiveTab('timeline')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'timeline' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] ${activeTab === 'timeline' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >📊 {t('clientDetail.timeline')} ({timelineTotal})</button>
           <button
             onClick={() => setActiveTab('diary')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'diary' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] ${activeTab === 'diary' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >📝 {t('clientDetail.diary')} ({diaryTotal})</button>
           <button
             onClick={() => setActiveTab('notes')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'notes' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] ${activeTab === 'notes' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >🗒️ {t('clientDetail.notesTab')} ({notesTotal})</button>
           <button
             onClick={() => setActiveTab('sessions')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'sessions' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] ${activeTab === 'sessions' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >🎧 {t('clientDetail.sessionsTab')} ({sessionsTotal})</button>
           <button
             onClick={() => setActiveTab('exercises')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'exercises' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] ${activeTab === 'exercises' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >💪 {t('clientDetail.exercisesTab')} ({exercisesTotal})</button>
           <button
             onClick={() => setActiveTab('context')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'context' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] ${activeTab === 'context' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >🧠 {t('clientDetail.contextTab')}</button>
         </div>
 
