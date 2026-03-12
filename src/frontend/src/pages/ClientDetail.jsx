@@ -34,6 +34,9 @@ function ClientDetail() {
   const [timeline, setTimeline] = useState([]);
   const [timelineTotal, setTimelineTotal] = useState(0);
   const [timelineLoading, setTimelineLoading] = useState(false);
+  const [timelinePage, setTimelinePage] = useState(1);
+  const [timelineHasMore, setTimelineHasMore] = useState(false);
+  const [timelineLoadingMore, setTimelineLoadingMore] = useState(false);
   const [timelineStartDate, setTimelineStartDate] = useState(searchParams.get('tl_start') || '');
   const [timelineEndDate, setTimelineEndDate] = useState(searchParams.get('tl_end') || '');
   const [timelineTypeFilter, setTimelineTypeFilter] = useState(searchParams.get('tl_type') || '');
@@ -271,13 +274,21 @@ function ClientDetail() {
     }
   }
 
-  async function fetchTimeline() {
+  async function fetchTimeline(loadMore = false) {
     try {
-      setTimelineLoading(true);
+      if (loadMore) {
+        setTimelineLoadingMore(true);
+      } else {
+        setTimelineLoading(true);
+        setTimelinePage(1);
+      }
+      const currentPage = loadMore ? timelinePage + 1 : 1;
       const params = new URLSearchParams();
       if (timelineStartDate) params.set('start_date', timelineStartDate);
       if (timelineEndDate) params.set('end_date', timelineEndDate);
       if (timelineTypeFilter) params.set('type', timelineTypeFilter);
+      params.set('page', currentPage);
+      params.set('per_page', '50');
       const qs = params.toString();
       const url = `${API}/clients/${id}/timeline${qs ? '?' + qs : ''}`;
       const res = await fetch(url, {
@@ -286,17 +297,26 @@ function ClientDetail() {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         console.error('Timeline error:', data.error);
-        setTimeline([]);
-        setTimelineTotal(0);
+        if (!loadMore) {
+          setTimeline([]);
+          setTimelineTotal(0);
+        }
         return;
       }
       const data = await res.json();
-      setTimeline(data.timeline);
+      if (loadMore) {
+        setTimeline(prev => [...prev, ...data.timeline]);
+        setTimelinePage(currentPage);
+      } else {
+        setTimeline(data.timeline);
+      }
       setTimelineTotal(data.total);
+      setTimelineHasMore(data.has_more || false);
     } catch (e) {
       console.error('Timeline fetch error:', e.message);
     } finally {
       setTimelineLoading(false);
+      setTimelineLoadingMore(false);
     }
   }
 
@@ -585,6 +605,21 @@ function ClientDetail() {
                     </div>
                   );
                 })}
+                {/* Pagination: showing count and Load More */}
+                <div className="mt-4 text-center">
+                  <p className="text-sm text-stone-500 mb-2">
+                    Showing {timeline.length} of {timelineTotal} items
+                  </p>
+                  {timelineHasMore && (
+                    <button
+                      onClick={() => fetchTimeline(true)}
+                      disabled={timelineLoadingMore}
+                      className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
+                    >
+                      {timelineLoadingMore ? 'Loading...' : 'Load More'}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>

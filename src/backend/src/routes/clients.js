@@ -717,6 +717,7 @@ router.put('/:id/context', (req, res) => {
 });
 
 // GET /api/clients/:id/timeline - Unified timeline of diary entries, notes, and sessions
+// Supports pagination via page & per_page query params (default: page=1, per_page=50)
 router.get('/:id/timeline', (req, res) => {
   try {
     const db = getDatabase();
@@ -725,6 +726,8 @@ router.get('/:id/timeline', (req, res) => {
     const startDate = req.query.start_date || '';
     const endDate = req.query.end_date || '';
     const sourceType = req.query.type || ''; // Filter by source type: diary, note, session
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const perPage = Math.min(200, Math.max(1, parseInt(req.query.per_page) || 50));
 
     // Verify client belongs to this therapist
     const clientResult = db.exec(
@@ -757,108 +760,140 @@ router.get('/:id/timeline', (req, res) => {
     const validTypes = ['diary', 'note', 'session'];
     const filterByType = sourceType && validTypes.includes(sourceType) ? sourceType : '';
 
-    const timeline = [];
-
-    // 1. Fetch diary entries (if not filtering or filtering by diary)
+    // First, get total counts efficiently (without decryption)
+    let totalCount = 0;
     if (!filterByType || filterByType === 'diary') {
-      const diaryResult = db.exec(
-        `SELECT id, entry_type, content_encrypted, transcript_encrypted, created_at
-         FROM diary_entries WHERE client_id = ?${dateFilter}
-         ORDER BY created_at DESC`,
+      const countResult = db.exec(
+        `SELECT COUNT(*) FROM diary_entries WHERE client_id = ?${dateFilter}`,
         [clientId, ...dateParams]
       );
+      if (countResult.length > 0) totalCount += countResult[0].values[0][0];
+    }
+    if (!filterByType || filterByType === 'note') {
+      const countResult = db.exec(
+        `SELECT COUNT(*) FROM therapist_notes WHERE therapist_id = ? AND client_id = ?${dateFilter}`,
+        [therapistId, clientId, ...dateParams]
+      );
+      if (countResult.length > 0) totalCount += countResult[0].values[0][0];
+    }
+    if (!filterByType || filterByType === 'session') {
+      const countResult = db.exec(
+        `SELECT COUNT(*) FROM sessions WHERE therapist_id = ? AND client_id = ?${dateFilter}`,
+        [therapistId, clientId, ...dateParams]
+      );
+      if (countResult.length > 0) totalCount += countResult[0].values[0][0];
+    }
 
-      if (diaryResult.length > 0 && diaryResult[0].values.length > 0) {
+    const totalPages = Math.ceil(totalCount / perPage);
+
+    // Use a UNION ALL approach for efficient paginated timeline
+    // We fetch only created_at and id+type to sort, then paginate, then fetch full details
+    // For simplicity with SQLite in-memory, we use a two-pass approach:
+    // Pass 1: Get sorted IDs for the requested page (lightweight - no decryption)
+    // Pass 2: Fetch full details only for items on this page
+
+    const allItems = [];
+
+    if (!filterByType || filterByType === 'diary') {
+      const diaryResult = db.exec(
+        `SELECT id, 'diary' as type, created_at FROM diary_entries WHERE client_id = ?${dateFilter}`,
+        [clientId, ...dateParams]
+      );
+      if (diaryResult.length > 0) {
         for (const row of diaryResult[0].values) {
-          let content = null;
-          let transcript = null;
-          try { if (row[2]) content = decrypt(row[2]); } catch (e) { content = '[decryption error]'; }
-          try { if (row[3]) transcript = decrypt(row[3]); } catch (e) { transcript = '[decryption error]'; }
-
-          timeline.push({
-            type: 'diary',
-            id: row[0],
-            entry_type: row[1],
-            content: content,
-            transcript: transcript,
-            created_at: row[4]
-          });
+          allItems.push({ id: row[0], source: 'diary', created_at: row[2] });
         }
       }
     }
 
-    // 2. Fetch therapist notes (if not filtering or filtering by note)
     if (!filterByType || filterByType === 'note') {
       const notesResult = db.exec(
-        `SELECT id, note_encrypted, session_date, created_at
-         FROM therapist_notes WHERE therapist_id = ? AND client_id = ?${dateFilter}
-         ORDER BY created_at DESC`,
+        `SELECT id, 'note' as type, created_at FROM therapist_notes WHERE therapist_id = ? AND client_id = ?${dateFilter}`,
         [therapistId, clientId, ...dateParams]
       );
-
-      if (notesResult.length > 0 && notesResult[0].values.length > 0) {
+      if (notesResult.length > 0) {
         for (const row of notesResult[0].values) {
-          let content = null;
-          try { if (row[1]) content = decrypt(row[1]); } catch (e) { content = '[decryption error]'; }
-
-          timeline.push({
-            type: 'note',
-            id: row[0],
-            content: content,
-            session_date: row[2],
-            created_at: row[3]
-          });
+          allItems.push({ id: row[0], source: 'note', created_at: row[2] });
         }
       }
     }
 
-    // 3. Fetch sessions (if not filtering or filtering by session)
     if (!filterByType || filterByType === 'session') {
       const sessionsResult = db.exec(
-        `SELECT id, audio_ref, transcript_encrypted, summary_encrypted, status, scheduled_at, created_at
-         FROM sessions WHERE therapist_id = ? AND client_id = ?${dateFilter}
-         ORDER BY created_at DESC`,
+        `SELECT id, 'session' as type, created_at FROM sessions WHERE therapist_id = ? AND client_id = ?${dateFilter}`,
         [therapistId, clientId, ...dateParams]
       );
-
-      if (sessionsResult.length > 0 && sessionsResult[0].values.length > 0) {
+      if (sessionsResult.length > 0) {
         for (const row of sessionsResult[0].values) {
-          let summary = null;
-          try { if (row[3]) summary = decrypt(row[3]); } catch (e) { summary = '[decryption error]'; }
-
-          timeline.push({
-            type: 'session',
-            id: row[0],
-            has_audio: !!row[1],
-            has_transcript: !!row[2],
-            summary: summary,
-            status: row[4],
-            scheduled_at: row[5],
-            created_at: row[6]
-          });
+          allItems.push({ id: row[0], source: 'session', created_at: row[2] });
         }
       }
     }
 
     // Sort all items chronologically (newest first)
-    timeline.sort((a, b) => {
-      const dateA = new Date(a.created_at);
-      const dateB = new Date(b.created_at);
-      return dateB - dateA;
-    });
+    allItems.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    // Apply pagination
+    const offset = (page - 1) * perPage;
+    const pageItems = allItems.slice(offset, offset + perPage);
+
+    // Now fetch full details only for items on this page (decrypt only what's needed)
+    const timeline = [];
+    for (const item of pageItems) {
+      if (item.source === 'diary') {
+        const result = db.exec(
+          'SELECT id, entry_type, content_encrypted, transcript_encrypted, created_at FROM diary_entries WHERE id = ?',
+          [item.id]
+        );
+        if (result.length > 0 && result[0].values.length > 0) {
+          const row = result[0].values[0];
+          let content = null;
+          let transcript = null;
+          try { if (row[2]) content = decrypt(row[2]); } catch (e) { content = '[decryption error]'; }
+          try { if (row[3]) transcript = decrypt(row[3]); } catch (e) { transcript = '[decryption error]'; }
+          timeline.push({ type: 'diary', id: row[0], entry_type: row[1], content, transcript, created_at: row[4] });
+        }
+      } else if (item.source === 'note') {
+        const result = db.exec(
+          'SELECT id, note_encrypted, session_date, created_at FROM therapist_notes WHERE id = ?',
+          [item.id]
+        );
+        if (result.length > 0 && result[0].values.length > 0) {
+          const row = result[0].values[0];
+          let content = null;
+          try { if (row[1]) content = decrypt(row[1]); } catch (e) { content = '[decryption error]'; }
+          timeline.push({ type: 'note', id: row[0], content, session_date: row[2], created_at: row[3] });
+        }
+      } else if (item.source === 'session') {
+        const result = db.exec(
+          'SELECT id, audio_ref, transcript_encrypted, summary_encrypted, status, scheduled_at, created_at FROM sessions WHERE id = ?',
+          [item.id]
+        );
+        if (result.length > 0 && result[0].values.length > 0) {
+          const row = result[0].values[0];
+          let summary = null;
+          try { if (row[3]) summary = decrypt(row[3]); } catch (e) { summary = '[decryption error]'; }
+          timeline.push({ type: 'session', id: row[0], has_audio: !!row[1], has_transcript: !!row[2], summary, status: row[4], scheduled_at: row[5], created_at: row[6] });
+        }
+      }
+    }
 
     // Audit log
     db.run(
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
-      [therapistId, 'read_timeline', 'client', clientId, JSON.stringify({ items_count: timeline.length })]
+      [therapistId, 'read_timeline', 'client', clientId, JSON.stringify({ items_count: timeline.length, page, total: totalCount })]
     );
     saveDatabase();
 
-    logger.info(`Therapist ${therapistId} accessed timeline for client ${clientId} (${timeline.length} items)`);
+    logger.info(`Therapist ${therapistId} accessed timeline for client ${clientId} (page ${page}/${totalPages}, ${timeline.length} items)`);
 
     res.json({
       timeline,
-      total: timeline.length,
+      total: totalCount,
+      page,
+      per_page: perPage,
+      total_pages: totalPages,
+      has_more: page < totalPages,
       filters: {
         start_date: startDate || null,
         end_date: endDate || null,
