@@ -242,6 +242,13 @@ function ClientDetail() {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      if (res.status === 404) {
+        // Entry was already deleted (e.g., by another session)
+        setContextMsg('This entry has already been deleted.');
+        fetchDiary();
+        fetchTimeline();
+        return;
+      }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         alert(data.error || 'Failed to delete diary entry');
