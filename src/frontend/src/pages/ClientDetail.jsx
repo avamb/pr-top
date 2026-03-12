@@ -32,8 +32,9 @@ function ClientDetail() {
   const [error, setError] = useState('');
   const [diaryError, setDiaryError] = useState('');
   const [typeFilter, setTypeFilter] = useState(searchParams.get('type') || '');
+  const todayStr = new Date().toISOString().split('T')[0];
   const [dateFrom, setDateFrom] = useState(searchParams.get('date_from') || '');
-  const [dateTo, setDateTo] = useState(searchParams.get('date_to') || '');
+  const [dateTo, setDateTo] = useState(searchParams.get('date_to') || todayStr);
   const [timeline, setTimeline] = useState([]);
   const [timelineTotal, setTimelineTotal] = useState(0);
   const [timelineLoading, setTimelineLoading] = useState(false);
@@ -41,7 +42,7 @@ function ClientDetail() {
   const [timelineHasMore, setTimelineHasMore] = useState(false);
   const [timelineLoadingMore, setTimelineLoadingMore] = useState(false);
   const [timelineStartDate, setTimelineStartDate] = useState(searchParams.get('tl_start') || '');
-  const [timelineEndDate, setTimelineEndDate] = useState(searchParams.get('tl_end') || '');
+  const [timelineEndDate, setTimelineEndDate] = useState(searchParams.get('tl_end') || todayStr);
   const [timelineTypeFilter, setTimelineTypeFilter] = useState(searchParams.get('tl_type') || '');
   const [sessions, setSessions] = useState([]);
   const [sessionsTotal, setSessionsTotal] = useState(0);
@@ -577,9 +578,9 @@ function ClientDetail() {
                 className="px-3 py-1.5 border border-stone-300 rounded text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
                 aria-label="Timeline end date"
               />
-              {(timelineStartDate || timelineEndDate) && (
+              {(timelineStartDate || timelineEndDate !== todayStr) && (
                 <button
-                  onClick={() => { setTimelineStartDate(''); setTimelineEndDate(''); }}
+                  onClick={() => { setTimelineStartDate(''); setTimelineEndDate(todayStr); }}
                   className="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
                 >Clear dates</button>
               )}
@@ -588,7 +589,7 @@ function ClientDetail() {
             {timelineLoading ? (
               <p className="text-stone-500 text-center py-8">Loading timeline...</p>
             ) : timeline.length === 0 ? (
-              <p className="text-stone-400 text-center py-8">No timeline items found{(timelineStartDate || timelineEndDate || timelineTypeFilter) ? ' for the selected filters' : ''}</p>
+              <p className="text-stone-400 text-center py-8">No timeline items found{(timelineStartDate || timelineEndDate !== todayStr || timelineTypeFilter) ? ' for the selected filters' : ''}</p>
             ) : (
               <div className="space-y-4">
                 {timeline.map((item, idx) => {
@@ -1092,9 +1093,9 @@ function ClientDetail() {
               className="px-3 py-1.5 border border-stone-300 rounded text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
               aria-label="Date to"
             />
-            {(dateFrom || dateTo) && (
+            {(dateFrom || dateTo !== todayStr) && (
               <button
-                onClick={() => { setDateFrom(''); setDateTo(''); }}
+                onClick={() => { setDateFrom(''); setDateTo(todayStr); }}
                 className="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
               >Clear dates</button>
             )}
@@ -1109,18 +1110,18 @@ function ClientDetail() {
             <p className="text-stone-500">Loading diary entries...</p>
           ) : diary.length === 0 ? (
             <div className="text-center py-12">
-              <div className="text-5xl mb-4">{(typeFilter || dateFrom || dateTo) ? '🔍' : '📓'}</div>
+              <div className="text-5xl mb-4">{(typeFilter || dateFrom || dateTo !== todayStr) ? '🔍' : '📓'}</div>
               <h3 className="text-lg font-medium text-stone-600 mb-2">
-                {(typeFilter || dateFrom || dateTo) ? t('no_diary_filtered', 'No diary entries match your filters') : t('no_diary_entries', 'No diary entries yet')}
+                {(typeFilter || dateFrom || dateTo !== todayStr) ? t('no_diary_filtered', 'No diary entries match your filters') : t('no_diary_entries', 'No diary entries yet')}
               </h3>
               <p className="text-sm text-stone-400 max-w-sm mx-auto">
-                {(typeFilter || dateFrom || dateTo)
+                {(typeFilter || dateFrom || dateTo !== todayStr)
                   ? t('no_diary_filtered_hint', 'Try adjusting or clearing your filters to see more entries.')
                   : t('no_diary_hint', 'Diary entries will appear here once the client submits them via the Telegram bot.')}
               </p>
-              {(typeFilter || dateFrom || dateTo) && (
+              {(typeFilter || dateFrom || dateTo !== todayStr) && (
                 <button
-                  onClick={() => { setTypeFilter(''); setDateFrom(''); setDateTo(''); }}
+                  onClick={() => { setTypeFilter(''); setDateFrom(''); setDateTo(todayStr); }}
                   className="mt-4 px-4 py-2 text-sm bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg transition-colors"
                 >
                   {t('clear_filters', 'Clear all filters')}

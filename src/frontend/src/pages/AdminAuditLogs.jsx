@@ -34,8 +34,9 @@ export default function AdminAuditLogs() {
   const [totalPages, setTotalPages] = useState(1);
   const [perPage] = useState(25);
   const [actionFilter, setActionFilter] = useState('');
+  const todayStr = new Date().toISOString().split('T')[0];
   const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateTo, setDateTo] = useState(todayStr);
   const [actions, setActions] = useState([]);
 
   useEffect(() => {
@@ -130,8 +131,8 @@ export default function AdminAuditLogs() {
   const handleClearFilters = () => {
     setActionFilter('');
     setDateFrom('');
-    setDateTo('');
-    loadLogs(null, 1, '', '', '');
+    setDateTo(todayStr);
+    loadLogs(null, 1, '', todayStr, '');
   };
 
   const handlePageChange = (newPage) => {
