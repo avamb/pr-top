@@ -1,5 +1,28 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-12_batch_158_159 ===
+
+- Feature #158: Direct URL access to /admin requires superadmin role ✅
+  - Added role check in AppLayout: non-superadmin users redirected from /admin/* to /dashboard
+  - Therapist → /admin/therapists: redirected to /dashboard (PASS)
+  - Therapist → /admin: redirected to /dashboard (PASS)
+  - Superadmin → /admin/therapists: page loads correctly with 291 therapists (PASS)
+  - Backend API: therapist gets 403 on all 4 admin endpoints (PASS)
+  - Backend API: superadmin gets 200 on all 4 admin endpoints (PASS)
+  - Zero console errors
+
+- Feature #159: URL with malformed client ID handled gracefully ✅
+  - Added client-side ID validation: /^\d+$/.test(id) && Number(id) > 0
+  - /clients/abc → "Invalid client ID" error page, zero console errors (PASS)
+  - /clients/0 → "Invalid client ID" error page, zero console errors (PASS)
+  - /clients/-5 → "Invalid client ID" error page, zero console errors (PASS)
+  - No unnecessary API calls made for invalid IDs
+  - "Back to Clients" button navigates to /clients correctly
+  - Server health check still OK (no crash)
+  - Enhanced error page with centered message and teal back button
+
+CURRENT STATUS: ~168/205 features passing
+
 === Session 2026-03-12_batch_155_157 ===
 
 - Feature #155: Unsaved changes warning on navigation away ✅
