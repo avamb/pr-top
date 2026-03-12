@@ -115,6 +115,76 @@ src/
 | NL Queries | No | No | Yes | Yes |
 | Analytics | Basic | Basic | Full | Full + Export |
 
+## Docker Deployment
+
+PsyLink is containerized for deployment via Docker Compose (compatible with Dokploy on Hetzner).
+
+### Quick Start with Docker
+
+```bash
+# 1. Copy and configure environment variables
+cp .env.example .env
+# Edit .env with your actual secrets, Telegram token, Stripe keys, etc.
+
+# 2. Build and start all services
+docker-compose up --build -d
+
+# 3. Access the application
+# Frontend: http://localhost (port 80)
+# Backend API: http://localhost/api/health (proxied through nginx)
+```
+
+### Services
+
+| Service | Description | Port |
+|---------|-------------|------|
+| **frontend** | React SPA served via nginx, proxies /api/* to backend | 80 (exposed) |
+| **backend** | Node.js Express API with SQLite | 3001 (internal) |
+| **bot** | Telegram bot (long-polling, no port) | none |
+
+### Architecture
+
+- **Frontend**: Multi-stage build (Vite build + nginx). Nginx serves static files and reverse-proxies `/api/*` to the backend container.
+- **Backend**: Node.js 18 Alpine. SQLite data persisted in a Docker named volume (`backend-data`).
+- **Bot**: Node.js 18 Alpine. Connects to backend via internal Docker network.
+
+### Environment Variables
+
+All secrets are injected via `.env` file (never baked into images). See `.env.example` for the full list. Required variables for production:
+
+- `JWT_SECRET` - Random string for JWT signing
+- `ENCRYPTION_MASTER_KEY` - Random string for data encryption
+- `BOT_API_KEY` - Shared secret between bot and backend
+- `TELEGRAM_BOT_TOKEN` - From BotFather
+- `STRIPE_SECRET_KEY` - Stripe API key (optional)
+
+### Production Notes
+
+- Change all default secrets in `.env` before deploying
+- The `backend-data` volume persists the SQLite database across container restarts
+- The `backend-uploads` volume persists encrypted audio/video session files separately
+- For HTTPS, configure a reverse proxy (Traefik, Caddy, or Dokploy's built-in SSL) in front of the frontend container
+- Health checks are configured on the backend; frontend waits for backend to be healthy before starting
+
+### Common Commands
+
+```bash
+# View logs
+docker-compose logs -f
+
+# Restart a single service
+docker-compose restart backend
+
+# Rebuild after code changes
+docker-compose up --build -d
+
+# Stop all services
+docker-compose down
+
+# Stop and remove volumes (WARNING: deletes data)
+docker-compose down -v
+```
+
 ## License
 
 Proprietary - All rights reserved.
