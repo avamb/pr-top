@@ -1,0 +1,30 @@
+{
+  "type": "diary",
+  "entries": [
+    {
+      "content": "TZ_ENTRY_A: Written at 2026-03-11T23:55:00Z (just before UTC midnight - Mar 11 in UTC, Mar 12 in Tokyo)",
+      "entry_type": "text",
+      "created_at": "2026-03-11T23:55:00.000Z"
+    },
+    {
+      "content": "TZ_ENTRY_B: Written at 2026-03-12T00:05:00Z (just after UTC midnight - Mar 12 in UTC, Mar 12 in Tokyo)",
+      "entry_type": "text",
+      "created_at": "2026-03-12T00:05:00.000Z"
+    },
+    {
+      "content": "TZ_ENTRY_C: Written at 2026-03-12T12:00:00Z (midday UTC - Mar 12 in UTC, Mar 12 in Tokyo)",
+      "entry_type": "text",
+      "created_at": "2026-03-12T12:00:00.000Z"
+    },
+    {
+      "content": "TZ_ENTRY_D: Written at 2026-03-12T14:30:00Z (afternoon UTC - Mar 12 in UTC, Mar 12 in Tokyo but still Mar 12)",
+      "entry_type": "text",
+      "created_at": "2026-03-12T14:30:00.000Z"
+    },
+    {
+      "content": "TZ_ENTRY_E: Written at 2026-03-12T15:01:00Z (3pm UTC - Mar 12 in UTC, Mar 13 00:01 in Tokyo!)",
+      "entry_type": "text",
+      "created_at": "2026-03-12T15:01:00.000Z"
+    }
+  ]
+}

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import Breadcrumb from '../components/Breadcrumb';
 import useNavigationBlocker from '../hooks/useNavigationBlocker';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { formatUserDate, formatUserDateOnly } from '../utils/formatDate';
+import { formatUserDate, formatUserDateOnly, getUserTimezone } from '../utils/formatDate';
 
 const API = 'http://localhost:3001/api';
 
@@ -206,6 +206,8 @@ function ClientDetail() {
       if (searchVal.trim()) params.set('search', searchVal.trim());
       params.set('page', currentPage);
       params.set('per_page', '25');
+      var tz = getUserTimezone();
+      if (tz) params.set('timezone', tz);
       const qs = params.toString();
       const url = `${API}/clients/${id}/diary${qs ? '?' + qs : ''}`;
       const res = await fetch(url, {
@@ -423,6 +425,8 @@ function ClientDetail() {
       if (timelineTypeFilter) params.set('type', timelineTypeFilter);
       params.set('page', currentPage);
       params.set('per_page', '50');
+      var tz = getUserTimezone();
+      if (tz) params.set('timezone', tz);
       const qs = params.toString();
       const url = `${API}/clients/${id}/timeline${qs ? '?' + qs : ''}`;
       const res = await fetch(url, {

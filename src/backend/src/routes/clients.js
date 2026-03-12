@@ -8,6 +8,66 @@ const { encrypt, decrypt } = require('../services/encryption');
 
 const router = express.Router();
 
+/**
+ * Convert a local datetime string (e.g. '2026-03-12T00:00:00') in a given IANA timezone
+ * to its UTC equivalent ISO string. If timezone is empty or invalid, returns the input as-is.
+ * This enables timezone-aware date filtering: a user in Asia/Tokyo filtering for March 12
+ * gets entries from March 12 00:00 Tokyo time (= March 11 15:00 UTC).
+ */
+function convertLocalDateToUTC(localDateTimeStr, timezone) {
+  if (!timezone || typeof timezone !== 'string') {
+    return localDateTimeStr;
+  }
+  try {
+    // Validate the timezone
+    Intl.DateTimeFormat('en-US', { timeZone: timezone });
+
+    // Parse the local datetime components
+    const parts = localDateTimeStr.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+    if (!parts) return localDateTimeStr;
+
+    const [, year, month, day, hour, min, sec] = parts;
+
+    // Create a date in UTC, then find the offset for the target timezone
+    // We use an iterative approach: start with UTC guess, then adjust
+    const utcGuess = new Date(Date.UTC(
+      parseInt(year), parseInt(month) - 1, parseInt(day),
+      parseInt(hour), parseInt(min), parseInt(sec)
+    ));
+
+    // Get what time it would be in the target timezone if it were this UTC time
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false
+    });
+    const localParts = formatter.formatToParts(utcGuess);
+    const getPart = (type) => {
+      const p = localParts.find(x => x.type === type);
+      return p ? parseInt(p.value) : 0;
+    };
+
+    const localYear = getPart('year');
+    const localMonth = getPart('month');
+    const localDay = getPart('day');
+    const localHour = getPart('hour') === 24 ? 0 : getPart('hour');
+    const localMin = getPart('minute');
+    const localSec = getPart('second');
+
+    // Calculate offset in milliseconds between UTC and local
+    const localAsUTC = new Date(Date.UTC(localYear, localMonth - 1, localDay, localHour, localMin, localSec));
+    const offsetMs = localAsUTC.getTime() - utcGuess.getTime();
+
+    // The UTC time we want is: local_time - offset
+    const targetUTC = new Date(utcGuess.getTime() - offsetMs);
+    return targetUTC.toISOString().replace('Z', '').substring(0, 19);
+  } catch (e) {
+    // Invalid timezone or parse error - return original
+    return localDateTimeStr;
+  }
+}
+
 // All client routes require authenticated therapist
 router.use(authenticate);
 router.use(requireRole('therapist', 'superadmin'));
@@ -191,14 +251,17 @@ router.get('/:id/diary', (req, res) => {
       params.push(entryType);
     }
 
-    // Date range filtering
+    // Date range filtering (timezone-aware: convert user's local date boundaries to UTC)
+    const userTimezone = req.query.timezone || '';
     if (dateFrom && /^\d{4}-\d{2}-\d{2}/.test(dateFrom)) {
       whereClause += ' AND created_at >= ?';
-      params.push(dateFrom.substring(0, 10) + 'T00:00:00');
+      const fromStr = dateFrom.substring(0, 10) + 'T00:00:00';
+      params.push(convertLocalDateToUTC(fromStr, userTimezone));
     }
     if (dateTo && /^\d{4}-\d{2}-\d{2}/.test(dateTo)) {
       whereClause += ' AND created_at <= ?';
-      params.push(dateTo.substring(0, 10) + 'T23:59:59');
+      const toStr = dateTo.substring(0, 10) + 'T23:59:59';
+      params.push(convertLocalDateToUTC(toStr, userTimezone));
     }
 
     // When search is active, we need to decrypt all entries first, then filter & paginate
@@ -616,7 +679,7 @@ router.put('/:id/context', (req, res) => {
     const db = getDatabase();
     const therapistId = req.user.id;
     const clientId = req.params.id;
-    const { anamnesis, current_goals, contraindications, ai_instructions } = req.body;
+    const { anamnesis, current_goals, contraindications, ai_instructions, expected_updated_at } = req.body;
 
     // At least one field must be provided
     if (!anamnesis && !current_goals && !contraindications && !ai_instructions) {
@@ -661,6 +724,43 @@ router.put('/:id/context', (req, res) => {
     let contextId;
     const hasExisting = existing.length > 0 && existing[0].values.length > 0;
 
+    // Optimistic concurrency control: check if data changed since client last fetched
+    if (hasExisting && expected_updated_at) {
+      const currentTimestamp = db.exec(
+        'SELECT updated_at FROM client_context WHERE therapist_id = ? AND client_id = ?',
+        [therapistId, clientId]
+      );
+      if (currentTimestamp.length > 0 && currentTimestamp[0].values.length > 0) {
+        const dbUpdatedAt = currentTimestamp[0].values[0][0];
+        if (dbUpdatedAt && dbUpdatedAt !== expected_updated_at) {
+          // Conflict detected - return latest data so client can merge
+          const latestRow = existing[0].values[0];
+          const decryptConflict = (encrypted) => {
+            if (!encrypted) return null;
+            try { return decrypt(encrypted); } catch (e) { return '[decryption error]'; }
+          };
+          const latestUpdatedAt = db.exec(
+            'SELECT updated_at FROM client_context WHERE therapist_id = ? AND client_id = ?',
+            [therapistId, clientId]
+          );
+          return res.status(409).json({
+            error: 'Context was modified by another session. Please review the latest version and try again.',
+            conflict: true,
+            latest_context: {
+              id: latestRow[0],
+              client_id: parseInt(clientId),
+              therapist_id: therapistId,
+              anamnesis: decryptConflict(latestRow[1]),
+              current_goals: decryptConflict(latestRow[2]),
+              contraindications: decryptConflict(latestRow[3]),
+              ai_instructions: decryptConflict(latestRow[4]),
+              updated_at: latestUpdatedAt[0].values[0][0]
+            }
+          });
+        }
+      }
+    }
+
     if (hasExisting) {
       // Update existing context - merge: keep existing encrypted values for fields not provided
       const existingRow = existing[0].values[0];
@@ -682,15 +782,16 @@ router.put('/:id/context', (req, res) => {
       const keyId = encResult ? encResult.keyId : null;
       const keyVersion = encResult ? encResult.keyVersion : null;
 
+      const nowISO = new Date().toISOString();
       const updateParts = [
         'anamnesis_encrypted = ?',
         'current_goals_encrypted = ?',
         'contraindications_encrypted = ?',
         'ai_instructions_encrypted = ?',
-        "updated_at = datetime('now')"
+        'updated_at = ?'
       ];
 
-      const updateParams = [finalAnamnesis, finalGoals, finalContraindications, finalAiInstructions];
+      const updateParams = [finalAnamnesis, finalGoals, finalContraindications, finalAiInstructions, nowISO];
 
       if (keyId !== null) {
         updateParts.push('encryption_key_id = ?', 'payload_version = ?');
@@ -713,11 +814,12 @@ router.put('/:id/context', (req, res) => {
       // Get key info from whichever field was encrypted
       const encResult = anamnesisEnc || goalsEnc || contraindicationsEnc || aiInstructionsEnc;
 
+      const insertNow = new Date().toISOString();
       db.run(
         `INSERT INTO client_context (therapist_id, client_id, anamnesis_encrypted, current_goals_encrypted,
          contraindications_encrypted, ai_instructions_encrypted, encryption_key_id, payload_version,
          created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           therapistId, clientId,
           anamnesisEnc ? anamnesisEnc.encrypted : null,
@@ -725,7 +827,8 @@ router.put('/:id/context', (req, res) => {
           contraindicationsEnc ? contraindicationsEnc.encrypted : null,
           aiInstructionsEnc ? aiInstructionsEnc.encrypted : null,
           encResult ? encResult.keyId : null,
-          encResult ? encResult.keyVersion : null
+          encResult ? encResult.keyVersion : null,
+          insertNow, insertNow
         ]
       );
 
@@ -804,16 +907,19 @@ router.get('/:id/timeline', (req, res) => {
       return res.status(403).json({ error: 'Client has not granted consent for data access' });
     }
 
-    // Build date filter clause
+    // Build date filter clause (normalize date strings like diary endpoint)
+    const userTimezone = req.query.timezone || '';
     let dateFilter = '';
     const dateParams = [];
-    if (startDate) {
+    if (startDate && /^\d{4}-\d{2}-\d{2}/.test(startDate)) {
       dateFilter += ' AND created_at >= ?';
-      dateParams.push(startDate);
+      const startDateStr = startDate.substring(0, 10) + 'T00:00:00';
+      dateParams.push(convertLocalDateToUTC(startDateStr, userTimezone));
     }
-    if (endDate) {
+    if (endDate && /^\d{4}-\d{2}-\d{2}/.test(endDate)) {
       dateFilter += ' AND created_at <= ?';
-      dateParams.push(endDate);
+      const endDateStr = endDate.substring(0, 10) + 'T23:59:59';
+      dateParams.push(convertLocalDateToUTC(endDateStr, userTimezone));
     }
 
     // Validate source type filter
