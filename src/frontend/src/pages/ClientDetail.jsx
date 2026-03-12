@@ -200,7 +200,7 @@ function ClientDetail() {
 
   async function handleCreateNote(e) {
     e.preventDefault();
-    if (!newNoteContent.trim()) return;
+    if (!newNoteContent.trim() || creatingNote) return;
     setCreatingNote(true);
     try {
       const res = await fetch(`${API}/clients/${id}/notes`, {
