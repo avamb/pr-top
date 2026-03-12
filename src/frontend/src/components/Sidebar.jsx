@@ -175,7 +175,7 @@ export default function Sidebar({ user, isOpen, onToggle }) {
               <li key={item.key}>
                 <button
                   onClick={() => safeNavigate(item.path)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1 ${
                     active
                       ? 'bg-primary/10 text-primary'
                       : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'
@@ -205,7 +205,7 @@ export default function Sidebar({ user, isOpen, onToggle }) {
                   <li key={item.key}>
                     <button
                       onClick={() => safeNavigate(item.path)}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1 ${
                         active
                           ? 'bg-red-50 text-red-700'
                           : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'
@@ -228,7 +228,7 @@ export default function Sidebar({ user, isOpen, onToggle }) {
         <div className="px-3 text-xs text-stone-500 truncate">{user?.email}</div>
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-stone-600 hover:bg-red-50 hover:text-red-700 transition-colors"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-stone-600 hover:bg-red-50 hover:text-red-700 transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1"
         >
           <LogoutIcon />
           {t('nav.logout')}

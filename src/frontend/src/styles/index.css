@@ -9,6 +9,20 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Global focus-visible styles for accessibility */
+*:focus-visible {
+  outline: 2px solid #0D9488;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Override for elements that already have focus:ring styles */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+}
+
 /* Skip to content link for accessibility */
 .skip-to-content {
   position: absolute;

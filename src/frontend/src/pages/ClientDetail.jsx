@@ -362,6 +362,11 @@ function ClientDetail() {
         return;
       }
 
+      // Send expected_updated_at for optimistic concurrency control
+      if (context && context.updated_at) {
+        body.expected_updated_at = context.updated_at;
+      }
+
       const res = await fetch(`${API}/clients/${id}/context`, {
         method: 'PUT',
         headers: {
@@ -370,6 +375,24 @@ function ClientDetail() {
         },
         body: JSON.stringify(body)
       });
+      if (res.status === 409) {
+        // Conflict detected - another session modified the context
+        const conflictData = await res.json().catch(() => ({}));
+        if (conflictData.conflict && conflictData.latest_context) {
+          setContext(conflictData.latest_context);
+          setContextForm({
+            anamnesis: conflictData.latest_context.anamnesis || '',
+            current_goals: conflictData.latest_context.current_goals || '',
+            contraindications: conflictData.latest_context.contraindications || '',
+            ai_instructions: conflictData.latest_context.ai_instructions || ''
+          });
+          setContextDirty(false);
+        }
+        setContextMsg('Conflict: Context was modified in another session. The latest version has been loaded. Please review and save again.');
+        setContextSaving(false);
+        return;
+      }
+
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to save context');
@@ -582,27 +605,27 @@ function ClientDetail() {
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-thin">
           <button
             onClick={() => setActiveTab('timeline')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] ${activeTab === 'timeline' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'timeline' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >📊 {t('clientDetail.timeline')} ({timelineTotal})</button>
           <button
             onClick={() => setActiveTab('diary')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] ${activeTab === 'diary' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'diary' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >📝 {t('clientDetail.diary')} ({diaryTotal})</button>
           <button
             onClick={() => setActiveTab('notes')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] ${activeTab === 'notes' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'notes' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >🗒️ {t('clientDetail.notesTab')} ({notesTotal})</button>
           <button
             onClick={() => setActiveTab('sessions')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] ${activeTab === 'sessions' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'sessions' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >🎧 {t('clientDetail.sessionsTab')} ({sessionsTotal})</button>
           <button
             onClick={() => setActiveTab('exercises')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] ${activeTab === 'exercises' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'exercises' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >💪 {t('clientDetail.exercisesTab')} ({exercisesTotal})</button>
           <button
             onClick={() => setActiveTab('context')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] ${activeTab === 'context' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'context' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >🧠 {t('clientDetail.contextTab')}</button>
         </div>
 
@@ -1140,19 +1163,19 @@ function ClientDetail() {
               </label>
               <button
                 onClick={() => setTypeFilter('')}
-                className={`px-3 py-1 rounded text-sm ${!typeFilter ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+                className={`px-3 py-1 rounded text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${!typeFilter ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
               >All</button>
               <button
                 onClick={() => setTypeFilter('text')}
-                className={`px-3 py-1 rounded text-sm ${typeFilter === 'text' ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+                className={`px-3 py-1 rounded text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${typeFilter === 'text' ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
               >📝 Text</button>
               <button
                 onClick={() => setTypeFilter('voice')}
-                className={`px-3 py-1 rounded text-sm ${typeFilter === 'voice' ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+                className={`px-3 py-1 rounded text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${typeFilter === 'voice' ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
               >🎤 Voice</button>
               <button
                 onClick={() => setTypeFilter('video')}
-                className={`px-3 py-1 rounded text-sm ${typeFilter === 'video' ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+                className={`px-3 py-1 rounded text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${typeFilter === 'video' ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
               >🎥 Video</button>
             </div>
           </div>
