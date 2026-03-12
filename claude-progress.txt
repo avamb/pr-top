@@ -1129,3 +1129,30 @@ CURRENT STATUS: ~154/205 features passing (152 + 2 new)
   - Zero console errors
 
 CURRENT STATUS: ~156/205 features passing (154 + 2 new)
+
+=== Session 2026-03-12_batch_147_148 ===
+
+- Feature #147: Client activity timestamp updates on new activity ✅
+  - Registered therapist + client, linked via invite code + consent
+  - Initial client list shows "No activity" (last_activity: null)
+  - Submitted diary entry via bot API
+  - Refreshed client list: last_activity updated to "1h ago" with green dot
+  - Tooltip shows exact diary creation timestamp
+  - SQL query correctly computes MAX(created_at) from diary_entries, therapist_notes, sessions
+  - API test: initial null → post-diary timestamp (PASS)
+  - Browser test: screenshots confirm before/after state change
+  - Zero console errors, no mock data patterns
+
+- Feature #148: Session audio stored securely with no public URLs ✅
+  - Uploaded test audio file via authenticated API → 201 Created
+  - Audio stored as encrypted .enc file with opaque UUID filename
+  - Storage directory: src/backend/data/sessions/ (non-public)
+  - 6 direct URL paths tested: all return 404 (no public access)
+    - /data/sessions/{ref}, /sessions/{ref}, /{ref}, /api/sessions/audio/{ref}, /uploads/{ref}, /static/{ref}
+  - Authenticated GET /api/sessions/:id returns session data (200)
+  - Unauthenticated GET /api/sessions/:id returns 401
+  - No express.static serving data directory
+  - Files encrypted at rest (encryptFileOnDisk function)
+  - Zero console errors, no mock data patterns
+
+CURRENT STATUS: ~158/205 features passing (156 + 2 new)
