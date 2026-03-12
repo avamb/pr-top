@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 import { useCsrfToken } from '../hooks/useCsrfToken';
 import LoadingSpinner from '../components/LoadingSpinner';
 
@@ -111,6 +112,8 @@ export default function Register() {
           email: form.email,
           password: form.password,
           role: 'therapist',
+          language: i18n.language || 'en',
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
           ...utmParams
         })
       });

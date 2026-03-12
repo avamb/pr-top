@@ -36,7 +36,7 @@ function extractToken(req) {
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, role, utm_source, utm_medium, utm_campaign, utm_content, utm_term } = req.body;
+    const { email, password, role, language, timezone, utm_source, utm_medium, utm_campaign, utm_content, utm_term } = req.body;
 
     // Validate required fields individually
     const missingFields = [];
@@ -82,10 +82,15 @@ router.post('/register', async (req, res) => {
 
     logger.info(`Registering new user: ${email} with role: ${userRole}`);
 
-    // Insert user into database with UTM tracking
+    // Validate and set language/timezone defaults
+    const supportedLanguages = ['en', 'ru', 'es'];
+    const userLanguage = supportedLanguages.includes(language) ? language : 'en';
+    const userTimezone = (timezone && typeof timezone === 'string' && timezone.length <= 100) ? timezone : 'UTC';
+
+    // Insert user into database with UTM tracking and locale defaults
     db.run(
-      'INSERT INTO users (email, password_hash, role, invite_code, utm_source, utm_medium, utm_campaign, utm_content, utm_term) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [email, passwordHash, userRole, inviteCode, utm_source || null, utm_medium || null, utm_campaign || null, utm_content || null, utm_term || null]
+      'INSERT INTO users (email, password_hash, role, invite_code, language, timezone, utm_source, utm_medium, utm_campaign, utm_content, utm_term) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [email, passwordHash, userRole, inviteCode, userLanguage, userTimezone, utm_source || null, utm_medium || null, utm_campaign || null, utm_content || null, utm_term || null]
     );
 
     // Save to disk after write

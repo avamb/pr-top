@@ -12,7 +12,11 @@ i18n
       ru: { translation: ru },
       es: { translation: es }
     },
-    lng: localStorage.getItem('app_language') || 'en',
+    lng: localStorage.getItem('app_language') || (() => {
+      // Detect browser locale and map to supported language
+      const browserLang = (navigator.language || navigator.userLanguage || 'en').split('-')[0];
+      return ['en', 'ru', 'es'].includes(browserLang) ? browserLang : 'en';
+    })(),
     fallbackLng: 'en',
     interpolation: {
       escapeValue: false
