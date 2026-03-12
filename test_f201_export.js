@@ -1,96 +1,94 @@
 var http = require('http');
 
-function request(method, path, body, headers) {
+function req(method, path, body, hdrs) {
   return new Promise(function(resolve, reject) {
     var opts = {
-      hostname: '127.0.0.1',
-      port: 3001,
-      path: path,
-      method: method,
-      headers: Object.assign({ 'Content-Type': 'application/json' }, headers || {})
+      hostname: '127.0.0.1', port: 3001, path: path, method: method,
+      headers: Object.assign({'Content-Type':'application/json'}, hdrs || {})
     };
-    var req = http.request(opts, function(res) {
-      var data = '';
-      res.on('data', function(chunk) { data += chunk; });
-      res.on('end', function() {
-        resolve({ status: res.statusCode, headers: res.headers, body: data });
-      });
+    var r = http.request(opts, function(res) {
+      var d = '';
+      res.on('data', function(c) { d += c; });
+      res.on('end', function() { resolve({status: res.statusCode, headers: res.headers, body: d}); });
     });
-    req.on('error', reject);
-    if (body) req.write(JSON.stringify(body));
-    req.end();
+    r.on('error', reject);
+    if (body) r.write(JSON.stringify(body));
+    r.end();
   });
 }
 
-var BOT_HDR = { 'x-bot-api-key': 'dev-bot-api-key' };
+var BOT = { 'x-bot-api-key': 'dev-bot-api-key' };
+var uid = Date.now();
 
 async function main() {
-  // 1. Get CSRF
-  var csrfRes = await request('GET', '/api/csrf-token');
-  var csrf = JSON.parse(csrfRes.body).csrfToken;
+  // 1. CSRF
+  var csrfR = await req('GET', '/api/csrf-token');
+  var csrf = JSON.parse(csrfR.body).csrfToken;
 
-  // 2. Register therapist
-  var regRes = await request('POST', '/api/auth/register',
-    { email: 'export_201c@example.com', password: 'TestPass1', role: 'therapist' },
+  // 2. Register or login therapist
+  var regR = await req('POST', '/api/auth/register',
+    { email: 'exp201_' + uid + '@test.com', password: 'TestPass1', role: 'therapist' },
     { 'x-csrf-token': csrf }
   );
-  var regData = JSON.parse(regRes.body);
-  var therapistToken = regData.token;
-  var therapistId = regData.user.id;
-  console.log('Therapist id:', therapistId);
+  var regD = JSON.parse(regR.body);
+  if (regR.status !== 200 && regR.status !== 201) {
+    console.log('Register failed:', regR.status, regD.error || regD.message);
+    return;
+  }
+  var token = regD.token;
+  var tId = regD.user.id;
+  console.log('Therapist:', tId);
 
-  // 3. Get invite code
-  var invRes = await request('GET', '/api/invite-code', null, { 'Authorization': 'Bearer ' + therapistToken });
-  var inviteCode = JSON.parse(invRes.body).invite_code;
+  // 3. Invite code
+  var invR = await req('GET', '/api/invite-code', null, { 'Authorization': 'Bearer ' + token });
+  var inv = JSON.parse(invR.body).invite_code;
 
   // 4. Register client
-  var botRegRes = await request('POST', '/api/bot/register',
-    { telegram_id: 'exp_client_201c', role: 'client' }, BOT_HDR);
-  var clientData = JSON.parse(botRegRes.body);
-  var clientId = clientData.user.id;
-  console.log('Client id:', clientId);
+  var tgId = 'exp_cli_' + uid;
+  var cRegR = await req('POST', '/api/bot/register', { telegram_id: tgId, role: 'client' }, BOT);
+  var cRegD = JSON.parse(cRegR.body);
+  var cId = cRegD.user.id;
+  console.log('Client:', cId);
 
-  // 5. Connect
-  var connectRes = await request('POST', '/api/bot/connect',
-    { telegram_id: 'exp_client_201c', invite_code: inviteCode }, BOT_HDR);
-  var connectData = JSON.parse(connectRes.body);
-  console.log('Connect:', connectData.message);
+  // 5. Connect + consent
+  await req('POST', '/api/bot/connect', { telegram_id: tgId, invite_code: inv }, BOT);
+  await req('POST', '/api/bot/consent', { telegram_id: tgId, therapist_id: tId, consent: true }, BOT);
+  console.log('Linked + consented');
 
-  // 6. Consent (needs therapist_id, consent: true)
-  var consentRes = await request('POST', '/api/bot/consent',
-    { telegram_id: 'exp_client_201c', therapist_id: therapistId, consent: true }, BOT_HDR);
-  var consentData = JSON.parse(consentRes.body);
-  console.log('Consent:', consentData.message);
-
-  // 7. Create diary entries
+  // 6. Create entries
   for (var i = 1; i <= 3; i++) {
-    await request('POST', '/api/bot/diary',
-      { telegram_id: 'exp_client_201c', entry_type: 'text', content: 'EXPORT_TEST_ENTRY_' + i + ': This is diary entry ' + i },
-      BOT_HDR);
+    await req('POST', '/api/bot/diary',
+      { telegram_id: tgId, entry_type: 'text', content: 'EXPORT_TEST_ENTRY_' + i + ': diary ' + i },
+      BOT);
   }
-  console.log('Created 3 diary entries');
+  console.log('Created 3 entries');
 
-  // 8. Test export
-  var exportRes = await request('GET', '/api/clients/' + clientId + '/diary/export', null,
-    { 'Authorization': 'Bearer ' + therapistToken });
-  console.log('\nExport status:', exportRes.status);
-  console.log('Content-Disposition:', exportRes.headers['content-disposition']);
+  // 7. Export
+  var expR = await req('GET', '/api/clients/' + cId + '/diary/export', null,
+    { 'Authorization': 'Bearer ' + token });
+  console.log('\nExport status:', expR.status);
+  console.log('Content-Disposition:', expR.headers['content-disposition']);
 
-  var exportData = JSON.parse(exportRes.body);
-  console.log('Total entries:', exportData.total_entries);
-  console.log('Client ID:', exportData.client_id);
+  if (expR.status === 200) {
+    var expD = JSON.parse(expR.body);
+    console.log('Total entries:', expD.total_entries);
+    console.log('Client ID match:', expD.client_id === cId ? 'PASS' : 'FAIL');
+    console.log('Has export_date:', !!expD.export_date ? 'PASS' : 'FAIL');
 
-  var allDecrypted = exportData.entries.every(function(e) {
-    return e.content && e.content.indexOf('EXPORT_TEST_ENTRY_') >= 0;
-  });
-  console.log('All decrypted:', allDecrypted ? 'PASS' : 'FAIL');
-  console.log('Has filename:', (exportRes.headers['content-disposition'] || '').indexOf('diary_export') >= 0 ? 'PASS' : 'FAIL');
+    var ok = expD.entries.every(function(e) {
+      return e.content && e.content.indexOf('EXPORT_TEST_ENTRY_') >= 0;
+    });
+    console.log('All decrypted:', ok ? 'PASS' : 'FAIL');
+    console.log('Filename ok:', (expR.headers['content-disposition'] || '').indexOf('diary_export') >= 0 ? 'PASS' : 'FAIL');
+  } else {
+    console.log('FAIL - body:', expR.body.substring(0, 300));
+  }
 
-  // 9. No auth
-  var noAuth = await request('GET', '/api/clients/' + clientId + '/diary/export');
+  // 8. No-auth
+  var noAuth = await req('GET', '/api/clients/' + cId + '/diary/export');
   console.log('No-auth 401:', noAuth.status === 401 ? 'PASS' : 'FAIL');
 
-  console.log('\nAll tests done!');
+  console.log('\nDone!');
 }
 
 main().catch(function(e) { console.error('Error:', e.message); });
