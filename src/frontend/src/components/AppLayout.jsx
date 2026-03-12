@@ -74,6 +74,12 @@ export default function AppLayout({ children }) {
       return;
     }
 
+    // Therapist role cannot access admin pages - redirect to dashboard
+    if (parsedUser.role !== 'superadmin' && location.pathname.startsWith('/admin')) {
+      navigate('/dashboard', { replace: true });
+      return;
+    }
+
     // Check subscription status for therapists (not on subscription page itself)
     if (parsedUser.role === 'therapist' && !location.pathname.startsWith('/subscription')) {
       fetch(`${API_URL}/dashboard/stats`, {
