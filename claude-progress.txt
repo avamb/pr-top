@@ -1082,3 +1082,30 @@ CURRENT STATUS: ~150/205 features passing (148 + 2 new)
   - Zero console errors on login page
 
 CURRENT STATUS: ~152/205 features passing (150 + 2 new)
+
+=== Session 2026-03-12_batch_140_141 ===
+
+- Feature #140: Therapist cannot access admin endpoints ✅
+  - Registered therapist, obtained JWT token
+  - GET /api/admin/therapists: 403 Forbidden (PASS)
+  - PUT /api/admin/settings: 403 Forbidden (PASS)
+  - GET /api/admin/logs/audit: 403 Forbidden (PASS)
+  - GET /api/admin/stats/users: 403 Forbidden (PASS)
+  - GET /api/admin/logs/system: 403 Forbidden (PASS)
+  - GET /api/admin/stats/subscriptions: 403 Forbidden (PASS)
+  - GET /api/admin/stats/utm: 403 Forbidden (PASS)
+  - All 7 admin endpoints properly protected by requireRole('superadmin')
+  - Error message: "Insufficient permissions"
+  - No mock data patterns in src/
+
+- Feature #141: Client role cannot access web panel ✅
+  - Registered client-role user via API (role: 'client')
+  - API tests: dashboard 403, clients 403, search 403, admin 403
+  - Added client role check in Login.jsx - blocks login with access denied message
+  - Added client role check in AppLayout.jsx - redirects to /login if client somehow gets through
+  - Browser verified: client login shows "Access denied. The web panel is for therapists only."
+  - Therapist login still works normally (redirects to /dashboard)
+  - Zero console errors for therapist flow
+  - Fixed vite proxy: changed target from localhost to 127.0.0.1 (IPv6 resolution issue)
+
+CURRENT STATUS: ~154/205 features passing (152 + 2 new)
