@@ -997,3 +997,22 @@ CURRENT STATUS: ~140/205 features passing (138 + 2 new)
   - Verified via API test and browser automation with screenshot
 
 CURRENT STATUS: ~142/205 features passing (140 + 2 new)
+
+=== Session 2026-03-12_batch_132_133 ===
+
+- Feature #132: API returns 404 for non-existent session ✅
+  - GET /api/sessions/99999 returns 404 with {error: 'Session not found'}
+  - Also tested session IDs 0 and -1, all return 404
+  - Auth required, verified with valid JWT token
+  - Zero console errors
+
+- Feature #133: API returns proper error for invalid JSON body ✅
+  - Added JSON parse error handler in index.js error middleware
+  - Checks err.type === 'entity.parse.failed' and returns 400 Bad Request
+  - POST /api/auth/register with '{bad json}' returns 400 with descriptive message
+  - POST with 'not json at all' also returns 400
+  - Server remains stable after malformed requests (health check passes)
+  - Previously returned 500 Internal Server Error, now returns proper 400
+  - No mock data patterns found
+
+CURRENT STATUS: ~146/205 features passing (144 + 2 new)
