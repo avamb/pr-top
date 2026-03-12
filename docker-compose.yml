@@ -3,7 +3,6 @@ services:
     build:
       context: ./src/backend
       dockerfile: Dockerfile
-    container_name: psylink-backend
     restart: unless-stopped
     env_file:
       - .env
@@ -27,7 +26,6 @@ services:
     build:
       context: ./src/frontend
       dockerfile: Dockerfile
-    container_name: psylink-frontend
     restart: unless-stopped
     expose:
       - "80"
@@ -39,7 +37,6 @@ services:
     build:
       context: ./src/bot
       dockerfile: Dockerfile
-    container_name: psylink-bot
     restart: unless-stopped
     env_file:
       - .env
