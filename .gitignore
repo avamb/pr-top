@@ -1,24 +1,71 @@
-.playwright-cli/
-.playwright/
+# Dependencies
 node_modules/
+
+# Build output
 dist/
 build/
+
+# Environment
 .env
+
+# Database
 *.db
 *.db-shm
 *.db-wal
-.autoforge/features.db
-.autoforge/features.db-shm
-.autoforge/features.db-wal
-.autoforge/.agent.lock
-.autoforge/.claude_settings.json
+
+# OS
 .DS_Store
+
+# Logs
 *.log
+
+# Runtime data
 src/backend/data/
 src/backend/uploads/
-cookies*.txt
-test_regression_*.js
+
+# Testing tools
+.playwright-cli/
+.playwright/
+
+# AutoForge / Claude tooling
+.autoforge/
+.claude/
+
+# Documentation / specs (local only)
+PsyLink_*.md
+START_HERE_AutoForge.md
+FIRST_MILESTONE_CHECKLIST.md
+app_spec.txt
+claude-progress.txt
+
+# Utility scripts (kill, restart, setup, check, etc.)
+kill_*.js
+killnode.js
+_kill_*.js
+restart_*.js
+force_restart.js
+start_*.js
+wait_*.js
+setup_*.js
+check_*.js
+find_*.js
+compare_*.js
+patch_*.js
+delete_*.js
+gen_*.js
+simulate_*.js
+
+# Test scripts
 test_*.js
+test_*.json
+test_*.txt
 verify_*.js
 _test_*.js
-setup_*test*.js
+
+# Temporary response/data files
+*_resp.json
+cookies*.txt
+tz_import_*.json
+diary_response.json
+login_resp.json
+audit_resp.json
