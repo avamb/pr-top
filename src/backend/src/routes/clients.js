@@ -18,7 +18,11 @@ router.get('/', (req, res) => {
   try {
     const db = getDatabase();
     const therapistId = req.user.id;
-    const search = (req.query.search || '').trim();
+    const rawSearch = (req.query.search || '').trim();
+    if (rawSearch.length > 500) {
+      return res.status(400).json({ error: 'Search query too long (max 500 characters)' });
+    }
+    const search = rawSearch;
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page) || 25));
     const languageFilter = req.query.language || '';
@@ -136,7 +140,11 @@ router.get('/:id/diary', (req, res) => {
     const entryType = req.query.entry_type || '';
     const dateFrom = req.query.date_from || ''; // ISO date string e.g. 2026-01-01
     const dateTo = req.query.date_to || ''; // ISO date string e.g. 2026-12-31
-    const searchQuery = (req.query.search || '').trim().toLowerCase();
+    const rawSearchQuery = (req.query.search || '').trim();
+    if (rawSearchQuery.length > 500) {
+      return res.status(400).json({ error: 'Search query too long (max 500 characters)' });
+    }
+    const searchQuery = rawSearchQuery.toLowerCase();
     const offset = (page - 1) * perPage;
 
     // Verify client exists
@@ -430,7 +438,11 @@ router.get('/:id/notes', (req, res) => {
     const clientId = req.params.id;
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page) || 25));
-    const searchQuery = (req.query.search || '').trim().toLowerCase();
+    const rawNoteSearch = (req.query.search || '').trim();
+    if (rawNoteSearch.length > 500) {
+      return res.status(400).json({ error: 'Search query too long (max 500 characters)' });
+    }
+    const searchQuery = rawNoteSearch.toLowerCase();
 
     // Verify client belongs to this therapist OR therapist has existing notes for this client
     // (therapist retains access to their own notes even after client revokes consent)

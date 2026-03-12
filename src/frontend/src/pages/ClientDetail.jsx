@@ -1204,6 +1204,7 @@ function ClientDetail() {
                     fetchDiary(false, trimmed);
                   }
                 }}
+                maxLength={500}
                 placeholder={t('search_diary_placeholder', 'Search diary entries...')}
                 className="w-full border border-stone-300 rounded-lg pl-10 pr-20 py-2 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                 aria-label="Search diary entries"
