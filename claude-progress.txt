@@ -1,5 +1,30 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-12_batch_197_198_199 ===
+
+- Feature #197: Concurrent edits to client context handled ✅
+  - Implemented optimistic concurrency control using updated_at timestamps
+  - Backend PUT /context accepts expected_updated_at, returns 409 on conflict
+  - Changed updated_at to use millisecond-precision ISO timestamps (was SQLite datetime('now'))
+  - Frontend sends expected_updated_at with saves, handles 409 by loading latest data
+  - Conflict message shown: "Context was modified in another session..."
+  - Retry with fresh data succeeds, both edits preserved
+  - 7/7 API tests, browser E2E verified
+
+- Feature #198: Viewing deleted record shows appropriate message ✅
+  - SessionDetail: 404 shows "Record Unavailable" card with explanation + Go Back button
+  - Diary delete: 404 (already deleted) handled gracefully, refreshes list
+  - No crashes or undefined errors when records are removed
+  - 4/4 API tests, browser E2E verified
+
+- Feature #199: Rapid navigation between pages doesn't crash ✅
+  - Navigated: Dashboard→Clients→Analytics→Settings→Subscription→ExerciseLibrary→Dashboard→Clients
+  - Two rounds of rapid navigation with zero JS application errors
+  - Final page renders correctly with accurate data, no stale content
+  - Only console entries: React Router deprecation warnings + Vite HMR reconnect (dev-only)
+
+CURRENT STATUS: ~198/205 features passing (195 + 3 new)
+
 === Session 2026-03-12_batch_182_188_189 ===
 
 - Feature #182: Filter persistence across page refresh ✅
