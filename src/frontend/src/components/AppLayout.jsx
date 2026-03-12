@@ -18,6 +18,7 @@ export default function AppLayout({ children }) {
   const [user, setUser] = useState(null);
   const [checked, setChecked] = useState(false);
   const [subscriptionExpired, setSubscriptionExpired] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Cross-tab session sync: listen for localStorage changes from other tabs
   const handleStorageChange = useCallback((e) => {
@@ -102,9 +103,30 @@ export default function AppLayout({ children }) {
   return (
     <UnsavedChangesProvider>
       <div className="min-h-screen bg-background">
-        <Sidebar user={user} />
-        {/* Main content area offset by sidebar width */}
-        <div className="ml-60">
+        <Sidebar user={user} isOpen={sidebarOpen} onToggle={setSidebarOpen} />
+
+        {/* Hamburger button for mobile/tablet (below lg breakpoint) */}
+        <div className="fixed top-0 left-0 right-0 h-14 bg-white border-b border-gray-200 flex items-center px-4 z-20 lg:hidden">
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="p-2 rounded-lg text-stone-600 hover:bg-stone-100 transition-colors"
+            aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
+          >
+            {sidebarOpen ? (
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+              </svg>
+            )}
+          </button>
+          <span className="ml-3 text-lg font-bold text-primary">PsyLink</span>
+        </div>
+
+        {/* Main content area - offset by sidebar on lg+, top padding on mobile/tablet for hamburger bar */}
+        <div className="lg:ml-60 pt-14 lg:pt-0">
           {typeof children === 'function' ? children({ user }) : children}
         </div>
       </div>

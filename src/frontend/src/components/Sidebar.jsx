@@ -111,7 +111,7 @@ function isActive(itemPath, currentPath) {
 /* ═══════════════════════════════════════════════════════ */
 /*                     Sidebar Component                   */
 /* ═══════════════════════════════════════════════════════ */
-export default function Sidebar({ user }) {
+export default function Sidebar({ user, isOpen, onToggle }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
@@ -121,12 +121,15 @@ export default function Sidebar({ user }) {
     if (path === location.pathname) return;
     if (!confirmNavigation()) return;
     navigate(path);
+    // Close sidebar on mobile after navigation
+    if (onToggle) onToggle(false);
   };
 
   const handleLogout = () => {
     if (!confirmNavigation()) return;
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    if (onToggle) onToggle(false);
     navigate('/');
   };
 
@@ -137,10 +140,21 @@ export default function Sidebar({ user }) {
   const extraItems = isSuperadmin ? adminNavItems : [];
 
   return (
-    <aside
-      aria-label="Sidebar navigation"
-      className="fixed top-0 left-0 h-full w-60 bg-white border-r border-gray-200 flex flex-col z-40"
-    >
+    <>
+      {/* Overlay for mobile/tablet */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/30 z-30 lg:hidden"
+          onClick={() => onToggle && onToggle(false)}
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        aria-label="Sidebar navigation"
+        className={`fixed top-0 left-0 h-full w-60 bg-white border-r border-gray-200 flex flex-col z-40 transition-transform duration-200 ease-in-out ${
+          isOpen ? 'translate-x-0' : '-translate-x-full'
+        } lg:translate-x-0`}
+      >
       {/* Brand */}
       <div className="px-5 py-5 border-b border-gray-100 flex items-center gap-2">
         <span className="text-xl font-bold text-primary tracking-tight">{t('brand')}</span>
@@ -221,5 +235,6 @@ export default function Sidebar({ user }) {
         </button>
       </div>
     </aside>
+    </>
   );
 }
