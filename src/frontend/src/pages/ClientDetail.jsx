@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Breadcrumb from '../components/Breadcrumb';
-import useBeforeUnload from '../hooks/useBeforeUnload';
+import useNavigationBlocker from '../hooks/useNavigationBlocker';
 
 const API = 'http://localhost:3001/api';
 
@@ -60,7 +60,7 @@ function ClientDetail() {
 
   // Warn user before leaving page with unsaved form data
   const hasUnsavedChanges = newNoteContent.trim() !== '' || contextDirty;
-  useBeforeUnload(hasUnsavedChanges);
+  useNavigationBlocker(hasUnsavedChanges);
 
   // Sync filter state to URL query parameters
   useEffect(() => {

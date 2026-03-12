@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import { UnsavedChangesProvider } from '../contexts/UnsavedChangesContext';
 
 const API_URL = 'http://localhost:3001/api';
 
@@ -93,12 +94,14 @@ export default function AppLayout({ children }) {
   if (!checked || !user) return null;
 
   return (
-    <div className="min-h-screen bg-background">
-      <Sidebar user={user} />
-      {/* Main content area offset by sidebar width */}
-      <div className="ml-60">
-        {typeof children === 'function' ? children({ user }) : children}
+    <UnsavedChangesProvider>
+      <div className="min-h-screen bg-background">
+        <Sidebar user={user} />
+        {/* Main content area offset by sidebar width */}
+        <div className="ml-60">
+          {typeof children === 'function' ? children({ user }) : children}
+        </div>
       </div>
-    </div>
+    </UnsavedChangesProvider>
   );
 }

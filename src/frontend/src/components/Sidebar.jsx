@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useUnsavedChanges } from '../contexts/UnsavedChangesContext';
 
 /* ── SVG Icons ────────────────────────────────────────── */
 const DashboardIcon = () => (
@@ -114,8 +115,16 @@ export default function Sidebar({ user }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
+  const { confirmNavigation } = useUnsavedChanges();
+
+  const safeNavigate = (path) => {
+    if (path === location.pathname) return;
+    if (!confirmNavigation()) return;
+    navigate(path);
+  };
 
   const handleLogout = () => {
+    if (!confirmNavigation()) return;
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     navigate('/');
@@ -151,7 +160,7 @@ export default function Sidebar({ user }) {
             return (
               <li key={item.key}>
                 <button
-                  onClick={() => navigate(item.path)}
+                  onClick={() => safeNavigate(item.path)}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     active
                       ? 'bg-primary/10 text-primary'
@@ -181,7 +190,7 @@ export default function Sidebar({ user }) {
                 return (
                   <li key={item.key}>
                     <button
-                      onClick={() => navigate(item.path)}
+                      onClick={() => safeNavigate(item.path)}
                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                         active
                           ? 'bg-red-50 text-red-700'
