@@ -192,6 +192,10 @@ app.use('/api/*', (req, res) => {
 
 // Error handler
 app.use((err, req, res, next) => {
+  // Handle JSON parse errors gracefully (malformed request body)
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'Invalid JSON in request body', message: err.message });
+  }
   logger.error('Unhandled error: ' + err.message);
   logger.error('Stack: ' + err.stack);
   res.status(500).json({ error: 'Internal server error: ' + err.message });
