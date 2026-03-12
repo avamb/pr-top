@@ -377,6 +377,59 @@ router.get('/:id/transcript', authenticate, requireRole('therapist', 'superadmin
   }
 });
 
+// DELETE /api/sessions/:id - Delete a session and its associated files
+router.delete('/:id', authenticate, requireRole('therapist', 'superadmin'), async (req, res) => {
+  try {
+    const db = getDatabase();
+    const sessionId = req.params.id;
+
+    const result = db.exec(
+      'SELECT id, therapist_id, client_id, audio_ref FROM sessions WHERE id = ?',
+      [sessionId]
+    );
+
+    if (result.length === 0 || result[0].values.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const row = result[0].values[0];
+    if (req.user.role !== 'superadmin' && row[1] !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Delete associated vector embeddings
+    db.run(
+      "DELETE FROM vector_embeddings WHERE source_type IN ('session_transcript', 'session_summary') AND source_id = ?",
+      [sessionId]
+    );
+
+    // Delete the audio file if it exists
+    if (row[3]) {
+      const audioPath = path.join(UPLOAD_DIR, row[3]);
+      if (fs.existsSync(audioPath)) {
+        fs.unlinkSync(audioPath);
+      }
+    }
+
+    // Delete the session record
+    db.run('DELETE FROM sessions WHERE id = ?', [sessionId]);
+    saveDatabase();
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'delete_session', 'session', ?, ?, datetime('now'))",
+      [req.user.id, sessionId, JSON.stringify({ client_id: row[2] })]
+    );
+    saveDatabase();
+
+    logger.info(`Therapist ${req.user.id} deleted session ${sessionId}`);
+    res.json({ success: true, message: 'Session deleted successfully' });
+  } catch (error) {
+    logger.error('Delete session error: ' + error.message);
+    res.status(500).json({ error: 'Failed to delete session' });
+  }
+});
+
 // Handle multer errors
 router.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
