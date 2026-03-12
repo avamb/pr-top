@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useCsrfToken } from '../hooks/useCsrfToken';
@@ -8,6 +8,14 @@ export default function Register() {
   const { t } = useTranslation();
   const csrfToken = useCsrfToken();
   const [searchParams] = useSearchParams();
+
+  // Redirect if already authenticated (prevents back-button resubmit)
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [navigate]);
 
   // Capture UTM params from URL
   const utmParams = useMemo(() => ({
@@ -118,8 +126,8 @@ export default function Register() {
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
 
-      // Redirect to dashboard
-      navigate('/dashboard');
+      // Redirect to dashboard (replace history to prevent back-button resubmit)
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(t('auth.networkError'));
       setLoading(false);

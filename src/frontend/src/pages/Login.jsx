@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useCsrfToken } from '../hooks/useCsrfToken';
@@ -10,6 +10,14 @@ export default function Login() {
   const csrfToken = useCsrfToken();
   const redirectTo = location.state?.from || null;
   const accessDenied = location.state?.accessDenied || false;
+
+  // Redirect if already authenticated (prevents back-button resubmit)
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token && !accessDenied) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [navigate, accessDenied]);
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState(accessDenied ? t('auth.clientAccessDenied', 'Access denied. The web panel is for therapists only. Clients should use the Telegram bot.') : '');
   const [fieldErrors, setFieldErrors] = useState({});
@@ -86,13 +94,13 @@ export default function Login() {
         }
       } catch (e) { /* ignore - language will sync on settings page */ }
 
-      // Redirect to intended page, or default based on role
+      // Redirect to intended page, or default based on role (replace history to prevent back-button resubmit)
       if (redirectTo) {
-        navigate(redirectTo);
+        navigate(redirectTo, { replace: true });
       } else if (data.user.role === 'superadmin') {
-        navigate('/admin');
+        navigate('/admin', { replace: true });
       } else {
-        navigate('/dashboard');
+        navigate('/dashboard', { replace: true });
       }
     } catch (err) {
       setError(t('auth.networkError'));
