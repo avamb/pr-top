@@ -87,7 +87,9 @@
     "passwordReqUppercase": "At least one uppercase letter",
     "passwordReqLowercase": "At least one lowercase letter",
     "passwordReqNumber": "At least one number",
-    "passwordStrengthPlaceholder": "Min 8 chars, upper, lower, number"
+    "passwordStrengthPlaceholder": "Min 8 chars, upper, lower, number",
+    "fieldRequired": "This field is required",
+    "fillRequiredFields": "Please fill in all required fields"
   },
   "dashboard": {
     "title": "PsyLink Dashboard",

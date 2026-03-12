@@ -87,7 +87,9 @@
     "passwordReqUppercase": "Al menos una letra mayúscula",
     "passwordReqLowercase": "Al menos una letra minúscula",
     "passwordReqNumber": "Al menos un número",
-    "passwordStrengthPlaceholder": "Mín. 8 car., mayúscula, minúscula, número"
+    "passwordStrengthPlaceholder": "Mín. 8 car., mayúscula, minúscula, número",
+    "fieldRequired": "Este campo es obligatorio",
+    "fillRequiredFields": "Por favor, complete todos los campos obligatorios"
   },
   "dashboard": {
     "title": "Panel de PsyLink",

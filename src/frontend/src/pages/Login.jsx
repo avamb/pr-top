@@ -11,19 +11,34 @@ export default function Login() {
   const redirectTo = location.state?.from || null;
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
     setError('');
+    if (fieldErrors[e.target.name]) {
+      setFieldErrors(prev => ({ ...prev, [e.target.name]: '' }));
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setFieldErrors({});
 
-    if (!form.email || !form.password) {
-      setError(t('auth.emailPasswordRequired'));
+    // Per-field required validation
+    const errors = {};
+    if (!form.email.trim()) {
+      errors.email = t('auth.fieldRequired', 'This field is required');
+    }
+    if (!form.password) {
+      errors.password = t('auth.fieldRequired', 'This field is required');
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setError(t('auth.fillRequiredFields', 'Please fill in all required fields'));
       return;
     }
 
@@ -97,10 +112,10 @@ export default function Login() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} noValidate className="space-y-4">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-text mb-1">
-                {t('auth.email')}
+                {t('auth.email')} <span className="text-error">*</span>
               </label>
               <input
                 id="email"
@@ -110,14 +125,17 @@ export default function Login() {
                 required
                 value={form.email}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${fieldErrors.email ? 'border-error' : 'border-gray-300'}`}
                 placeholder={t('auth.emailPlaceholder')}
               />
+              {fieldErrors.email && (
+                <p className="mt-1 text-sm text-error">{fieldErrors.email}</p>
+              )}
             </div>
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-text mb-1">
-                {t('auth.password')}
+                {t('auth.password')} <span className="text-error">*</span>
               </label>
               <input
                 id="password"
@@ -127,9 +145,12 @@ export default function Login() {
                 required
                 value={form.password}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${fieldErrors.password ? 'border-error' : 'border-gray-300'}`}
                 placeholder={t('auth.passwordPlaceholder')}
               />
+              {fieldErrors.password && (
+                <p className="mt-1 text-sm text-error">{fieldErrors.password}</p>
+              )}
             </div>
 
             <button

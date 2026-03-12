@@ -87,7 +87,9 @@
     "passwordReqUppercase": "Минимум одна заглавная буква",
     "passwordReqLowercase": "Минимум одна строчная буква",
     "passwordReqNumber": "Минимум одна цифра",
-    "passwordStrengthPlaceholder": "Мин. 8 символов, заглавная, строчная, цифра"
+    "passwordStrengthPlaceholder": "Мин. 8 символов, заглавная, строчная, цифра",
+    "fieldRequired": "Это поле обязательно",
+    "fillRequiredFields": "Пожалуйста, заполните все обязательные поля"
   },
   "dashboard": {
     "title": "Панель PsyLink",

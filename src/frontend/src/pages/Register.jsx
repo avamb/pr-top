@@ -19,26 +19,46 @@ export default function Register() {
   }), [searchParams]);
   const [form, setForm] = useState({ email: '', password: '', confirmPassword: '' });
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
     setError('');
+    // Clear field error when user starts typing
+    if (fieldErrors[e.target.name]) {
+      setFieldErrors(prev => ({ ...prev, [e.target.name]: '' }));
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (loading) return;
     setError('');
+    setFieldErrors({});
 
-    if (!form.email || !form.password) {
-      setError(t('auth.emailPasswordRequired'));
+    // Per-field required validation
+    const errors = {};
+    if (!form.email.trim()) {
+      errors.email = t('auth.fieldRequired', 'This field is required');
+    }
+    if (!form.password) {
+      errors.password = t('auth.fieldRequired', 'This field is required');
+    }
+    if (!form.confirmPassword) {
+      errors.confirmPassword = t('auth.fieldRequired', 'This field is required');
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setError(t('auth.fillRequiredFields', 'Please fill in all required fields'));
       return;
     }
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(form.email)) {
+      setFieldErrors({ email: t('auth.invalidEmail', 'Please enter a valid email address') });
       setError(t('auth.invalidEmail', 'Please enter a valid email address'));
       return;
     }
@@ -58,11 +78,13 @@ export default function Register() {
       passwordErrors.push(t('auth.passwordReqNumber', 'At least one number'));
     }
     if (passwordErrors.length > 0) {
+      setFieldErrors({ password: passwordErrors.join(', ') });
       setError(t('auth.passwordWeak', 'Password does not meet requirements') + ': ' + passwordErrors.join(', '));
       return;
     }
 
     if (form.password !== form.confirmPassword) {
+      setFieldErrors({ confirmPassword: t('auth.passwordMismatch') });
       setError(t('auth.passwordMismatch'));
       return;
     }
@@ -127,7 +149,7 @@ export default function Register() {
           <form onSubmit={handleSubmit} noValidate className="space-y-4">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-text mb-1">
-                {t('auth.email')}
+                {t('auth.email')} <span className="text-error">*</span>
               </label>
               <input
                 id="email"
@@ -137,14 +159,17 @@ export default function Register() {
                 required
                 value={form.email}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${fieldErrors.email ? 'border-error' : 'border-gray-300'}`}
                 placeholder={t('auth.emailPlaceholder')}
               />
+              {fieldErrors.email && (
+                <p className="mt-1 text-sm text-error">{fieldErrors.email}</p>
+              )}
             </div>
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-text mb-1">
-                {t('auth.password')}
+                {t('auth.password')} <span className="text-error">*</span>
               </label>
               <input
                 id="password"
@@ -154,14 +179,17 @@ export default function Register() {
                 required
                 value={form.password}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${fieldErrors.password ? 'border-error' : 'border-gray-300'}`}
                 placeholder={t('auth.passwordStrengthPlaceholder', 'Min 8 chars, upper, lower, number')}
               />
+              {fieldErrors.password && (
+                <p className="mt-1 text-sm text-error">{fieldErrors.password}</p>
+              )}
             </div>
 
             <div>
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-text mb-1">
-                {t('auth.confirmPassword')}
+                {t('auth.confirmPassword')} <span className="text-error">*</span>
               </label>
               <input
                 id="confirmPassword"
@@ -171,9 +199,12 @@ export default function Register() {
                 required
                 value={form.confirmPassword}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${fieldErrors.confirmPassword ? 'border-error' : 'border-gray-300'}`}
                 placeholder={t('auth.confirmPasswordPlaceholder')}
               />
+              {fieldErrors.confirmPassword && (
+                <p className="mt-1 text-sm text-error">{fieldErrors.confirmPassword}</p>
+              )}
             </div>
 
             <button
