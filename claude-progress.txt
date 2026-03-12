@@ -1156,3 +1156,30 @@ CURRENT STATUS: ~156/205 features passing (154 + 2 new)
   - Zero console errors, no mock data patterns
 
 CURRENT STATUS: ~158/205 features passing (156 + 2 new)
+
+=== Session 2026-03-12_batch_149_150 ===
+
+- Feature #149: File storage uses encrypted storage and opaque IDs ✅
+  - Uploaded test audio with original name "my_session_recording.mp3"
+  - File stored as UUID.mp3.enc (e.g., 504bdbce-92bd-4075-9855-978c39936a82.mp3.enc)
+  - File content encrypted on disk (version:nonce:tag:ciphertext format)
+  - No original filenames in storage directory
+  - 6 direct URL paths all return non-200 (no express.static serving data dir)
+  - Authenticated GET /api/sessions/:id returns 200
+  - Unauthenticated access returns 401
+  - Diary voice file_ref encrypted in DB (not stored as plaintext)
+  - No mock data patterns in src/
+  - Zero console errors
+
+- Feature #150: Timeline performant for 1+ year of client records ✅
+  - Added pagination to backend timeline endpoint (page, per_page query params)
+  - Two-pass approach: COUNT queries first (fast), then paginated detail fetch with decryption
+  - Frontend: "Load More" button with "Showing X of Y items" counter
+  - Created 400 diary entries for test client
+  - First page (50 items) loads in ~700ms
+  - 8 pages total, no duplicate items between pages
+  - Load More button correctly appends next page (50→100→150...)
+  - Filtered timeline also paginates correctly
+  - Browser verified: zero console errors, Load More works end-to-end
+
+CURRENT STATUS: ~160/205 features passing (158 + 2 new)
