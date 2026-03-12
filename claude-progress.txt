@@ -1016,3 +1016,23 @@ CURRENT STATUS: ~142/205 features passing (140 + 2 new)
   - No mock data patterns found
 
 CURRENT STATUS: ~146/205 features passing (144 + 2 new)
+
+=== Session 2026-03-12_batch_134_135 ===
+
+- Feature #134: API returns proper error for missing required fields ✅
+  - POST /api/auth/register with empty body returns 400 with missing_fields: ["email", "password"]
+  - POST with only email returns missing_fields: ["password"]
+  - POST with only password returns missing_fields: ["email"]
+  - Login endpoint also updated with same per-field validation
+  - All 4 API tests passing
+
+- Feature #135: Network error during form submission shows feedback ✅
+  - Navigated to login form, filled email and password
+  - Killed backend to simulate network failure
+  - Submitted form: "Network error. Please try again." shown (user-friendly, not raw exception)
+  - Form data preserved: email and password fields still populated for retry
+  - Button returns to "Sign In" (not stuck in loading state)
+  - Verified with screenshot: clean error banner, form intact
+  - i18n translations present for en/ru/es
+
+CURRENT STATUS: ~148/205 features passing (146 + 2 new)
