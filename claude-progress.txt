@@ -1,5 +1,26 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-12_batch_190_191_193 ===
+
+- Feature #190: ARIA labels on form fields ✅
+  - Login/Register forms: aria-required, aria-invalid, aria-describedby on all inputs
+  - Error messages linked via id + aria-describedby, with role="alert"
+  - Zero console errors
+
+- Feature #191: Color contrast meets WCAG AA ✅
+  - Primary DEFAULT: #0D9488 (3.74:1) → #0F766E (5.47:1 with white)
+  - Error color: #EF4444 (3.60:1) → #DC2626 (4.62:1 on light bg)
+  - All color pairs now meet 4.5:1 WCAG AA minimum
+
+- Feature #193: Timestamps display in user timezone ✅
+  - Created formatDate.js utility (formatUserDate/formatUserDateOnly)
+  - Backend login/register return user timezone
+  - Updated all 12 pages to use timezone-aware formatting
+  - Settings saves timezone to localStorage immediately
+  - Zero console errors across all pages
+
+CURRENT STATUS: ~189/205 features passing
+
 === Session 2026-03-12_batch_185_186_187 ===
 
 - Feature #185: Dashboard responsive at tablet (768px) ✅
