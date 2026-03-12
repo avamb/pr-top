@@ -1,5 +1,26 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-12_batch_174_175 ===
+
+- Feature #174: Filter reset when switching clients ✅
+  - Added useEffect with prevIdRef to detect client ID changes
+  - Resets all filters (type, date range, timeline filters) to defaults
+  - Resets active tab to timeline, clears stale data
+  - Verified via browser: apply Voice filter on client A → navigate to client B → filters reset
+  - URL params correctly cleared (no type=voice carried over)
+  - Zero console errors
+
+- Feature #175: Pagination resets on filter change ✅
+  - Added diary pagination (25 per page) with Load More button
+  - New state: diaryPage, diaryHasMore, diaryLoadingMore
+  - fetchDiary now supports loadMore param, resets page to 1 on fresh fetch
+  - "Showing X of Y entries" counter added below diary entries
+  - Verified: Load More to page 2 (46 entries), click Text filter → resets to page 1 (25 of 33)
+  - Timeline pagination already reset correctly (existing behavior)
+  - Zero console errors, no mock data patterns
+
+CURRENT STATUS: ~180/205 features passing (178 + 2 new)
+
 === Session 2026-03-12_batch_168_170 ===
 
 - Feature #168: Consent revocation cascades to hide all client data ✅
