@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import Breadcrumb from '../components/Breadcrumb';
 import useNavigationBlocker from '../hooks/useNavigationBlocker';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { formatUserDate, formatUserDateOnly } from '../utils/formatDate';
 
 const API = 'http://localhost:3001/api';
 
@@ -35,7 +36,7 @@ function ClientDetail() {
   const [error, setError] = useState('');
   const [diaryError, setDiaryError] = useState('');
   const [typeFilter, setTypeFilter] = useState(searchParams.get('type') || '');
-  const [diarySearch, setDiarySearch] = useState('');
+  const [diarySearch, setDiarySearch] = useState(searchParams.get('search') || '');
   const todayStr = new Date().toISOString().split('T')[0];
   const [dateFrom, setDateFrom] = useState(searchParams.get('date_from') || '');
   const [dateTo, setDateTo] = useState(searchParams.get('date_to') || todayStr);
@@ -123,11 +124,12 @@ function ClientDetail() {
     if (typeFilter) params.set('type', typeFilter);
     if (dateFrom) params.set('date_from', dateFrom);
     if (dateTo) params.set('date_to', dateTo);
+    if (diarySearch) params.set('search', diarySearch);
     if (timelineStartDate) params.set('tl_start', timelineStartDate);
     if (timelineEndDate) params.set('tl_end', timelineEndDate);
     if (timelineTypeFilter) params.set('tl_type', timelineTypeFilter);
     setSearchParams(params, { replace: true });
-  }, [activeTab, typeFilter, dateFrom, dateTo, timelineStartDate, timelineEndDate, timelineTypeFilter]);
+  }, [activeTab, typeFilter, dateFrom, dateTo, diarySearch, timelineStartDate, timelineEndDate, timelineTypeFilter]);
 
   // Validate client ID is a positive integer
   const isValidId = /^\d+$/.test(id) && Number(id) > 0;
@@ -571,7 +573,7 @@ function ClientDetail() {
             <div className="flex gap-4 mt-2 text-sm text-stone-500">
               <span>{t('clientDetail.language')}: {(client.language || 'en').toUpperCase()}</span>
               <span>{t('clientDetail.consent')}: {client.consent_therapist_access ? t('clientDetail.consentGranted') : t('clientDetail.consentNotGranted')}</span>
-              <span>{t('clientDetail.joined')}: {new Date(client.created_at).toLocaleDateString()}</span>
+              <span>{t('clientDetail.joined')}: {formatUserDateOnly(client.created_at)}</span>
             </div>
           </div>
         )}
@@ -684,7 +686,7 @@ function ClientDetail() {
                           {badge.label}
                         </span>
                         <span className="text-xs text-stone-400 ml-auto">
-                          {new Date(item.created_at).toLocaleString()}
+                          {formatUserDate(item.created_at)}
                         </span>
                       </div>
 
@@ -877,7 +879,7 @@ function ClientDetail() {
                   <div key={note.id} className="border border-stone-200 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs text-stone-400">
-                        {new Date(note.created_at).toLocaleString()}
+                        {formatUserDate(note.created_at)}
                       </span>
                       {note.session_date && (
                         <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
@@ -953,7 +955,7 @@ function ClientDetail() {
               </div>
               <div className="flex justify-between items-center">
                 {context && context.updated_at && (
-                  <span className="text-xs text-stone-400">Last updated: {new Date(context.updated_at).toLocaleString()}</span>
+                  <span className="text-xs text-stone-400">Last updated: {formatUserDate(context.updated_at)}</span>
                 )}
                 <button
                   type="submit"
@@ -1000,7 +1002,7 @@ function ClientDetail() {
                         </span>
                       </div>
                       <span className="text-xs text-stone-400">
-                        {new Date(session.created_at).toLocaleString()}
+                        {formatUserDate(session.created_at)}
                       </span>
                     </div>
                     <div className="flex gap-3 text-xs text-stone-500 mb-2">
@@ -1101,8 +1103,8 @@ function ClientDetail() {
                       <p className="text-sm text-stone-600 mt-1">{delivery.exercise_description}</p>
                     )}
                     <div className="text-xs text-stone-400 mt-2">
-                      Sent: {new Date(delivery.sent_at).toLocaleString()}
-                      {delivery.completed_at && ` • Completed: ${new Date(delivery.completed_at).toLocaleString()}`}
+                      Sent: {formatUserDate(delivery.sent_at)}
+                      {delivery.completed_at && ` • Completed: ${formatUserDate(delivery.completed_at)}`}
                     </div>
                   </div>
                 ))}
@@ -1275,7 +1277,7 @@ function ClientDetail() {
                       {entry.entry_type}
                     </span>
                     <span className="text-xs text-stone-400 ml-auto">
-                      {new Date(entry.created_at).toLocaleString()}
+                      {formatUserDate(entry.created_at)}
                     </span>
                     <button
                       onClick={() => deleteDiaryEntry(entry.id)}
