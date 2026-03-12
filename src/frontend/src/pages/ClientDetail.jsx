@@ -88,13 +88,17 @@ function ClientDetail() {
       setLoading(false);
       return;
     }
-    fetchClient();
-    fetchDiary();
-    fetchNotes();
-    fetchContext();
-    fetchTimeline();
-    fetchSessions();
-    fetchExercises();
+    // First verify the client exists and is accessible, then load sub-resources
+    fetchClient().then(function(clientOk) {
+      if (clientOk) {
+        fetchDiary();
+        fetchNotes();
+        fetchContext();
+        fetchTimeline();
+        fetchSessions();
+        fetchExercises();
+      }
+    });
   }, [id, typeFilter, dateFrom, dateTo, timelineStartDate, timelineEndDate, timelineTypeFilter]);
 
   async function fetchClient() {
@@ -106,13 +110,25 @@ function ClientDetail() {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         navigate('/login');
-        return;
+        return false;
+      }
+      if (res.status === 404) {
+        setError(t('client.not_found', 'This client is no longer available. They may have been unlinked or their consent was revoked.'));
+        setLoading(false);
+        return false;
+      }
+      if (res.status === 403) {
+        setError(t('client.access_denied', 'You do not have permission to view this client.'));
+        setLoading(false);
+        return false;
       }
       if (!res.ok) throw new Error('Failed to fetch client');
       const data = await res.json();
       setClient(data.client);
+      return true;
     } catch (e) {
       setError(e.message);
+      return false;
     }
   }
 
@@ -453,8 +469,10 @@ function ClientDetail() {
   if (error) {
     return (
       <div className="min-h-screen bg-stone-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-red-600 text-lg mb-4">{error}</div>
+        <div className="text-center max-w-md mx-auto px-4">
+          <div className="text-5xl mb-4" role="img" aria-label="warning">&#9888;</div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">{t('client.unavailable', 'Client Unavailable')}</h2>
+          <p className="text-gray-600 mb-6">{error}</p>
           <button
             onClick={() => navigate('/clients')}
             className="px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700"
