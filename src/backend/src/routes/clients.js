@@ -395,14 +395,25 @@ router.get('/:id/notes', (req, res) => {
     const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page) || 25));
     const searchQuery = (req.query.search || '').trim().toLowerCase();
 
-    // Verify client belongs to this therapist
+    // Verify client belongs to this therapist OR therapist has existing notes for this client
+    // (therapist retains access to their own notes even after client revokes consent)
     const clientResult = db.exec(
       "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
       [clientId, therapistId]
     );
 
-    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
-      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    const clientLinked = clientResult.length > 0 && clientResult[0].values.length > 0;
+
+    if (!clientLinked) {
+      // Check if therapist has any notes for this client (own intellectual property)
+      const notesExist = db.exec(
+        "SELECT COUNT(*) FROM therapist_notes WHERE therapist_id = ? AND client_id = ?",
+        [therapistId, clientId]
+      );
+      const noteCount = notesExist.length > 0 ? notesExist[0].values[0][0] : 0;
+      if (noteCount === 0) {
+        return res.status(404).json({ error: 'Client not found or not linked to you' });
+      }
     }
 
     // Get all notes (need to decrypt for search filtering, then paginate)
