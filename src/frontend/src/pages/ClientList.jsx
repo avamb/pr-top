@@ -111,7 +111,8 @@ export default function ClientList() {
         page: pageNum.toString(),
         per_page: perPage.toString()
       });
-      if (searchTerm) params.set('search', searchTerm);
+      const trimmedSearch = (searchTerm || '').trim();
+      if (trimmedSearch) params.set('search', trimmedSearch);
 
       const res = await fetch(`${API_URL}/clients?${params}`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -155,7 +156,7 @@ export default function ClientList() {
   // Debounced search
   const debouncedSearch = useCallback(
     debounce((term) => {
-      setSearch(term);
+      setSearch(term.trim());
       setPage(1);
     }, 300),
     []

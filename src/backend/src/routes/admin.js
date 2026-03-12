@@ -262,7 +262,7 @@ router.get('/logs/system', (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page) || 50));
     const level = req.query.level || '';
-    const search = req.query.search || '';
+    const search = (req.query.search || '').trim();
     const offset = (page - 1) * perPage;
 
     const { logs, total } = getSystemLogs({

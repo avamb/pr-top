@@ -254,7 +254,7 @@ function ClientDetail() {
   async function fetchNotes(search) {
     try {
       const params = new URLSearchParams();
-      const q = search !== undefined ? search : notesSearch;
+      const q = (search !== undefined ? search : notesSearch).trim();
       if (q) params.set('search', q);
       const qs = params.toString();
       const res = await fetch(`${API}/clients/${id}/notes${qs ? '?' + qs : ''}`, {
@@ -792,7 +792,9 @@ function ClientDetail() {
                   }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
-                      fetchNotes(notesSearch);
+                      const trimmed = notesSearch.trim();
+                      setNotesSearch(trimmed);
+                      fetchNotes(trimmed);
                     }
                   }}
                   placeholder="Search notes by keyword..."
@@ -804,7 +806,7 @@ function ClientDetail() {
                 <div className="absolute right-2 top-1.5 flex gap-1">
                   <button
                     type="button"
-                    onClick={() => fetchNotes(notesSearch)}
+                    onClick={() => { const trimmed = notesSearch.trim(); setNotesSearch(trimmed); fetchNotes(trimmed); }}
                     className="px-3 py-1 bg-teal-600 text-white rounded text-xs font-medium hover:bg-teal-700"
                   >
                     Search
@@ -1197,7 +1199,9 @@ function ClientDetail() {
                 onChange={(e) => setDiarySearch(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
-                    fetchDiary(false, diarySearch);
+                    const trimmed = diarySearch.trim();
+                    setDiarySearch(trimmed);
+                    fetchDiary(false, trimmed);
                   }
                 }}
                 placeholder={t('search_diary_placeholder', 'Search diary entries...')}
@@ -1210,7 +1214,7 @@ function ClientDetail() {
               <div className="absolute right-2 top-1.5 flex gap-1">
                 <button
                   type="button"
-                  onClick={() => fetchDiary(false, diarySearch)}
+                  onClick={() => { const trimmed = diarySearch.trim(); setDiarySearch(trimmed); fetchDiary(false, trimmed); }}
                   className="px-3 py-1 bg-teal-600 text-white rounded text-xs font-medium hover:bg-teal-700"
                 >
                   {t('search', 'Search')}

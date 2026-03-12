@@ -18,7 +18,7 @@ router.get('/', (req, res) => {
   try {
     const db = getDatabase();
     const therapistId = req.user.id;
-    const search = req.query.search || '';
+    const search = (req.query.search || '').trim();
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page) || 25));
     const languageFilter = req.query.language || '';
