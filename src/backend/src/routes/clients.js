@@ -136,6 +136,7 @@ router.get('/:id/diary', (req, res) => {
     const entryType = req.query.entry_type || '';
     const dateFrom = req.query.date_from || ''; // ISO date string e.g. 2026-01-01
     const dateTo = req.query.date_to || ''; // ISO date string e.g. 2026-12-31
+    const searchQuery = (req.query.search || '').trim().toLowerCase();
     const offset = (page - 1) * perPage;
 
     // Verify client exists
@@ -192,7 +193,43 @@ router.get('/:id/diary', (req, res) => {
       params.push(dateTo.substring(0, 10) + 'T23:59:59');
     }
 
-    // Get total count
+    // When search is active, we need to decrypt all entries first, then filter & paginate
+    if (searchQuery) {
+      // Fetch all matching entries (without pagination) for search filtering
+      const allResult = db.exec(
+        `SELECT id, entry_type, content_encrypted, transcript_encrypted, encryption_key_id, payload_version, created_at, updated_at, embedding_ref
+         FROM diary_entries WHERE ${whereClause}
+         ORDER BY created_at DESC`,
+        params
+      );
+
+      let allEntries = (allResult.length > 0 ? allResult[0].values : []).map(row => {
+        let content = null;
+        let transcript = null;
+        try { if (row[2]) content = decrypt(row[2]); } catch (e) { content = '[decryption error]'; }
+        try { if (row[3]) transcript = decrypt(row[3]); } catch (e) { transcript = '[decryption error]'; }
+        return { id: row[0], entry_type: row[1], content, transcript, created_at: row[6], updated_at: row[7], embedding_ref: row[8] || null };
+      });
+
+      // Filter by search query (searches decrypted content and transcript)
+      allEntries = allEntries.filter(entry =>
+        (entry.content && entry.content.toLowerCase().includes(searchQuery)) ||
+        (entry.transcript && entry.transcript.toLowerCase().includes(searchQuery))
+      );
+
+      const total = allEntries.length;
+      const entries = allEntries.slice(offset, offset + perPage);
+
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+        [therapistId, 'read_diary', 'client', clientId, JSON.stringify({ entries_count: entries.length, page, search: searchQuery })]
+      );
+      saveDatabase();
+
+      return res.json({ entries, total, page, per_page: perPage, total_pages: Math.ceil(total / perPage) });
+    }
+
+    // No search: use efficient SQL-level pagination
     const countResult = db.exec(`SELECT COUNT(*) FROM diary_entries WHERE ${whereClause}`, params);
     const total = countResult.length > 0 ? countResult[0].values[0][0] : 0;
 

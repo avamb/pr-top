@@ -35,6 +35,7 @@ function ClientDetail() {
   const [error, setError] = useState('');
   const [diaryError, setDiaryError] = useState('');
   const [typeFilter, setTypeFilter] = useState(searchParams.get('type') || '');
+  const [diarySearch, setDiarySearch] = useState('');
   const todayStr = new Date().toISOString().split('T')[0];
   const [dateFrom, setDateFrom] = useState(searchParams.get('date_from') || '');
   const [dateTo, setDateTo] = useState(searchParams.get('date_to') || todayStr);
@@ -87,8 +88,9 @@ function ClientDetail() {
       setDiaryHasMore(false);
       setTimelinePage(1);
       setTimelineHasMore(false);
-      // Reset notes search
+      // Reset notes search and diary search
       setNotesSearch('');
+      setDiarySearch('');
       // Reset tab to default
       setActiveTab('timeline');
       // Reset data states
@@ -184,7 +186,7 @@ function ClientDetail() {
     }
   }
 
-  async function fetchDiary(loadMore = false) {
+  async function fetchDiary(loadMore = false, searchOverride) {
     try {
       if (loadMore) {
         setDiaryLoadingMore(true);
@@ -198,6 +200,8 @@ function ClientDetail() {
       if (typeFilter) params.set('entry_type', typeFilter);
       if (dateFrom) params.set('date_from', dateFrom);
       if (dateTo) params.set('date_to', dateTo);
+      const searchVal = searchOverride !== undefined ? searchOverride : diarySearch;
+      if (searchVal.trim()) params.set('search', searchVal.trim());
       params.set('page', currentPage);
       params.set('per_page', '25');
       const qs = params.toString();
@@ -648,6 +652,15 @@ function ClientDetail() {
                   onClick={() => { setTimelineStartDate(''); setTimelineEndDate(todayStr); }}
                   className="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
                 >Clear dates</button>
+              )}
+              {(timelineTypeFilter || timelineStartDate || timelineEndDate !== todayStr) && (
+                <button
+                  onClick={() => { setTimelineTypeFilter(''); setTimelineStartDate(''); setTimelineEndDate(todayStr); }}
+                  className="ml-auto px-3 py-1.5 text-sm bg-stone-200 hover:bg-stone-300 text-stone-700 rounded font-medium"
+                  aria-label="Reset all filters"
+                >
+                  {t('reset_all_filters', 'Reset all filters')}
+                </button>
               )}
             </div>
 
@@ -1164,6 +1177,60 @@ function ClientDetail() {
                 className="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
               >Clear dates</button>
             )}
+            {(typeFilter || dateFrom || dateTo !== todayStr || diarySearch) && (
+              <button
+                onClick={() => { setTypeFilter(''); setDateFrom(''); setDateTo(todayStr); setDiarySearch(''); setDiaryPage(1); }}
+                className="ml-auto px-3 py-1.5 text-sm bg-stone-200 hover:bg-stone-300 text-stone-700 rounded font-medium"
+                aria-label="Reset all filters"
+              >
+                {t('reset_all_filters', 'Reset all filters')}
+              </button>
+            )}
+          </div>
+
+          {/* Diary Search */}
+          <div className="mb-4">
+            <div className="relative">
+              <input
+                type="text"
+                value={diarySearch}
+                onChange={(e) => setDiarySearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    fetchDiary(false, diarySearch);
+                  }
+                }}
+                placeholder={t('search_diary_placeholder', 'Search diary entries...')}
+                className="w-full border border-stone-300 rounded-lg pl-10 pr-20 py-2 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                aria-label="Search diary entries"
+              />
+              <svg className="absolute left-3 top-2.5 h-4 w-4 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <div className="absolute right-2 top-1.5 flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => fetchDiary(false, diarySearch)}
+                  className="px-3 py-1 bg-teal-600 text-white rounded text-xs font-medium hover:bg-teal-700"
+                >
+                  {t('search', 'Search')}
+                </button>
+                {diarySearch && (
+                  <button
+                    type="button"
+                    onClick={() => { setDiarySearch(''); fetchDiary(false, ''); }}
+                    className="px-2 py-1 bg-stone-200 text-stone-600 rounded text-xs font-medium hover:bg-stone-300"
+                  >
+                    {t('clear', 'Clear')}
+                  </button>
+                )}
+              </div>
+            </div>
+            {diarySearch && (
+              <p className="text-xs text-stone-500 mt-1">
+                Showing {diaryTotal} {diaryTotal === 1 ? 'entry' : 'entries'} matching &quot;{diarySearch}&quot;
+              </p>
+            )}
           </div>
 
           {diaryError ? (
@@ -1175,18 +1242,18 @@ function ClientDetail() {
             <p className="text-stone-500">Loading diary entries...</p>
           ) : diary.length === 0 ? (
             <div className="text-center py-12">
-              <div className="text-5xl mb-4">{(typeFilter || dateFrom || dateTo !== todayStr) ? '🔍' : '📓'}</div>
+              <div className="text-5xl mb-4">{(typeFilter || dateFrom || dateTo !== todayStr || diarySearch) ? '🔍' : '📓'}</div>
               <h3 className="text-lg font-medium text-stone-600 mb-2">
-                {(typeFilter || dateFrom || dateTo !== todayStr) ? t('no_diary_filtered', 'No diary entries match your filters') : t('no_diary_entries', 'No diary entries yet')}
+                {(typeFilter || dateFrom || dateTo !== todayStr || diarySearch) ? t('no_diary_filtered', 'No diary entries match your filters') : t('no_diary_entries', 'No diary entries yet')}
               </h3>
               <p className="text-sm text-stone-400 max-w-sm mx-auto">
-                {(typeFilter || dateFrom || dateTo !== todayStr)
+                {(typeFilter || dateFrom || dateTo !== todayStr || diarySearch)
                   ? t('no_diary_filtered_hint', 'Try adjusting or clearing your filters to see more entries.')
                   : t('no_diary_hint', 'Diary entries will appear here once the client submits them via the Telegram bot.')}
               </p>
-              {(typeFilter || dateFrom || dateTo !== todayStr) && (
+              {(typeFilter || dateFrom || dateTo !== todayStr || diarySearch) && (
                 <button
-                  onClick={() => { setTypeFilter(''); setDateFrom(''); setDateTo(todayStr); }}
+                  onClick={() => { setTypeFilter(''); setDateFrom(''); setDateTo(todayStr); setDiarySearch(''); setDiaryPage(1); }}
                   className="mt-4 px-4 py-2 text-sm bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg transition-colors"
                 >
                   {t('clear_filters', 'Clear all filters')}

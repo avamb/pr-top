@@ -27,7 +27,15 @@ const PORT = process.env.PORT || 3001;
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: function(origin, callback) {
+    var allowed = [process.env.FRONTEND_URL || 'http://localhost:3000'];
+    // In development, allow any localhost port
+    if (!origin || allowed.indexOf(origin) !== -1 || (process.env.NODE_ENV !== 'production' && origin && origin.match(/^http:\/\/localhost:\d+$/))) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 
