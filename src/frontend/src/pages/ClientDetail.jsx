@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Breadcrumb from '../components/Breadcrumb';
+import useBeforeUnload from '../hooks/useBeforeUnload';
 
 const API = 'http://localhost:3001/api';
 
@@ -24,6 +25,7 @@ function ClientDetail() {
   const [contextForm, setContextForm] = useState({ anamnesis: '', current_goals: '', contraindications: '', ai_instructions: '' });
   const [contextSaving, setContextSaving] = useState(false);
   const [contextMsg, setContextMsg] = useState('');
+  const [contextDirty, setContextDirty] = useState(false);
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'timeline');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -55,6 +57,10 @@ function ClientDetail() {
   const [importMsg, setImportMsg] = useState('');
   const [importError, setImportError] = useState('');
   const token = localStorage.getItem('token');
+
+  // Warn user before leaving page with unsaved form data
+  const hasUnsavedChanges = newNoteContent.trim() !== '' || contextDirty;
+  useBeforeUnload(hasUnsavedChanges);
 
   // Sync filter state to URL query parameters
   useEffect(() => {
@@ -230,6 +236,7 @@ function ClientDetail() {
         contraindications: data.context.contraindications || '',
         ai_instructions: data.context.ai_instructions || ''
       });
+      setContextDirty(false);
     } catch (e) {
       console.error('Context fetch error:', e.message);
     }
@@ -266,6 +273,7 @@ function ClientDetail() {
       }
       const data = await res.json();
       setContext(data.context);
+      setContextDirty(false);
       setContextMsg('Context saved successfully!');
     } catch (e) {
       setContextMsg('Error: ' + e.message);
@@ -776,7 +784,7 @@ function ClientDetail() {
                 <label className="block text-sm font-medium text-stone-700 mb-1">Anamnesis / History</label>
                 <textarea
                   value={contextForm.anamnesis}
-                  onChange={(e) => setContextForm(f => ({ ...f, anamnesis: e.target.value }))}
+                  onChange={(e) => { setContextForm(f => ({ ...f, anamnesis: e.target.value })); setContextDirty(true); }}
                   placeholder="Patient history, background, relevant medical/psychological information..."
                   className="w-full border border-stone-300 rounded-lg p-3 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   rows={4}
@@ -788,7 +796,7 @@ function ClientDetail() {
                 <label className="block text-sm font-medium text-stone-700 mb-1">Current Goals</label>
                 <textarea
                   value={contextForm.current_goals}
-                  onChange={(e) => setContextForm(f => ({ ...f, current_goals: e.target.value }))}
+                  onChange={(e) => { setContextForm(f => ({ ...f, current_goals: e.target.value })); setContextDirty(true); }}
                   placeholder="Current therapy goals and objectives..."
                   className="w-full border border-stone-300 rounded-lg p-3 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   rows={3}
@@ -800,7 +808,7 @@ function ClientDetail() {
                 <label className="block text-sm font-medium text-stone-700 mb-1">Contraindications</label>
                 <textarea
                   value={contextForm.contraindications}
-                  onChange={(e) => setContextForm(f => ({ ...f, contraindications: e.target.value }))}
+                  onChange={(e) => { setContextForm(f => ({ ...f, contraindications: e.target.value })); setContextDirty(true); }}
                   placeholder="Any contraindications or precautions..."
                   className="w-full border border-stone-300 rounded-lg p-3 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   rows={3}
@@ -812,7 +820,7 @@ function ClientDetail() {
                 <label className="block text-sm font-medium text-stone-700 mb-1">AI Instructions / Boundaries</label>
                 <textarea
                   value={contextForm.ai_instructions}
-                  onChange={(e) => setContextForm(f => ({ ...f, ai_instructions: e.target.value }))}
+                  onChange={(e) => { setContextForm(f => ({ ...f, ai_instructions: e.target.value })); setContextDirty(true); }}
                   placeholder="Instructions for AI when processing this client's data..."
                   className="w-full border border-stone-300 rounded-lg p-3 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   rows={3}
