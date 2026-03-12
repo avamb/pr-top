@@ -70,18 +70,34 @@ export default function Settings() {
   const [timezone, setTimezone] = useState('UTC');
   const [escalation, setEscalation] = useState(DEFAULT_ESCALATION);
 
+  const abortControllerRef = React.useRef(null);
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) { navigate('/login'); return; }
     fetchProfile(token);
+
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, []);
 
   async function fetchProfile(token) {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       setLoading(true);
       const res = await fetch(`${API_URL}/settings/profile`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal: controller.signal
       });
+      if (controller.signal.aborted) return;
       if (res.status === 401) {
         localStorage.removeItem('token');
         navigate('/login');
@@ -89,20 +105,27 @@ export default function Settings() {
       }
       if (!res.ok) throw new Error('Failed to fetch profile');
       const data = await res.json();
-      setProfile(data.profile);
-      setLanguage(data.profile.language || 'en');
-      setTimezone(data.profile.timezone || 'UTC');
-      setEscalation({ ...DEFAULT_ESCALATION, ...(data.profile.escalation_preferences || {}) });
-      // Sync i18n language with profile
-      const lang = data.profile.language || 'en';
-      if (i18n.language !== lang) {
-        i18n.changeLanguage(lang);
-        localStorage.setItem('app_language', lang);
+      if (!controller.signal.aborted) {
+        setProfile(data.profile);
+        setLanguage(data.profile.language || 'en');
+        setTimezone(data.profile.timezone || 'UTC');
+        setEscalation({ ...DEFAULT_ESCALATION, ...(data.profile.escalation_preferences || {}) });
+        // Sync i18n language with profile
+        const lang = data.profile.language || 'en';
+        if (i18n.language !== lang) {
+          i18n.changeLanguage(lang);
+          localStorage.setItem('app_language', lang);
+        }
       }
     } catch (err) {
-      setError(err.message);
+      if (err.name === 'AbortError') return;
+      if (!controller.signal.aborted) {
+        setError(err.message);
+      }
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
   }
 

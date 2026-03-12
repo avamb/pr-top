@@ -213,6 +213,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const abortControllerRef = React.useRef(null);
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
@@ -225,9 +227,23 @@ export default function Dashboard() {
     const parsedUser = JSON.parse(storedUser);
     setUser(parsedUser);
     fetchDashboardData(token);
+
+    return () => {
+      // Abort any in-flight requests when component unmounts
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [navigate]);
 
   async function fetchDashboardData(token) {
+    // Abort previous request if still pending
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       setLoading(true);
       setError(null);
@@ -238,9 +254,11 @@ export default function Dashboard() {
       };
 
       const [statsRes, activityRes] = await Promise.all([
-        fetch(`${API_URL}/dashboard/stats`, { headers }),
-        fetch(`${API_URL}/dashboard/activity`, { headers })
+        fetch(`${API_URL}/dashboard/stats`, { headers, signal: controller.signal }),
+        fetch(`${API_URL}/dashboard/activity`, { headers, signal: controller.signal })
       ]);
+
+      if (controller.signal.aborted) return;
 
       if (statsRes.status === 401 || activityRes.status === 401) {
         localStorage.removeItem('token');
@@ -261,16 +279,23 @@ export default function Dashboard() {
       const statsData = await statsRes.json();
       const activityData = await activityRes.json();
 
-      setStats(statsData);
-      setActivities(activityData.activities || []);
+      if (!controller.signal.aborted) {
+        setStats(statsData);
+        setActivities(activityData.activities || []);
+      }
     } catch (err) {
+      if (err.name === 'AbortError') return;
       console.error('Dashboard fetch error:', err);
       const friendly = err.message === 'Failed to fetch'
         ? 'Unable to connect to server. Please check your connection and try again.'
         : err.message;
-      setError(friendly);
+      if (!controller.signal.aborted) {
+        setError(friendly);
+      }
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
   }
 

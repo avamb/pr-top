@@ -95,10 +95,18 @@ export default function ClientList() {
   const [planInfo, setPlanInfo] = useState(null);
   const [loadTime, setLoadTime] = useState(null);
   const fetchRef = useRef(0);
+  const abortControllerRef = useRef(null);
 
   const fetchClients = useCallback(async (searchTerm, pageNum) => {
     const token = localStorage.getItem('token');
     if (!token) { navigate('/login'); return; }
+
+    // Abort previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     const fetchId = ++fetchRef.current;
     setLoading(true);
@@ -115,7 +123,8 @@ export default function ClientList() {
       if (trimmedSearch) params.set('search', trimmedSearch);
 
       const res = await fetch(`${API_URL}/clients?${params}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal: controller.signal
       });
 
       if (res.status === 401) {
@@ -140,6 +149,7 @@ export default function ClientList() {
         setLoadTime(elapsed);
       }
     } catch (err) {
+      if (err.name === 'AbortError') return;
       if (fetchId === fetchRef.current) {
         const friendly = err.message === 'Failed to fetch'
           ? 'Unable to connect to server. Please check your connection and try again.'
@@ -166,6 +176,12 @@ export default function ClientList() {
     const token = localStorage.getItem('token');
     if (!token) { navigate('/login'); return; }
     fetchClients(search, page);
+
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [search, page, fetchClients, navigate]);
 
   const handleSearchChange = (e) => {

@@ -34,6 +34,9 @@ function SessionDetail() {
         navigate('/login');
         return;
       }
+      if (res.status === 404) {
+        throw new Error('This session has been deleted or is no longer available.');
+      }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to fetch session');
@@ -64,7 +67,14 @@ function SessionDetail() {
         {loading ? (
           <p className="text-stone-500">{t('sessionDetail.loadingSession')}</p>
         ) : error ? (
-          <div className="text-red-600">{error}</div>
+          <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-8 text-center">
+            <h2 className="text-xl font-semibold text-stone-800 mb-2">Record Unavailable</h2>
+            <p className="text-stone-600 mb-4">{error}</p>
+            <button
+              onClick={() => navigate(-1)}
+              className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700"
+            >← Go Back</button>
+          </div>
         ) : session ? (
           <div>
             <button

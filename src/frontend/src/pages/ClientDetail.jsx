@@ -26,6 +26,9 @@ function ClientDetail() {
   const [newNoteContent, setNewNoteContent] = useState('');
   const [creatingNote, setCreatingNote] = useState(false);
   const [notesSearch, setNotesSearch] = useState('');
+  const [editingNoteId, setEditingNoteId] = useState(null);
+  const [editingNoteContent, setEditingNoteContent] = useState('');
+  const [updatingNote, setUpdatingNote] = useState(false);
   const [context, setContext] = useState(null);
   const [contextForm, setContextForm] = useState({ anamnesis: '', current_goals: '', contraindications: '', ai_instructions: '' });
   const [contextSaving, setContextSaving] = useState(false);
@@ -133,6 +136,7 @@ function ClientDetail() {
 
   // Validate client ID is a positive integer
   const isValidId = /^\d+$/.test(id) && Number(id) > 0;
+  const clientAbortRef = useRef(null);
 
   useEffect(() => {
     if (!token) {
@@ -144,24 +148,38 @@ function ClientDetail() {
       setLoading(false);
       return;
     }
+
+    // Abort previous requests when deps change or component unmounts
+    if (clientAbortRef.current) {
+      clientAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    clientAbortRef.current = controller;
+
     // First verify the client exists and is accessible, then load sub-resources
-    fetchClient().then(function(clientOk) {
-      if (clientOk) {
-        fetchDiary();
-        fetchNotes();
-        fetchContext();
-        fetchTimeline();
-        fetchSessions();
-        fetchExercises();
+    fetchClient(controller.signal).then(function(clientOk) {
+      if (clientOk && !controller.signal.aborted) {
+        fetchDiary(false, undefined, controller.signal);
+        fetchNotes(undefined, controller.signal);
+        fetchContext(controller.signal);
+        fetchTimeline(false, controller.signal);
+        fetchSessions(controller.signal);
+        fetchExercises(controller.signal);
       }
     });
+
+    return () => {
+      controller.abort();
+    };
   }, [id, typeFilter, dateFrom, dateTo, timelineStartDate, timelineEndDate, timelineTypeFilter]);
 
-  async function fetchClient() {
+  async function fetchClient(signal) {
     try {
       const res = await fetch(`${API}/clients/${id}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal
       });
+      if (signal && signal.aborted) return false;
       if (res.status === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -180,15 +198,17 @@ function ClientDetail() {
       }
       if (!res.ok) throw new Error('Failed to fetch client');
       const data = await res.json();
+      if (signal && signal.aborted) return false;
       setClient(data.client);
       return true;
     } catch (e) {
+      if (e.name === 'AbortError') return false;
       setError(e.message);
       return false;
     }
   }
 
-  async function fetchDiary(loadMore = false, searchOverride) {
+  async function fetchDiary(loadMore = false, searchOverride, signal) {
     try {
       if (loadMore) {
         setDiaryLoadingMore(true);
@@ -211,14 +231,17 @@ function ClientDetail() {
       const qs = params.toString();
       const url = `${API}/clients/${id}/diary${qs ? '?' + qs : ''}`;
       const res = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal
       });
+      if (signal && signal.aborted) return;
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setDiaryError(data.error || 'Failed to fetch diary');
         return;
       }
       const data = await res.json();
+      if (signal && signal.aborted) return;
       if (loadMore) {
         setDiary(prev => [...prev, ...data.entries]);
         setDiaryPage(currentPage);
@@ -228,10 +251,13 @@ function ClientDetail() {
       setDiaryTotal(data.total);
       setDiaryHasMore(currentPage < (data.total_pages || 1));
     } catch (e) {
+      if (e.name === 'AbortError') return;
       setDiaryError(e.message);
     } finally {
-      setLoading(false);
-      setDiaryLoadingMore(false);
+      if (!signal || !signal.aborted) {
+        setLoading(false);
+        setDiaryLoadingMore(false);
+      }
     }
   }
 
@@ -262,20 +288,24 @@ function ClientDetail() {
     }
   }
 
-  async function fetchNotes(search) {
+  async function fetchNotes(search, signal) {
     try {
       const params = new URLSearchParams();
       const q = (search !== undefined ? search : notesSearch).trim();
       if (q) params.set('search', q);
       const qs = params.toString();
       const res = await fetch(`${API}/clients/${id}/notes${qs ? '?' + qs : ''}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal
       });
+      if (signal && signal.aborted) return;
       if (!res.ok) throw new Error('Failed to fetch notes');
       const data = await res.json();
+      if (signal && signal.aborted) return;
       setNotes(data.notes);
       setNotesTotal(data.total);
     } catch (e) {
+      if (e.name === 'AbortError') return;
       console.error('Notes fetch error:', e.message);
     }
   }
@@ -300,6 +330,29 @@ function ClientDetail() {
       setError(e.message);
     } finally {
       setCreatingNote(false);
+    }
+  }
+
+  async function handleUpdateNote(noteId) {
+    if (!editingNoteContent.trim() || updatingNote) return;
+    setUpdatingNote(true);
+    try {
+      const res = await fetch(`${API}/clients/${id}/notes/${noteId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ content: editingNoteContent.trim() })
+      });
+      if (!res.ok) throw new Error('Failed to update note');
+      setEditingNoteId(null);
+      setEditingNoteContent('');
+      fetchNotes();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setUpdatingNote(false);
     }
   }
 
@@ -334,13 +387,16 @@ function ClientDetail() {
     }
   }
 
-  async function fetchContext() {
+  async function fetchContext(signal) {
     try {
       const res = await fetch(`${API}/clients/${id}/context`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal
       });
+      if (signal && signal.aborted) return;
       if (!res.ok) throw new Error('Failed to fetch context');
       const data = await res.json();
+      if (signal && signal.aborted) return;
       setContext(data.context);
       setContextForm({
         anamnesis: data.context.anamnesis || '',
@@ -350,6 +406,7 @@ function ClientDetail() {
       });
       setContextDirty(false);
     } catch (e) {
+      if (e.name === 'AbortError') return;
       console.error('Context fetch error:', e.message);
     }
   }
@@ -417,7 +474,7 @@ function ClientDetail() {
     }
   }
 
-  async function fetchTimeline(loadMore = false) {
+  async function fetchTimeline(loadMore = false, signal) {
     try {
       if (loadMore) {
         setTimelineLoadingMore(true);
@@ -437,8 +494,10 @@ function ClientDetail() {
       const qs = params.toString();
       const url = `${API}/clients/${id}/timeline${qs ? '?' + qs : ''}`;
       const res = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal
       });
+      if (signal && signal.aborted) return;
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         console.error('Timeline error:', data.error);
@@ -449,6 +508,7 @@ function ClientDetail() {
         return;
       }
       const data = await res.json();
+      if (signal && signal.aborted) return;
       if (loadMore) {
         setTimeline(prev => [...prev, ...data.timeline]);
         setTimelinePage(currentPage);
@@ -458,44 +518,59 @@ function ClientDetail() {
       setTimelineTotal(data.total);
       setTimelineHasMore(data.has_more || false);
     } catch (e) {
+      if (e.name === 'AbortError') return;
       console.error('Timeline fetch error:', e.message);
     } finally {
-      setTimelineLoading(false);
-      setTimelineLoadingMore(false);
+      if (!signal || !signal.aborted) {
+        setTimelineLoading(false);
+        setTimelineLoadingMore(false);
+      }
     }
   }
 
-  async function fetchSessions() {
+  async function fetchSessions(signal) {
     try {
       setSessionsLoading(true);
       const res = await fetch(`${API}/clients/${id}/sessions`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal
       });
+      if (signal && signal.aborted) return;
       if (!res.ok) throw new Error('Failed to fetch sessions');
       const data = await res.json();
+      if (signal && signal.aborted) return;
       setSessions(data.sessions);
       setSessionsTotal(data.total);
     } catch (e) {
+      if (e.name === 'AbortError') return;
       console.error('Sessions fetch error:', e.message);
     } finally {
-      setSessionsLoading(false);
+      if (!signal || !signal.aborted) {
+        setSessionsLoading(false);
+      }
     }
   }
 
-  async function fetchExercises() {
+  async function fetchExercises(signal) {
     try {
       setExercisesLoading(true);
       const res = await fetch(`${API}/clients/${id}/exercises`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal
       });
+      if (signal && signal.aborted) return;
       if (!res.ok) throw new Error('Failed to fetch exercises');
       const data = await res.json();
+      if (signal && signal.aborted) return;
       setExercises(data.deliveries);
       setExercisesTotal(data.total);
     } catch (e) {
+      if (e.name === 'AbortError') return;
       console.error('Exercises fetch error:', e.message);
     } finally {
-      setExercisesLoading(false);
+      if (!signal || !signal.aborted) {
+        setExercisesLoading(false);
+      }
     }
   }
 
@@ -912,16 +987,52 @@ function ClientDetail() {
                 {notes.map(note => (
                   <div key={note.id} className="border border-stone-200 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-stone-400">
-                        {formatUserDate(note.created_at)}
-                      </span>
-                      {note.session_date && (
-                        <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
-                          Session: {note.session_date}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-stone-400">
+                          {t('created', 'Created')}: {formatUserDate(note.created_at)}
                         </span>
-                      )}
+                        {note.updated_at && note.updated_at !== note.created_at && (
+                          <span className="text-xs text-stone-400">
+                            | {t('updated', 'Updated')}: {formatUserDate(note.updated_at)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {note.session_date && (
+                          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                            Session: {note.session_date}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => {
+                            setEditingNoteId(editingNoteId === note.id ? null : note.id);
+                            setEditingNoteContent(note.content);
+                          }}
+                          className="text-xs text-teal-600 hover:text-teal-800 cursor-pointer"
+                        >
+                          {editingNoteId === note.id ? t('cancel', 'Cancel') : t('edit', 'Edit')}
+                        </button>
+                      </div>
                     </div>
-                    <p className="text-stone-700 whitespace-pre-wrap">{note.content}</p>
+                    {editingNoteId === note.id ? (
+                      <div className="mt-2">
+                        <textarea
+                          value={editingNoteContent}
+                          onChange={(e) => setEditingNoteContent(e.target.value)}
+                          className="w-full border border-stone-300 rounded-lg p-3 text-sm resize-y min-h-[80px]"
+                          rows={3}
+                        />
+                        <button
+                          onClick={() => handleUpdateNote(note.id)}
+                          disabled={updatingNote || !editingNoteContent.trim()}
+                          className="mt-2 px-4 py-1.5 bg-teal-600 text-white text-sm rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {updatingNote ? t('saving', 'Saving...') : t('save', 'Save')}
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-stone-700 whitespace-pre-wrap">{note.content}</p>
+                    )}
                   </div>
                 ))}
               </div>

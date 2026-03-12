@@ -129,20 +129,36 @@ export default function Analytics() {
   const [error, setError] = useState(null);
   const [days, setDays] = useState(30);
 
+  const abortControllerRef = React.useRef(null);
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) { navigate('/login'); return; }
     fetchAnalytics();
+
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [days]);
 
   async function fetchAnalytics() {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     const token = localStorage.getItem('token');
     setLoading(true);
     setError(null);
     try {
       const res = await fetch(`${API}/dashboard/analytics?days=${days}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal: controller.signal
       });
+      if (controller.signal.aborted) return;
       if (res.status === 401) {
         localStorage.removeItem('token');
         navigate('/login');
@@ -150,11 +166,18 @@ export default function Analytics() {
       }
       if (!res.ok) throw new Error('Failed to fetch analytics');
       const data = await res.json();
-      setAnalytics(data);
+      if (!controller.signal.aborted) {
+        setAnalytics(data);
+      }
     } catch (e) {
-      setError(e.message);
+      if (e.name === 'AbortError') return;
+      if (!controller.signal.aborted) {
+        setError(e.message);
+      }
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
   }
 

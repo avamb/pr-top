@@ -492,6 +492,76 @@ router.post('/:id/notes', (req, res) => {
   }
 });
 
+// PUT /api/clients/:id/notes/:noteId - Update an existing therapist note
+router.put('/:id/notes/:noteId', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+    const noteId = req.params.noteId;
+    const { content, session_date } = req.body;
+
+    if (!content || typeof content !== 'string' || content.trim().length === 0) {
+      return res.status(400).json({ error: 'Note content is required' });
+    }
+
+    if (content.length > 50000) {
+      return res.status(400).json({ error: 'Note content exceeds 50000 character limit' });
+    }
+
+    // Verify the note belongs to this therapist and client
+    const noteResult = db.exec(
+      'SELECT id, therapist_id, client_id, created_at FROM therapist_notes WHERE id = ? AND therapist_id = ? AND client_id = ?',
+      [noteId, therapistId, clientId]
+    );
+
+    if (noteResult.length === 0 || noteResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Note not found' });
+    }
+
+    const originalCreatedAt = noteResult[0].values[0][3];
+
+    // Encrypt the updated content
+    const { encrypted, keyVersion, keyId } = encrypt(content.trim());
+
+    // Update the note (only updated_at changes, created_at stays the same)
+    db.run(
+      `UPDATE therapist_notes SET note_encrypted = ?, encryption_key_id = ?, payload_version = ?, session_date = ?, updated_at = datetime('now') WHERE id = ?`,
+      [encrypted, keyId, keyVersion, session_date || null, noteId]
+    );
+
+    // Record in audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      [therapistId, 'update_note', 'therapist_note', noteId, JSON.stringify({ client_id: clientId })]
+    );
+    saveDatabase();
+
+    // Fetch the updated note to return accurate timestamps
+    const updatedResult = db.exec(
+      'SELECT id, created_at, updated_at FROM therapist_notes WHERE id = ?',
+      [noteId]
+    );
+
+    const updatedRow = updatedResult[0].values[0];
+
+    logger.info(`Therapist ${therapistId} updated note ${noteId} for client ${clientId}`);
+
+    res.json({
+      id: parseInt(noteId),
+      therapist_id: therapistId,
+      client_id: parseInt(clientId),
+      content: content.trim(),
+      session_date: session_date || null,
+      created_at: updatedRow[1],
+      updated_at: updatedRow[2]
+    });
+  } catch (error) {
+    logger.error('Update note error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update note' });
+  }
+});
+
 // GET /api/clients/:id/notes - Get therapist notes for a client (decrypted)
 // Supports ?search=keyword to filter notes by decrypted content
 router.get('/:id/notes', (req, res) => {
