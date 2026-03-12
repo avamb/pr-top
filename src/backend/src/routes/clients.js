@@ -1466,7 +1466,7 @@ router.post('/:id/import', (req, res, next) => {
 
     } catch (error) {
       logger.error('Import error: ' + error.message);
-      res.status(500).json({ error: 'Failed to import data: ' + error.message });
+      res.status(500).json({ error: 'Something went wrong. Please try again later.' });
     }
   });
 });

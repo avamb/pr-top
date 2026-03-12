@@ -120,7 +120,10 @@ function InviteCodeSection({ t }) {
       const data = await res.json();
       setInviteCode(data.invite_code);
     } catch (err) {
-      setError(err.message);
+      const friendly = err.message === 'Failed to fetch'
+        ? 'Unable to connect to server.'
+        : err.message;
+      setError(friendly);
     } finally {
       setLoading(false);
     }
@@ -251,8 +254,8 @@ export default function Dashboard() {
         return;
       }
 
-      if (!statsRes.ok) throw new Error(`Stats request failed: ${statsRes.status}`);
-      if (!activityRes.ok) throw new Error(`Activity request failed: ${activityRes.status}`);
+      if (!statsRes.ok) throw new Error('Unable to load dashboard data. Please try again.');
+      if (!activityRes.ok) throw new Error('Unable to load recent activity. Please try again.');
 
       const statsData = await statsRes.json();
       const activityData = await activityRes.json();
@@ -261,7 +264,10 @@ export default function Dashboard() {
       setActivities(activityData.activities || []);
     } catch (err) {
       console.error('Dashboard fetch error:', err);
-      setError(err.message);
+      const friendly = err.message === 'Failed to fetch'
+        ? 'Unable to connect to server. Please check your connection and try again.'
+        : err.message;
+      setError(friendly);
     } finally {
       setLoading(false);
     }

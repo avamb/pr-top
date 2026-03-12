@@ -124,7 +124,7 @@ export default function ClientList() {
         return;
       }
 
-      if (!res.ok) throw new Error(`Failed: ${res.status}`);
+      if (!res.ok) throw new Error('Unable to load clients. Please try again.');
 
       const data = await res.json();
       const elapsed = Math.round(performance.now() - startTime);
@@ -140,7 +140,10 @@ export default function ClientList() {
       }
     } catch (err) {
       if (fetchId === fetchRef.current) {
-        setError(err.message);
+        const friendly = err.message === 'Failed to fetch'
+          ? 'Unable to connect to server. Please check your connection and try again.'
+          : err.message;
+        setError(friendly);
       }
     } finally {
       if (fetchId === fetchRef.current) {

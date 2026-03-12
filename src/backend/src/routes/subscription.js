@@ -130,7 +130,7 @@ router.post('/create-customer', requireAuth, async (req, res) => {
     });
   } catch (error) {
     logger.error('Create customer error: ' + error.message);
-    res.status(500).json({ error: 'Failed to create Stripe customer: ' + error.message });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 });
 
@@ -491,7 +491,7 @@ router.post('/checkout', requireAuth, async (req, res) => {
     });
   } catch (error) {
     logger.error('Checkout error: ' + error.message);
-    res.status(500).json({ error: 'Failed to create checkout session: ' + error.message });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 });
 

@@ -104,7 +104,7 @@ router.post('/decrypt', requireAuth, (req, res) => {
     res.json({ plaintext });
   } catch (error) {
     logger.error('Decrypt error: ' + error.message);
-    res.status(500).json({ error: 'Decryption failed: ' + error.message });
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 });
 

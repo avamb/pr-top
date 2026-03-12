@@ -198,7 +198,8 @@ app.use((err, req, res, next) => {
   }
   logger.error('Unhandled error: ' + err.message);
   logger.error('Stack: ' + err.stack);
-  res.status(500).json({ error: 'Internal server error: ' + err.message });
+  // Never expose internal error details to users
+  res.status(500).json({ error: 'Something went wrong. Please try again later.' });
 });
 
 // Initialize database and start server
