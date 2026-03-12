@@ -1268,3 +1268,23 @@ CURRENT STATUS: ~160/205 features passing (158 + 2 new)
   - Zero console errors
 
 CURRENT STATUS: ~162/205 features passing (160 + 2 new)
+
+=== Session 2026-03-12_batch_160_163 ===
+
+- Feature #160: Deep link to deleted client shows appropriate message ✅
+  - Client fetch now returns boolean to gate sub-resource fetches
+  - 404 shows 'Client Unavailable' heading with explanation about unlinking/consent revocation
+  - 403 shows 'Access denied' message
+  - Reduced console errors from 24 to 2 (only unavoidable network 404 logs)
+  - Back to Clients button navigates correctly
+  - Full E2E test: register therapist, link client, revoke consent, navigate to saved URL
+  - Zero JS console errors, no mock data patterns
+
+- Feature #163: Double-click submit on note creation prevented ✅
+  - Added creatingNote guard in handleCreateNote handler
+  - Button disabled={creatingNote || \!newNoteContent.trim()} already in place
+  - Rapid double-click test: second click fails (button disabled), only 1 note created
+  - API verified: exactly 1 note in database after double-click attempt
+  - Zero console errors
+
+CURRENT STATUS: ~170/205 features passing
