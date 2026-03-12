@@ -1109,3 +1109,23 @@ CURRENT STATUS: ~152/205 features passing (150 + 2 new)
   - Fixed vite proxy: changed target from localhost to 127.0.0.1 (IPv6 resolution issue)
 
 CURRENT STATUS: ~154/205 features passing (152 + 2 new)
+
+=== Session 2026-03-12_batch_143_146 ===
+
+- Feature #143: Landing hero section renders with value proposition ✅
+  - Hero section visible with aria-label='Hero'
+  - Headline: 'Your Between-Session Therapy Assistant'
+  - CTA button: 'Start Free Trial' linking to /register
+  - Added SVG dashboard illustration (therapist dashboard mockup with client cards, chat bubble, security shield)
+  - Two-column layout: text left, illustration right on desktop
+  - Zero console errors
+
+- Feature #146: Dashboard data comes from real API not hardcoded ✅
+  - Registered therapist, initial dashboard stats: 0 clients, 0 sessions, 0 notes
+  - Added linked client via bot API (register -> connect -> consent)
+  - Dashboard stats updated to 1 client (real DB query confirmed)
+  - Browser verified: Quick Stats show Clients: 1 after adding client
+  - No mock data patterns in src/
+  - Zero console errors
+
+CURRENT STATUS: ~156/205 features passing (154 + 2 new)
