@@ -1057,3 +1057,28 @@ CURRENT STATUS: ~148/205 features passing (146 + 2 new)
   - Zero console errors when backend is running
 
 CURRENT STATUS: ~150/205 features passing (148 + 2 new)
+
+=== Session 2026-03-12_batch_138_139 ===
+
+- Feature #138: Therapist data isolated from other therapists ✅
+  - Created 2 therapists (A, B), each with own client (X, Y) and diary entries
+  - Therapist A client list: only sees clientX (PASS)
+  - Therapist B client list: only sees clientY (PASS)
+  - Cross-therapist access (A→B client detail/diary/notes/timeline): all 404/403 (PASS)
+  - Reverse cross-access (B→A client): also blocked (PASS)
+  - Browser verified: login as A shows only clientX, login as B shows only clientY
+  - URL manipulation (B tries /clients/543 for A's client) shows "Failed to fetch client"
+  - No mock data patterns in src/
+  - 7/7 API isolation tests passing
+
+- Feature #139: Non-authenticated requests blocked from protected endpoints ✅
+  - 16 protected endpoints tested without auth token: all return 401
+  - Endpoints: /api/clients, /api/clients/:id, diary, notes, timeline, /api/auth/me,
+    /api/sessions/:id, /api/dashboard, notifications, analytics, /api/invite-code,
+    /api/exercises, /api/settings/profile, /api/search/stats, /api/admin/therapists
+  - Invalid token (Bearer invalid-token-xyz) also returns 401
+  - Browser: /dashboard without auth redirects to /login
+  - Browser: /clients without auth redirects to /login
+  - Zero console errors on login page
+
+CURRENT STATUS: ~152/205 features passing (150 + 2 new)
