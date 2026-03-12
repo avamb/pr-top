@@ -1742,4 +1742,85 @@ router.post('/:id/import', (req, res, next) => {
   });
 });
 
+// GET /clients/:id/diary/export - Export diary entries as JSON file
+router.get('/:id/diary/export', (req, res) => {
+  try {
+    var db = getDatabase();
+    var therapistId = req.user.id;
+    var clientId = req.params.id;
+
+    // Verify client exists and is linked
+    var clientResult = db.exec(
+      "SELECT id, therapist_id, consent_therapist_access, email, telegram_id FROM users WHERE id = ? AND role = 'client'",
+      [clientId]
+    );
+
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+
+    var clientRow = clientResult[0].values[0];
+    var clientTherapistId = clientRow[1];
+    var hasConsent = clientRow[2];
+    var clientEmail = clientRow[3];
+    var clientTelegramId = clientRow[4];
+
+    if (!clientTherapistId || String(clientTherapistId) !== String(therapistId)) {
+      return res.status(403).json({ error: 'You are not authorized to access this client\'s data' });
+    }
+
+    if (!hasConsent) {
+      return res.status(403).json({ error: 'Client has not granted consent for data access' });
+    }
+
+    // Fetch all diary entries (decrypted)
+    var diaryResult = db.exec(
+      "SELECT id, entry_type, content_encrypted, transcript_encrypted, created_at, updated_at FROM diary_entries WHERE client_id = ? ORDER BY created_at DESC",
+      [clientId]
+    );
+
+    var entries = (diaryResult.length > 0 ? diaryResult[0].values : []).map(function(row) {
+      var content = null;
+      var transcript = null;
+      try { if (row[2]) content = decrypt(row[2]); } catch (e) { content = '[decryption error]'; }
+      try { if (row[3]) transcript = decrypt(row[3]); } catch (e) { transcript = '[decryption error]'; }
+      return {
+        id: row[0],
+        entry_type: row[1],
+        content: content,
+        transcript: transcript,
+        created_at: row[4],
+        updated_at: row[5]
+      };
+    });
+
+    var clientName = clientEmail || clientTelegramId || ('client_' + clientId);
+    var safeClientName = clientName.replace(/[^a-zA-Z0-9_@.-]/g, '_');
+    var dateStr = new Date().toISOString().split('T')[0];
+    var filename = 'diary_export_' + safeClientName + '_' + dateStr + '.json';
+
+    var exportData = {
+      export_date: new Date().toISOString(),
+      client_id: Number(clientId),
+      client_identifier: clientName,
+      total_entries: entries.length,
+      entries: entries
+    };
+
+    // Log export action in audit
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      [therapistId, 'diary_export', 'client', clientId, JSON.stringify({ entries_count: entries.length })]
+    );
+    saveDatabase();
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
+    res.json(exportData);
+  } catch (error) {
+    logger.error('Diary export error: ' + error.message);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
+  }
+});
+
 module.exports = router;

@@ -356,6 +356,34 @@ function ClientDetail() {
     }
   }
 
+  async function handleExportDiary() {
+    try {
+      var res = await fetch(`${API}/clients/${id}/diary/export`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        var errData = await res.json().catch(function() { return {}; });
+        alert(errData.error || 'Failed to export diary entries');
+        return;
+      }
+      // Get filename from Content-Disposition header or use default
+      var disposition = res.headers.get('Content-Disposition') || '';
+      var filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+      var filename = filenameMatch ? filenameMatch[1] : 'diary_export.json';
+      var blob = await res.blob();
+      var url = window.URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('Export failed: ' + e.message);
+    }
+  }
+
   async function handleImportFile(e, importType) {
     const file = e.target.files[0];
     if (!file) return;
@@ -1273,6 +1301,14 @@ function ClientDetail() {
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-semibold text-stone-800">{t('clientDetail.diaryEntries', { count: diaryTotal })}</h3>
             <div className="flex gap-2">
+              <button
+                onClick={handleExportDiary}
+                disabled={diaryTotal === 0}
+                className="px-3 py-1 bg-stone-100 text-stone-600 rounded text-sm hover:bg-stone-200 border border-stone-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1"
+                title={t('clientDetail.exportDiary', 'Export diary entries')}
+              >
+                {t('clientDetail.exportJSON', 'Export JSON')}
+              </button>
               <label className="px-3 py-1 bg-stone-100 text-stone-600 rounded text-sm hover:bg-stone-200 cursor-pointer border border-stone-200">
                 {importLoading ? 'Importing...' : 'Import JSON'}
                 <input
