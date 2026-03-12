@@ -64,6 +64,51 @@ function ClientDetail() {
   const hasUnsavedChanges = newNoteContent.trim() !== '' || contextDirty;
   useNavigationBlocker(hasUnsavedChanges);
 
+  // Track previous client ID to detect client switches
+  const prevIdRef = useRef(id);
+
+  // Reset all filters when switching to a different client
+  useEffect(() => {
+    if (prevIdRef.current !== id) {
+      prevIdRef.current = id;
+      // Reset diary filters
+      setTypeFilter('');
+      setDateFrom('');
+      setDateTo(new Date().toISOString().split('T')[0]);
+      // Reset timeline filters
+      setTimelineStartDate('');
+      setTimelineEndDate(new Date().toISOString().split('T')[0]);
+      setTimelineTypeFilter('');
+      // Reset pagination
+      setTimelinePage(1);
+      setTimelineHasMore(false);
+      // Reset notes search
+      setNotesSearch('');
+      // Reset tab to default
+      setActiveTab('timeline');
+      // Reset data states
+      setDiary([]);
+      setDiaryTotal(0);
+      setNotes([]);
+      setNotesTotal(0);
+      setTimeline([]);
+      setTimelineTotal(0);
+      setSessions([]);
+      setSessionsTotal(0);
+      setExercises([]);
+      setExercisesTotal(0);
+      setNewNoteContent('');
+      setContext(null);
+      setContextForm({ anamnesis: '', current_goals: '', contraindications: '', ai_instructions: '' });
+      setContextDirty(false);
+      setContextMsg('');
+      setError('');
+      setDiaryError('');
+      setLoading(true);
+      setClient(null);
+    }
+  }, [id]);
+
   // Sync filter state to URL query parameters
   useEffect(() => {
     const params = new URLSearchParams();
