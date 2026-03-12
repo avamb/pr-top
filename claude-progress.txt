@@ -1352,3 +1352,27 @@ CURRENT STATUS: ~170/205 features passing
   - Zero JS console errors
 
 CURRENT STATUS: ~174/205 features passing (172 + 2 new)
+
+=== Session 2026-03-12_batch_172_173 ===
+
+- Feature #172: Registration form has sensible defaults ✅
+  - Updated i18n to detect browser locale (en/ru/es) with fallback to English
+  - Registration now sends browser timezone via Intl.DateTimeFormat().resolvedOptions().timeZone
+  - Backend registration endpoint accepts and stores language/timezone
+  - Defaults: language=en, timezone=UTC if not provided
+  - API test: ru/Europe/Moscow saved correctly when specified
+  - API test: en/UTC used as defaults when not specified
+  - Browser verified: form fields are empty (no pre-filled placeholder data)
+  - Settings page shows saved language/timezone after registration
+  - Zero console errors, no mock data patterns
+
+- Feature #173: Date picker defaults to today in relevant contexts ✅
+  - Diary view "Date to" field defaults to today (2026-03-12)
+  - Timeline view "Timeline end date" field defaults to today
+  - AdminAuditLogs "Date to" also defaults to today
+  - Clear filters resets to today (sensible default) instead of empty
+  - URL params reflect defaults: date_to=2026-03-12&tl_end=2026-03-12
+  - Diary entries still display correctly with today as default end date
+  - Zero console errors, verified via browser automation
+
+CURRENT STATUS: ~178/205 features passing (176 + 2 new)
