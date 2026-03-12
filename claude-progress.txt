@@ -1,5 +1,26 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-12_batch_164_165 ===
+
+- Feature #164: Rapid SOS button clicks handled idempotently ✅
+  - Added in-memory deduplication lock per client with 30-second window
+  - Concurrent SOS requests return existing event with deduplicated=true flag
+  - Tested with 5 simultaneous requests: only 1 SOS event created, 4 deduplicated
+  - Therapist receives exactly 1 notification, not 5
+  - Periodic cleanup of stale entries when map exceeds 100 entries
+  - No mock data patterns in src/
+
+- Feature #165: Back-and-resubmit prevention on forms ✅
+  - Added useEffect auth check to Register.jsx: logged-in users redirect to /dashboard
+  - Added useEffect auth check to Login.jsx: logged-in users redirect to /dashboard
+  - Changed navigate('/dashboard') to navigate('/dashboard', { replace: true }) on both forms
+  - replace:true removes the form page from browser history stack
+  - Backend returns 409 for duplicate email as defense-in-depth
+  - Verified: after registration, navigating to /register redirects to /dashboard
+  - Zero console errors
+
+CURRENT STATUS: ~172/205 features passing
+
 === Session 2026-03-12_batch_158_159 ===
 
 - Feature #158: Direct URL access to /admin requires superadmin role ✅
