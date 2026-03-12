@@ -125,7 +125,7 @@ export default function Login() {
           <h2 className="text-xl font-semibold text-text mb-6">{t('auth.loginTitle')}</h2>
 
           {error && (
-            <div className="bg-red-50 border border-error text-error rounded-md p-3 mb-4 text-sm">
+            <div role="alert" className="bg-red-50 border border-error text-error rounded-md p-3 mb-4 text-sm">
               {error}
             </div>
           )}
@@ -141,13 +141,16 @@ export default function Login() {
                 type="email"
                 autoComplete="email"
                 required
+                aria-required="true"
+                aria-invalid={!!fieldErrors.email}
+                aria-describedby={fieldErrors.email ? 'email-error' : undefined}
                 value={form.email}
                 onChange={handleChange}
                 className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${fieldErrors.email ? 'border-error' : 'border-gray-300'}`}
                 placeholder={t('auth.emailPlaceholder')}
               />
               {fieldErrors.email && (
-                <p className="mt-1 text-sm text-error">{fieldErrors.email}</p>
+                <p id="email-error" role="alert" className="mt-1 text-sm text-error">{fieldErrors.email}</p>
               )}
             </div>
 
@@ -161,13 +164,16 @@ export default function Login() {
                 type="password"
                 autoComplete="current-password"
                 required
+                aria-required="true"
+                aria-invalid={!!fieldErrors.password}
+                aria-describedby={fieldErrors.password ? 'password-error' : undefined}
                 value={form.password}
                 onChange={handleChange}
                 className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${fieldErrors.password ? 'border-error' : 'border-gray-300'}`}
                 placeholder={t('auth.passwordPlaceholder')}
               />
               {fieldErrors.password && (
-                <p className="mt-1 text-sm text-error">{fieldErrors.password}</p>
+                <p id="password-error" role="alert" className="mt-1 text-sm text-error">{fieldErrors.password}</p>
               )}
             </div>
 
