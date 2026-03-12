@@ -1,5 +1,22 @@
 == PsyLink Progress Notes ==
 
+=== Session 2026-03-12_batch_178_179 ===
+
+- Feature #178: Whitespace-only search handled gracefully ✅
+  - Added .trim() to all search inputs: frontend (ClientList debounce, ClientDetail notes/diary) and backend (clients, admin routes)
+  - Whitespace-only search now treated as empty search (shows normal empty state, not "no results")
+  - Verified via browser: spaces in client search shows "No clients linked yet" not "No clients match"
+  - Zero console errors, no mock data patterns
+
+- Feature #179: Special characters in search don't crash app ✅
+  - Tested XSS payload <script>alert('xss')</script> - no execution, React escapes output
+  - Tested SQL injection variants - parameterized queries prevent injection
+  - Tested brackets, quotes, special chars []{}\"'<>&@$%^ - all handled safely
+  - Database still healthy after all tests (15 tables intact)
+  - Zero console errors across all tests
+
+CURRENT STATUS: ~184/205 features passing (182 + 2 new)
+
 === Session 2026-03-12_batch_176_177 ===
 
 - Feature #176: Reset button clears all form filters ✅
