@@ -11,5 +11,29 @@ body {
 
 /* Skip to content link for accessibility */
 .skip-to-content {
-  @apply sr-only focus:not-sr-only focus:absolute focus:top-0 focus:left-0 focus:z-50 focus:p-4 focus:bg-primary focus:text-white;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.skip-to-content:focus {
+  position: absolute;
+  width: auto;
+  height: auto;
+  padding: 1rem;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+  top: 0;
+  left: 0;
+  z-index: 50;
+  background-color: #0D9488;
+  color: white;
 }
