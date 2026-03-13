@@ -1,10 +1,54 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="600" height="300" viewBox="0 0 600 300">
-  <rect width="600" height="300" fill="#f1f5f9" rx="12"/>
-  <rect x="40" y="30" width="520" height="240" fill="#e2e8f0" rx="8" stroke="#cbd5e1" stroke-width="1"/>
-  <rect x="60" y="50" width="160" height="20" fill="#94a3b8" rx="4"/>
-  <rect x="60" y="80" width="480" height="8" fill="#cbd5e1" rx="2"/>
-  <rect x="60" y="96" width="400" height="8" fill="#cbd5e1" rx="2"/>
-  <rect x="60" y="140" width="220" height="100" fill="#e0e7ff" rx="6"/>
-  <rect x="300" y="140" width="220" height="100" fill="#e0e7ff" rx="6"/>
-  <text x="300" y="270" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="13">Exercises screenshot placeholder</text>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F4F7F6"/>
+      <stop offset="100%" stop-color="#E6F5F3"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="300" fill="url(#bg)" rx="12"/>
+  <text x="30" y="35" fill="#1C2328" font-family="sans-serif" font-size="16" font-weight="bold">Exercises</text>
+  <rect x="430" y="16" width="140" height="30" fill="#1F8A83" rx="6"/>
+  <text x="500" y="36" text-anchor="middle" fill="#fff" font-family="sans-serif" font-size="11">+ Assign Exercise</text>
+  <!-- Exercise cards -->
+  <rect x="30" y="55" width="170" height="120" fill="#fff" rx="8" stroke="#D9E2E0" stroke-width="1"/>
+  <rect x="42" y="67" width="40" height="40" fill="#E6F5F3" rx="8"/>
+  <text x="62" y="93" text-anchor="middle" fill="#1F8A83" font-family="sans-serif" font-size="20">&#x1F9D8;</text>
+  <rect x="42" y="115" width="120" height="9" fill="#1C2328" rx="3" opacity="0.7"/>
+  <text x="42" y="140" fill="#5E6A71" font-family="sans-serif" font-size="9">Mindfulness</text>
+  <rect x="42" y="150" width="50" height="14" fill="#D1FAE5" rx="3"/>
+  <text x="67" y="161" text-anchor="middle" fill="#065F46" font-family="sans-serif" font-size="8">Done</text>
+
+  <rect x="215" y="55" width="170" height="120" fill="#fff" rx="8" stroke="#D9E2E0" stroke-width="1"/>
+  <rect x="227" y="67" width="40" height="40" fill="#E6F5F3" rx="8"/>
+  <text x="247" y="93" text-anchor="middle" fill="#1F8A83" font-family="sans-serif" font-size="20">&#x270D;&#xFE0F;</text>
+  <rect x="227" y="115" width="130" height="9" fill="#1C2328" rx="3" opacity="0.7"/>
+  <text x="227" y="140" fill="#5E6A71" font-family="sans-serif" font-size="9">Journaling</text>
+  <rect x="227" y="150" width="70" height="14" fill="#FEF3C7" rx="3"/>
+  <text x="262" y="161" text-anchor="middle" fill="#92400E" font-family="sans-serif" font-size="8">In Progress</text>
+
+  <rect x="400" y="55" width="170" height="120" fill="#fff" rx="8" stroke="#D9E2E0" stroke-width="1"/>
+  <rect x="412" y="67" width="40" height="40" fill="#E6F5F3" rx="8"/>
+  <text x="432" y="93" text-anchor="middle" fill="#1F8A83" font-family="sans-serif" font-size="20">&#x1F4AD;</text>
+  <rect x="412" y="115" width="110" height="9" fill="#1C2328" rx="3" opacity="0.7"/>
+  <text x="412" y="140" fill="#5E6A71" font-family="sans-serif" font-size="9">CBT</text>
+  <rect x="412" y="150" width="40" height="14" fill="#E0E7FF" rx="3"/>
+  <text x="432" y="161" text-anchor="middle" fill="#3730A3" font-family="sans-serif" font-size="8">New</text>
+
+  <!-- Exercise categories list -->
+  <rect x="30" y="190" width="540" height="90" fill="#fff" rx="8" stroke="#D9E2E0" stroke-width="1"/>
+  <text x="45" y="212" fill="#1C2328" font-family="sans-serif" font-size="11" font-weight="bold">Categories</text>
+  <rect x="45" y="222" width="75" height="22" fill="#E6F5F3" rx="5"/>
+  <text x="82" y="237" text-anchor="middle" fill="#1F8A83" font-family="sans-serif" font-size="9">Mindfulness</text>
+  <rect x="128" y="222" width="55" height="22" fill="#E6F5F3" rx="5"/>
+  <text x="155" y="237" text-anchor="middle" fill="#1F8A83" font-family="sans-serif" font-size="9">CBT</text>
+  <rect x="191" y="222" width="65" height="22" fill="#E6F5F3" rx="5"/>
+  <text x="223" y="237" text-anchor="middle" fill="#1F8A83" font-family="sans-serif" font-size="9">Journaling</text>
+  <rect x="264" y="222" width="70" height="22" fill="#E6F5F3" rx="5"/>
+  <text x="299" y="237" text-anchor="middle" fill="#1F8A83" font-family="sans-serif" font-size="9">Breathing</text>
+  <rect x="342" y="222" width="70" height="22" fill="#E6F5F3" rx="5"/>
+  <text x="377" y="237" text-anchor="middle" fill="#1F8A83" font-family="sans-serif" font-size="9">Art Therapy</text>
+  <rect x="420" y="222" width="80" height="22" fill="#E6F5F3" rx="5"/>
+  <text x="460" y="237" text-anchor="middle" fill="#1F8A83" font-family="sans-serif" font-size="9">Psychoeducation</text>
+  <rect x="45" y="252" width="130" height="7" fill="#E6F5F3" rx="2"/>
+  <rect x="183" y="252" width="100" height="7" fill="#E6F5F3" rx="2"/>
 </svg>
