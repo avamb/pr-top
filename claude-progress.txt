@@ -1,3 +1,37 @@
+## Session: 2026-03-13 - Feature #239
+
+### Completed: Therapist Guide SVG illustrations — verify and create missing assets (#239) - PASSING
+
+**What was changed:**
+- Replaced all 8 placeholder SVG illustrations in public/images/guide/ with proper themed illustrations
+- Each SVG uses the app's teal/sage color palette (#1F8A83, #A8C9BE, #F4F7F6, etc.)
+- dashboard.svg: stat cards, activity feed, invite code with Copy button
+- clients.svg: client cards with avatar initials, activity dots, status badges
+- profile.svg: client header with consent badge, 6 tab navigation, anamnesis/goals, quick stats
+- sessions.svg: session list with upload button, Complete and Transcribing status badges
+- exercises.svg: exercise cards with category icons, status badges, category pills
+- sos.svg: red alert banner, severity indicators, Pending/Acknowledged/Resolved statuses
+- analytics.svg: bar chart (diary per day), line chart (sessions per day), client activity sidebar
+- settings.svg: language/timezone dropdowns, subscription plan card, payment history
+
+**Verification:**
+- All 8 SVGs exist and are under 5KB each ✅
+- Dashboard SVG renders correctly in accordion section ✅
+- Clients SVG renders correctly ✅
+- Profile SVG renders correctly with tabs and stats ✅
+- SOS SVG renders correctly with alert banner and severity levels ✅
+- Analytics SVG renders correctly with charts and export button ✅
+- Guide page loads in EN with all illustrations visible ✅
+- Guide page loads in RU with all illustrations visible ✅
+- Guide page loads in ES with all illustrations visible ✅
+- No broken image icons in any section ✅
+- No 404s for image assets ✅
+- Zero JS console errors related to guide/images ✅
+
+### Current Status
+- Features passing: 236/239 (98.7%)
+- Feature #239: PASSING
+
 ## Session: 2026-03-13 - Feature #236
 
 ### Completed: Automatic voice and video diary transcription on save (#236) - PASSING
