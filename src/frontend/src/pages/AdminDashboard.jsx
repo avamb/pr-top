@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { formatUserDateOnly } from '../utils/formatDate';
 
@@ -21,8 +21,6 @@ function StatCard({ label, value, icon, color }) {
 
 export default function AdminDashboard() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
-  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
   const [subStats, setSubStats] = useState(null);
@@ -30,32 +28,9 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/login');
-      return;
-    }
-
-    fetch(`${API_URL}/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('Unauthorized');
-        return res.json();
-      })
-      .then(data => {
-        if (data.user.role !== 'superadmin') {
-          navigate('/dashboard');
-          return;
-        }
-        setUser(data.user);
-        loadStats(token);
-      })
-      .catch(() => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        navigate('/login');
-      });
-  }, [navigate]);
+    if (!token) return;
+    loadStats(token);
+  }, []);
 
   const loadStats = async (token) => {
     try {

@@ -1,6 +1,9 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import AppLayout from './components/AppLayout';
+import AuthGuard from './components/guards/AuthGuard';
+import TherapistGuard from './components/guards/TherapistGuard';
+import AdminGuard from './components/guards/AdminGuard';
 import Landing from './pages/Landing';
 import Register from './pages/Register';
 import Login from './pages/Login';
@@ -20,32 +23,64 @@ import AdminSystemLogs from './pages/AdminSystemLogs';
 import TherapistGuide from './pages/TherapistGuide';
 import NotFound from './pages/NotFound';
 
+/**
+ * GuardedLayout - Wraps content with AuthGuard + TherapistGuard + AppLayout.
+ * Used for therapist dashboard routes.
+ */
+function GuardedLayout({ children }) {
+  return (
+    <AuthGuard>
+      <TherapistGuard>
+        <AppLayout>{children}</AppLayout>
+      </TherapistGuard>
+    </AuthGuard>
+  );
+}
+
+/**
+ * AdminLayout - Wraps content with AuthGuard + TherapistGuard + AdminGuard + AppLayout.
+ * Used for superadmin routes.
+ */
+function AdminLayout({ children }) {
+  return (
+    <AuthGuard>
+      <TherapistGuard>
+        <AdminGuard>
+          <AppLayout>{children}</AppLayout>
+        </AdminGuard>
+      </TherapistGuard>
+    </AuthGuard>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public routes - no sidebar */}
+        {/* Public routes - no sidebar, no guards */}
         <Route path="/" element={<Landing />} />
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />
 
-        {/* Authenticated routes - with sidebar */}
-        <Route path="/dashboard" element={<AppLayout><Dashboard /></AppLayout>} />
-        <Route path="/clients" element={<AppLayout><ClientList /></AppLayout>} />
-        <Route path="/clients/:id" element={<AppLayout><ClientDetail /></AppLayout>} />
-        <Route path="/sessions/:id" element={<AppLayout><SessionDetail /></AppLayout>} />
-        <Route path="/exercises" element={<AppLayout><ExerciseLibrary /></AppLayout>} />
-        <Route path="/analytics" element={<AppLayout><Analytics /></AppLayout>} />
-        <Route path="/settings" element={<AppLayout><Settings /></AppLayout>} />
-        <Route path="/subscription" element={<AppLayout><Subscription /></AppLayout>} />
-        <Route path="/subscription/success" element={<AppLayout><Subscription /></AppLayout>} />
-        <Route path="/dashboard/guide" element={<AppLayout><TherapistGuide /></AppLayout>} />
-        <Route path="/admin" element={<AppLayout><AdminDashboard /></AppLayout>} />
-        <Route path="/admin/therapists" element={<AppLayout><AdminTherapists /></AppLayout>} />
-        <Route path="/admin/settings" element={<AppLayout><AdminSettings /></AppLayout>} />
-        <Route path="/admin/logs" element={<AppLayout><AdminAuditLogs /></AppLayout>} />
-        <Route path="/admin/system-logs" element={<AppLayout><AdminSystemLogs /></AppLayout>} />
-        <Route path="/admin/*" element={<AppLayout><AdminDashboard /></AppLayout>} />
+        {/* Authenticated therapist routes - AuthGuard + TherapistGuard + AppLayout */}
+        <Route path="/dashboard" element={<GuardedLayout><Dashboard /></GuardedLayout>} />
+        <Route path="/clients" element={<GuardedLayout><ClientList /></GuardedLayout>} />
+        <Route path="/clients/:id" element={<GuardedLayout><ClientDetail /></GuardedLayout>} />
+        <Route path="/sessions/:id" element={<GuardedLayout><SessionDetail /></GuardedLayout>} />
+        <Route path="/exercises" element={<GuardedLayout><ExerciseLibrary /></GuardedLayout>} />
+        <Route path="/analytics" element={<GuardedLayout><Analytics /></GuardedLayout>} />
+        <Route path="/settings" element={<GuardedLayout><Settings /></GuardedLayout>} />
+        <Route path="/subscription" element={<GuardedLayout><Subscription /></GuardedLayout>} />
+        <Route path="/subscription/success" element={<GuardedLayout><Subscription /></GuardedLayout>} />
+        <Route path="/dashboard/guide" element={<GuardedLayout><TherapistGuide /></GuardedLayout>} />
+
+        {/* Admin routes - AuthGuard + TherapistGuard + AdminGuard + AppLayout */}
+        <Route path="/admin" element={<AdminLayout><AdminDashboard /></AdminLayout>} />
+        <Route path="/admin/therapists" element={<AdminLayout><AdminTherapists /></AdminLayout>} />
+        <Route path="/admin/settings" element={<AdminLayout><AdminSettings /></AdminLayout>} />
+        <Route path="/admin/logs" element={<AdminLayout><AdminAuditLogs /></AdminLayout>} />
+        <Route path="/admin/system-logs" element={<AdminLayout><AdminSystemLogs /></AdminLayout>} />
+        <Route path="/admin/*" element={<AdminLayout><AdminDashboard /></AdminLayout>} />
 
         <Route path="*" element={<NotFound />} />
       </Routes>

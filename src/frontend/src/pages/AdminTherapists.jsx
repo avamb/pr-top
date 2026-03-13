@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { formatUserDateOnly } from '../utils/formatDate';
 
@@ -7,8 +7,6 @@ const API_URL = '/api';
 
 export default function AdminTherapists() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
-  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [therapists, setTherapists] = useState([]);
   const [actionLoading, setActionLoading] = useState(null);
@@ -16,32 +14,9 @@ export default function AdminTherapists() {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/login');
-      return;
-    }
-
-    fetch(`${API_URL}/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('Unauthorized');
-        return res.json();
-      })
-      .then(data => {
-        if (data.user.role !== 'superadmin') {
-          navigate('/dashboard');
-          return;
-        }
-        setUser(data.user);
-        loadTherapists(token);
-      })
-      .catch(() => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        navigate('/login');
-      });
-  }, [navigate]);
+    if (!token) return;
+    loadTherapists(token);
+  }, []);
 
   const loadTherapists = async (token) => {
     try {
