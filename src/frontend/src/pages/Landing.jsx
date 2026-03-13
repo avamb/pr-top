@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 /* ───────── Feature Highlights (icons only, text from i18n) ───────── */
 const highlightIcons = [
@@ -103,6 +104,7 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
           <span className="text-xl font-bold text-primary tracking-tight">{t('brand')}</span>
           <div className="flex items-center gap-4">
+            <LanguageSwitcher compact />
             <Link to="/login" className="text-sm font-medium text-secondary hover:text-text transition-colors min-h-[44px] flex items-center">
               {t('nav.login')}
             </Link>

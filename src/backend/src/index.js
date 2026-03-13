@@ -12,7 +12,9 @@ const { logger } = require('./utils/logger');
 const { initStripe, getStripeStatus, isConfigured: isStripeConfigured } = require('./services/stripe');
 const cookieParser = require('cookie-parser');
 const { csrfProtection, csrfTokenEndpoint } = require('./middleware/csrf');
-const { requireActiveSubscription } = require('./middleware/auth');
+const { requireActiveSubscription, authenticate } = require('./middleware/auth');
+const { i18nMiddleware } = require('./middleware/i18n');
+const { t: translate, SUPPORTED_LANGUAGES } = require('./i18n');
 const authRoutes = require('./routes/auth');
 const botRoutes = require('./routes/bot');
 const subscriptionRoutes = require('./routes/subscription');
@@ -94,6 +96,30 @@ app.use(cookieParser());
 // CSRF Protection
 app.get('/api/csrf-token', csrfTokenEndpoint);
 app.use('/api/', csrfProtection);
+
+// i18n middleware - attach locale to every API request
+app.use('/api/', i18nMiddleware);
+
+// PATCH /api/profile/language - Quick language update endpoint
+app.patch('/api/profile/language', authenticate, (req, res) => {
+  try {
+    const { language } = req.body;
+    if (!language || !SUPPORTED_LANGUAGES.includes(language)) {
+      return res.status(400).json({ error: translate('profile.invalidLanguage', req.locale) });
+    }
+    const { getDatabase, saveDatabase } = require('./db/connection');
+    const db = getDatabase();
+    db.run("UPDATE users SET language = ?, updated_at = datetime('now') WHERE id = ?", [language, req.user.id]);
+    saveDatabase();
+    const { logger } = require('./utils/logger');
+    logger.info(`Language updated for user id=${req.user.id}: ${language}`);
+    res.json({ message: translate('profile.languageUpdated', language), language });
+  } catch (error) {
+    const { logger } = require('./utils/logger');
+    logger.error('Update language error: ' + error.message);
+    res.status(500).json({ error: translate('errors.serverError', req.locale) });
+  }
+});
 
 // Health check endpoint
 app.get('/api/health', async (req, res) => {

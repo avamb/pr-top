@@ -235,7 +235,7 @@ export default function Sidebar({ user, isOpen, onToggle }) {
       <div className="border-t border-gray-100 px-3 py-4 space-y-2">
         <div className="px-3 flex items-center justify-between">
           <span className="text-xs text-stone-500 truncate">{user?.email}</span>
-          <LanguageSwitcher compact persistToServer />
+          <LanguageSwitcher compact persistToServer dropUp />
         </div>
         <button
           onClick={handleLogout}
