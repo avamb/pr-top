@@ -1,62 +1,59 @@
-## Session: 2026-03-13 - Feature #208
+## Session: 2026-03-13 - Features #209, #222, #211
 
-### Completed: Full multilingual language switcher (Feature #208) - PASSING
-
-**What was built:**
-- Reusable LanguageSwitcher component (src/frontend/src/components/LanguageSwitcher.jsx)
-  - Flag-based dropdown for RU/EN/ES with country flags
-  - Supports dropUp mode for sidebar positioning
-  - Persists to localStorage and optionally to server via PATCH /api/profile/language
-  - Compact and full-label display modes
-
-- Added LanguageSwitcher to:
-  - Sidebar.jsx (bottom, near user email, with dropUp)
-  - Landing.jsx header (for unauthenticated visitors)
-  - Login.jsx (top-right corner)
-  - Register.jsx (top-right corner)
-
-- Backend i18n system:
-  - PATCH /api/profile/language endpoint (src/backend/src/index.js)
-  - i18n middleware (src/backend/src/middleware/i18n.js) - reads Accept-Language header or user DB preference
-  - Server-side translation files (src/backend/src/i18n/en.json, ru.json, es.json) with all API messages
-  - Translation helper function t(key, locale, params) (src/backend/src/i18n/index.js)
-
-- Language sync on login already existed (Login.jsx fetches profile and applies language)
-- Settings.jsx already syncs language to PUT /api/settings/profile; added additional sync to PATCH endpoint
-
-**Verification:**
-- Landing page: language switcher visible, switches instantly, persists across navigation
-- Login/Register: language switcher visible in top-right, language persists from landing
-- Dashboard sidebar: language switcher shows compact flag+code, dropdown opens upward, all nav items translate instantly
-- Server restart persistence: language stored in DB via PATCH endpoint
-- Zero console errors
-- No mock data patterns found
-
-### Current Status
-- Features passing: 207/208 (99.5%)
-- Feature #208: PASSING
-
-## Session: 2026-03-13 - Feature #210
-
-### Completed: Disable or hard-restrict encryption debug/decrypt endpoints (Feature #210) - PASSING
+### Completed: Restrict public registration to therapist-only (#209) - PASSING
 
 **What was changed:**
-- Added `requireDevOrSuperadmin` middleware to src/backend/src/routes/encryption.js
-- Applied it to 3 debug endpoints: POST /encrypt, POST /decrypt, GET /active-version
-- Logic: In dev mode (NODE_ENV unset or 'development'), any authenticated user can access
-- In production (NODE_ENV=production), only superadmins can access; others get 403
-- Key management endpoints (/keys, /rotate) were already superadmin-only - unchanged
-- Business encryption in diary/notes/sessions routes uses encryption service directly - unaffected
+- Hardcoded role='therapist' in POST /api/auth/register
+- Returns 400 if role=client or role=superadmin is explicitly requested
+- Bot invite flow (POST /api/bot/register) unaffected
+- Trial subscription bootstrap still works for therapist registration
 
 **Verification:**
-- Production mode: therapist gets 403 on all 3 debug endpoints ✅
-- Production mode: superadmin can still access all 3 debug endpoints ✅
-- Production mode: unauthenticated access blocked (401/CSRF) ✅
-- Dev mode: therapist can still access debug endpoints ✅
-- No frontend code depends on these endpoints (grep confirmed) ✅
-- Browser test: app loads, login works, zero console errors ✅
-- No mock data patterns found ✅
+- API: role=client → 400, role=superadmin → 400, role=therapist → 201, no role → 201 (therapist)
+- Browser: registration form works, redirects to dashboard as therapist
+- Zero console errors
+
+### Completed: Replace ad hoc auth checks with explicit route guards (#222) - PASSING
+
+**What was built:**
+- Created AuthGuard (checks token, handles cross-tab sync, redirects to /login)
+- Created TherapistGuard (blocks client role, allows therapist/superadmin)
+- Created AdminGuard (requires superadmin, redirects others to /dashboard)
+- All in src/frontend/src/components/guards/
+- Refactored App.jsx: GuardedLayout (AuthGuard+TherapistGuard+AppLayout) for dashboard routes,
+  AdminLayout (AuthGuard+TherapistGuard+AdminGuard+AppLayout) for admin routes
+- Removed scattered auth/role checks from AppLayout.jsx (kept subscription check only)
+- Removed inline superadmin checks from AdminDashboard, AdminTherapists, AdminSettings, AdminAuditLogs, AdminSystemLogs
+
+**Verification:**
+- Unauthenticated → /login ✅
+- Therapist → /dashboard ✅, /admin → redirected to /dashboard ✅
+- Superadmin → /admin ✅, /dashboard ✅, all admin sub-pages ✅
+- Zero console errors across all pages ✅
+
+### Completed: Enforce consent on all therapist read paths (#211) - PASSING
+
+**What was built:**
+- Created reusable verifyClientConsent(therapistId, clientId, auditAction) in src/backend/src/utils/consentCheck.js
+- Applied consent checks to previously unprotected endpoints in clients.js:
+  - GET /:id/sessions, GET /:id/exercises, POST /:id/exercises
+  - GET /:id/sos, PUT /:id/sos/:sosId/acknowledge
+  - POST /:id/notes, PUT /:id/notes/:noteId
+  - GET /:id/context, PUT /:id/context
+  - POST /:id/import
+- Applied consent checks to sessions.js:
+  - GET /:id (session detail with transcript/summary)
+  - GET /:id/summary
+  - GET /:id/transcript
+- Added dev endpoint /api/dev/set-consent for testing consent flows
+
+**Verification:**
+- With consent=true: all endpoints return 200 ✅
+- With consent=false: all endpoints return 403 "Client has not granted consent for data access" ✅
+- Re-granting consent: immediately restores access (no caching) ✅
+- Browser test: client detail page shows data with consent, shows errors without ✅
+- No mock data patterns ✅
 
 ### Current Status
-- Features passing: 209/222 (94.1%)
-- Feature #210: PASSING
+- Features passing: 211/222 (95.0%)
+- Features #209, #222, #211: ALL PASSING
