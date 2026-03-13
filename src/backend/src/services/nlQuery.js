@@ -273,6 +273,14 @@ function executeNLQuery(therapistId, clientId, query, options = {}) {
   results.sort((a, b) => b.relevance - a.relevance);
   const topResults = results.slice(0, limit);
 
+  // Normalize relevance scores to 0-1 range for UI display
+  const maxRelevance = topResults.length > 0 ? topResults[0].relevance : 1;
+  for (const r of topResults) {
+    r.similarity_score = maxRelevance > 0
+      ? Math.round((r.relevance / maxRelevance) * 100) / 100
+      : 0;
+  }
+
   return {
     results: topResults,
     query,
