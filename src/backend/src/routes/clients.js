@@ -3,7 +3,7 @@ const express = require('express');
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { authenticate, requireRole } = require('../middleware/auth');
-const { checkClientLimit } = require('../utils/planLimits');
+const { checkClientLimit, getClientCount, getClientLimit } = require('../utils/planLimits');
 const { encrypt, decrypt } = require('../services/encryption');
 const { verifyClientConsent } = require('../utils/consentCheck');
 const telegramNotify = require('../utils/telegramNotify');
@@ -1795,6 +1795,300 @@ router.get('/:id/diary/export', (req, res) => {
     logger.error('Diary export error: ' + error.message);
     res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
+});
+
+// POST /api/clients/import-bulk - Bulk client import from CSV or JSON file
+// Creates multiple client records at once, useful for platform migration
+const { v4: uuidv4 } = require('uuid');
+
+const bulkImportUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
+  fileFilter: (req, file, cb) => {
+    const allowed = ['application/json', 'text/csv', 'application/vnd.ms-excel'];
+    if (allowed.includes(file.mimetype) || file.originalname.endsWith('.json') || file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV and JSON files are accepted'), false);
+    }
+  }
+});
+
+function parseCSVContent(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return { error: 'CSV must have a header row and at least one data row' };
+
+  const headerLine = lines[0];
+  const headers = headerLine.split(',').map(h => h.trim().toLowerCase().replace(/^["']|["']$/g, ''));
+
+  // Validate required columns
+  if (!headers.includes('email') && !headers.includes('name')) {
+    return { error: 'CSV must have at least an "email" or "name" column' };
+  }
+
+  const clients = [];
+  const errors = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const values = parseCSVLine(lines[i]);
+    if (values.length !== headers.length) {
+      errors.push({ row: i + 1, error: 'Column count mismatch (expected ' + headers.length + ', got ' + values.length + ')' });
+      continue;
+    }
+
+    const obj = {};
+    headers.forEach((h, idx) => { obj[h] = values[idx].trim(); });
+    clients.push(obj);
+  }
+
+  return { clients, errors };
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+function validateEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+router.post('/import-bulk', (req, res, next) => {
+  bulkImportUpload.single('file')(req, res, (err) => {
+    if (err) {
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ error: 'File too large. Maximum size is 5MB.' });
+        }
+        return res.status(400).json({ error: 'File upload error: ' + err.message });
+      }
+      return res.status(400).json({ error: err.message });
+    }
+
+    try {
+      const db = getDatabase();
+      const therapistId = req.user.id;
+
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded. Please provide a CSV or JSON file.' });
+      }
+
+      // Check subscription - get plan and limits
+      const limitCheck = checkClientLimit(therapistId);
+      if (!limitCheck.plan) {
+        return res.status(403).json({ error: 'No active subscription' });
+      }
+
+      const rawText = req.file.buffer.toString('utf8');
+      let clientRows = [];
+      let parseErrors = [];
+      const isCSV = req.file.originalname.endsWith('.csv') || req.file.mimetype === 'text/csv' || req.file.mimetype === 'application/vnd.ms-excel';
+
+      if (isCSV) {
+        const parsed = parseCSVContent(rawText);
+        if (parsed.error) {
+          return res.status(400).json({ error: parsed.error });
+        }
+        clientRows = parsed.clients;
+        parseErrors = parsed.errors || [];
+      } else {
+        // JSON format
+        try {
+          const data = JSON.parse(rawText);
+          if (Array.isArray(data)) {
+            clientRows = data;
+          } else if (data.clients && Array.isArray(data.clients)) {
+            clientRows = data.clients;
+          } else {
+            return res.status(400).json({
+              error: 'Invalid JSON format. Expected an array of client objects or { "clients": [...] }'
+            });
+          }
+        } catch (parseErr) {
+          return res.status(400).json({ error: 'Invalid JSON file: ' + parseErr.message });
+        }
+      }
+
+      if (clientRows.length === 0) {
+        return res.status(400).json({ error: 'No client records found in the file' });
+      }
+
+      if (clientRows.length > 200) {
+        return res.status(400).json({ error: 'Too many records. Maximum 200 clients per import.' });
+      }
+
+      // Check tier limit
+      const currentCount = limitCheck.current;
+      const limit = limitCheck.limit;
+      const plan = limitCheck.plan;
+
+      if (plan !== 'premium' && limit > 0 && (currentCount + clientRows.length) > limit) {
+        const available = Math.max(0, limit - currentCount);
+        return res.status(403).json({
+          error: 'Import would exceed client limit',
+          message: 'Your ' + plan + ' plan allows ' + limit + ' clients. You have ' + currentCount + ' and are trying to import ' + clientRows.length + '. Available slots: ' + available + '.',
+          current: currentCount,
+          limit: limit,
+          plan: plan,
+          requested: clientRows.length,
+          available: available
+        });
+      }
+
+      // Check for existing emails in DB to detect duplicates
+      const existingEmails = new Set();
+      const emailResult = db.exec("SELECT email FROM users WHERE email IS NOT NULL");
+      if (emailResult.length > 0) {
+        emailResult[0].values.forEach(row => {
+          if (row[0]) existingEmails.add(row[0].toLowerCase());
+        });
+      }
+
+      // Process each client
+      const created = [];
+      const skipped = [];
+      const rowErrors = [...parseErrors];
+      const seenEmails = new Set();
+
+      clientRows.forEach((row, index) => {
+        const rowNum = index + (isCSV ? 2 : 1); // CSV has header row offset
+        const email = (row.email || '').trim().toLowerCase();
+        const name = (row.name || '').trim();
+        const phone = (row.phone || '').trim();
+        const notes = (row.notes || '').trim();
+        const language = (row.language || 'en').trim().toLowerCase();
+
+        // Validate required fields
+        if (!email && !name) {
+          rowErrors.push({ row: rowNum, error: 'Either email or name is required' });
+          return;
+        }
+
+        // Validate email format if provided
+        if (email && !validateEmail(email)) {
+          rowErrors.push({ row: rowNum, error: 'Invalid email format: ' + email });
+          return;
+        }
+
+        // Check for duplicates within the file
+        if (email && seenEmails.has(email)) {
+          skipped.push({ row: rowNum, email: email || name, reason: 'Duplicate within import file' });
+          return;
+        }
+
+        // Check for existing email in DB
+        if (email && existingEmails.has(email)) {
+          skipped.push({ row: rowNum, email: email, reason: 'Email already exists in the system' });
+          return;
+        }
+
+        if (email) seenEmails.add(email);
+
+        // Generate invite code for this client
+        var inviteCode = uuidv4().slice(0, 8).toUpperCase();
+        // Ensure uniqueness
+        var codeCheck = db.exec('SELECT id FROM users WHERE invite_code = ?', [inviteCode]);
+        while (codeCheck.length > 0 && codeCheck[0].values.length > 0) {
+          inviteCode = uuidv4().slice(0, 8).toUpperCase();
+          codeCheck = db.exec('SELECT id FROM users WHERE invite_code = ?', [inviteCode]);
+        }
+
+        // Create client record
+        db.run(
+          "INSERT INTO users (email, role, therapist_id, invite_code, language, consent_therapist_access, created_at, updated_at) VALUES (?, 'client', ?, ?, ?, 0, datetime('now'), datetime('now'))",
+          [email || null, therapistId, inviteCode, language]
+        );
+
+        // Get the new client ID
+        var newIdResult = db.exec('SELECT last_insert_rowid()');
+        var newClientId = newIdResult[0].values[0][0];
+
+        // If notes provided, create a therapist note (encrypted)
+        if (notes) {
+          var encryptedNote = encrypt(notes);
+          db.run(
+            "INSERT INTO therapist_notes (therapist_id, client_id, note_encrypted, created_at) VALUES (?, ?, ?, datetime('now'))",
+            [therapistId, newClientId, encryptedNote]
+          );
+        }
+
+        // If name/phone provided, store in client context
+        if (name || phone) {
+          var contextParts = [];
+          if (name) contextParts.push('Name: ' + name);
+          if (phone) contextParts.push('Phone: ' + phone);
+          var contextText = contextParts.join('\n');
+          var encryptedContext = encrypt(contextText);
+          db.run(
+            "INSERT INTO client_context (client_id, therapist_id, anamnesis_encrypted, created_at, updated_at) VALUES (?, ?, ?, datetime('now'), datetime('now'))",
+            [newClientId, therapistId, encryptedContext]
+          );
+        }
+
+        created.push({
+          id: newClientId,
+          email: email || null,
+          name: name || null,
+          invite_code: inviteCode,
+          row: rowNum
+        });
+      });
+
+      // Save to disk
+      saveDatabase();
+
+      // Audit log
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+        [therapistId, 'bulk_client_import', 'clients', 0, JSON.stringify({
+          file: req.file.originalname,
+          total_rows: clientRows.length,
+          created: created.length,
+          skipped: skipped.length,
+          errors: rowErrors.length
+        })]
+      );
+      saveDatabase();
+
+      logger.info('Bulk client import by therapist ' + therapistId + ': ' + created.length + ' created, ' + skipped.length + ' skipped, ' + rowErrors.length + ' errors');
+
+      res.json({
+        success: true,
+        summary: {
+          total_rows: clientRows.length,
+          created: created.length,
+          skipped: skipped.length,
+          errors: rowErrors.length
+        },
+        created: created,
+        skipped: skipped,
+        errors: rowErrors
+      });
+    } catch (error) {
+      logger.error('Bulk import error: ' + error.message);
+      res.status(500).json({ error: 'Import failed. Please try again.' });
+    }
+  });
 });
 
 module.exports = router;

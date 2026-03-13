@@ -25,6 +25,7 @@ import AdminSystemLogs from './pages/AdminSystemLogs';
 import TherapistGuide from './pages/TherapistGuide';
 import NotFound from './pages/NotFound';
 import InstallPrompt from './components/InstallPrompt';
+import NotificationToast from './components/NotificationToast';
 
 /**
  * GuardedLayout - Wraps content with AuthGuard + TherapistGuard + AppLayout.
@@ -34,6 +35,7 @@ function GuardedLayout({ children }) {
   return (
     <AuthGuard>
       <TherapistGuard>
+        <NotificationToast />
         <AppLayout>{children}</AppLayout>
       </TherapistGuard>
     </AuthGuard>

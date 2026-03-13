@@ -11,6 +11,7 @@ const { initDatabase, saveDatabase } = require('./db/connection');
 const { logger } = require('./utils/logger');
 const { initStripe, getStripeStatus, isConfigured: isStripeConfigured } = require('./services/stripe');
 const scheduler = require('./services/scheduler');
+const { initWebSocket, getStats: getWsStats } = require('./services/websocketService');
 const cookieParser = require('cookie-parser');
 const { csrfProtection, csrfTokenEndpoint } = require('./middleware/csrf');
 const { requireActiveSubscription, authenticate } = require('./middleware/auth');
@@ -146,6 +147,7 @@ app.get('/api/health', async (req, res) => {
     database: dbStatus,
     tableCount,
     stripe: stripeStatus,
+    websocket: getWsStats(),
     timestamp: new Date().toISOString(),
     version: '0.1.0'
   });
@@ -284,10 +286,14 @@ async function start() {
     // Start scheduled task runner (after DB is ready)
     scheduler.start();
 
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       logger.info(`PR-TOP API server running on port ${PORT}`);
       logger.info(`Health check: http://localhost:${PORT}/api/health`);
     });
+
+    // Attach WebSocket server for real-time notifications
+    initWebSocket(server);
+    logger.info('WebSocket server attached for real-time notifications');
   } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);

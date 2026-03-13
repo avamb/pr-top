@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useUnsavedChanges } from '../contexts/UnsavedChangesContext';
 import LanguageSwitcher from './LanguageSwitcher';
+import { useNotificationCount } from './NotificationToast';
 
 /* ── SVG Icons ────────────────────────────────────────── */
 const DashboardIcon = () => (
@@ -124,6 +125,7 @@ export default function Sidebar({ user, isOpen, onToggle }) {
   const location = useLocation();
   const { t } = useTranslation();
   const { confirmNavigation } = useUnsavedChanges();
+  const { count: notificationCount, clearCount: clearNotifications } = useNotificationCount();
 
   const safeNavigate = (path) => {
     if (path === location.pathname) return;
@@ -191,7 +193,16 @@ export default function Sidebar({ user, isOpen, onToggle }) {
                   aria-current={active ? 'page' : undefined}
                 >
                   <Icon />
-                  {t(item.labelKey)}
+                  <span className="flex-1">{t(item.labelKey)}</span>
+                  {item.key === 'dashboard' && notificationCount > 0 && (
+                    <span
+                      className="bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1"
+                      title={t('notifications.unreadCount', { count: notificationCount })}
+                      onClick={(e) => { e.stopPropagation(); clearNotifications(); }}
+                    >
+                      {notificationCount > 99 ? '99+' : notificationCount}
+                    </span>
+                  )}
                 </button>
               </li>
             );

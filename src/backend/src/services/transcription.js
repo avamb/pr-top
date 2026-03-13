@@ -8,6 +8,7 @@ const path = require('path');
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { encrypt, decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
+const wsService = require('./websocketService');
 // Lazy-loaded to avoid circular dependency
 let summarizationService = null;
 function getSummarizationService() {
@@ -259,6 +260,13 @@ async function processSessionTranscription(sessionId) {
     } catch (summaryErr) {
       logger.warn(`Summary generation error for session ${sessionId}: ${summaryErr.message}`);
       // Don't fail the transcription if summary fails
+    }
+
+    // Push real-time session status to therapist
+    try {
+      wsService.emitSessionStatus(therapistId, { sessionId, clientId, status: 'complete' });
+    } catch (wsErr) {
+      logger.warn(`[WS] Failed to emit session status: ${wsErr.message}`);
     }
 
     return { success: true, sessionId };
