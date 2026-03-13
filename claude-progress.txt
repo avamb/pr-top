@@ -1,3 +1,32 @@
+## Session: 2026-03-13 - Feature #236
+
+### Completed: Automatic voice and video diary transcription on save (#236) - PASSING
+
+**What was changed:**
+- Updated GET /api/bot/diary/:telegram_id to return transcript (decrypted) and transcription_status fields
+- transcription_status: 'complete' (has transcript), 'pending' (voice/video without transcript), null (text entries)
+- Updated /history bot command to show transcript preview for transcribed entries, [Transcribing...] for pending
+- Added transcription status badges in therapist diary view: green "✅ Transcribed" / amber "⏳ Pending transcription"
+- Updated bot voice/video/video_note handlers with "Transcription in progress..." confirmation messages
+- Added i18n strings for transcription status in EN, RU, ES (bot i18n.js)
+- Backend auto-transcription was already wired in POST /api/bot/diary via processDiaryTranscription()
+
+**Verification:**
+- API: Voice diary entry → auto-transcribed → transcription_status=complete ✅
+- API: Video diary entry → auto-transcribed → transcription_status=complete ✅
+- API: Text diary entry → transcription_status=null (no transcription needed) ✅
+- API: Manual transcription endpoint → correctly reports already_transcribed ✅
+- Browser: Therapist diary view shows green "✅ Transcribed" badge on voice/video entries ✅
+- Browser: Transcript text displayed with "📝 Transcript:" prefix ✅
+- Browser: Text entries show no transcription badge ✅
+- Data persists after server restart ✅
+- No mock data patterns in source ✅
+- Zero console errors ✅
+
+### Current Status
+- Features passing: 234/239 (97.9%)
+- Feature #236: PASSING
+
 ## Session: 2026-03-13 - Features #209, #222, #211
 
 ### Completed: Restrict public registration to therapist-only (#209) - PASSING
@@ -324,3 +353,20 @@
 ### Current Status
 - Features passing: 229/239 (95.8%)
 - Features #232, #237, #238: ALL PASSING
+
+## Session: 2026-03-13 - Features #227, #228, #229
+
+### Completed: Email notification service (#227) - PASSING
+- emailService.js with nodemailer SMTP, HTML templates (SOS/welcome/receipt/expiry/reset), EN/RU/ES
+- Rate limiting, graceful fallback when SMTP not configured
+- Wired to SOS route, registration, Stripe webhook
+
+### Completed: Scheduled tasks system (#228) - PASSING
+- scheduler.js with node-cron: 5 jobs (trial expiry, sub downgrade, expiry warning, diary reminder, CSRF cleanup)
+- SCHEDULER_ENABLED env var, audit logging for all automated actions
+
+### Completed: Password reset flow (#229) - PASSING
+- password_reset_tokens table, forgot-password/reset-password endpoints
+- ForgotPassword.jsx, ResetPassword.jsx, "Forgot password?" link on Login
+- Full flow tested: request reset -> set new password -> login with new password
+- Rate limited, no user enumeration, i18n EN/RU/ES
