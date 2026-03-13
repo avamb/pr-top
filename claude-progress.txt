@@ -95,6 +95,28 @@
 - Client detail page shows session with complete status, transcript, summary ✅
 - Zero console errors ✅
 
+## Session: 2026-03-13 - Feature #216
+
+### Completed: Add Telegram video diary support (#216) - PASSING
+
+**What was built:**
+- Added bot.on('video') handler: extracts file_id/duration, posts to /api/bot/diary with entry_type='video'
+- Added bot.on('video_note') handler: same flow for round video messages (Telegram video notes)
+- Both handlers check user role (client-only), send localized confirmation
+- Added i18n strings in all 3 languages (EN/RU/ES): videoSaved, failedVideoDiary, therapistVideoText
+- Updated help text to mention video messages alongside text and voice
+- Updated text message filter to exclude video_note messages (was already filtering video)
+- Backend already supported entry_type='video' in diary endpoint, DB schema, and transcription pipeline
+
+**Verification:**
+- API test: POST /api/bot/diary with entry_type='video' → 201, entry created with has_file=true ✅
+- API test: Video note entry also created successfully ✅
+- History endpoint shows video entries with correct type ✅
+- Data persists after server restart ✅
+- No mock data patterns in modified files ✅
+- Zero console errors in browser ✅
+- Frontend already displays 🎥 icon for video entries ✅
+
 ### Current Status
 - Features passing: 215/222 (96.8%)
-- Features #212, #215, #213: ALL PASSING
+- Feature #216: PASSING
