@@ -139,11 +139,127 @@ if (!token || token === 'your-telegram-bot-token') {
     );
   });
 
-  // Handle callback queries (role selection + consent)
+  // /help command - role-aware command list
+  bot.onText(/\/help/, async (msg) => {
+    const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+    const lang = await getUserLang(telegramId);
+
+    try {
+      const user = await checkExistingUser(telegramId);
+      if (!user) {
+        bot.sendMessage(chatId, t(lang, 'helpUnregistered'), { parse_mode: 'Markdown' });
+        return;
+      }
+      if (user.role === 'therapist') {
+        bot.sendMessage(chatId, t(lang, 'helpTherapist'), { parse_mode: 'Markdown' });
+      } else {
+        bot.sendMessage(chatId, t(lang, 'helpClient'), { parse_mode: 'Markdown' });
+      }
+    } catch (error) {
+      bot.sendMessage(chatId, t(lang, 'helpClient'), { parse_mode: 'Markdown' });
+    }
+  });
+
+  // /sos command - client emergency alert
+  bot.onText(/\/sos(?:\s+(.*))?/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+    const lang = await getUserLang(telegramId);
+    const sosMessage = match[1] ? match[1].trim() : '';
+
+    try {
+      const result = await api.post('/api/bot/sos', {
+        telegram_id: String(telegramId),
+        message: sosMessage || undefined
+      });
+
+      bot.sendMessage(chatId, t(lang, 'sosConfirmed'));
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || t(lang, 'sosFailed');
+      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+    }
+  });
+
+  // /history command - show recent diary entries
+  bot.onText(/\/history/, async (msg) => {
+    const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+    const lang = await getUserLang(telegramId);
+
+    try {
+      const result = await api.get(`/api/bot/diary/${telegramId}?limit=10`);
+      const entries = result.data.entries;
+
+      if (!entries || entries.length === 0) {
+        bot.sendMessage(chatId, t(lang, 'historyEmpty'));
+        return;
+      }
+
+      let text = t(lang, 'historyHeader') + '\n\n';
+      entries.forEach((entry, i) => {
+        const date = new Date(entry.created_at).toLocaleDateString(lang === 'ru' ? 'ru-RU' : lang === 'es' ? 'es-ES' : 'en-US', {
+          day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+        const typeIcon = entry.entry_type === 'voice' ? '🎤' : entry.entry_type === 'video' ? '🎥' : '📝';
+        const preview = entry.content ? entry.content.substring(0, 100) + (entry.content.length > 100 ? '...' : '') : '[no content]';
+        text += `${i + 1}. ${typeIcon} ${date}\n${preview}\n\n`;
+      });
+
+      bot.sendMessage(chatId, text);
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || t(lang, 'historyFailed');
+      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+    }
+  });
+
+  // /disconnect command - client revokes therapist access
+  bot.onText(/\/disconnect/, async (msg) => {
+    const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+    const lang = await getUserLang(telegramId);
+
+    // Show confirmation prompt
+    bot.sendMessage(chatId, t(lang, 'disconnectConfirm'), {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: t(lang, 'disconnectYes'), callback_data: 'disconnect_yes' },
+            { text: t(lang, 'disconnectNo'), callback_data: 'disconnect_no' }
+          ]
+        ]
+      }
+    });
+  });
+
+  // Handle callback queries (role selection + consent + disconnect)
   bot.on('callback_query', async (callbackQuery) => {
     const chatId = callbackQuery.message.chat.id;
     const telegramId = callbackQuery.from.id;
     const data = callbackQuery.data;
+
+    // Handle disconnect callbacks
+    if (data === 'disconnect_yes' || data === 'disconnect_no') {
+      const lang = await getUserLang(telegramId);
+
+      if (data === 'disconnect_no') {
+        bot.sendMessage(chatId, t(lang, 'disconnectCancelled'));
+      } else {
+        try {
+          await api.post('/api/bot/revoke-consent', {
+            telegram_id: String(telegramId)
+          });
+          bot.sendMessage(chatId, t(lang, 'disconnected'));
+        } catch (error) {
+          const errorMsg = error.response?.data?.error || t(lang, 'disconnectFailed');
+          bot.sendMessage(chatId, `❌ ${errorMsg}`);
+        }
+      }
+
+      bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
 
     // Handle consent callbacks
     if (data.startsWith('consent_yes_') || data.startsWith('consent_no_')) {

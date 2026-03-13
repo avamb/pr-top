@@ -4,7 +4,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { logger } = require('../utils/logger');
-const { encrypt } = require('../services/encryption');
+const { encrypt, decrypt } = require('../services/encryption');
 const { processDiaryTranscription } = require('../services/diaryTranscription');
 const { checkClientLimit } = require('../utils/planLimits');
 
@@ -526,21 +526,29 @@ router.get('/diary/:telegram_id', botAuth, (req, res) => {
     const client = clientResult[0].values[0];
     const clientId = client[0];
 
-    // Get diary entries (without decrypting - just metadata)
+    // Get diary entries with decrypted content for the client's own viewing
+    const limit = parseInt(req.query.limit) || 10;
     const result = db.exec(
       `SELECT id, entry_type, content_encrypted, encryption_key_id, payload_version, created_at
-       FROM diary_entries WHERE client_id = ? ORDER BY created_at DESC LIMIT 50`,
-      [clientId]
+       FROM diary_entries WHERE client_id = ? ORDER BY created_at DESC LIMIT ?`,
+      [clientId, limit]
     );
 
-    const entries = (result.length > 0 ? result[0].values : []).map(row => ({
-      id: row[0],
-      entry_type: row[1],
-      content_encrypted: row[2],
-      encryption_key_id: row[3],
-      payload_version: row[4],
-      created_at: row[5]
-    }));
+    const entries = (result.length > 0 ? result[0].values : []).map(row => {
+      let content = null;
+      try {
+        if (row[2]) content = decrypt(row[2]);
+      } catch (e) {
+        logger.error('Failed to decrypt diary entry: ' + e.message);
+        content = '[unable to read]';
+      }
+      return {
+        id: row[0],
+        entry_type: row[1],
+        content: content,
+        created_at: row[5]
+      };
+    });
 
     res.json({ entries, total: entries.length });
   } catch (error) {

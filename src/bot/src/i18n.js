@@ -22,7 +22,25 @@ const messages = {
     failedVoiceDiary: 'Failed to save voice diary entry.',
     failedDiary: 'Failed to save diary entry.',
     failedInviteCode: 'Failed to process invite code. Please try again.',
-    failedConsent: 'Failed to process consent. Please try again.'
+    failedConsent: 'Failed to process consent. Please try again.',
+    // /help command
+    helpUnregistered: '👋 Welcome to *PR-TOP*!\n\nUse /start to register and get started.',
+    helpClient: '📋 *Available Commands:*\n\n/start - Register or check your status\n/help - Show this help message\n/connect `CODE` - Connect with your therapist\n/sos - Emergency alert to your therapist\n/history - View your recent diary entries\n/disconnect - Disconnect from your therapist\n\n💡 *Diary:* Simply send a text or voice message to save a diary entry.',
+    helpTherapist: '📋 *Available Commands:*\n\n/start - Check your registration status\n/help - Show this help message\n\n💡 *Tip:* Use the web dashboard at pr-top.com to manage your clients, view diaries, and more.',
+    // /sos command
+    sosConfirmed: '🆘 *SOS alert sent!*\n\nYour therapist has been notified. If you are in immediate danger, please contact emergency services.\n\n🇺🇸 USA: 988 (Suicide & Crisis Lifeline)\n🌍 International: https://findahelpline.com',
+    sosFailed: 'Failed to send SOS alert. Please try again or contact emergency services directly.',
+    // /history command
+    historyHeader: '📖 *Your Recent Diary Entries:*',
+    historyEmpty: '📖 You have no diary entries yet.\n\nSend a text or voice message to start your diary!',
+    historyFailed: 'Failed to load diary history. Please try again.',
+    // /disconnect command
+    disconnectConfirm: '⚠️ *Are you sure you want to disconnect?*\n\nThis will:\n• Revoke your therapist\'s access to your data\n• Remove your therapist connection\n\nYou can reconnect later with a new invite code.',
+    disconnectYes: '✅ Yes, disconnect',
+    disconnectNo: '❌ No, keep connection',
+    disconnected: '✅ You have been disconnected from your therapist.\n\nYour therapist can no longer access your diary entries. Use /connect `CODE` to connect with a therapist again.',
+    disconnectCancelled: '👍 Connection kept. Your therapist link is unchanged.',
+    disconnectFailed: 'Failed to disconnect. Please try again.'
   },
   ru: {
     welcomeBack: (role) => {
@@ -50,7 +68,25 @@ const messages = {
     failedVoiceDiary: 'Не удалось сохранить голосовую запись дневника.',
     failedDiary: 'Не удалось сохранить запись дневника.',
     failedInviteCode: 'Не удалось обработать код приглашения. Попробуйте снова.',
-    failedConsent: 'Не удалось обработать согласие. Попробуйте снова.'
+    failedConsent: 'Не удалось обработать согласие. Попробуйте снова.',
+    // /help
+    helpUnregistered: '👋 Добро пожаловать в *PR-TOP*!\n\nИспользуйте /start для регистрации.',
+    helpClient: '📋 *Доступные команды:*\n\n/start - Регистрация или проверка статуса\n/help - Показать эту справку\n/connect `КОД` - Подключиться к терапевту\n/sos - Экстренный сигнал терапевту\n/history - Просмотр последних записей дневника\n/disconnect - Отключиться от терапевта\n\n💡 *Дневник:* Просто отправьте текстовое или голосовое сообщение для записи в дневник.',
+    helpTherapist: '📋 *Доступные команды:*\n\n/start - Проверка статуса регистрации\n/help - Показать эту справку\n\n💡 *Совет:* Используйте веб-панель на pr-top.com для управления клиентами, просмотра дневников и многого другого.',
+    // /sos
+    sosConfirmed: '🆘 *SOS-сигнал отправлен!*\n\nВаш терапевт уведомлён. Если вы в непосредственной опасности, обратитесь в службу экстренной помощи.\n\n🇷🇺 Россия: 8-800-2000-122 (телефон доверия)\n🌍 Международный: https://findahelpline.com',
+    sosFailed: 'Не удалось отправить SOS-сигнал. Попробуйте снова или обратитесь в экстренные службы.',
+    // /history
+    historyHeader: '📖 *Ваши последние записи дневника:*',
+    historyEmpty: '📖 У вас пока нет записей в дневнике.\n\nОтправьте текстовое или голосовое сообщение, чтобы начать вести дневник!',
+    historyFailed: 'Не удалось загрузить историю дневника. Попробуйте снова.',
+    // /disconnect
+    disconnectConfirm: '⚠️ *Вы уверены, что хотите отключиться?*\n\nЭто:\n• Отзовёт доступ терапевта к вашим данным\n• Удалит связь с терапевтом\n\nВы сможете подключиться снова с новым кодом приглашения.',
+    disconnectYes: '✅ Да, отключиться',
+    disconnectNo: '❌ Нет, оставить подключение',
+    disconnected: '✅ Вы отключены от терапевта.\n\nВаш терапевт больше не имеет доступа к вашему дневнику. Используйте /connect `КОД` для нового подключения.',
+    disconnectCancelled: '👍 Подключение сохранено. Связь с терапевтом не изменена.',
+    disconnectFailed: 'Не удалось отключиться. Попробуйте снова.'
   },
   es: {
     welcomeBack: (role) => {
@@ -78,7 +114,25 @@ const messages = {
     failedVoiceDiary: 'No se pudo guardar la entrada de voz del diario.',
     failedDiary: 'No se pudo guardar la entrada del diario.',
     failedInviteCode: 'No se pudo procesar el código de invitación. Inténtalo de nuevo.',
-    failedConsent: 'No se pudo procesar el consentimiento. Inténtalo de nuevo.'
+    failedConsent: 'No se pudo procesar el consentimiento. Inténtalo de nuevo.',
+    // /help
+    helpUnregistered: '👋 ¡Bienvenido a *PR-TOP*!\n\nUsa /start para registrarte y comenzar.',
+    helpClient: '📋 *Comandos disponibles:*\n\n/start - Registrarse o verificar tu estado\n/help - Mostrar esta ayuda\n/connect `CÓDIGO` - Conectarte con tu terapeuta\n/sos - Alerta de emergencia a tu terapeuta\n/history - Ver tus entradas recientes del diario\n/disconnect - Desconectarte de tu terapeuta\n\n💡 *Diario:* Simplemente envía un mensaje de texto o voz para guardar una entrada de diario.',
+    helpTherapist: '📋 *Comandos disponibles:*\n\n/start - Verificar tu estado de registro\n/help - Mostrar esta ayuda\n\n💡 *Consejo:* Usa el panel web en pr-top.com para gestionar tus clientes, ver diarios y más.',
+    // /sos
+    sosConfirmed: '🆘 *¡Alerta SOS enviada!*\n\nTu terapeuta ha sido notificado. Si estás en peligro inmediato, contacta a los servicios de emergencia.\n\n🇪🇸 España: 024 (Línea de Atención a la Conducta Suicida)\n🌍 Internacional: https://findahelpline.com',
+    sosFailed: 'No se pudo enviar la alerta SOS. Inténtalo de nuevo o contacta directamente a los servicios de emergencia.',
+    // /history
+    historyHeader: '📖 *Tus entradas recientes del diario:*',
+    historyEmpty: '📖 Aún no tienes entradas en el diario.\n\n¡Envía un mensaje de texto o voz para comenzar tu diario!',
+    historyFailed: 'No se pudo cargar el historial del diario. Inténtalo de nuevo.',
+    // /disconnect
+    disconnectConfirm: '⚠️ *¿Estás seguro de que quieres desconectarte?*\n\nEsto:\n• Revocará el acceso de tu terapeuta a tus datos\n• Eliminará tu conexión con el terapeuta\n\nPodrás reconectarte más tarde con un nuevo código de invitación.',
+    disconnectYes: '✅ Sí, desconectar',
+    disconnectNo: '❌ No, mantener conexión',
+    disconnected: '✅ Te has desconectado de tu terapeuta.\n\nTu terapeuta ya no puede acceder a tus entradas de diario. Usa /connect `CÓDIGO` para conectarte con un terapeuta nuevamente.',
+    disconnectCancelled: '👍 Conexión mantenida. Tu vínculo con el terapeuta no ha cambiado.',
+    disconnectFailed: 'No se pudo desconectar. Inténtalo de nuevo.'
   }
 };
 
