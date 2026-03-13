@@ -128,6 +128,8 @@ export default function Analytics() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [days, setDays] = useState(30);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportMsg, setExportMsg] = useState('');
 
   const abortControllerRef = React.useRef(null);
 
@@ -181,6 +183,40 @@ export default function Analytics() {
     }
   }
 
+  async function handleAnalyticsExport() {
+    if (exportLoading) return;
+    setExportLoading(true);
+    setExportMsg('');
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${API}/export/analytics?days=${days}&format=csv`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.status === 403) {
+        setExportMsg(t('analytics.exportUpgradeRequired', 'Analytics export requires Pro or Premium plan'));
+        return;
+      }
+      if (!res.ok) {
+        setExportMsg(t('analytics.exportFailed', 'Analytics export failed'));
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `analytics_${days}d_export.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      setExportMsg(t('analytics.exportSuccess', 'Analytics export downloaded'));
+    } catch (e) {
+      setExportMsg(t('analytics.exportFailed', 'Analytics export failed'));
+    } finally {
+      setExportLoading(false);
+    }
+  }
+
   return (
     <div>
       <main className="max-w-7xl mx-auto px-4 py-8">
@@ -189,7 +225,7 @@ export default function Analytics() {
             <h2 className="text-2xl font-bold text-stone-800">{t('analytics.title')}</h2>
             <p className="text-sm text-stone-500 mt-1">{t('analytics.subtitle')}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             {[7, 14, 30, 60].map(d => (
               <button
                 key={d}
@@ -203,6 +239,19 @@ export default function Analytics() {
                 {d}d
               </button>
             ))}
+            <button
+              onClick={handleAnalyticsExport}
+              disabled={exportLoading}
+              className="px-3 py-1.5 text-sm rounded-lg font-medium bg-stone-600 text-white hover:bg-stone-700 disabled:opacity-50 flex items-center gap-1 transition-colors"
+            >
+              <span>📥</span>
+              {exportLoading ? t('analytics.exportDownloading', 'Exporting...') : t('analytics.exportCSV', 'Export CSV')}
+            </button>
+            {exportMsg && (
+              <span className={`text-sm ${exportMsg === t('analytics.exportSuccess', 'Analytics export downloaded') ? 'text-green-600' : 'text-amber-600'}`}>
+                {exportMsg}
+              </span>
+            )}
           </div>
         </div>
 
