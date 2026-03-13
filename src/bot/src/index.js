@@ -23,6 +23,9 @@ const api = axios.create({
 // Cache for user language preferences
 const userLangCache = {};
 
+// Track active exercise sessions (telegramId -> deliveryId)
+const activeExercises = {};
+
 // Get user language from cache or API
 async function getUserLang(telegramId) {
   if (userLangCache[telegramId]) return userLangCache[telegramId];
@@ -213,6 +216,63 @@ if (!token || token === 'your-telegram-bot-token') {
     }
   });
 
+  // /exercises command - client views assigned exercises
+  bot.onText(/\/exercises/, async (msg) => {
+    const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+    const lang = await getUserLang(telegramId);
+
+    try {
+      const result = await api.get(`/api/bot/exercises/${telegramId}`);
+      const exercises = result.data.exercises;
+
+      if (!exercises || exercises.length === 0) {
+        bot.sendMessage(chatId, t(lang, 'exercisesEmpty'));
+        return;
+      }
+
+      let text = t(lang, 'exercisesHeader') + '\n';
+      const inlineButtons = [];
+
+      exercises.forEach((ex, i) => {
+        // Get localized title
+        const title = lang === 'ru' ? (ex.title_ru || ex.title_en || 'Exercise') :
+                      lang === 'es' ? (ex.title_es || ex.title_en || 'Exercise') :
+                      (ex.title_en || 'Exercise');
+
+        // Get status label
+        let statusLabel;
+        if (ex.status === 'completed') {
+          statusLabel = t(lang, 'exerciseStatusCompleted');
+        } else if (ex.status === 'acknowledged') {
+          statusLabel = t(lang, 'exerciseStatusAcknowledged');
+        } else {
+          statusLabel = t(lang, 'exerciseStatusSent');
+        }
+
+        text += `${i + 1}. ${statusLabel} *${title}*\n`;
+
+        // Only show buttons for non-completed exercises
+        if (ex.status !== 'completed') {
+          inlineButtons.push([{
+            text: `${i + 1}. ${title}`,
+            callback_data: `exercise_view_${ex.delivery_id}`
+          }]);
+        }
+      });
+
+      const opts = { parse_mode: 'Markdown' };
+      if (inlineButtons.length > 0) {
+        opts.reply_markup = { inline_keyboard: inlineButtons };
+      }
+
+      bot.sendMessage(chatId, text, opts);
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || t(lang, 'exercisesFailed');
+      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+    }
+  });
+
   // /disconnect command - client revokes therapist access
   bot.onText(/\/disconnect/, async (msg) => {
     const chatId = msg.chat.id;
@@ -255,6 +315,68 @@ if (!token || token === 'your-telegram-bot-token') {
           const errorMsg = error.response?.data?.error || t(lang, 'disconnectFailed');
           bot.sendMessage(chatId, `❌ ${errorMsg}`);
         }
+      }
+
+      bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
+
+    // Handle exercise view callbacks
+    if (data.startsWith('exercise_view_')) {
+      const deliveryId = data.replace('exercise_view_', '');
+      const lang = await getUserLang(telegramId);
+
+      try {
+        // Fetch exercises to get detail for this delivery
+        const result = await api.get(`/api/bot/exercises/${telegramId}`);
+        const exercise = result.data.exercises.find(e => String(e.delivery_id) === deliveryId);
+
+        if (!exercise || exercise.status === 'completed') {
+          bot.sendMessage(chatId, t(lang, 'exerciseNotFound'));
+          bot.answerCallbackQuery(callbackQuery.id);
+          return;
+        }
+
+        const title = lang === 'ru' ? (exercise.title_ru || exercise.title_en || 'Exercise') :
+                      lang === 'es' ? (exercise.title_es || exercise.title_en || 'Exercise') :
+                      (exercise.title_en || 'Exercise');
+        const instructions = lang === 'ru' ? (exercise.instructions_ru || exercise.instructions_en) :
+                             (exercise.instructions_en || '');
+
+        const detailMsg = t(lang, 'exerciseDetail');
+        bot.sendMessage(chatId, detailMsg(title, exercise.category, instructions), {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [[
+              { text: t(lang, 'exerciseStartBtn'), callback_data: `exercise_start_${deliveryId}` }
+            ]]
+          }
+        });
+      } catch (error) {
+        bot.sendMessage(chatId, `❌ ${t(lang, 'exercisesFailed')}`);
+      }
+
+      bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
+
+    // Handle exercise start callbacks
+    if (data.startsWith('exercise_start_')) {
+      const deliveryId = data.replace('exercise_start_', '');
+      const lang = await getUserLang(telegramId);
+
+      try {
+        await api.post(`/api/bot/exercises/${deliveryId}/acknowledge`, {
+          telegram_id: String(telegramId)
+        });
+
+        // Track active exercise for this user so next text message is captured as response
+        activeExercises[telegramId] = deliveryId;
+
+        bot.sendMessage(chatId, t(lang, 'exerciseStarted'));
+      } catch (error) {
+        const errorMsg = error.response?.data?.error || t(lang, 'exerciseStartFailed');
+        bot.sendMessage(chatId, `❌ ${errorMsg}`);
       }
 
       bot.answerCallbackQuery(callbackQuery.id);
@@ -319,13 +441,20 @@ if (!token || token === 'your-telegram-bot-token') {
     }
   });
 
-  // Handle voice messages - save as diary entries
+  // Handle voice messages - save as diary entries (clients only)
   bot.on('voice', async (msg) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
 
     try {
+      // Check user role - only clients can create diary entries
+      const user = await checkExistingUser(telegramId);
+      if (user && user.role !== 'client') {
+        bot.sendMessage(chatId, t(lang, 'therapistVoiceText'));
+        return;
+      }
+
       // Get file info from Telegram
       const fileId = msg.voice.file_id;
       const duration = msg.voice.duration;
@@ -345,16 +474,109 @@ if (!token || token === 'your-telegram-bot-token') {
     }
   });
 
-  // Handle text messages as diary entries (non-command messages)
+  // Handle video messages - save as diary entries (clients only)
+  bot.on('video', async (msg) => {
+    const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+    const lang = await getUserLang(telegramId);
+
+    try {
+      // Check user role - only clients can create diary entries
+      const user = await checkExistingUser(telegramId);
+      if (user && user.role !== 'client') {
+        bot.sendMessage(chatId, t(lang, 'therapistVideoText'));
+        return;
+      }
+
+      // Get file info from Telegram
+      const fileId = msg.video.file_id;
+      const duration = msg.video.duration;
+
+      // Submit video diary entry via backend API
+      const result = await api.post('/api/bot/diary', {
+        telegram_id: String(telegramId),
+        entry_type: 'video',
+        content: `[Video message, duration: ${duration}s]`,
+        file_ref: fileId
+      });
+
+      bot.sendMessage(chatId, t(lang, 'videoSaved'));
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || t(lang, 'failedVideoDiary');
+      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+    }
+  });
+
+  // Handle video note (round video) messages - save as diary entries (clients only)
+  bot.on('video_note', async (msg) => {
+    const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+    const lang = await getUserLang(telegramId);
+
+    try {
+      // Check user role - only clients can create diary entries
+      const user = await checkExistingUser(telegramId);
+      if (user && user.role !== 'client') {
+        bot.sendMessage(chatId, t(lang, 'therapistVideoText'));
+        return;
+      }
+
+      // Get file info from Telegram
+      const fileId = msg.video_note.file_id;
+      const duration = msg.video_note.duration;
+
+      // Submit video diary entry via backend API
+      const result = await api.post('/api/bot/diary', {
+        telegram_id: String(telegramId),
+        entry_type: 'video',
+        content: `[Video note, duration: ${duration}s]`,
+        file_ref: fileId
+      });
+
+      bot.sendMessage(chatId, t(lang, 'videoSaved'));
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || t(lang, 'failedVideoDiary');
+      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+    }
+  });
+
+  // Handle text messages as diary entries or exercise responses (clients only, non-command messages)
   bot.on('message', async (msg) => {
     // Skip commands and non-text messages
-    if (!msg.text || msg.text.startsWith('/') || msg.voice || msg.video) return;
+    if (!msg.text || msg.text.startsWith('/') || msg.voice || msg.video || msg.video_note) return;
 
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
 
     try {
+      // Check user role - only clients can create diary entries
+      const user = await checkExistingUser(telegramId);
+      if (user && user.role !== 'client') {
+        bot.sendMessage(chatId, t(lang, 'therapistFreeText'));
+        return;
+      }
+
+      // Check if user has an active exercise - route text as exercise response
+      if (activeExercises[telegramId]) {
+        const deliveryId = activeExercises[telegramId];
+        try {
+          await api.post(`/api/bot/exercises/${deliveryId}/respond`, {
+            telegram_id: String(telegramId),
+            response_text: msg.text
+          });
+          delete activeExercises[telegramId];
+          bot.sendMessage(chatId, t(lang, 'exerciseCompleted'));
+          return;
+        } catch (error) {
+          delete activeExercises[telegramId];
+          const errorMsg = error.response?.data?.error || t(lang, 'exerciseCompleteFailed');
+          bot.sendMessage(chatId, `❌ ${errorMsg}`);
+          return;
+        }
+      }
+
+      // Default: save as diary entry
       await api.post('/api/bot/diary', {
         telegram_id: String(telegramId),
         entry_type: 'text',
