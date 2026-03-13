@@ -54,6 +54,47 @@
 - Browser test: client detail page shows data with consent, shows errors without ✅
 - No mock data patterns ✅
 
+## Session: 2026-03-13 - Features #212, #215, #213
+
+### Completed: Remove direct therapist-client linking bypass (#212) - PASSING
+
+**What was changed:**
+- POST /api/clients/link restricted to superadmin role only (was open to all therapists)
+- Therapists now get 403 "Insufficient permissions" when trying direct linking
+- Superadmin can still use it with audit logging
+- Sets consent_therapist_access=1 for superadmin overrides
+- Proper flow preserved: invite code → consent → link via bot
+
+### Completed: Add missing core Telegram commands (#215) - PASSING
+
+**What was built:**
+- /help command: role-aware (client sees diary/sos/history/disconnect, therapist sees web dashboard tip)
+- /sos command: sends SOS alert to connected therapist, shows emergency hotlines
+- /history command: shows last 10 decrypted diary entries with date/type/preview
+- /disconnect command: confirmation prompt, then revokes consent via backend
+- Updated backend GET /api/bot/diary/:id to decrypt content (was metadata-only)
+- All commands localized in EN, RU, ES (i18n.js)
+- Disconnect callback handling added to callback_query handler
+
+### Completed: Implement real session audio transcription STT (#213) - PASSING
+
+**What was built:**
+- callTranscriptionAPI: real OpenAI Whisper API integration using native fetch
+- Multipart/form-data upload with configurable model, language, API URL
+- Audio decrypted before sending to provider, transcript encrypted before DB storage
+- 5-minute timeout for long audio files
+- Error handling: API failures set session status to 'transcription_failed'
+- Dev mode fallback: generates placeholder transcript with [DEV MODE] prefix
+- Frontend: red badge for transcription_failed/failed session status
+- Status flow: pending → transcribing → complete/transcription_failed
+
+**Verification:**
+- Session upload triggers async transcription pipeline ✅
+- Dev mode produces [DEV MODE] transcript, encrypted, stored, decrypted on read ✅
+- Summary auto-generated from transcript ✅
+- Client detail page shows session with complete status, transcript, summary ✅
+- Zero console errors ✅
+
 ### Current Status
-- Features passing: 211/222 (95.0%)
-- Features #209, #222, #211: ALL PASSING
+- Features passing: 215/222 (96.8%)
+- Features #212, #215, #213: ALL PASSING
