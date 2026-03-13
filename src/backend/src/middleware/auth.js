@@ -128,7 +128,7 @@ function requireActiveSubscription(req, res, next) {
 
         return res.status(402).json({
           error: 'subscription_expired',
-          message: 'Your trial has expired. Please select a plan to continue using PsyLink.',
+          message: 'Your trial has expired. Please select a plan to continue using PR-TOP.',
           plan: 'trial',
           expired_at: trialEndsAt,
           redirect: '/subscription'

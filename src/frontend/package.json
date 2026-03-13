@@ -1,7 +1,7 @@
 {
-  "name": "psylink-frontend",
+  "name": "prtop-frontend",
   "version": "0.1.0",
-  "description": "PsyLink Frontend - Therapist dashboard and landing page",
+  "description": "PR-TOP Frontend - Therapist dashboard and landing page",
   "private": true,
   "scripts": {
     "dev": "npx vite --port 3000",

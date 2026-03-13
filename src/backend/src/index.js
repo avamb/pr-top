@@ -1,4 +1,4 @@
-// PsyLink Backend API Server
+// PR-TOP Backend API Server
 // Entry point for the Express server
 
 require('dotenv').config();
@@ -253,7 +253,7 @@ async function start() {
     logger.info(`Stripe initialized: ${stripeReady ? 'configured' : 'not configured (placeholder key)'}`);
 
     app.listen(PORT, () => {
-      logger.info(`PsyLink API server running on port ${PORT}`);
+      logger.info(`PR-TOP API server running on port ${PORT}`);
       logger.info(`Health check: http://localhost:${PORT}/api/health`);
     });
   } catch (error) {

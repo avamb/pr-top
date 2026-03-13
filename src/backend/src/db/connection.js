@@ -12,7 +12,7 @@ let db = null;
 let dbPath = null;
 
 function getDbPath() {
-  const dbUrl = process.env.DATABASE_URL || 'sqlite:./data/psylink.db';
+  const dbUrl = process.env.DATABASE_URL || 'sqlite:./data/prtop.db';
   const relativePath = dbUrl.replace('sqlite:', '');
   return path.resolve(__dirname, '../../', relativePath);
 }
@@ -328,7 +328,7 @@ function applySchema(db) {
 }
 
 function seedSuperadmin(db) {
-  const email = process.env.SUPERADMIN_EMAIL || 'admin@psylink.app';
+  const email = process.env.SUPERADMIN_EMAIL || 'admin@pr-top.com';
   const password = process.env.SUPERADMIN_PASSWORD || 'Admin123!';
 
   // Check if superadmin already exists

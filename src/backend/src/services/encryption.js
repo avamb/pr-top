@@ -19,7 +19,7 @@ const MASTER_KEY = process.env.ENCRYPTION_MASTER_KEY || 'dev-master-key-change-i
  */
 function deriveKey(keyVersion) {
   // Use PBKDF2 to derive a 256-bit key from master key + version salt
-  const salt = `psylink-key-v${keyVersion}`;
+  const salt = `prtop-key-v${keyVersion}`;
   return crypto.pbkdf2Sync(MASTER_KEY, salt, 100000, 32, 'sha256');
 }
 

@@ -4,7 +4,7 @@
 const messages = {
   en: {
     welcomeBack: (role) => `Welcome back! You are registered as a ${role}.\n\nUse /help to see available commands.`,
-    chooseRole: 'Welcome to PsyLink! Please choose your role:',
+    chooseRole: 'Welcome to PR-TOP! Please choose your role:',
     roleTherapist: '🧑‍⚕️ I am a Therapist',
     roleClient: '🙋 I am a Client',
     connectUsage: '📋 To connect with your therapist, use:\n`/connect YOUR_CODE`\n\nReplace YOUR_CODE with the invite code your therapist gave you.',
@@ -29,7 +29,7 @@ const messages = {
       const roleLabel = role === 'therapist' ? 'Терапевт' : 'Клиент';
       return `С возвращением! Вы зарегистрированы как ${roleLabel}.\n\nИспользуйте /help для просмотра доступных команд.`;
     },
-    chooseRole: 'Добро пожаловать в PsyLink! Выберите вашу роль:',
+    chooseRole: 'Добро пожаловать в PR-TOP! Выберите вашу роль:',
     roleTherapist: '🧑‍⚕️ Я терапевт',
     roleClient: '🙋 Я клиент',
     connectUsage: '📋 Чтобы подключиться к терапевту, используйте:\n`/connect ВАШ_КОД`\n\nЗамените ВАШ_КОД кодом приглашения, который дал вам терапевт.',
@@ -57,7 +57,7 @@ const messages = {
       const roleLabel = role === 'therapist' ? 'Terapeuta' : 'Cliente';
       return `¡Bienvenido de nuevo! Estás registrado como ${roleLabel}.\n\nUsa /help para ver los comandos disponibles.`;
     },
-    chooseRole: '¡Bienvenido a PsyLink! Elige tu rol:',
+    chooseRole: '¡Bienvenido a PR-TOP! Elige tu rol:',
     roleTherapist: '🧑‍⚕️ Soy terapeuta',
     roleClient: '🙋 Soy cliente',
     connectUsage: '📋 Para conectarte con tu terapeuta, usa:\n`/connect TU_CÓDIGO`\n\nReemplaza TU_CÓDIGO con el código de invitación que te dio tu terapeuta.',

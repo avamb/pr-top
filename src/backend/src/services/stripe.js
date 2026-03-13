@@ -30,7 +30,7 @@ function initStripe() {
     try {
       stripeClient = new Stripe('sk_test_development_placeholder', {
         apiVersion: '2023-10-16',
-        appInfo: { name: 'PsyLink', version: '0.1.0' }
+        appInfo: { name: 'PR-TOP', version: '0.1.0' }
       });
       logger.info('Stripe SDK loaded successfully (development mode)');
     } catch (error) {
@@ -45,7 +45,7 @@ function initStripe() {
     stripeClient = new Stripe(secretKey, {
       apiVersion: '2023-10-16',
       appInfo: {
-        name: 'PsyLink',
+        name: 'PR-TOP',
         version: '0.1.0'
       }
     });
@@ -138,8 +138,8 @@ async function createCustomer({ email, name, userId }) {
       email: email,
       name: name || null,
       metadata: {
-        psylink_user_id: String(userId),
-        platform: 'psylink'
+        prtop_user_id: String(userId),
+        platform: 'prtop'
       },
       created: Math.floor(Date.now() / 1000),
       livemode: false,
@@ -152,8 +152,8 @@ async function createCustomer({ email, name, userId }) {
       email,
       name: name || undefined,
       metadata: {
-        psylink_user_id: String(userId),
-        platform: 'psylink'
+        prtop_user_id: String(userId),
+        platform: 'prtop'
       }
     });
 
@@ -222,7 +222,7 @@ async function createCheckoutSession({ customerId, plan, userId, successUrl, can
       status: 'open',
       customer: customerId,
       metadata: {
-        psylink_user_id: String(userId),
+        prtop_user_id: String(userId),
         plan: plan
       },
       _dev_mode: true
@@ -238,7 +238,7 @@ async function createCheckoutSession({ customerId, plan, userId, successUrl, can
           currency: planConfig.currency,
           product_data: {
             name: planConfig.name,
-            description: `PsyLink ${planConfig.name} - Monthly Subscription`
+            description: `PR-TOP ${planConfig.name} - Monthly Subscription`
           },
           unit_amount: planConfig.amount,
           recurring: { interval: planConfig.interval }
@@ -249,7 +249,7 @@ async function createCheckoutSession({ customerId, plan, userId, successUrl, can
       success_url: successUrl + '?session_id={CHECKOUT_SESSION_ID}',
       cancel_url: cancelUrl,
       metadata: {
-        psylink_user_id: String(userId),
+        prtop_user_id: String(userId),
         plan: plan
       }
     });
