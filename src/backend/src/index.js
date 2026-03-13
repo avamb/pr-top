@@ -10,6 +10,7 @@ const path = require('path');
 const { initDatabase, saveDatabase } = require('./db/connection');
 const { logger } = require('./utils/logger');
 const { initStripe, getStripeStatus, isConfigured: isStripeConfigured } = require('./services/stripe');
+const scheduler = require('./services/scheduler');
 const cookieParser = require('cookie-parser');
 const { csrfProtection, csrfTokenEndpoint } = require('./middleware/csrf');
 const { requireActiveSubscription, authenticate } = require('./middleware/auth');
@@ -164,6 +165,7 @@ app.use('/api/exercises', requireActiveSubscription, require('./routes/exercises
 app.use('/api/settings', requireActiveSubscription, require('./routes/settings'));
 app.use('/api/search', requireActiveSubscription, require('./routes/search'));
 app.use('/api/query', requireActiveSubscription, require('./routes/query'));
+app.use('/api/export', requireActiveSubscription, require('./routes/export'));
 
 // Dev-only seed endpoint for testing with large datasets
 if (process.env.NODE_ENV !== 'production') {
@@ -278,6 +280,9 @@ async function start() {
     // Initialize Stripe SDK
     const stripeReady = initStripe();
     logger.info(`Stripe initialized: ${stripeReady ? 'configured' : 'not configured (placeholder key)'}`);
+
+    // Start scheduled task runner (after DB is ready)
+    scheduler.start();
 
     app.listen(PORT, () => {
       logger.info(`PR-TOP API server running on port ${PORT}`);
