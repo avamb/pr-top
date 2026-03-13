@@ -199,7 +199,12 @@
     "client": "Client",
     "total": "Total",
     "lastActive": "Last Active",
-    "retry": "Retry"
+    "retry": "Retry",
+    "exportCSV": "Export CSV",
+    "exportDownloading": "Exporting...",
+    "exportSuccess": "Analytics export downloaded",
+    "exportFailed": "Analytics export failed",
+    "exportUpgradeRequired": "Analytics export requires Pro or Premium plan"
   },
   "clientDetail": {
     "timeline": "Timeline",
@@ -289,7 +294,16 @@
     "video": "Video",
     "dateRange": "Date range:",
     "clearDateFilters": "Clear date filters",
-    "noDiaryEntries": "No diary entries found"
+    "noDiaryEntries": "No diary entries found",
+    "exportAllData": "Export All Data",
+    "exportFormat": "Format:",
+    "exportJSON": "JSON",
+    "exportCSV": "CSV (ZIP)",
+    "exportDownloading": "Exporting...",
+    "exportSuccess": "Export downloaded successfully",
+    "exportFailed": "Export failed",
+    "exportUpgradeRequired": "Full export requires Pro or Premium plan",
+    "exportUpgradeHint": "Upgrade to export all data types including sessions, notes, exercises, and CSV format."
   },
   "exerciseLibrary": {
     "title": "Exercise Library",
@@ -362,6 +376,15 @@
     "sessionSummary": "Session Summary",
     "summaryDecryptFail": "Summary available but could not be decrypted.",
     "noSummaryYet": "No summary available yet"
+  },
+  "player": {
+    "play": "Play",
+    "pause": "Pause",
+    "volume": "Volume",
+    "speed": "Playback speed",
+    "loading": "Loading media...",
+    "error": "Playback Error",
+    "loadError": "Failed to load media file"
   },
   "admin": {
     "loadingAdmin": "Loading admin panel...",
@@ -598,7 +621,7 @@
     "faq6Q": "What happens if my subscription expires?",
     "faq6A": "If your subscription expires, you will be redirected to the Subscription page to select a new plan. Your data is safely preserved and will be accessible again once you subscribe.",
     "faq7Q": "Can I export my data?",
-    "faq7A": "Data export functionality allows you to download your client data in encrypted format. Contact support for assistance with bulk data exports.",
+    "faq7A": "Yes! On any client's profile, click 'Export All Data' to download their complete data as JSON or CSV (ZIP). JSON includes profile, context, diary, sessions, notes, exercises, and SOS events. CSV bundles separate files in a ZIP archive. Trial/Basic plans can export diary data in JSON; Pro/Premium plans unlock full export with all data types and CSV format. Analytics can also be exported from the Analytics page.",
     "faq8Q": "How are voice messages transcribed?",
     "faq8A": "Voice messages and audio recordings are processed through our speech-to-text pipeline. The audio is uploaded, transcribed automatically, and an AI-generated summary is created. The process typically takes a few minutes.",
     "faq9Q": "How do AI instructions work?",

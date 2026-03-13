@@ -199,7 +199,12 @@
     "client": "Cliente",
     "total": "Total",
     "lastActive": "Última actividad",
-    "retry": "Reintentar"
+    "retry": "Reintentar",
+    "exportCSV": "Exportar CSV",
+    "exportDownloading": "Exportando...",
+    "exportSuccess": "Exportación de analítica descargada",
+    "exportFailed": "Error en la exportación de analítica",
+    "exportUpgradeRequired": "La exportación de analítica requiere un plan Pro o Premium"
   },
   "clientDetail": {
     "timeline": "Cronología",
@@ -289,7 +294,16 @@
     "video": "Vídeo",
     "dateRange": "Rango de fechas:",
     "clearDateFilters": "Limpiar fechas",
-    "noDiaryEntries": "No se encontraron entradas de diario"
+    "noDiaryEntries": "No se encontraron entradas de diario",
+    "exportAllData": "Exportar todos los datos",
+    "exportFormat": "Formato:",
+    "exportJSON": "JSON",
+    "exportCSV": "CSV (ZIP)",
+    "exportDownloading": "Exportando...",
+    "exportSuccess": "Exportación descargada correctamente",
+    "exportFailed": "Error en la exportación",
+    "exportUpgradeRequired": "La exportación completa requiere un plan Pro o Premium",
+    "exportUpgradeHint": "Mejora tu plan para exportar todos los tipos de datos, incluyendo sesiones, notas, ejercicios y formato CSV."
   },
   "exerciseLibrary": {
     "title": "Biblioteca de ejercicios",
@@ -362,6 +376,15 @@
     "sessionSummary": "Resumen de sesión",
     "summaryDecryptFail": "Resumen disponible pero no se pudo descifrar.",
     "noSummaryYet": "Resumen aún no disponible"
+  },
+  "player": {
+    "play": "Reproducir",
+    "pause": "Pausar",
+    "volume": "Volumen",
+    "speed": "Velocidad de reproducción",
+    "loading": "Cargando media...",
+    "error": "Error de reproducción",
+    "loadError": "No se pudo cargar el archivo de media"
   },
   "admin": {
     "loadingAdmin": "Cargando panel de administración...",
@@ -598,7 +621,7 @@
     "faq6Q": "¿Qué pasa si mi suscripción expira?",
     "faq6A": "Si tu suscripción expira, serás redirigido a la página de Suscripción para seleccionar un nuevo plan. Tus datos se preservan de forma segura y estarán accesibles nuevamente una vez que te suscribas.",
     "faq7Q": "¿Puedo exportar mis datos?",
-    "faq7A": "La funcionalidad de exportación de datos te permite descargar los datos de tus clientes en formato cifrado. Contacta al soporte para asistencia con exportaciones masivas de datos.",
+    "faq7A": "¡Sí! En el perfil de cualquier cliente, haz clic en 'Exportar todos los datos' para descargar sus datos completos en JSON o CSV (ZIP). JSON incluye perfil, contexto, diario, sesiones, notas, ejercicios y eventos SOS. CSV agrupa archivos separados en un archivo ZIP. Los planes Trial/Basic pueden exportar datos del diario en JSON; los planes Pro/Premium desbloquean la exportación completa con todos los tipos de datos y formato CSV. La analítica también se puede exportar desde la página de Analítica.",
     "faq8Q": "¿Cómo se transcriben los mensajes de voz?",
     "faq8A": "Los mensajes de voz y las grabaciones de audio se procesan a través de nuestro pipeline de reconocimiento de voz. El audio se sube, se transcribe automáticamente y se crea un resumen generado por IA. El proceso generalmente tarda unos minutos.",
     "faq9Q": "¿Cómo funcionan las instrucciones de IA?",
