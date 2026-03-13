@@ -173,3 +173,66 @@
 ### Current Status
 - Features passing: 217/222 (97.7%)
 - Features #217, #218, #219: ALL PASSING
+
+## Session: 2026-03-13 - Features #214, #220, #221
+
+### Completed: Implement real AI summarization for sessions (#214) - PASSING
+
+**What was built:**
+- Implemented callAIAPI() in summarization.js using OpenAI-compatible chat completions endpoint
+- Configurable via AI_API_URL and AI_MODEL env vars (defaults: OpenAI API, gpt-4o-mini)
+- Therapist-supportive system prompt that avoids diagnosis language
+- Includes client context (anamnesis, goals, contraindications, AI instructions) in prompt
+- Transcript truncation for very long sessions (60k char limit)
+- Error handling: API failures logged, don't crash session workflow
+- Dev mode fallback: generates structured summary with [DEV MODE] prefix when no API key
+- 2-minute timeout for API calls, 300-600 word target summaries
+
+**Verification:**
+- Session upload → transcription → summarization pipeline works end-to-end ✅
+- Dev mode produces [DEV MODE] prefixed summary ✅
+- Summary stored encrypted in DB, decrypted on read ✅
+- Manual re-summarization endpoint works ✅
+- No diagnosis language in summaries ✅
+- Structured sections (Key Topics, Observations, Progress, Follow-up) ✅
+
+### Completed: Add therapist web UI for session audio upload (#220) - PASSING
+
+**What was built:**
+- Upload Session Recording button in ClientDetail Sessions tab
+- File picker (accept audio/*, video/*), preview with file name and size
+- Upload progress bar using XHR for real-time progress tracking
+- Success/error/retry states with auto-refresh of sessions list
+- Added video MIME types to backend multer file filter
+- i18n keys for EN, RU, ES
+
+**Verification:**
+- Therapist opens client → Sessions tab → clicks Upload → selects file → sees preview ✅
+- Upload & Process → progress bar → success message → session appears in list ✅
+- Session shows complete status with transcript and summary after processing ✅
+- Zero console errors ✅
+
+### Completed: Add therapist web UI for natural-language queries (#221) - PASSING
+
+**What was built:**
+- NL query panel in ClientDetail: expandable "Ask about this client" section
+- Text input with placeholder, Search button, loading spinner
+- Results display with type icon, date, relevance score, content snippet
+- Subscription gating: trial/basic shows ⭐ Pro Feature upgrade prompt with Upgrade Plan button
+- Pro/Premium therapists get actual search results with expanded terms
+- Dashboard "Ask About a Client" widget linking to client selection
+- Dev endpoint /api/dev/set-plan for testing plan-gated features
+- CSRF exemption for dev endpoints
+- i18n keys for EN, RU, ES
+
+**Verification:**
+- Trial therapist: query returns upgrade prompt with amber styling ✅
+- Pro therapist: query returns session results with relevance scores ✅
+- Expanded terms shown (e.g., "anxious, worried, worry, nervous, panic") ✅
+- Session results clickable, show content snippets ✅
+- Dashboard shows "Ask About a Client" widget ✅
+- Zero console errors in both scenarios ✅
+
+### Current Status
+- Features passing: 219/222 (98.6%)
+- Features #214, #220, #221: ALL PASSING
