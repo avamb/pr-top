@@ -259,6 +259,23 @@
 - GET /clients/:id/diary: replaced inline consent check (30+ lines) with verifyClientConsent() helper call for consistency and audit logging
 - Added verifyClientConsent import to search.js
 
+## Session: 2026-03-13 - Feature #226
+
+### Completed: Therapist guide and i18n update for consent enforcement changes (#226) - PASSING
+
+**What was changed:**
+- Updated faq2A in en.json, ru.json, es.json to describe full scope of consent revocation (diary, sessions, transcripts, summaries, exercises, SOS, search, dashboard stats, activity feed, analytics)
+- Updated section2Consent in all 3 languages to mention data hidden from dashboard, search, and analytics when consent revoked
+- Therapist notes explicitly noted as remaining accessible
+- No old product name (PsyLink) references in any updated text
+
+**Verification:**
+- Guide page loads in EN with updated section2Consent and faq2A ✅
+- Guide page loads in RU with correct translations ✅
+- Guide page loads in ES with correct translations ✅
+- Zero console errors across all 3 languages ✅
+- No PsyLink references anywhere in guide ✅
+
 ### Current Status
-- Features passing: 225/226 (99.6%)
-- Features #223, #224, #225: ALL PASSING
+- Features passing: 226/226 (100.0%) 🎉
+- ALL FEATURES COMPLETE
