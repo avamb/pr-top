@@ -28,7 +28,10 @@ const PORT = process.env.PORT || 3001;
 app.use(helmet());
 app.use(cors({
   origin: function(origin, callback) {
-    var allowed = [process.env.FRONTEND_URL || 'http://localhost:3000'];
+    var allowed = [
+      process.env.FRONTEND_URL || 'http://localhost:3000',
+      process.env.PUBLIC_URL || ''
+    ].filter(Boolean);
     // In development, allow any localhost port
     if (!origin || allowed.indexOf(origin) !== -1 || (process.env.NODE_ENV !== 'production' && origin && origin.match(/^http:\/\/localhost:\d+$/))) {
       callback(null, true);
