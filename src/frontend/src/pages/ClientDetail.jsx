@@ -1934,6 +1934,16 @@ function ClientDetail() {
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${typeBadgeColor(entry.entry_type)}`}>
                       {entry.entry_type}
                     </span>
+                    {/* Transcription status badge for voice/video entries */}
+                    {(entry.entry_type === 'voice' || entry.entry_type === 'video') && (
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        entry.transcript
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-amber-100 text-amber-700'
+                      }`}>
+                        {entry.transcript ? '✅ Transcribed' : '⏳ Pending transcription'}
+                      </span>
+                    )}
                     <span className="text-xs text-stone-400 ml-auto">
                       {formatUserDate(entry.created_at)}
                     </span>
@@ -1946,7 +1956,7 @@ function ClientDetail() {
                   <p className="text-stone-700 whitespace-pre-wrap">{entry.content}</p>
                   {entry.transcript && (
                     <div className="mt-2 p-2 bg-stone-50 rounded text-sm text-stone-600">
-                      <span className="font-medium">Transcript:</span> {entry.transcript}
+                      <span className="font-medium">📝 Transcript:</span> {entry.transcript}
                     </div>
                   )}
                 </div>

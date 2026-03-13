@@ -61,7 +61,11 @@ const messages = {
     exerciseStartBtn: '▶️ Start Exercise',
     exerciseNotFound: 'Exercise not found or already completed.',
     exerciseAwaitingResponse: '✍️ Please type your response to the exercise now.',
-    exerciseNoActiveExercise: 'You don\'t have an active exercise. Use /exercises to see your exercises.'
+    exerciseNoActiveExercise: 'You don\'t have an active exercise. Use /exercises to see your exercises.',
+    // Transcription status
+    transcribing: '⏳ [Transcribing...]',
+    voiceSavedTranscribing: '🎤 Voice diary entry saved! Transcription in progress...',
+    videoSavedTranscribing: '🎥 Video diary entry saved! Transcription in progress...'
   },
   ru: {
     welcomeBack: (role) => {
@@ -128,7 +132,11 @@ const messages = {
     exerciseStartBtn: '▶️ Начать упражнение',
     exerciseNotFound: 'Упражнение не найдено или уже выполнено.',
     exerciseAwaitingResponse: '✍️ Напишите ваш ответ на упражнение.',
-    exerciseNoActiveExercise: 'У вас нет активного упражнения. Используйте /exercises для просмотра упражнений.'
+    exerciseNoActiveExercise: 'У вас нет активного упражнения. Используйте /exercises для просмотра упражнений.',
+    // Transcription status
+    transcribing: '⏳ [Транскрибирование...]',
+    voiceSavedTranscribing: '🎤 Голосовая запись дневника сохранена! Транскрибирование в процессе...',
+    videoSavedTranscribing: '🎥 Видеозапись дневника сохранена! Транскрибирование в процессе...'
   },
   es: {
     welcomeBack: (role) => {
@@ -195,7 +203,11 @@ const messages = {
     exerciseStartBtn: '▶️ Iniciar ejercicio',
     exerciseNotFound: 'Ejercicio no encontrado o ya completado.',
     exerciseAwaitingResponse: '✍️ Escribe tu respuesta al ejercicio ahora.',
-    exerciseNoActiveExercise: 'No tienes un ejercicio activo. Usa /exercises para ver tus ejercicios.'
+    exerciseNoActiveExercise: 'No tienes un ejercicio activo. Usa /exercises para ver tus ejercicios.',
+    // Transcription status
+    transcribing: '⏳ [Transcribiendo...]',
+    voiceSavedTranscribing: '🎤 ¡Entrada de diario de voz guardada! Transcripción en progreso...',
+    videoSavedTranscribing: '🎥 ¡Entrada de diario de video guardada! Transcripción en progreso...'
   }
 };
 

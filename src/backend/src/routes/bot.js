@@ -9,6 +9,7 @@ const { processDiaryTranscription } = require('../services/diaryTranscription');
 const { checkClientLimit } = require('../utils/planLimits');
 const telegramNotify = require('../utils/telegramNotify');
 const emailService = require('../services/emailService');
+const wsService = require('../services/websocketService');
 
 const router = express.Router();
 
@@ -475,6 +476,20 @@ router.post('/diary', botAuth, (req, res) => {
     var embRefResult = db.exec('SELECT embedding_ref FROM diary_entries WHERE id = ?', [entryId]);
     var embRef = (embRefResult.length > 0 && embRefResult[0].values.length > 0) ? embRefResult[0].values[0][0] : null;
 
+    // Push real-time WebSocket notification to therapist
+    try {
+      const therapistIdForWs = client[2]; // therapist_id from client record
+      if (therapistIdForWs) {
+        const clientEmailResult = db.exec("SELECT email FROM users WHERE id = ?", [clientId]);
+        const clientName = (clientEmailResult.length > 0 && clientEmailResult[0].values.length > 0)
+          ? (clientEmailResult[0].values[0][0] || 'Client #' + clientId)
+          : 'Client #' + clientId;
+        wsService.emitNewDiaryEntry(therapistIdForWs, { clientId, clientName, entryId, entryType: type });
+      }
+    } catch (wsErr) {
+      logger.warn(`[WS] Failed to emit diary entry notification: ${wsErr.message}`);
+    }
+
     res.status(201).json({
       message: 'Diary entry saved successfully',
       entry: {
@@ -528,10 +543,10 @@ router.get('/diary/:telegram_id', botAuth, (req, res) => {
     const client = clientResult[0].values[0];
     const clientId = client[0];
 
-    // Get diary entries with decrypted content for the client's own viewing
+    // Get diary entries with decrypted content and transcript for the client's own viewing
     const limit = parseInt(req.query.limit) || 10;
     const result = db.exec(
-      `SELECT id, entry_type, content_encrypted, encryption_key_id, payload_version, created_at
+      `SELECT id, entry_type, content_encrypted, encryption_key_id, payload_version, created_at, transcript_encrypted
        FROM diary_entries WHERE client_id = ? ORDER BY created_at DESC LIMIT ?`,
       [clientId, limit]
     );
@@ -544,10 +559,26 @@ router.get('/diary/:telegram_id', botAuth, (req, res) => {
         logger.error('Failed to decrypt diary entry: ' + e.message);
         content = '[unable to read]';
       }
+      // Decrypt transcript if present
+      let transcript = null;
+      try {
+        if (row[6]) transcript = decrypt(row[6]);
+      } catch (e) {
+        logger.error('Failed to decrypt diary transcript: ' + e.message);
+        transcript = '[unable to read]';
+      }
+      // Determine transcription status for voice/video entries
+      const entryType = row[1];
+      let transcription_status = null;
+      if (entryType === 'voice' || entryType === 'video') {
+        transcription_status = transcript ? 'complete' : 'pending';
+      }
       return {
         id: row[0],
-        entry_type: row[1],
+        entry_type: entryType,
         content: content,
+        transcript: transcript,
+        transcription_status: transcription_status,
         created_at: row[5]
       };
     });
@@ -661,6 +692,18 @@ router.post('/sos', botAuth, (req, res) => {
     saveDatabase();
 
     logger.info(`SOS ALERT: Client ${clientId} (telegram_id=${telegram_id}) triggered SOS, therapist ${therapistId}, event #${sosId}`);
+
+    // Push real-time WebSocket notification to therapist
+    try {
+      // Look up client name for display
+      const clientNameResult = db.exec("SELECT email, telegram_id FROM users WHERE id = ?", [clientId]);
+      const clientName = (clientNameResult.length > 0 && clientNameResult[0].values.length > 0)
+        ? (clientNameResult[0].values[0][0] || 'Client #' + clientId)
+        : 'Client #' + clientId;
+      wsService.emitSosAlert(therapistId, { clientId, clientName, sosId, message: message || null });
+    } catch (wsErr) {
+      logger.warn(`[WS] Failed to emit SOS alert: ${wsErr.message}`);
+    }
 
     // Notify therapist based on escalation preferences
     const therapistResult = db.exec(
@@ -925,6 +968,17 @@ router.post('/exercises/:delivery_id/respond', botAuth, (req, res) => {
     );
 
     saveDatabase();
+
+    // Push real-time WebSocket notification to therapist
+    try {
+      const clientEmailForWs = db.exec("SELECT email FROM users WHERE id = ?", [clientId]);
+      const clientNameForWs = (clientEmailForWs.length > 0 && clientEmailForWs[0].values.length > 0)
+        ? (clientEmailForWs[0].values[0][0] || 'Client #' + clientId)
+        : 'Client #' + clientId;
+      wsService.emitExerciseCompleted(therapistId, { clientId, clientName: clientNameForWs, deliveryId: parseInt(deliveryId) });
+    } catch (wsErr) {
+      logger.warn(`[WS] Failed to emit exercise completion: ${wsErr.message}`);
+    }
 
     // Notify therapist about exercise completion (non-blocking)
     const therapistTgResult = db.exec("SELECT telegram_id FROM users WHERE id = ?", [therapistId]);

@@ -205,7 +205,17 @@ if (!token || token === 'your-telegram-bot-token') {
           day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
         });
         const typeIcon = entry.entry_type === 'voice' ? '🎤' : entry.entry_type === 'video' ? '🎥' : '📝';
-        const preview = entry.content ? entry.content.substring(0, 100) + (entry.content.length > 100 ? '...' : '') : '[no content]';
+        // For voice/video entries, show transcript preview or transcription status
+        let preview;
+        if ((entry.entry_type === 'voice' || entry.entry_type === 'video') && entry.transcript) {
+          // Show transcript preview for transcribed voice/video entries
+          const transcriptPreview = entry.transcript.substring(0, 100) + (entry.transcript.length > 100 ? '...' : '');
+          preview = transcriptPreview;
+        } else if ((entry.entry_type === 'voice' || entry.entry_type === 'video') && entry.transcription_status === 'pending') {
+          preview = t(lang, 'transcribing');
+        } else {
+          preview = entry.content ? entry.content.substring(0, 100) + (entry.content.length > 100 ? '...' : '') : '[no content]';
+        }
         text += `${i + 1}. ${typeIcon} ${date}\n${preview}\n\n`;
       });
 
@@ -459,7 +469,7 @@ if (!token || token === 'your-telegram-bot-token') {
       const fileId = msg.voice.file_id;
       const duration = msg.voice.duration;
 
-      // Submit voice diary entry via backend API
+      // Submit voice diary entry via backend API (auto-transcription is triggered server-side)
       const result = await api.post('/api/bot/diary', {
         telegram_id: String(telegramId),
         entry_type: 'voice',
@@ -467,7 +477,8 @@ if (!token || token === 'your-telegram-bot-token') {
         file_ref: fileId
       });
 
-      bot.sendMessage(chatId, t(lang, 'voiceSaved'));
+      // Notify user that transcription is in progress
+      bot.sendMessage(chatId, t(lang, 'voiceSavedTranscribing'));
     } catch (error) {
       const errorMsg = error.response?.data?.error || t(lang, 'failedVoiceDiary');
       bot.sendMessage(chatId, `❌ ${errorMsg}`);
@@ -492,7 +503,7 @@ if (!token || token === 'your-telegram-bot-token') {
       const fileId = msg.video.file_id;
       const duration = msg.video.duration;
 
-      // Submit video diary entry via backend API
+      // Submit video diary entry via backend API (auto-transcription is triggered server-side)
       const result = await api.post('/api/bot/diary', {
         telegram_id: String(telegramId),
         entry_type: 'video',
@@ -500,7 +511,8 @@ if (!token || token === 'your-telegram-bot-token') {
         file_ref: fileId
       });
 
-      bot.sendMessage(chatId, t(lang, 'videoSaved'));
+      // Notify user that transcription is in progress
+      bot.sendMessage(chatId, t(lang, 'videoSavedTranscribing'));
     } catch (error) {
       const errorMsg = error.response?.data?.error || t(lang, 'failedVideoDiary');
       bot.sendMessage(chatId, `❌ ${errorMsg}`);
@@ -525,7 +537,7 @@ if (!token || token === 'your-telegram-bot-token') {
       const fileId = msg.video_note.file_id;
       const duration = msg.video_note.duration;
 
-      // Submit video diary entry via backend API
+      // Submit video diary entry via backend API (auto-transcription is triggered server-side)
       const result = await api.post('/api/bot/diary', {
         telegram_id: String(telegramId),
         entry_type: 'video',
@@ -533,7 +545,8 @@ if (!token || token === 'your-telegram-bot-token') {
         file_ref: fileId
       });
 
-      bot.sendMessage(chatId, t(lang, 'videoSaved'));
+      // Notify user that transcription is in progress
+      bot.sendMessage(chatId, t(lang, 'videoSavedTranscribing'));
     } catch (error) {
       const errorMsg = error.response?.data?.error || t(lang, 'failedVideoDiary');
       bot.sendMessage(chatId, `❌ ${errorMsg}`);
