@@ -5,6 +5,7 @@ const { logger } = require('../utils/logger');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { checkClientLimit } = require('../utils/planLimits');
 const { encrypt, decrypt } = require('../services/encryption');
+const { verifyClientConsent } = require('../utils/consentCheck');
 
 const router = express.Router();
 
@@ -445,14 +446,10 @@ router.post('/:id/notes', (req, res) => {
       return res.status(400).json({ error: 'Note content is required' });
     }
 
-    // Verify client belongs to this therapist
-    const clientResult = db.exec(
-      "SELECT id, consent_therapist_access FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
-      [clientId, therapistId]
-    );
-
-    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
-      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    // Verify client belongs to this therapist AND has granted consent
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'create_note');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
     // Encrypt the note content (Class A data)
@@ -507,6 +504,12 @@ router.put('/:id/notes/:noteId', (req, res) => {
 
     if (content.length > 50000) {
       return res.status(400).json({ error: 'Note content exceeds 50000 character limit' });
+    }
+
+    // Verify client consent
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'update_note');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
     // Verify the note belongs to this therapist and client
@@ -667,14 +670,10 @@ router.get('/:id/context', (req, res) => {
     const therapistId = req.user.id;
     const clientId = req.params.id;
 
-    // Verify client belongs to this therapist
-    const clientResult = db.exec(
-      "SELECT id, consent_therapist_access FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
-      [clientId, therapistId]
-    );
-
-    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
-      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    // Verify client belongs to this therapist AND has granted consent
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'context');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
     // Get context record
@@ -769,14 +768,10 @@ router.put('/:id/context', (req, res) => {
       }
     }
 
-    // Verify client belongs to this therapist
-    const clientResult = db.exec(
-      "SELECT id, consent_therapist_access FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
-      [clientId, therapistId]
-    );
-
-    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
-      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    // Verify client belongs to this therapist AND has granted consent
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'update_context');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
     // Encrypt each provided field (Class A data)
@@ -1152,14 +1147,10 @@ router.get('/:id/sessions', (req, res) => {
     const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page) || 25));
     const offset = (page - 1) * perPage;
 
-    // Verify client belongs to this therapist
-    const clientResult = db.exec(
-      "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
-      [clientId, therapistId]
-    );
-
-    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
-      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    // Verify client belongs to this therapist AND has granted consent
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'sessions');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
     // Get total count
@@ -1222,14 +1213,10 @@ router.get('/:id/exercises', (req, res) => {
     const therapistId = req.user.id;
     const clientId = req.params.id;
 
-    // Verify client belongs to this therapist
-    const clientResult = db.exec(
-      "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
-      [clientId, therapistId]
-    );
-
-    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
-      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    // Verify client belongs to this therapist AND has granted consent
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'exercises');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
     // Get exercise deliveries for this client
@@ -1276,17 +1263,18 @@ router.post('/:id/exercises', (req, res) => {
       return res.status(400).json({ error: 'exercise_id is required' });
     }
 
-    // Verify client belongs to this therapist
-    const clientResult = db.exec(
-      "SELECT id, telegram_id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
-      [clientId, therapistId]
-    );
-
-    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
-      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    // Verify client belongs to this therapist AND has granted consent
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'exercise_send');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
-    const clientTelegramId = clientResult[0].values[0][1];
+    // Get telegram_id for notification
+    const clientTgResult = db.exec(
+      "SELECT telegram_id FROM users WHERE id = ?",
+      [clientId]
+    );
+    const clientTelegramId = (clientTgResult.length > 0 && clientTgResult[0].values.length > 0) ? clientTgResult[0].values[0][0] : null;
 
     // Verify exercise exists
     const exerciseResult = db.exec(
@@ -1413,14 +1401,10 @@ router.get('/:id/sos', (req, res) => {
     const therapistId = req.user.id;
     const clientId = req.params.id;
 
-    // Verify client belongs to this therapist
-    const clientResult = db.exec(
-      "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
-      [clientId, therapistId]
-    );
-
-    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
-      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    // Verify client belongs to this therapist AND has granted consent
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'sos');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
     const result = db.exec(
@@ -1465,14 +1449,10 @@ router.put('/:id/sos/:sosId/acknowledge', (req, res) => {
     const clientId = req.params.id;
     const sosId = req.params.sosId;
 
-    // Verify client belongs to this therapist
-    const clientResult = db.exec(
-      "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
-      [clientId, therapistId]
-    );
-
-    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
-      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    // Verify client belongs to this therapist AND has granted consent
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'sos_acknowledge');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
     // Verify SOS event exists and belongs to this therapist/client
@@ -1555,14 +1535,10 @@ router.post('/:id/import', (req, res, next) => {
       const therapistId = req.user.id;
       const clientId = req.params.id;
 
-      // Verify client belongs to this therapist
-      const clientResult = db.exec(
-        "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
-        [clientId, therapistId]
-      );
-
-      if (clientResult.length === 0 || clientResult[0].values.length === 0) {
-        return res.status(404).json({ error: 'Client not found or not linked to you' });
+      // Verify client belongs to this therapist AND has granted consent
+      const consentCheck = verifyClientConsent(therapistId, clientId, 'import');
+      if (!consentCheck.allowed) {
+        return res.status(consentCheck.status).json({ error: consentCheck.error });
       }
 
       if (!req.file) {

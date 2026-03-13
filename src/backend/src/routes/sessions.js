@@ -12,6 +12,7 @@ const { processSessionTranscription } = require('../services/transcription');
 const { processSessionSummary } = require('../services/summarization');
 const { checkSessionLimit } = require('../utils/planLimits');
 const { logger } = require('../utils/logger');
+const { verifyClientConsent } = require('../utils/consentCheck');
 
 // Configure multer for audio file uploads
 // Files are stored in a non-public directory with opaque (random) filenames
@@ -191,6 +192,14 @@ router.get('/:id', authenticate, requireRole('therapist', 'superadmin'), async (
       return res.status(403).json({ error: 'Access denied' });
     }
 
+    // Verify client consent (unless superadmin)
+    if (req.user.role !== 'superadmin' && row[2]) {
+      const consentCheck = verifyClientConsent(req.user.id, row[2], 'session');
+      if (!consentCheck.allowed) {
+        return res.status(consentCheck.status).json({ error: consentCheck.error });
+      }
+    }
+
     const session = {
       id: row[0],
       therapist_id: row[1],
@@ -320,7 +329,7 @@ router.get('/:id/summary', authenticate, requireRole('therapist', 'superadmin'),
     const sessionId = req.params.id;
 
     const result = db.exec(
-      'SELECT therapist_id, summary_encrypted FROM sessions WHERE id = ?',
+      'SELECT therapist_id, summary_encrypted, client_id FROM sessions WHERE id = ?',
       [sessionId]
     );
 
@@ -331,6 +340,14 @@ router.get('/:id/summary', authenticate, requireRole('therapist', 'superadmin'),
     const row = result[0].values[0];
     if (req.user.role !== 'superadmin' && row[0] !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Verify client consent (unless superadmin)
+    if (req.user.role !== 'superadmin' && row[2]) {
+      const consentCheck = verifyClientConsent(req.user.id, row[2], 'session_summary');
+      if (!consentCheck.allowed) {
+        return res.status(consentCheck.status).json({ error: consentCheck.error });
+      }
     }
 
     if (!row[1]) {
@@ -352,7 +369,7 @@ router.get('/:id/transcript', authenticate, requireRole('therapist', 'superadmin
     const sessionId = req.params.id;
 
     const result = db.exec(
-      'SELECT therapist_id, transcript_encrypted FROM sessions WHERE id = ?',
+      'SELECT therapist_id, transcript_encrypted, client_id FROM sessions WHERE id = ?',
       [sessionId]
     );
 
@@ -363,6 +380,14 @@ router.get('/:id/transcript', authenticate, requireRole('therapist', 'superadmin
     const row = result[0].values[0];
     if (req.user.role !== 'superadmin' && row[0] !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Verify client consent (unless superadmin)
+    if (req.user.role !== 'superadmin' && row[2]) {
+      const consentCheck = verifyClientConsent(req.user.id, row[2], 'session_transcript');
+      if (!consentCheck.allowed) {
+        return res.status(consentCheck.status).json({ error: consentCheck.error });
+      }
     }
 
     if (!row[1]) {

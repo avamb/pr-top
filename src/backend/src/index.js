@@ -212,6 +212,18 @@ if (process.env.NODE_ENV !== 'production') {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
+  app.post('/api/dev/set-consent', (req, res) => {
+    try {
+      const { client_id, consent } = req.body;
+      if (!client_id || consent === undefined) return res.status(400).json({ error: 'client_id and consent required' });
+      const { getDatabase, saveDatabase: save } = require('./db/connection');
+      const db = getDatabase();
+      db.run("UPDATE users SET consent_therapist_access = ?, updated_at = datetime('now') WHERE id = ? AND role = 'client'", [consent ? 1 : 0, client_id]);
+      save();
+      res.json({ updated: true, client_id, consent: !!consent });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
   app.post('/api/dev/expire-trial', (req, res) => {
     try {
       const { therapist_id } = req.body;
