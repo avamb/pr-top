@@ -268,6 +268,20 @@ function applySchema(db) {
     )
   `);
 
+  db.run(`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      token TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      used INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  db.run('CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id)');
+
   // Add pending_plan column for scheduled downgrades (migration)
   try {
     db.run('ALTER TABLE subscriptions ADD COLUMN pending_plan TEXT');

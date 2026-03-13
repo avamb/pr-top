@@ -372,6 +372,52 @@ function subscriptionExpiryTemplate(data, locale) {
   };
 }
 
+/**
+ * Password reset email template
+ */
+function passwordResetTemplate(data, locale) {
+  const l = locale || 'en';
+  const resetUrl = data.resetUrl || '#';
+
+  const titles = {
+    en: 'Reset your PR-TOP password',
+    ru: 'Сброс пароля PR-TOP',
+    es: 'Restablecer su contraseña de PR-TOP'
+  };
+
+  const bodies = {
+    en: `
+      <h2>Password Reset</h2>
+      <p>We received a request to reset your password. Click the button below to set a new password:</p>
+      <a href="${escapeHtml(resetUrl)}" class="btn">Reset Password</a>
+      <p style="font-size: 13px; color: #6b7280;">This link will expire in <strong>1 hour</strong>. If you didn't request a password reset, you can safely ignore this email.</p>
+      <p style="font-size: 12px; color: #9ca3af; margin-top: 24px;">If the button doesn't work, copy and paste this link into your browser:<br>
+      <span style="word-break: break-all; font-family: monospace; font-size: 11px;">${escapeHtml(resetUrl)}</span></p>
+    `,
+    ru: `
+      <h2>Сброс пароля</h2>
+      <p>Мы получили запрос на сброс вашего пароля. Нажмите кнопку ниже, чтобы установить новый пароль:</p>
+      <a href="${escapeHtml(resetUrl)}" class="btn">Сбросить пароль</a>
+      <p style="font-size: 13px; color: #6b7280;">Эта ссылка действительна <strong>1 час</strong>. Если вы не запрашивали сброс пароля, проигнорируйте это письмо.</p>
+      <p style="font-size: 12px; color: #9ca3af; margin-top: 24px;">Если кнопка не работает, скопируйте и вставьте эту ссылку в браузер:<br>
+      <span style="word-break: break-all; font-family: monospace; font-size: 11px;">${escapeHtml(resetUrl)}</span></p>
+    `,
+    es: `
+      <h2>Restablecer contraseña</h2>
+      <p>Recibimos una solicitud para restablecer su contraseña. Haga clic en el botón para establecer una nueva:</p>
+      <a href="${escapeHtml(resetUrl)}" class="btn">Restablecer contraseña</a>
+      <p style="font-size: 13px; color: #6b7280;">Este enlace expirará en <strong>1 hora</strong>. Si no solicitó un restablecimiento, puede ignorar este correo.</p>
+      <p style="font-size: 12px; color: #9ca3af; margin-top: 24px;">Si el botón no funciona, copie y pegue este enlace en su navegador:<br>
+      <span style="word-break: break-all; font-family: monospace; font-size: 11px;">${escapeHtml(resetUrl)}</span></p>
+    `
+  };
+
+  return {
+    subject: titles[l] || titles.en,
+    html: baseLayout(bodies[l] || bodies.en, l)
+  };
+}
+
 // ── Utility ────────────────────────────────────────────────────────────────
 
 function escapeHtml(str) {
@@ -456,6 +502,9 @@ async function sendEmail(to, templateName, templateData, locale) {
     case 'subscription_expiry':
       template = subscriptionExpiryTemplate(templateData, l);
       break;
+    case 'password_reset':
+      template = passwordResetTemplate(templateData, l);
+      break;
     default:
       logger.warn(`[EMAIL] Unknown template: ${templateName}`);
       return { sent: false, error: `Unknown template: ${templateName}` };
@@ -524,11 +573,26 @@ async function sendSubscriptionExpiryWarning(email, data, locale) {
   }, locale);
 }
 
+/**
+ * Send password reset email
+ * @param {string} email - User's email
+ * @param {string} resetToken - The reset token
+ * @param {string} [locale='en'] - Language code
+ * @returns {Promise<{sent: boolean, error?: string}>}
+ */
+async function sendPasswordReset(email, resetToken, locale) {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  return sendEmail(email, 'password_reset', {
+    resetUrl: frontendUrl + '/reset-password?token=' + encodeURIComponent(resetToken)
+  }, locale);
+}
+
 module.exports = {
   isConfigured,
   sendEmail,
   sendSosAlert,
   sendWelcomeEmail,
   sendPaymentReceipt,
-  sendSubscriptionExpiryWarning
+  sendSubscriptionExpiryWarning,
+  sendPasswordReset
 };

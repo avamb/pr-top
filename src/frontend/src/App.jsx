@@ -7,6 +7,8 @@ import AdminGuard from './components/guards/AdminGuard';
 import Landing from './pages/Landing';
 import Register from './pages/Register';
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import ClientList from './pages/ClientList';
 import Subscription from './pages/Subscription';
@@ -63,6 +65,8 @@ function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* Authenticated therapist routes - AuthGuard + TherapistGuard + AppLayout */}
         <Route path="/dashboard" element={<GuardedLayout><Dashboard /></GuardedLayout>} />
