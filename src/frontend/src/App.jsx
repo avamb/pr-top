@@ -17,6 +17,7 @@ import AdminTherapists from './pages/AdminTherapists';
 import AdminSettings from './pages/AdminSettings';
 import AdminAuditLogs from './pages/AdminAuditLogs';
 import AdminSystemLogs from './pages/AdminSystemLogs';
+import TherapistGuide from './pages/TherapistGuide';
 import NotFound from './pages/NotFound';
 
 function App() {
@@ -38,6 +39,7 @@ function App() {
         <Route path="/settings" element={<AppLayout><Settings /></AppLayout>} />
         <Route path="/subscription" element={<AppLayout><Subscription /></AppLayout>} />
         <Route path="/subscription/success" element={<AppLayout><Subscription /></AppLayout>} />
+        <Route path="/dashboard/guide" element={<AppLayout><TherapistGuide /></AppLayout>} />
         <Route path="/admin" element={<AppLayout><AdminDashboard /></AppLayout>} />
         <Route path="/admin/therapists" element={<AppLayout><AdminTherapists /></AppLayout>} />
         <Route path="/admin/settings" element={<AppLayout><AdminSettings /></AppLayout>} />
