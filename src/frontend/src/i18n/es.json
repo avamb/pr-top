@@ -628,5 +628,14 @@
     "faq9A": "Las instrucciones de IA en la pestaña de Contexto del cliente te permiten establecer límites y directrices sobre cómo la IA procesa los datos de ese cliente. Por ejemplo, puedes especificar temas a evitar o enfoques particulares a enfatizar.",
     "faq10Q": "¿Cómo contacto al soporte?",
     "faq10A": "Para soporte técnico, comunícate a través de la información de contacto en la página principal. Nos esforzamos por responder a todas las consultas en un plazo de 24 horas."
+  },
+  "pwa": {
+    "installTitle": "Agregar PR-TOP a la pantalla de inicio",
+    "installDesc": "Instala la app para una experiencia nativa con soporte offline.",
+    "install": "Instalar",
+    "notNow": "Ahora no",
+    "updateAvailable": "Una nueva versión está disponible.",
+    "reload": "Actualizar",
+    "offline": "Estás sin conexión. Algunas funciones pueden no estar disponibles."
   }
 }

@@ -22,6 +22,7 @@ import AdminAuditLogs from './pages/AdminAuditLogs';
 import AdminSystemLogs from './pages/AdminSystemLogs';
 import TherapistGuide from './pages/TherapistGuide';
 import NotFound from './pages/NotFound';
+import InstallPrompt from './components/InstallPrompt';
 
 /**
  * GuardedLayout - Wraps content with AuthGuard + TherapistGuard + AppLayout.
@@ -56,6 +57,7 @@ function AdminLayout({ children }) {
 function App() {
   return (
     <BrowserRouter>
+      <InstallPrompt />
       <Routes>
         {/* Public routes - no sidebar, no guards */}
         <Route path="/" element={<Landing />} />

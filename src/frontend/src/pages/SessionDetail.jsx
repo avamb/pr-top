@@ -64,7 +64,7 @@ function SessionDetail() {
     <div>
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 bg-teal-600 text-white px-4 py-2 rounded z-50">{t('nav.skipToContent')}</a>
 
-      <main id="main-content" className="max-w-6xl mx-auto px-6 py-8">
+      <main id="main-content" className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {loading ? (
           <p className="text-stone-500">{t('sessionDetail.loadingSession')}</p>
         ) : error ? (
