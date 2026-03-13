@@ -13,6 +13,7 @@ services:
     volumes:
       - backend-data:/app/data
       - backend-uploads:/app/data/sessions
+      - backend-backups:/app/backups
     expose:
       - "3001"
     healthcheck:
@@ -51,4 +52,6 @@ volumes:
   backend-data:
     driver: local
   backend-uploads:
+    driver: local
+  backend-backups:
     driver: local

@@ -22,6 +22,8 @@ build/
 # Runtime data
 src/backend/data/
 src/backend/uploads/
+src/backend/backups/
+backups/
 
 # Testing tools
 .playwright-cli/

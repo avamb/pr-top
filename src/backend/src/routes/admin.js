@@ -3,6 +3,7 @@ const express = require('express');
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { logger, getSystemLogs } = require('../utils/logger');
 const { authenticate, requireRole } = require('../middleware/auth');
+const backupService = require('../services/backupService');
 
 const router = express.Router();
 
@@ -610,6 +611,102 @@ router.get('/stats/utm', (req, res) => {
   } catch (error) {
     logger.error('Admin UTM stats error: ' + error.message);
     res.status(500).json({ error: 'Failed to fetch UTM statistics' });
+  }
+});
+
+// POST /api/admin/backup - Trigger manual database backup
+router.post('/backup', (req, res) => {
+  try {
+    logger.info(`[BACKUP] Manual backup triggered by admin ${req.user.id}`);
+    const result = backupService.backup();
+
+    if (result.success) {
+      // Audit log
+      const db = getDatabase();
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'manual_backup', 'system', 0, ?, datetime('now'))",
+        [req.user.id, JSON.stringify({ filename: result.filename, size: result.size })]
+      );
+      saveDatabase();
+
+      res.json({
+        message: 'Backup created successfully',
+        filename: result.filename,
+        size: result.size,
+        raw_size: result.raw_size
+      });
+    } else {
+      res.status(500).json({ error: 'Backup failed: ' + result.error });
+    }
+  } catch (error) {
+    logger.error('Admin backup error: ' + error.message);
+    res.status(500).json({ error: 'Failed to create backup' });
+  }
+});
+
+// GET /api/admin/backups - List available backups
+router.get('/backups', (req, res) => {
+  try {
+    const result = backupService.listBackups();
+    res.json(result);
+  } catch (error) {
+    logger.error('Admin list backups error: ' + error.message);
+    res.status(500).json({ error: 'Failed to list backups' });
+  }
+});
+
+// GET /api/admin/backup/status - Get backup status summary
+router.get('/backup/status', (req, res) => {
+  try {
+    const status = backupService.getBackupStatus();
+    res.json(status);
+  } catch (error) {
+    logger.error('Admin backup status error: ' + error.message);
+    res.status(500).json({ error: 'Failed to get backup status' });
+  }
+});
+
+// POST /api/admin/restore - Restore from a specific backup
+router.post('/restore', (req, res) => {
+  try {
+    const { filename, confirm } = req.body;
+
+    if (!filename) {
+      return res.status(400).json({ error: 'filename is required' });
+    }
+
+    if (!confirm) {
+      return res.status(400).json({
+        error: 'Confirmation required',
+        message: 'Set confirm=true to proceed. WARNING: This will replace the current database with the backup. A safety snapshot will be created first.'
+      });
+    }
+
+    logger.info(`[BACKUP] Database restore triggered by admin ${req.user.id} from: ${filename}`);
+
+    // Audit log BEFORE restore (in current DB)
+    const db = getDatabase();
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'database_restore', 'system', 0, ?, datetime('now'))",
+      [req.user.id, JSON.stringify({ filename, initiated_by: req.user.email })]
+    );
+    saveDatabase();
+
+    const result = backupService.restore(filename);
+
+    if (result.success) {
+      res.json({
+        message: 'Database restored successfully. Server restart recommended.',
+        filename: result.filename,
+        size: result.size,
+        restart_required: true
+      });
+    } else {
+      res.status(500).json({ error: 'Restore failed: ' + result.error });
+    }
+  } catch (error) {
+    logger.error('Admin restore error: ' + error.message);
+    res.status(500).json({ error: 'Failed to restore backup' });
   }
 });
 

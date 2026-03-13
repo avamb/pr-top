@@ -26,6 +26,13 @@ try {
   telegramNotify = null;
 }
 
+let backupService;
+try {
+  backupService = require('./backupService');
+} catch (e) {
+  backupService = null;
+}
+
 const SCHEDULER_ENABLED = process.env.SCHEDULER_ENABLED !== 'false'; // default true
 const GRACE_PERIOD_DAYS = parseInt(process.env.SUBSCRIPTION_GRACE_PERIOD_DAYS || '7', 10);
 const EXPIRY_WARNING_DAYS = parseInt(process.env.SUBSCRIPTION_EXPIRY_WARNING_DAYS || '3', 10);
@@ -340,6 +347,40 @@ function runCsrfCleanup() {
 /**
  * Start all scheduled jobs
  */
+/**
+ * Job 6: Database backup
+ * Create encrypted compressed backup of the SQLite database
+ */
+function runDatabaseBackup() {
+  try {
+    if (!backupService) {
+      logger.warn('[SCHEDULER] Backup service not available');
+      return { success: false, error: 'Backup service not loaded' };
+    }
+
+    const result = backupService.backup();
+
+    if (result.success) {
+      logger.info('[SCHEDULER] Database backup completed: ' + result.filename + ' (' + result.size + ' bytes)');
+
+      // Audit log
+      const db = getDatabase();
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (0, 'scheduled_backup', 'system', 0, ?, datetime('now'))",
+        [JSON.stringify({ filename: result.filename, size: result.size })]
+      );
+      saveDatabase();
+    } else {
+      logger.error('[SCHEDULER] Database backup failed: ' + result.error);
+    }
+
+    return result;
+  } catch (error) {
+    logger.error('[SCHEDULER] Database backup error: ' + error.message);
+    return { success: false, error: error.message };
+  }
+}
+
 function start() {
   if (!SCHEDULER_ENABLED) {
     logger.info('[SCHEDULER] Scheduler disabled via SCHEDULER_ENABLED=false');
@@ -377,8 +418,15 @@ function start() {
     runCsrfCleanup();
   }, { name: 'csrf-cleanup' }));
 
+  // Job 6: Database backup - daily at 3:00 AM (configurable via BACKUP_CRON)
+  var backupCron = process.env.BACKUP_CRON || '0 3 * * *';
+  scheduledTasks.push(cron.schedule(backupCron, function() {
+    logger.info('[SCHEDULER] Running database backup job...');
+    runDatabaseBackup();
+  }, { name: 'database-backup' }));
+
   logger.info('[SCHEDULER] All scheduled tasks registered (' + scheduledTasks.length + ' jobs)');
-  logger.info('[SCHEDULER] Jobs: trial-expiration (2:00), subscription-downgrade (2:15), expiry-warning (9:00), diary-reminder (10:00), csrf-cleanup (hourly)');
+  logger.info('[SCHEDULER] Jobs: trial-expiration (2:00), subscription-downgrade (2:15), expiry-warning (9:00), diary-reminder (10:00), csrf-cleanup (hourly), database-backup (' + backupCron + ')');
 }
 
 /**
@@ -400,5 +448,6 @@ module.exports = {
   runSubscriptionDowngrade,
   runExpiryWarning,
   runDiaryReminder,
-  runCsrfCleanup
+  runCsrfCleanup,
+  runDatabaseBackup
 };
