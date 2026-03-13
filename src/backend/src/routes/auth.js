@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { logger } = require('../utils/logger');
+const emailService = require('../services/emailService');
 
 const router = express.Router();
 
@@ -109,8 +110,8 @@ router.post('/register', async (req, res) => {
     const userId = user[0];
 
     // Create trial subscription for therapists
+    let trialDays = 14;
     if (userRole === 'therapist') {
-      let trialDays = 14;
       try {
         const settingsResult = db.exec("SELECT value FROM platform_settings WHERE key = 'trial_duration_days'");
         if (settingsResult.length > 0 && settingsResult[0].values.length > 0) {
@@ -141,6 +142,19 @@ router.post('/register', async (req, res) => {
     );
 
     logger.info(`User registered successfully: id=${userId}, email=${user[1]}`);
+
+    // Send welcome email (non-blocking, failure won't break registration)
+    emailService.sendWelcomeEmail(user[1], trialDays, userLanguage)
+      .then(result => {
+        if (result.sent) {
+          logger.info(`Welcome email sent to ${user[1]}`);
+        } else {
+          logger.info(`[EMAIL] Welcome email for ${user[1]}: ${result.error || 'not sent'}`);
+        }
+      })
+      .catch(err => {
+        logger.error(`Welcome email error for ${user[1]}: ${err.message}`);
+      });
 
     // Set secure HttpOnly session cookie
     res.cookie('session_token', token, SESSION_COOKIE_OPTIONS);
