@@ -2027,8 +2027,8 @@ router.post('/import-bulk', (req, res, next) => {
         if (notes) {
           var encryptedNote = encrypt(notes);
           db.run(
-            "INSERT INTO therapist_notes (therapist_id, client_id, note_encrypted, created_at) VALUES (?, ?, ?, datetime('now'))",
-            [therapistId, newClientId, encryptedNote]
+            "INSERT INTO therapist_notes (therapist_id, client_id, note_encrypted, encryption_key_id, payload_version, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+            [therapistId, newClientId, encryptedNote.encrypted, encryptedNote.keyId, encryptedNote.keyVersion]
           );
         }
 
@@ -2040,8 +2040,8 @@ router.post('/import-bulk', (req, res, next) => {
           var contextText = contextParts.join('\n');
           var encryptedContext = encrypt(contextText);
           db.run(
-            "INSERT INTO client_context (client_id, therapist_id, anamnesis_encrypted, created_at, updated_at) VALUES (?, ?, ?, datetime('now'), datetime('now'))",
-            [newClientId, therapistId, encryptedContext]
+            "INSERT INTO client_context (client_id, therapist_id, anamnesis_encrypted, encryption_key_id, payload_version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
+            [newClientId, therapistId, encryptedContext.encrypted, encryptedContext.keyId, encryptedContext.keyVersion]
           );
         }
 
@@ -2085,7 +2085,7 @@ router.post('/import-bulk', (req, res, next) => {
         errors: rowErrors
       });
     } catch (error) {
-      logger.error('Bulk import error: ' + error.message);
+      logger.error('Bulk import error: ' + (error && error.message || error));
       res.status(500).json({ error: 'Import failed. Please try again.' });
     }
   });

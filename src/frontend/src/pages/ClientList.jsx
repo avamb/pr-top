@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { formatUserDate, formatUserDateOnly } from '../utils/formatDate';
+import BulkImport from '../components/BulkImport';
 
 const API_URL = '/api';
 
@@ -94,6 +95,7 @@ export default function ClientList() {
   const [error, setError] = useState(null);
   const [planInfo, setPlanInfo] = useState(null);
   const [loadTime, setLoadTime] = useState(null);
+  const [showImport, setShowImport] = useState(false);
   const fetchRef = useRef(0);
   const abortControllerRef = useRef(null);
 
@@ -225,11 +227,26 @@ export default function ClientList() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
+            <button
+              onClick={() => setShowImport(true)}
+              className="px-4 py-2 text-sm font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors flex items-center gap-2 whitespace-nowrap"
+            >
+              <span>📥</span>
+              {t('clientList.importClients', 'Import Clients')}
+            </button>
             <span className="text-sm text-secondary whitespace-nowrap">
               Page {page} of {totalPages}
             </span>
           </div>
         </div>
+
+        {/* Bulk Import Modal */}
+        {showImport && (
+          <BulkImport
+            onClose={() => setShowImport(false)}
+            onImportComplete={() => fetchClients(search, page)}
+          />
+        )}
 
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
