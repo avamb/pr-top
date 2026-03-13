@@ -19,6 +19,7 @@ const {
   exportAnalyticsCSV,
   objectsToCSV
 } = require('../services/exportService');
+const { generateAnalyticsPDF } = require('../services/pdfGenerator');
 
 const router = express.Router();
 
@@ -258,8 +259,8 @@ router.get('/client/:id/notes', (req, res) => {
   }
 });
 
-// GET /api/export/analytics?days=30&format=csv
-// Export analytics data as CSV
+// GET /api/export/analytics?days=30&format=csv|pdf
+// Export analytics data as CSV ZIP or PDF report
 router.get('/analytics', (req, res) => {
   try {
     const therapistId = req.user.id;
@@ -271,22 +272,20 @@ router.get('/analytics', (req, res) => {
       return res.status(400).json({ error: 'Invalid days parameter (1-365)' });
     }
 
-    if (!['csv'].includes(format)) {
-      return res.status(400).json({ error: 'Invalid format. Use csv.' });
+    if (!['csv', 'pdf'].includes(format)) {
+      return res.status(400).json({ error: 'Invalid format. Use csv or pdf.' });
     }
 
-    // Tier check for analytics export
+    // Tier check for analytics export - Premium only
     const plan = getExportTier(req);
-    if (!isFullExportAllowed(plan)) {
+    if (plan !== 'premium') {
       return res.status(403).json({
         error: 'Plan upgrade required',
-        message: 'Analytics export is available on Pro and Premium plans.',
+        message: 'Analytics export is available on the Premium plan.',
         current_plan: plan,
-        required_plans: ['pro', 'premium']
+        required_plans: ['premium']
       });
     }
-
-    const csvData = exportAnalyticsCSV(therapistId, days);
 
     // Audit log
     db.run(
@@ -295,7 +294,23 @@ router.get('/analytics', (req, res) => {
     );
     saveDatabase();
 
-    // Return as ZIP with both CSV files
+    // PDF format
+    if (format === 'pdf') {
+      const therapistEmail = req.user.email || 'therapist';
+      const doc = generateAnalyticsPDF(therapistId, days, therapistEmail);
+
+      const filename = `analytics_${days}d_report.pdf`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+      doc.pipe(res);
+      doc.end();
+      return;
+    }
+
+    // CSV format - ZIP with separate CSV files
+    const csvData = exportAnalyticsCSV(therapistId, days);
+
     const filename = `analytics_${days}d_export.zip`;
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

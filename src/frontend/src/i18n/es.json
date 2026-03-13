@@ -223,10 +223,11 @@
     "lastActive": "Última actividad",
     "retry": "Reintentar",
     "exportCSV": "Exportar CSV",
+    "exportPDF": "Exportar PDF",
     "exportDownloading": "Exportando...",
     "exportSuccess": "Exportación de analítica descargada",
     "exportFailed": "Error en la exportación de analítica",
-    "exportUpgradeRequired": "La exportación de analítica requiere un plan Pro o Premium"
+    "exportUpgradeRequired": "La exportación de analítica requiere un plan Premium"
   },
   "clientDetail": {
     "timeline": "Cronología",
@@ -658,6 +659,19 @@
     "faq9A": "Las instrucciones de IA en la pestaña de Contexto del cliente te permiten establecer límites y directrices sobre cómo la IA procesa los datos de ese cliente. Por ejemplo, puedes especificar temas a evitar o enfoques particulares a enfatizar.",
     "faq10Q": "¿Cómo contacto al soporte?",
     "faq10A": "Para soporte técnico, comunícate a través de la información de contacto en la página principal. Nos esforzamos por responder a todas las consultas en un plazo de 24 horas."
+  },
+  "notifications": {
+    "sosAlert": "Alerta SOS de {{client}}!",
+    "newDiary": "Nueva entrada de diario de {{client}}",
+    "exerciseCompleted": "{{client}} completó un ejercicio",
+    "sessionReady": "Procesamiento de sesión: {{status}}",
+    "newEvent": "Nueva notificación",
+    "viewClient": "Ver Cliente",
+    "viewSession": "Ver Sesión",
+    "view": "Ver",
+    "dismiss": "Cerrar",
+    "unknownClient": "Cliente desconocido",
+    "unreadCount": "{{count}} notificación(es) sin leer"
   },
   "pwa": {
     "installTitle": "Agregar PR-TOP a la pantalla de inicio",

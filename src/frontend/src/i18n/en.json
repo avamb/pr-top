@@ -223,10 +223,11 @@
     "lastActive": "Last Active",
     "retry": "Retry",
     "exportCSV": "Export CSV",
+    "exportPDF": "Export PDF",
     "exportDownloading": "Exporting...",
     "exportSuccess": "Analytics export downloaded",
     "exportFailed": "Analytics export failed",
-    "exportUpgradeRequired": "Analytics export requires Pro or Premium plan"
+    "exportUpgradeRequired": "Analytics export requires Premium plan"
   },
   "clientDetail": {
     "timeline": "Timeline",
@@ -658,6 +659,19 @@
     "faq9A": "AI instructions in the client's Context tab allow you to set boundaries and guidelines for how AI processes that client's data. For example, you can specify topics to avoid or particular approaches to emphasize.",
     "faq10Q": "How do I contact support?",
     "faq10A": "For technical support, reach out via the contact information on the landing page. We aim to respond to all inquiries within 24 hours."
+  },
+  "notifications": {
+    "sosAlert": "SOS Alert from {{client}}!",
+    "newDiary": "New diary entry from {{client}}",
+    "exerciseCompleted": "{{client}} completed an exercise",
+    "sessionReady": "Session processing {{status}}",
+    "newEvent": "New notification",
+    "viewClient": "View Client",
+    "viewSession": "View Session",
+    "view": "View",
+    "dismiss": "Dismiss",
+    "unknownClient": "Unknown client",
+    "unreadCount": "{{count}} unread notification(s)"
   },
   "pwa": {
     "installTitle": "Add PR-TOP to Home Screen",

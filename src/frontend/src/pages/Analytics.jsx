@@ -183,17 +183,17 @@ export default function Analytics() {
     }
   }
 
-  async function handleAnalyticsExport() {
+  async function handleAnalyticsExport(format) {
     if (exportLoading) return;
     setExportLoading(true);
     setExportMsg('');
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch(`${API}/export/analytics?days=${days}&format=csv`, {
+      const res = await fetch(`${API}/export/analytics?days=${days}&format=${format}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.status === 403) {
-        setExportMsg(t('analytics.exportUpgradeRequired', 'Analytics export requires Pro or Premium plan'));
+        setExportMsg(t('analytics.exportUpgradeRequired', 'Analytics export requires Premium plan'));
         return;
       }
       if (!res.ok) {
@@ -204,7 +204,7 @@ export default function Analytics() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `analytics_${days}d_export.zip`;
+      a.download = format === 'pdf' ? `analytics_${days}d_report.pdf` : `analytics_${days}d_export.zip`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -240,12 +240,20 @@ export default function Analytics() {
               </button>
             ))}
             <button
-              onClick={handleAnalyticsExport}
+              onClick={() => handleAnalyticsExport('csv')}
               disabled={exportLoading}
               className="px-3 py-1.5 text-sm rounded-lg font-medium bg-stone-600 text-white hover:bg-stone-700 disabled:opacity-50 flex items-center gap-1 transition-colors"
             >
               <span>📥</span>
               {exportLoading ? t('analytics.exportDownloading', 'Exporting...') : t('analytics.exportCSV', 'Export CSV')}
+            </button>
+            <button
+              onClick={() => handleAnalyticsExport('pdf')}
+              disabled={exportLoading}
+              className="px-3 py-1.5 text-sm rounded-lg font-medium bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 flex items-center gap-1 transition-colors"
+            >
+              <span>📄</span>
+              {exportLoading ? t('analytics.exportDownloading', 'Exporting...') : t('analytics.exportPDF', 'Export PDF')}
             </button>
             {exportMsg && (
               <span className={`text-sm ${exportMsg === t('analytics.exportSuccess', 'Analytics export downloaded') ? 'text-green-600' : 'text-amber-600'}`}>
