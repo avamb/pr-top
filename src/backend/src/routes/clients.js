@@ -6,6 +6,7 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const { checkClientLimit } = require('../utils/planLimits');
 const { encrypt, decrypt } = require('../services/encryption');
 const { verifyClientConsent } = require('../utils/consentCheck');
+const telegramNotify = require('../utils/telegramNotify');
 
 const router = express.Router();
 
@@ -1307,10 +1308,24 @@ router.post('/:id/exercises', (req, res) => {
 
     saveDatabase();
 
-    // Notify client via Telegram (dev mode: log to console)
+    // Notify client via Telegram (real outbound delivery, non-blocking)
     if (clientTelegramId) {
-      logger.info(`[TELEGRAM NOTIFICATION] Exercise sent to client ${clientTelegramId}: "${exerciseTitle}" (delivery #${deliveryId})`);
-      logger.info(`[TELEGRAM NOTIFICATION] Message: "Your therapist has assigned you a new exercise: ${exerciseTitle}"`);
+      // Get client language for localized notification
+      const clientLangResult = db.exec("SELECT language FROM users WHERE id = ?", [clientId]);
+      const clientLang = (clientLangResult.length > 0 && clientLangResult[0].values.length > 0) ? clientLangResult[0].values[0][0] : 'en';
+
+      logger.info(`[TELEGRAM NOTIFICATION] Sending exercise notification to client ${clientTelegramId}: "${exerciseTitle}" (delivery #${deliveryId})`);
+      telegramNotify.sendExerciseNotification(clientTelegramId, exerciseTitle, clientLang)
+        .then(result => {
+          if (result.sent) {
+            logger.info(`Exercise Telegram notification delivered to client ${clientTelegramId} (delivery #${deliveryId})`);
+          } else {
+            logger.warn(`Exercise Telegram notification not delivered to ${clientTelegramId}: ${result.error}`);
+          }
+        })
+        .catch(err => {
+          logger.error(`Exercise Telegram notification error for client ${clientTelegramId}: ${err.message}`);
+        });
     }
 
     res.status(201).json({

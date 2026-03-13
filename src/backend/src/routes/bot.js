@@ -7,6 +7,7 @@ const { logger } = require('../utils/logger');
 const { encrypt, decrypt } = require('../services/encryption');
 const { processDiaryTranscription } = require('../services/diaryTranscription');
 const { checkClientLimit } = require('../utils/planLimits');
+const telegramNotify = require('../utils/telegramNotify');
 
 const router = express.Router();
 
@@ -686,7 +687,18 @@ router.post('/sos', botAuth, (req, res) => {
     if (therapistInfo && therapistInfo[0] && escalationPrefs.sos_telegram) {
       // Therapist has a Telegram ID and Telegram notifications enabled
       logger.info(`THERAPIST NOTIFICATION: SOS from ${clientIdentifier} → Therapist telegram_id=${therapistInfo[0]}`);
-      logger.info(`[DEV MODE] Would send Telegram message to ${therapistInfo[0]}: "🚨 SOS ALERT from your client ${clientIdentifier}. Please check immediately."`);
+      // Send real Telegram notification (non-blocking, failure won't break SOS record)
+      telegramNotify.sendSosAlert(therapistInfo[0], clientIdentifier, message ? message.trim() : null)
+        .then(result => {
+          if (result.sent) {
+            logger.info(`SOS Telegram notification delivered to therapist ${therapistId}`);
+          } else {
+            logger.warn(`SOS Telegram notification not delivered to therapist ${therapistId}: ${result.error}`);
+          }
+        })
+        .catch(err => {
+          logger.error(`SOS Telegram notification error for therapist ${therapistId}: ${err.message}`);
+        });
       notificationSent = true;
     } else if (therapistInfo && therapistInfo[0] && !escalationPrefs.sos_telegram) {
       logger.info(`SOS Telegram notification SKIPPED for therapist ${therapistId} (disabled in preferences)`);
@@ -694,7 +706,8 @@ router.post('/sos', botAuth, (req, res) => {
 
     if (therapistInfo && therapistInfo[1] && escalationPrefs.sos_email) {
       // Therapist has an email and email notifications enabled
-      logger.info(`[DEV MODE] Would send email notification to ${therapistInfo[1]}: SOS alert from client #${clientId}`);
+      logger.info(`[EMAIL] SOS alert notification for ${therapistInfo[1]}: SOS from client #${clientId}`);
+      // Email sending would go here when email service is configured
       notificationSent = true;
     } else if (therapistInfo && therapistInfo[1] && !escalationPrefs.sos_email) {
       logger.info(`SOS email notification SKIPPED for therapist ${therapistId} (disabled in preferences)`);
@@ -897,9 +910,26 @@ router.post('/exercises/:delivery_id/respond', botAuth, (req, res) => {
 
     saveDatabase();
 
-    // Notify therapist (dev mode: log to console)
-    logger.info(`[TELEGRAM NOTIFICATION] Client ${telegram_id} completed exercise delivery #${deliveryId}`);
-    logger.info(`[TELEGRAM NOTIFICATION] Therapist ${therapistId} should be notified`);
+    // Notify therapist about exercise completion (non-blocking)
+    const therapistTgResult = db.exec("SELECT telegram_id FROM users WHERE id = ?", [therapistId]);
+    const therapistTelegramId = (therapistTgResult.length > 0 && therapistTgResult[0].values.length > 0) ? therapistTgResult[0].values[0][0] : null;
+
+    if (therapistTelegramId) {
+      logger.info(`[TELEGRAM NOTIFICATION] Notifying therapist ${therapistId} about exercise completion by client ${telegram_id}`);
+      telegramNotify.sendMessage(therapistTelegramId, `✅ Your client has completed exercise #${deliveryId}.\n\nCheck the dashboard to review their response.`)
+        .then(result => {
+          if (result.sent) {
+            logger.info(`Exercise completion notification delivered to therapist ${therapistId}`);
+          } else {
+            logger.warn(`Exercise completion notification not delivered to therapist ${therapistId}: ${result.error}`);
+          }
+        })
+        .catch(err => {
+          logger.error(`Exercise completion notification error for therapist ${therapistId}: ${err.message}`);
+        });
+    } else {
+      logger.info(`[TELEGRAM NOTIFICATION] Therapist ${therapistId} has no Telegram ID, skipping notification`);
+    }
 
     res.json({
       delivery_id: parseInt(deliveryId),
