@@ -8,6 +8,7 @@ const { encrypt, decrypt } = require('../services/encryption');
 const { processDiaryTranscription } = require('../services/diaryTranscription');
 const { checkClientLimit } = require('../utils/planLimits');
 const telegramNotify = require('../utils/telegramNotify');
+const emailService = require('../services/emailService');
 
 const router = express.Router();
 
@@ -705,9 +706,24 @@ router.post('/sos', botAuth, (req, res) => {
     }
 
     if (therapistInfo && therapistInfo[1] && escalationPrefs.sos_email) {
-      // Therapist has an email and email notifications enabled
-      logger.info(`[EMAIL] SOS alert notification for ${therapistInfo[1]}: SOS from client #${clientId}`);
-      // Email sending would go here when email service is configured
+      // Therapist has an email and email notifications enabled — send SOS email
+      const therapistLang = (() => {
+        try {
+          const lr = db.exec('SELECT language FROM users WHERE id = ?', [therapistId]);
+          return (lr.length > 0 && lr[0].values.length > 0) ? lr[0].values[0][0] : 'en';
+        } catch (_) { return 'en'; }
+      })();
+      emailService.sendSosAlert(therapistInfo[1], clientIdentifier, message ? message.trim() : null, therapistLang)
+        .then(result => {
+          if (result.sent) {
+            logger.info(`SOS email delivered to therapist ${therapistId} (${therapistInfo[1]})`);
+          } else {
+            logger.info(`[EMAIL] SOS alert for ${therapistInfo[1]}: ${result.error || 'not sent (SMTP not configured)'}`);
+          }
+        })
+        .catch(err => {
+          logger.error(`SOS email error for therapist ${therapistId}: ${err.message}`);
+        });
       notificationSent = true;
     } else if (therapistInfo && therapistInfo[1] && !escalationPrefs.sos_email) {
       logger.info(`SOS email notification SKIPPED for therapist ${therapistId} (disabled in preferences)`);
