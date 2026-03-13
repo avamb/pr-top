@@ -72,6 +72,13 @@ function ClientDetail() {
   const [importLoading, setImportLoading] = useState(false);
   const [importMsg, setImportMsg] = useState('');
   const [importError, setImportError] = useState('');
+  // NL Query state
+  const [nlQueryText, setNlQueryText] = useState('');
+  const [nlQueryLoading, setNlQueryLoading] = useState(false);
+  const [nlQueryResult, setNlQueryResult] = useState(null);
+  const [nlQueryError, setNlQueryError] = useState('');
+  const [nlQueryUpgradeRequired, setNlQueryUpgradeRequired] = useState(false);
+  const [showNlQuery, setShowNlQuery] = useState(false);
   const token = localStorage.getItem('token');
 
   // Warn user before leaving page with unsaved form data
@@ -656,6 +663,44 @@ function ClientDetail() {
     }
   }
 
+  async function handleNlQuery(e) {
+    if (e) e.preventDefault();
+    if (!nlQueryText.trim() || nlQueryLoading) return;
+    setNlQueryLoading(true);
+    setNlQueryResult(null);
+    setNlQueryError('');
+    setNlQueryUpgradeRequired(false);
+
+    try {
+      const res = await fetch(`${API}/query`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ client_id: parseInt(id), query: nlQueryText.trim() })
+      });
+
+      const data = await res.json();
+
+      if (res.status === 403 && (data.error === 'Plan upgrade required' || data.required_plans)) {
+        setNlQueryUpgradeRequired(true);
+        setNlQueryError(data.message || t('clientDetail.nlUpgradeRequired', 'Natural language queries require a Pro or Premium plan.'));
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || data.message || 'Query failed');
+      }
+
+      setNlQueryResult(data);
+    } catch (err) {
+      setNlQueryError(err.message);
+    } finally {
+      setNlQueryLoading(false);
+    }
+  }
+
   async function fetchExercises(signal) {
     try {
       setExercisesLoading(true);
@@ -818,6 +863,127 @@ function ClientDetail() {
             onClick={() => setActiveTab('context')}
             className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'context' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >🧠 {t('clientDetail.contextTab')}</button>
+        </div>
+
+        {/* NL Query Panel */}
+        <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-4 mb-4">
+          <button
+            onClick={() => setShowNlQuery(!showNlQuery)}
+            className="flex items-center gap-2 w-full text-left"
+          >
+            <span className="text-lg">🔍</span>
+            <span className="font-medium text-stone-700">{t('clientDetail.askAboutClient', 'Ask about this client')}</span>
+            <span className="ml-auto text-stone-400 text-sm">{showNlQuery ? '▲' : '▼'}</span>
+          </button>
+
+          {showNlQuery && (
+            <div className="mt-3">
+              <form onSubmit={handleNlQuery} className="flex gap-2">
+                <input
+                  type="text"
+                  value={nlQueryText}
+                  onChange={(e) => setNlQueryText(e.target.value)}
+                  placeholder={t('clientDetail.nlQueryPlaceholder', 'e.g., "How has their anxiety been lately?" or "What exercises worked best?"')}
+                  className="flex-1 px-3 py-2 border border-stone-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  maxLength={1000}
+                  disabled={nlQueryLoading}
+                />
+                <button
+                  type="submit"
+                  disabled={nlQueryLoading || !nlQueryText.trim()}
+                  className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  {nlQueryLoading ? <LoadingSpinner size={16} /> : <span>🔍</span>}
+                  {t('clientDetail.nlSearch', 'Search')}
+                </button>
+              </form>
+
+              {/* Upgrade Required */}
+              {nlQueryUpgradeRequired && (
+                <div className="mt-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-lg">⭐</span>
+                    <span className="font-medium text-amber-800">{t('clientDetail.nlProFeature', 'Pro Feature')}</span>
+                  </div>
+                  <p className="text-sm text-amber-700">{nlQueryError}</p>
+                  <button
+                    onClick={() => navigate('/subscription')}
+                    className="mt-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors text-sm font-medium"
+                  >
+                    {t('clientDetail.nlUpgradeBtn', 'Upgrade Plan')}
+                  </button>
+                </div>
+              )}
+
+              {/* Query Error */}
+              {nlQueryError && !nlQueryUpgradeRequired && (
+                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  ❌ {nlQueryError}
+                </div>
+              )}
+
+              {/* Loading */}
+              {nlQueryLoading && (
+                <div className="mt-3 p-4 text-center text-stone-500">
+                  <LoadingSpinner size={24} className="mx-auto mb-2" />
+                  <p className="text-sm">{t('clientDetail.nlSearching', 'Searching client records...')}</p>
+                </div>
+              )}
+
+              {/* Query Results */}
+              {nlQueryResult && !nlQueryLoading && (
+                <div className="mt-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-stone-500">
+                      {nlQueryResult.total_matches > 0
+                        ? t('clientDetail.nlResultsFound', 'Found {{count}} relevant results (searched {{total}})', { count: nlQueryResult.total_matches, total: nlQueryResult.total_searched })
+                        : t('clientDetail.nlNoResults', 'No relevant results found')}
+                    </span>
+                    {nlQueryResult.expanded_terms && nlQueryResult.expanded_terms.length > 0 && (
+                      <span className="text-xs text-stone-400">
+                        {t('clientDetail.nlAlsoSearched', 'Also searched:')} {nlQueryResult.expanded_terms.slice(0, 5).join(', ')}
+                      </span>
+                    )}
+                  </div>
+
+                  {nlQueryResult.results && nlQueryResult.results.length > 0 && (
+                    <div className="space-y-2">
+                      {nlQueryResult.results.map((result, idx) => (
+                        <div
+                          key={`${result.type}-${result.id}-${idx}`}
+                          className="border border-stone-200 rounded-lg p-3 hover:border-teal-300 transition-colors cursor-pointer"
+                          onClick={() => {
+                            if (result.type === 'session') navigate(`/sessions/${result.id}`);
+                          }}
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm">
+                              {result.type === 'diary' ? '📝' : result.type === 'note' ? '🗒️' : '🎧'}
+                            </span>
+                            <span className="text-xs font-medium text-stone-600 uppercase">
+                              {result.type === 'diary' ? (result.entry_type || 'diary') : result.type}
+                            </span>
+                            <span className="text-xs text-stone-400">{new Date(result.created_at).toLocaleDateString()}</span>
+                            <span className="ml-auto text-xs text-teal-600 font-medium">
+                              {t('clientDetail.nlRelevance', 'Relevance')}: {result.relevance}
+                            </span>
+                          </div>
+                          <p className="text-sm text-stone-700 whitespace-pre-wrap line-clamp-3">{result.content}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {nlQueryResult.total_matches === 0 && (
+                    <div className="text-center py-6">
+                      <div className="text-3xl mb-2">🔍</div>
+                      <p className="text-sm text-stone-500">{t('clientDetail.nlNoResultsHint', 'Try different keywords or a broader question.')}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Timeline Tab */}

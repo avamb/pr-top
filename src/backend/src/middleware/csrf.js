@@ -72,6 +72,11 @@ function csrfProtection(req, res, next) {
     return next();
   }
 
+  // Dev endpoints are exempt (only available in development mode)
+  if (req.path.startsWith('/api/dev/') || req.originalUrl.startsWith('/api/dev/')) {
+    return next();
+  }
+
   // Requests with Authorization header (JWT) are already CSRF-safe
   // because browsers don't auto-attach custom Authorization headers
   const authHeader = req.headers['authorization'];

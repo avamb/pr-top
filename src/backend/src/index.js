@@ -235,6 +235,21 @@ if (process.env.NODE_ENV !== 'production') {
       res.json({ expired: true, therapist_id });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
+
+  // DEV: Set subscription plan (for testing plan-gated features)
+  app.post('/api/dev/set-plan', (req, res) => {
+    try {
+      const { therapist_id, plan } = req.body;
+      if (!therapist_id || !plan) return res.status(400).json({ error: 'therapist_id and plan required' });
+      const validPlans = ['trial', 'basic', 'pro', 'premium'];
+      if (!validPlans.includes(plan)) return res.status(400).json({ error: 'Invalid plan. Must be: ' + validPlans.join(', ') });
+      const { getDatabase, saveDatabase: save } = require('./db/connection');
+      const db = getDatabase();
+      db.run("UPDATE subscriptions SET plan = ?, status = 'active' WHERE therapist_id = ?", [plan, therapist_id]);
+      save();
+      res.json({ success: true, therapist_id, plan });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
 }
 
 // 404 handler
