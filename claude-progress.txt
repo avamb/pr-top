@@ -1,0 +1,62 @@
+## Session: 2026-03-13 - Feature #208
+
+### Completed: Full multilingual language switcher (Feature #208) - PASSING
+
+**What was built:**
+- Reusable LanguageSwitcher component (src/frontend/src/components/LanguageSwitcher.jsx)
+  - Flag-based dropdown for RU/EN/ES with country flags
+  - Supports dropUp mode for sidebar positioning
+  - Persists to localStorage and optionally to server via PATCH /api/profile/language
+  - Compact and full-label display modes
+
+- Added LanguageSwitcher to:
+  - Sidebar.jsx (bottom, near user email, with dropUp)
+  - Landing.jsx header (for unauthenticated visitors)
+  - Login.jsx (top-right corner)
+  - Register.jsx (top-right corner)
+
+- Backend i18n system:
+  - PATCH /api/profile/language endpoint (src/backend/src/index.js)
+  - i18n middleware (src/backend/src/middleware/i18n.js) - reads Accept-Language header or user DB preference
+  - Server-side translation files (src/backend/src/i18n/en.json, ru.json, es.json) with all API messages
+  - Translation helper function t(key, locale, params) (src/backend/src/i18n/index.js)
+
+- Language sync on login already existed (Login.jsx fetches profile and applies language)
+- Settings.jsx already syncs language to PUT /api/settings/profile; added additional sync to PATCH endpoint
+
+**Verification:**
+- Landing page: language switcher visible, switches instantly, persists across navigation
+- Login/Register: language switcher visible in top-right, language persists from landing
+- Dashboard sidebar: language switcher shows compact flag+code, dropdown opens upward, all nav items translate instantly
+- Server restart persistence: language stored in DB via PATCH endpoint
+- Zero console errors
+- No mock data patterns found
+
+### Current Status
+- Features passing: 207/208 (99.5%)
+- Feature #208: PASSING
+
+## Session: 2026-03-13 - Feature #210
+
+### Completed: Disable or hard-restrict encryption debug/decrypt endpoints (Feature #210) - PASSING
+
+**What was changed:**
+- Added `requireDevOrSuperadmin` middleware to src/backend/src/routes/encryption.js
+- Applied it to 3 debug endpoints: POST /encrypt, POST /decrypt, GET /active-version
+- Logic: In dev mode (NODE_ENV unset or 'development'), any authenticated user can access
+- In production (NODE_ENV=production), only superadmins can access; others get 403
+- Key management endpoints (/keys, /rotate) were already superadmin-only - unchanged
+- Business encryption in diary/notes/sessions routes uses encryption service directly - unaffected
+
+**Verification:**
+- Production mode: therapist gets 403 on all 3 debug endpoints ✅
+- Production mode: superadmin can still access all 3 debug endpoints ✅
+- Production mode: unauthenticated access blocked (401/CSRF) ✅
+- Dev mode: therapist can still access debug endpoints ✅
+- No frontend code depends on these endpoints (grep confirmed) ✅
+- Browser test: app loads, login works, zero console errors ✅
+- No mock data patterns found ✅
+
+### Current Status
+- Features passing: 209/222 (94.1%)
+- Feature #210: PASSING
