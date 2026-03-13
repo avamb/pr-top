@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { formatUserDate } from '../utils/formatDate';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = '/api';
 
 const ACTION_COLORS = {
   'consent_granted': 'bg-green-100 text-green-800',

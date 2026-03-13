@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { UnsavedChangesProvider } from '../contexts/UnsavedChangesContext';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = '/api';
 
 /**
  * AppLayout wraps authenticated pages with the Sidebar.
@@ -122,7 +122,7 @@ export default function AppLayout({ children }) {
               </svg>
             )}
           </button>
-          <span className="ml-3 text-lg font-bold text-primary">PsyLink</span>
+          <span className="ml-3 text-lg font-bold text-primary">PR-TOP</span>
         </div>
 
         {/* Main content area - offset by sidebar on lg+, top padding on mobile/tablet for hamburger bar */}

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = '/api';
 
 const categoryIcons = {
   breathing: '\u{1F32C}\uFE0F',

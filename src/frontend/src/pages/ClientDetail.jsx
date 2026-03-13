@@ -6,7 +6,7 @@ import useNavigationBlocker from '../hooks/useNavigationBlocker';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { formatUserDate, formatUserDateOnly, getUserTimezone } from '../utils/formatDate';
 
-const API = 'http://localhost:3001/api';
+const API = '/api';
 
 function ClientDetail() {
   const { id } = useParams();

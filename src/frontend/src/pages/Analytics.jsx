@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { formatUserDateOnly } from '../utils/formatDate';
 
-const API = 'http://localhost:3001/api';
+const API = '/api';
 
 function BarChart({ data, maxValue, label, color }) {
   if (!data || data.length === 0) return null;
