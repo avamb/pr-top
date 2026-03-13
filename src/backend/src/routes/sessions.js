@@ -41,13 +41,14 @@ const upload = multer({
     fileSize: 100 * 1024 * 1024, // 100MB max
   },
   fileFilter: (req, file, cb) => {
-    // Allow common audio formats
+    // Allow common audio and video formats (video for session recordings)
     const allowedMimes = [
       'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg',
       'audio/webm', 'audio/aac', 'audio/flac', 'audio/m4a',
-      'audio/x-m4a', 'audio/mp4', 'application/octet-stream'
+      'audio/x-m4a', 'audio/mp4', 'application/octet-stream',
+      'video/webm', 'video/mp4', 'video/ogg', 'video/quicktime'
     ];
-    if (allowedMimes.includes(file.mimetype) || file.mimetype.startsWith('audio/')) {
+    if (allowedMimes.includes(file.mimetype) || file.mimetype.startsWith('audio/') || file.mimetype.startsWith('video/')) {
       cb(null, true);
     } else {
       cb(new Error('Only audio files are allowed'), false);

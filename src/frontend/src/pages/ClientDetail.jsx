@@ -55,6 +55,12 @@ function ClientDetail() {
   const [sessions, setSessions] = useState([]);
   const [sessionsTotal, setSessionsTotal] = useState(0);
   const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionUploadFile, setSessionUploadFile] = useState(null);
+  const [sessionUploading, setSessionUploading] = useState(false);
+  const [sessionUploadProgress, setSessionUploadProgress] = useState(0);
+  const [sessionUploadMsg, setSessionUploadMsg] = useState('');
+  const [sessionUploadError, setSessionUploadError] = useState('');
+  const sessionFileInputRef = useRef(null);
   const [exercises, setExercises] = useState([]);
   const [exercisesTotal, setExercisesTotal] = useState(0);
   const [exercisesLoading, setExercisesLoading] = useState(false);
@@ -576,6 +582,77 @@ function ClientDetail() {
       if (!signal || !signal.aborted) {
         setSessionsLoading(false);
       }
+    }
+  }
+
+  async function handleSessionUpload() {
+    if (!sessionUploadFile || sessionUploading) return;
+    setSessionUploading(true);
+    setSessionUploadProgress(0);
+    setSessionUploadMsg('');
+    setSessionUploadError('');
+
+    try {
+      const formData = new FormData();
+      formData.append('audio', sessionUploadFile);
+      formData.append('client_id', id);
+
+      // Use XMLHttpRequest for progress tracking
+      const result = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API}/sessions`);
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+        // Get CSRF token from cookie or meta
+        const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+        if (csrfMeta) {
+          xhr.setRequestHeader('x-csrf-token', csrfMeta.content);
+        }
+
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            setSessionUploadProgress(Math.round((e.loaded / e.total) * 100));
+          }
+        };
+
+        xhr.onload = () => {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve(data);
+            } else {
+              reject(new Error(data.error || `Upload failed (${xhr.status})`));
+            }
+          } catch {
+            reject(new Error(`Upload failed (${xhr.status})`));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error('Network error during upload'));
+        xhr.ontimeout = () => reject(new Error('Upload timed out'));
+        xhr.timeout = 300000; // 5 minutes
+        xhr.send(formData);
+      });
+
+      setSessionUploadMsg(t('clientDetail.uploadSuccess', 'Session uploaded successfully! Transcription in progress...'));
+      setSessionUploadFile(null);
+      if (sessionFileInputRef.current) sessionFileInputRef.current.value = '';
+
+      // Refresh sessions list after a short delay to let transcription start
+      setTimeout(() => {
+        fetchSessions();
+      }, 2000);
+
+      // Refresh again after longer delay to catch completed transcription
+      setTimeout(() => {
+        fetchSessions();
+      }, 8000);
+
+    } catch (e) {
+      setSessionUploadError(e.message);
+    } finally {
+      setSessionUploading(false);
+      setSessionUploadProgress(0);
     }
   }
 
@@ -1146,10 +1223,105 @@ function ClientDetail() {
         {/* Sessions Tab */}
         {activeTab === 'sessions' && (
           <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6 mb-6">
-            <h3 className="text-lg font-semibold text-stone-800 mb-4">{t('clientDetail.sessionHistory', { count: sessionsTotal })}</h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-stone-800">{t('clientDetail.sessionHistory', { count: sessionsTotal })}</h3>
+              <button
+                onClick={() => sessionFileInputRef.current && sessionFileInputRef.current.click()}
+                disabled={sessionUploading}
+                className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <span>🎙️</span> {t('clientDetail.uploadSession', 'Upload Session Recording')}
+              </button>
+              <input
+                ref={sessionFileInputRef}
+                type="file"
+                accept="audio/*,video/*,.webm,.mp3,.mp4,.wav,.ogg,.m4a"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (file) {
+                    setSessionUploadFile(file);
+                    setSessionUploadMsg('');
+                    setSessionUploadError('');
+                  }
+                }}
+              />
+            </div>
+
+            {/* Upload area */}
+            {sessionUploadFile && !sessionUploading && (
+              <div className="mb-4 border-2 border-dashed border-teal-300 rounded-lg p-4 bg-teal-50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">🎧</span>
+                    <div>
+                      <p className="text-sm font-medium text-stone-800">{sessionUploadFile.name}</p>
+                      <p className="text-xs text-stone-500">{(sessionUploadFile.size / (1024 * 1024)).toFixed(2)} MB</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSessionUpload}
+                      className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
+                    >
+                      {t('clientDetail.uploadBtn', 'Upload & Process')}
+                    </button>
+                    <button
+                      onClick={() => { setSessionUploadFile(null); if (sessionFileInputRef.current) sessionFileInputRef.current.value = ''; }}
+                      className="px-3 py-2 bg-stone-200 text-stone-600 rounded-lg hover:bg-stone-300 transition-colors text-sm"
+                    >
+                      {t('cancel', 'Cancel')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Upload progress */}
+            {sessionUploading && (
+              <div className="mb-4 border border-blue-200 rounded-lg p-4 bg-blue-50">
+                <div className="flex items-center gap-3 mb-2">
+                  <LoadingSpinner size={20} />
+                  <span className="text-sm font-medium text-blue-800">
+                    {sessionUploadProgress < 100
+                      ? t('clientDetail.uploading', 'Uploading...') + ` ${sessionUploadProgress}%`
+                      : t('clientDetail.processing', 'Processing...')}
+                  </span>
+                </div>
+                <div className="w-full bg-blue-200 rounded-full h-2">
+                  <div
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${sessionUploadProgress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Upload success message */}
+            {sessionUploadMsg && (
+              <div className="mb-4 p-3 rounded-lg bg-green-50 text-green-700 text-sm flex items-center gap-2">
+                <span>✅</span> {sessionUploadMsg}
+              </div>
+            )}
+
+            {/* Upload error message */}
+            {sessionUploadError && (
+              <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span>❌</span> {sessionUploadError}
+                </div>
+                <button
+                  onClick={() => { setSessionUploadError(''); handleSessionUpload(); }}
+                  className="text-red-600 hover:text-red-800 text-sm font-medium underline"
+                >
+                  {t('retry', 'Retry')}
+                </button>
+              </div>
+            )}
+
             {sessionsLoading ? (
-              <p className="text-stone-500 text-center py-8">Loading sessions...</p>
-            ) : sessions.length === 0 ? (
+              <p className="text-stone-500 text-center py-8">{t('clientDetail.loadingSessions', 'Loading sessions...')}</p>
+            ) : sessions.length === 0 && !sessionUploadMsg ? (
               <div className="text-center py-12">
                 <div className="text-5xl mb-4">🎧</div>
                 <h3 className="text-lg font-medium text-stone-600 mb-2">
