@@ -1333,19 +1333,23 @@ router.post('/:id/exercises', (req, res) => {
   }
 });
 
-// POST /api/clients/link - Link a client to this therapist (via invite code)
-router.post('/link', (req, res) => {
+// POST /api/clients/link - Superadmin-only direct client linking (bypasses invite+consent flow)
+// Normal therapists must use the proper flow: therapist shares invite code → client enters code → client consents → link created
+router.post('/link', requireRole('superadmin'), (req, res) => {
   try {
     const db = getDatabase();
     const therapistId = req.user.id;
-    const { client_id } = req.body;
+    const { client_id, target_therapist_id } = req.body;
 
     if (!client_id) {
       return res.status(400).json({ error: 'client_id is required' });
     }
 
+    // Superadmin can link to themselves or specify a target therapist
+    const linkToTherapistId = target_therapist_id || therapistId;
+
     // Check client limit before linking
-    const limitCheck = checkClientLimit(therapistId);
+    const limitCheck = checkClientLimit(linkToTherapistId);
     if (!limitCheck.allowed) {
       return res.status(403).json({
         error: 'Client limit reached',
@@ -1371,22 +1375,30 @@ router.post('/link', (req, res) => {
       return res.status(400).json({ error: 'User is not a client' });
     }
 
-    if (client[2] && client[2] !== therapistId) {
+    if (client[2] && client[2] !== linkToTherapistId) {
       return res.status(400).json({ error: 'Client is already linked to another therapist' });
     }
 
-    // Link the client
+    // Superadmin direct link - sets consent since this is an admin override
     db.run(
-      "UPDATE users SET therapist_id = ?, updated_at = datetime('now') WHERE id = ?",
-      [therapistId, client_id]
+      "UPDATE users SET therapist_id = ?, consent_therapist_access = 1, updated_at = datetime('now') WHERE id = ?",
+      [linkToTherapistId, client_id]
     );
+
+    // Record in audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      [req.user.id, 'superadmin_direct_link', 'user', client_id, JSON.stringify({ client_id: parseInt(client_id), therapist_id: linkToTherapistId, admin_id: req.user.id })]
+    );
+
     saveDatabase();
 
-    logger.info(`Therapist ${therapistId} linked client ${client_id}`);
+    logger.info(`Superadmin ${req.user.id} directly linked client ${client_id} to therapist ${linkToTherapistId}`);
 
     res.json({
-      message: 'Client linked successfully',
-      client_id: parseInt(client_id)
+      message: 'Client linked successfully (superadmin override)',
+      client_id: parseInt(client_id),
+      therapist_id: linkToTherapistId
     });
   } catch (error) {
     logger.error('Link client error: ' + error.message);
