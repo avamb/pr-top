@@ -1,3 +1,34 @@
+## Session: 2026-03-13 - Feature #235
+
+### Completed: Bulk client import from CSV/JSON (#235) - PASSING
+
+**What was fixed:**
+- Fixed critical encryption bug in bulk import endpoint: `encrypt()` returns an object `{encrypted, keyVersion, keyId}`, but the code was passing the whole object to SQL INSERT instead of `.encrypted` property
+- Updated INSERT for therapist_notes and client_context to use `encryptedNote.encrypted`, `encryptedNote.keyId`, `encryptedNote.keyVersion`
+- This caused 500 errors whenever importing clients with name, phone, or notes fields
+
+**Verification:**
+- API: CSV import with 3 clients (name, email, phone, notes) → 200, all 3 created ✅
+- API: JSON import with 2 clients → 200, both created ✅
+- API: Duplicate email detection → skipped with warning ✅
+- API: Invalid email format → error with row number ✅
+- API: Tier limit exceeded → 403 with details ✅
+- API: No file uploaded → 400 ✅
+- Browser: Import Clients button visible in ClientList ✅
+- Browser: Modal opens with file upload area ✅
+- Browser: CSV file parsed and previewed in table (name, email, phone, notes) ✅
+- Browser: Import Clients button executes import → success summary with created count ✅
+- Browser: Created clients show ID, email, name, invite code ✅
+- Browser: Client list auto-refreshes after import ✅
+- Data persists after server restart ✅
+- No mock data patterns in source ✅
+- i18n labels present in EN, RU, ES ✅
+- Zero console errors ✅
+
+### Current Status
+- Features passing: 239/239 (100%)
+- Feature #235: PASSING
+
 ## Session: 2026-03-13 - Feature #239
 
 ### Completed: Therapist Guide SVG illustrations — verify and create missing assets (#239) - PASSING
