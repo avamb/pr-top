@@ -55,8 +55,15 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Please enter a valid email address' });
     }
 
-    const validRoles = ['therapist', 'client', 'superadmin'];
-    const userRole = validRoles.includes(role) ? role : 'therapist';
+    // Public registration is restricted to therapist role only.
+    // Client accounts are created through bot invite flow.
+    // Superadmin accounts are created via CLI/seed only.
+    if (role && role !== 'therapist') {
+      return res.status(400).json({
+        error: 'Public registration is only available for therapist accounts. Client and superadmin accounts cannot be created through public registration.'
+      });
+    }
+    const userRole = 'therapist';
 
     const db = getDatabase();
 
