@@ -233,6 +233,32 @@
 - Dashboard shows "Ask About a Client" widget ✅
 - Zero console errors in both scenarios ✅
 
+## Session: 2026-03-13 - Features #223, #224, #225
+
+### Completed: Consent enforcement — session transcribe, summarize, delete (#223) - PASSING
+
+**What was changed:**
+- Added verifyClientConsent() calls to POST /sessions/:id/transcribe, POST /sessions/:id/summarize, DELETE /sessions/:id
+- Updated SQL queries to include client_id column where missing (transcribe, summarize)
+- All three routes now return 403 when client has revoked consent
+- Audit logging on denial via consentCheck.js helper
+
+### Completed: Consent enforcement — dashboard aggregates filter by consent (#224) - PASSING
+
+**What was changed:**
+- GET /dashboard/stats: client count filters by consent_therapist_access=1, session/SOS counts JOIN users with consent filter
+- GET /dashboard/activity: diary, sessions, SOS queries all add AND u.consent_therapist_access = 1; therapist notes kept as-is (therapist IP)
+- GET /dashboard/notifications: SOS events query adds consent filter
+- GET /dashboard/analytics: diary per day, sessions per day, client activity all filter by consent; notes kept as-is (therapist IP)
+- Dashboard gracefully handles 0 consented clients (empty state renders correctly)
+
+### Completed: Consent enforcement — embedding endpoint and diary route consistency (#225) - PASSING
+
+**What was changed:**
+- GET /search/embedding/:sourceType/:sourceId: resolves client_id from diary_entries or sessions table, calls verifyClientConsent() with 'embedding_view' action
+- GET /clients/:id/diary: replaced inline consent check (30+ lines) with verifyClientConsent() helper call for consistency and audit logging
+- Added verifyClientConsent import to search.js
+
 ### Current Status
-- Features passing: 219/222 (98.6%)
-- Features #214, #220, #221: ALL PASSING
+- Features passing: 225/226 (99.6%)
+- Features #223, #224, #225: ALL PASSING

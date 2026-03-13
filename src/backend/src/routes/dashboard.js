@@ -16,30 +16,34 @@ router.get('/stats', (req, res) => {
     const db = getDatabase();
     const therapistId = req.user.id;
 
-    // Count linked clients (clients with therapist_id = current therapist and consent given)
+    // Count linked clients (only those who have granted consent)
     const clientResult = db.exec(
-      'SELECT COUNT(*) FROM users WHERE therapist_id = ? AND role = ?',
+      'SELECT COUNT(*) FROM users WHERE therapist_id = ? AND role = ? AND consent_therapist_access = 1',
       [therapistId, 'client']
     );
     const clientCount = clientResult.length > 0 ? clientResult[0].values[0][0] : 0;
 
-    // Count sessions for this therapist
+    // Count sessions for this therapist (only from consented clients)
     const sessionResult = db.exec(
-      'SELECT COUNT(*) FROM sessions WHERE therapist_id = ?',
+      `SELECT COUNT(*) FROM sessions s
+       JOIN users u ON u.id = s.client_id AND u.consent_therapist_access = 1
+       WHERE s.therapist_id = ?`,
       [therapistId]
     );
     const sessionCount = sessionResult.length > 0 ? sessionResult[0].values[0][0] : 0;
 
-    // Count therapist notes
+    // Count therapist notes (therapist IP - no consent filter needed)
     const noteResult = db.exec(
       'SELECT COUNT(*) FROM therapist_notes WHERE therapist_id = ?',
       [therapistId]
     );
     const noteCount = noteResult.length > 0 ? noteResult[0].values[0][0] : 0;
 
-    // Count unresolved SOS events for this therapist
+    // Count unresolved SOS events for this therapist (only from consented clients)
     const sosResult = db.exec(
-      "SELECT COUNT(*) FROM sos_events WHERE therapist_id = ? AND status != 'resolved'",
+      `SELECT COUNT(*) FROM sos_events se
+       JOIN users u ON u.id = se.client_id AND u.consent_therapist_access = 1
+       WHERE se.therapist_id = ? AND se.status != 'resolved'`,
       [therapistId]
     );
     const activeSosCount = sosResult.length > 0 ? sosResult[0].values[0][0] : 0;
@@ -82,12 +86,12 @@ router.get('/activity', (req, res) => {
 
     const activities = [];
 
-    // Get recent diary entries from linked clients
+    // Get recent diary entries from linked clients (consent filter)
     const diaryResult = db.exec(
       `SELECT de.id, de.entry_type, de.created_at, u.email, u.telegram_id, u.id as client_id
        FROM diary_entries de
        JOIN users u ON u.id = de.client_id
-       WHERE u.therapist_id = ?
+       WHERE u.therapist_id = ? AND u.consent_therapist_access = 1
        ORDER BY de.created_at DESC
        LIMIT ?`,
       [therapistId, limit]
@@ -106,12 +110,12 @@ router.get('/activity', (req, res) => {
       }
     }
 
-    // Get recent sessions
+    // Get recent sessions (consent filter)
     const sessionResult = db.exec(
       `SELECT s.id, s.status, s.created_at, u.email, u.telegram_id, u.id as client_id
        FROM sessions s
        JOIN users u ON u.id = s.client_id
-       WHERE s.therapist_id = ?
+       WHERE s.therapist_id = ? AND u.consent_therapist_access = 1
        ORDER BY s.created_at DESC
        LIMIT ?`,
       [therapistId, limit]
@@ -130,12 +134,12 @@ router.get('/activity', (req, res) => {
       }
     }
 
-    // Get recent SOS events
+    // Get recent SOS events (consent filter)
     const sosResult = db.exec(
       `SELECT se.id, se.status, se.created_at, u.email, u.telegram_id, u.id as client_id
        FROM sos_events se
        JOIN users u ON u.id = se.client_id
-       WHERE se.therapist_id = ?
+       WHERE se.therapist_id = ? AND u.consent_therapist_access = 1
        ORDER BY se.created_at DESC
        LIMIT ?`,
       [therapistId, limit]
@@ -194,13 +198,13 @@ router.get('/notifications', (req, res) => {
     const db = getDatabase();
     const therapistId = req.user.id;
 
-    // Get triggered (unacknowledged) SOS events
+    // Get triggered (unacknowledged) SOS events (consent filter)
     const sosResult = db.exec(
       `SELECT se.id, se.client_id, se.status, se.created_at,
               u.email, u.telegram_id
        FROM sos_events se
        JOIN users u ON u.id = se.client_id
-       WHERE se.therapist_id = ? AND se.status = 'triggered'
+       WHERE se.therapist_id = ? AND se.status = 'triggered' AND u.consent_therapist_access = 1
        ORDER BY se.created_at DESC`,
       [therapistId]
     );
@@ -245,12 +249,12 @@ router.get('/analytics', (req, res) => {
     startDate.setDate(startDate.getDate() - days);
     const startDateStr = startDate.toISOString().split('T')[0];
 
-    // Get diary entries per day
+    // Get diary entries per day (consent filter)
     const diaryResult = db.exec(
       `SELECT DATE(de.created_at) as day, COUNT(*) as count
        FROM diary_entries de
        JOIN users u ON u.id = de.client_id
-       WHERE u.therapist_id = ? AND de.created_at >= ?
+       WHERE u.therapist_id = ? AND u.consent_therapist_access = 1 AND de.created_at >= ?
        GROUP BY DATE(de.created_at)
        ORDER BY day ASC`,
       [therapistId, startDateStr]
@@ -262,10 +266,11 @@ router.get('/analytics', (req, res) => {
       }
     }
 
-    // Get sessions per day
+    // Get sessions per day (consent filter)
     const sessionsResult = db.exec(
       `SELECT DATE(s.created_at) as day, COUNT(*) as count
        FROM sessions s
+       JOIN users u ON u.id = s.client_id AND u.consent_therapist_access = 1
        WHERE s.therapist_id = ? AND s.created_at >= ?
        GROUP BY DATE(s.created_at)
        ORDER BY day ASC`,
@@ -321,7 +326,7 @@ router.get('/analytics', (req, res) => {
                 SELECT created_at FROM therapist_notes WHERE client_id = u.id
               )) as last_activity
        FROM users u
-       WHERE u.therapist_id = ? AND u.role = 'client'
+       WHERE u.therapist_id = ? AND u.role = 'client' AND u.consent_therapist_access = 1
        ORDER BY last_activity DESC NULLS LAST`,
       [therapistId, therapistId, therapistId]
     );

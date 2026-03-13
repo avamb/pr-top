@@ -209,39 +209,10 @@ router.get('/:id/diary', (req, res) => {
     const searchQuery = rawSearchQuery.toLowerCase();
     const offset = (page - 1) * perPage;
 
-    // Verify client exists
-    const clientExistsResult = db.exec(
-      "SELECT id, therapist_id, consent_therapist_access FROM users WHERE id = ? AND role = 'client'",
-      [clientId]
-    );
-
-    if (clientExistsResult.length === 0 || clientExistsResult[0].values.length === 0) {
-      return res.status(404).json({ error: 'Client not found' });
-    }
-
-    const clientRow = clientExistsResult[0].values[0];
-    const clientTherapistId = clientRow[1];
-    const hasConsent = clientRow[2];
-
-    // Check if client is linked to this therapist (use == for type coercion since sql.js may return different types)
-    if (!clientTherapistId || String(clientTherapistId) !== String(therapistId)) {
-      // Record access denial in audit log
-      db.run(
-        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
-        [therapistId, 'access_denied', 'diary', clientId, JSON.stringify({ reason: 'not_linked_therapist' })]
-      );
-      saveDatabase();
-      return res.status(403).json({ error: 'You are not authorized to access this client\'s data' });
-    }
-
-    if (!hasConsent) {
-      // Record access denial in audit log
-      db.run(
-        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
-        [therapistId, 'access_denied', 'diary', clientId, JSON.stringify({ reason: 'consent_not_granted' })]
-      );
-      saveDatabase();
-      return res.status(403).json({ error: 'Client has not granted consent for data access' });
+    // Verify client consent (uses shared helper with audit logging)
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'diary');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
     // Build query with optional type filter

@@ -256,7 +256,7 @@ router.post('/:id/transcribe', authenticate, requireRole('therapist', 'superadmi
 
     // Verify session exists and belongs to therapist
     const result = db.exec(
-      'SELECT id, therapist_id, audio_ref, transcript_encrypted FROM sessions WHERE id = ?',
+      'SELECT id, therapist_id, audio_ref, transcript_encrypted, client_id FROM sessions WHERE id = ?',
       [sessionId]
     );
 
@@ -267,6 +267,14 @@ router.post('/:id/transcribe', authenticate, requireRole('therapist', 'superadmi
     const row = result[0].values[0];
     if (req.user.role !== 'superadmin' && row[1] !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Verify client consent (unless superadmin)
+    if (req.user.role !== 'superadmin' && row[4]) {
+      const consentCheck = verifyClientConsent(req.user.id, row[4], 'session_transcribe');
+      if (!consentCheck.allowed) {
+        return res.status(consentCheck.status).json({ error: consentCheck.error });
+      }
     }
 
     if (!row[2]) {
@@ -293,7 +301,7 @@ router.post('/:id/summarize', authenticate, requireRole('therapist', 'superadmin
     const sessionId = req.params.id;
 
     const result = db.exec(
-      'SELECT id, therapist_id, transcript_encrypted FROM sessions WHERE id = ?',
+      'SELECT id, therapist_id, transcript_encrypted, client_id FROM sessions WHERE id = ?',
       [sessionId]
     );
 
@@ -304,6 +312,14 @@ router.post('/:id/summarize', authenticate, requireRole('therapist', 'superadmin
     const row = result[0].values[0];
     if (req.user.role !== 'superadmin' && row[1] !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Verify client consent (unless superadmin)
+    if (req.user.role !== 'superadmin' && row[3]) {
+      const consentCheck = verifyClientConsent(req.user.id, row[3], 'session_summarize');
+      if (!consentCheck.allowed) {
+        return res.status(consentCheck.status).json({ error: consentCheck.error });
+      }
     }
 
     if (!row[2]) {
@@ -421,6 +437,14 @@ router.delete('/:id', authenticate, requireRole('therapist', 'superadmin'), asyn
     const row = result[0].values[0];
     if (req.user.role !== 'superadmin' && row[1] !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Verify client consent (unless superadmin)
+    if (req.user.role !== 'superadmin' && row[2]) {
+      const consentCheck = verifyClientConsent(req.user.id, row[2], 'session_delete');
+      if (!consentCheck.allowed) {
+        return res.status(consentCheck.status).json({ error: consentCheck.error });
+      }
     }
 
     // Delete associated vector embeddings
