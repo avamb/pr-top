@@ -117,6 +117,59 @@
 - Zero console errors in browser ✅
 - Frontend already displays 🎥 icon for video entries ✅
 
+## Session: 2026-03-13 - Features #217, #218, #219
+
+### Completed: Fix bot routing — therapist free text must not create diary entries (#217) - PASSING
+
+**What was changed:**
+- Added role check in bot text message handler: checks user role via checkExistingUser() before routing
+- Therapist/superadmin free text gets helpful guidance message instead of diary creation
+- Same role check added to voice, video, and video_note handlers
+- Backend already had defense-in-depth check (returns 400 for non-client diary submissions)
+- Added i18n strings for therapist guidance messages in EN, RU, ES
+
+### Completed: Add Telegram exercise delivery and completion UX (#218) - PASSING
+
+**What was built:**
+- /exercises command: lists assigned exercises with status (new/in progress/completed)
+- Inline keyboard buttons for exercise selection
+- Exercise detail view with localized title, category, instructions
+- Start button → acknowledges exercise, tracks active exercise session
+- Text response capture: next text message from client is routed to exercise response endpoint
+- Callback handlers: exercise_view_{id} and exercise_start_{id}
+- activeExercises map tracks which user has an in-progress exercise
+- i18n strings for all exercise flows in EN, RU, ES
+- Updated /help text to include /exercises command
+
+**Verification:**
+- Exercise list endpoint returns exercises with correct status ✅
+- Acknowledge endpoint updates status to 'acknowledged' ✅
+- Response endpoint completes exercise with encrypted response ✅
+- Full flow: assign → list → view → start → respond → completed ✅
+- Data persists in database ✅
+
+### Completed: Replace fake SOS and exercise notifications with real outbound delivery (#219) - PASSING
+
+**What was built:**
+- Created src/backend/src/utils/telegramNotify.js utility:
+  - Uses Telegram Bot API (fetch to api.telegram.org/bot{token}/sendMessage)
+  - Falls back to logging when bot token not configured
+  - All calls are async, non-blocking, failure-safe
+  - Specialized methods: sendSosAlert(), sendExerciseNotification(), sendMessage()
+  - 10s timeout, proper error handling
+- Replaced [DEV MODE] SOS notification in bot.js with real telegramNotify.sendSosAlert()
+- Replaced log-only exercise notification in clients.js with real telegramNotify.sendExerciseNotification()
+- Added exercise completion notification to therapist in bot.js
+- All notifications wrapped in .then()/.catch() — failures never break DB transactions
+- Exercise notifications are localized (EN/RU/ES)
+
+**Verification:**
+- SOS endpoint creates event and triggers notification path ✅
+- Exercise assignment triggers notification to client ✅
+- Exercise completion triggers notification to therapist ✅
+- No [DEV MODE] or [Would send] patterns remain in route files ✅
+- Zero console errors in browser ✅
+
 ### Current Status
-- Features passing: 215/222 (96.8%)
-- Feature #216: PASSING
+- Features passing: 217/222 (97.7%)
+- Features #217, #218, #219: ALL PASSING
