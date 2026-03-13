@@ -277,5 +277,50 @@
 - No PsyLink references anywhere in guide ✅
 
 ### Current Status
-- Features passing: 226/226 (100.0%) 🎉
-- ALL FEATURES COMPLETE
+- Features passing: 226/226 (100.0%) - Previous batch complete
+
+## Session: 2026-03-13 - Features #232, #237, #238
+
+### Completed: Session audio/video player in therapist dashboard (#232) - PASSING
+
+**What was built:**
+- GET /api/sessions/:id/stream endpoint: decrypts encrypted audio files, streams with proper Content-Type
+- HTTP 206 Partial Content range request support for seeking
+- Consent check and audit logging on stream endpoint
+- AudioPlayer component with HTML5 audio/video element
+- Auto-detect media type from file extension (audio default, video for mp4/mov/mkv)
+- Playback controls: play/pause, seek bar, volume slider, playback speed (0.5x, 1x, 1.5x, 2x)
+- Timestamp display (current / total duration)
+- Loading state while media buffers, error state for missing/corrupted files
+- Integrated into SessionDetail page replacing static audio reference display
+- i18n labels for player controls in EN/RU/ES
+
+### Completed: Progressive Web App (PWA) support with mobile optimization (#237) - PASSING
+
+**What was built:**
+- manifest.json with app name, icons (192x192, 512x512 SVG), theme color #1F8A83, standalone display
+- SVG app icons in public/icons/ with PR-TOP branding
+- Service worker (sw.js): cache app shell, network-first for API calls, offline fallback
+- Service worker registration in main.jsx with update detection
+- PWA meta tags in index.html (theme-color, apple-mobile-web-app-capable, manifest link)
+- InstallPrompt component: beforeinstallprompt detection, install/dismiss buttons
+- SW update notification banner with refresh button
+- Mobile-responsive padding adjustments for SessionDetail
+- i18n for install prompt, offline messages, update notification in EN/RU/ES
+- Existing mobile hamburger menu and responsive grids already in place
+
+### Completed: Semantic search visualization (#238) - PASSING
+
+**What was built:**
+- Normalized similarity_score (0-1) per result in API response
+- search_time_ms in API response for timing display
+- Color-coded relevance bars: green (>0.7 High), amber (>0.4 Medium), gray (<0.4 Low)
+- Highlighted matched terms in result snippets with teal background marks
+- Search expansion visualization: original query -> expanded terms with pill badges
+- Sort by toggle: Relevance (default) vs Date
+- Result count with search time display (e.g., "Found 3 results (0.0s)")
+- i18n labels for relevance levels and sort options in EN/RU/ES
+
+### Current Status
+- Features passing: 229/239 (95.8%)
+- Features #232, #237, #238: ALL PASSING
