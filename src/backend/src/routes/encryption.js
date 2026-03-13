@@ -39,6 +39,20 @@ function requireSuperadmin(req, res, next) {
   next();
 }
 
+// Require development mode OR superadmin for debug endpoints
+// In production, only superadmins can access encrypt/decrypt test endpoints
+function requireDevOrSuperadmin(req, res, next) {
+  const isDev = !process.env.NODE_ENV || process.env.NODE_ENV === 'development';
+  if (isDev) {
+    return next();
+  }
+  // In production, only superadmin can access debug endpoints
+  if (req.user.role === 'superadmin') {
+    return next();
+  }
+  return res.status(403).json({ error: 'Debug endpoints are disabled in production' });
+}
+
 // GET /api/encryption/keys
 // List all encryption key versions
 router.get('/keys', requireAuth, requireSuperadmin, (req, res) => {
@@ -71,8 +85,8 @@ router.post('/rotate', requireAuth, requireSuperadmin, (req, res) => {
 });
 
 // POST /api/encryption/encrypt
-// Encrypt data (for testing/verification)
-router.post('/encrypt', requireAuth, (req, res) => {
+// Encrypt data (for testing/verification) - debug endpoint, dev-only or superadmin
+router.post('/encrypt', requireAuth, requireDevOrSuperadmin, (req, res) => {
   try {
     const { plaintext } = req.body;
     if (!plaintext) {
@@ -92,8 +106,8 @@ router.post('/encrypt', requireAuth, (req, res) => {
 });
 
 // POST /api/encryption/decrypt
-// Decrypt data (for testing/verification)
-router.post('/decrypt', requireAuth, (req, res) => {
+// Decrypt data (for testing/verification) - debug endpoint, dev-only or superadmin
+router.post('/decrypt', requireAuth, requireDevOrSuperadmin, (req, res) => {
   try {
     const { encrypted } = req.body;
     if (!encrypted) {
@@ -109,8 +123,8 @@ router.post('/decrypt', requireAuth, (req, res) => {
 });
 
 // GET /api/encryption/active-version
-// Get the current active encryption key version
-router.get('/active-version', requireAuth, (req, res) => {
+// Get the current active encryption key version - debug endpoint, dev-only or superadmin
+router.get('/active-version', requireAuth, requireDevOrSuperadmin, (req, res) => {
   try {
     const version = getActiveKeyVersion();
     res.json({ active_version: version });
