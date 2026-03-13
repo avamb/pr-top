@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useCsrfToken } from '../hooks/useCsrfToken';
 import LoadingSpinner from '../components/LoadingSpinner';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -111,7 +112,10 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+    <div className="min-h-screen bg-background flex items-center justify-center px-4 relative">
+      <div className="absolute top-4 right-4">
+        <LanguageSwitcher compact />
+      </div>
       <a href="#main-content" className="skip-to-content">
         {t('nav.skipToContent')}
       </a>

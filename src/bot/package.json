@@ -1,7 +1,7 @@
 {
-  "name": "psylink-bot",
+  "name": "prtop-bot",
   "version": "0.1.0",
-  "description": "PsyLink Telegram Bot - Client diary and therapist workspace",
+  "description": "PR-TOP Telegram Bot - Client diary and therapist workspace",
   "main": "src/index.js",
   "scripts": {
     "dev": "node src/index.js",

@@ -1,0 +1,69 @@
+{
+  "auth": {
+    "loginSuccess": "Inicio de sesi\u00f3n exitoso",
+    "registerSuccess": "Registro exitoso",
+    "invalidCredentials": "Email o contrase\u00f1a incorrectos",
+    "emailExists": "El email ya est\u00e1 registrado",
+    "emailRequired": "Se requiere email",
+    "passwordRequired": "Se requiere contrase\u00f1a",
+    "invalidEmail": "Formato de email inv\u00e1lido",
+    "passwordTooShort": "La contrase\u00f1a debe tener al menos 8 caracteres",
+    "passwordWeak": "La contrase\u00f1a debe contener may\u00fasculas, min\u00fasculas y n\u00fameros",
+    "unauthorized": "Se requiere autenticaci\u00f3n",
+    "forbidden": "Acceso denegado",
+    "tokenExpired": "Sesi\u00f3n expirada. Por favor, inicie sesi\u00f3n de nuevo",
+    "tokenInvalid": "Token de autenticaci\u00f3n inv\u00e1lido",
+    "clientAccessDenied": "Acceso denegado. El panel web es solo para terapeutas."
+  },
+  "profile": {
+    "updated": "Perfil actualizado exitosamente",
+    "languageUpdated": "Preferencia de idioma actualizada",
+    "invalidLanguage": "Idioma inv\u00e1lido. Debe ser uno de: en, ru, es",
+    "notFound": "Usuario no encontrado"
+  },
+  "clients": {
+    "notFound": "Cliente no encontrado",
+    "accessDenied": "No tiene acceso a este cliente",
+    "created": "Cliente creado exitosamente",
+    "updated": "Cliente actualizado exitosamente",
+    "deleted": "Cliente eliminado exitosamente",
+    "consentRequired": "Se requiere el consentimiento del cliente"
+  },
+  "sessions": {
+    "notFound": "Sesi\u00f3n no encontrada",
+    "created": "Sesi\u00f3n creada exitosamente",
+    "updated": "Sesi\u00f3n actualizada exitosamente",
+    "deleted": "Sesi\u00f3n eliminada exitosamente"
+  },
+  "notes": {
+    "notFound": "Nota no encontrada",
+    "created": "Nota creada exitosamente",
+    "updated": "Nota actualizada exitosamente",
+    "deleted": "Nota eliminada exitosamente"
+  },
+  "exercises": {
+    "notFound": "Ejercicio no encontrado",
+    "created": "Ejercicio creado exitosamente",
+    "sent": "Ejercicio enviado al cliente",
+    "completed": "Ejercicio completado"
+  },
+  "subscription": {
+    "required": "Se requiere suscripci\u00f3n activa",
+    "trialExpired": "Su periodo de prueba ha expirado. Suscr\u00edbase para continuar.",
+    "upgraded": "Suscripci\u00f3n actualizada exitosamente",
+    "cancelled": "Suscripci\u00f3n cancelada"
+  },
+  "errors": {
+    "serverError": "Algo sali\u00f3 mal. Int\u00e9ntelo de nuevo m\u00e1s tarde.",
+    "notFound": "Recurso no encontrado",
+    "badRequest": "Solicitud inv\u00e1lida",
+    "tooManyRequests": "Demasiadas solicitudes. Int\u00e9ntelo de nuevo m\u00e1s tarde.",
+    "validationFailed": "Error de validaci\u00f3n"
+  },
+  "settings": {
+    "profileUpdated": "Configuraci\u00f3n del perfil actualizada exitosamente",
+    "escalationUpdated": "Preferencias de escalamiento actualizadas exitosamente",
+    "invalidTimezone": "Formato de zona horaria inv\u00e1lido",
+    "noFieldsToUpdate": "No hay campos v\u00e1lidos para actualizar"
+  }
+}

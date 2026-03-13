@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { formatUserDateOnly } from '../utils/formatDate';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = '/api';
 
 export default function AdminTherapists() {
   const { t } = useTranslation();

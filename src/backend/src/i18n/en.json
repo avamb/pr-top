@@ -1,0 +1,69 @@
+{
+  "auth": {
+    "loginSuccess": "Login successful",
+    "registerSuccess": "Registration successful",
+    "invalidCredentials": "Invalid email or password",
+    "emailExists": "Email already registered",
+    "emailRequired": "Email is required",
+    "passwordRequired": "Password is required",
+    "invalidEmail": "Invalid email format",
+    "passwordTooShort": "Password must be at least 8 characters",
+    "passwordWeak": "Password must contain uppercase, lowercase, and a number",
+    "unauthorized": "Authentication required",
+    "forbidden": "Access denied",
+    "tokenExpired": "Session expired. Please log in again",
+    "tokenInvalid": "Invalid authentication token",
+    "clientAccessDenied": "Access denied. The web panel is for therapists only."
+  },
+  "profile": {
+    "updated": "Profile updated successfully",
+    "languageUpdated": "Language preference updated",
+    "invalidLanguage": "Invalid language. Must be one of: en, ru, es",
+    "notFound": "User not found"
+  },
+  "clients": {
+    "notFound": "Client not found",
+    "accessDenied": "You do not have access to this client",
+    "created": "Client created successfully",
+    "updated": "Client updated successfully",
+    "deleted": "Client removed successfully",
+    "consentRequired": "Client consent is required"
+  },
+  "sessions": {
+    "notFound": "Session not found",
+    "created": "Session created successfully",
+    "updated": "Session updated successfully",
+    "deleted": "Session deleted successfully"
+  },
+  "notes": {
+    "notFound": "Note not found",
+    "created": "Note created successfully",
+    "updated": "Note updated successfully",
+    "deleted": "Note deleted successfully"
+  },
+  "exercises": {
+    "notFound": "Exercise not found",
+    "created": "Exercise created successfully",
+    "sent": "Exercise sent to client",
+    "completed": "Exercise completed"
+  },
+  "subscription": {
+    "required": "Active subscription required",
+    "trialExpired": "Your trial has expired. Please subscribe to continue.",
+    "upgraded": "Subscription upgraded successfully",
+    "cancelled": "Subscription cancelled"
+  },
+  "errors": {
+    "serverError": "Something went wrong. Please try again later.",
+    "notFound": "Resource not found",
+    "badRequest": "Invalid request",
+    "tooManyRequests": "Too many requests. Please try again later.",
+    "validationFailed": "Validation failed"
+  },
+  "settings": {
+    "profileUpdated": "Profile settings updated successfully",
+    "escalationUpdated": "Escalation preferences updated successfully",
+    "invalidTimezone": "Invalid timezone format",
+    "noFieldsToUpdate": "No valid fields to update"
+  }
+}

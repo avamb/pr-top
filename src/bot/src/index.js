@@ -1,4 +1,4 @@
-// PsyLink Telegram Bot
+// PR-TOP Telegram Bot
 // Entry point for the Telegram bot service
 
 require('dotenv').config();
@@ -51,7 +51,7 @@ if (!token || token === 'your-telegram-bot-token') {
 } else {
   const bot = new TelegramBot(token, { polling: true });
 
-  console.log('PsyLink Telegram Bot starting...');
+  console.log('PR-TOP Telegram Bot starting...');
 
   // /start command - role selection
   bot.onText(/\/start/, async (msg) => {
@@ -252,7 +252,7 @@ if (!token || token === 'your-telegram-bot-token') {
     }
   });
 
-  console.log('PsyLink Telegram Bot is running.');
+  console.log('PR-TOP Telegram Bot is running.');
 }
 
 // Helper functions for API communication

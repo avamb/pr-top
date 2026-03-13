@@ -1,11 +1,8 @@
-version: "3.8"
-
 services:
   backend:
     build:
       context: ./src/backend
       dockerfile: Dockerfile
-    container_name: psylink-backend
     restart: unless-stopped
     env_file:
       - .env
@@ -29,10 +26,9 @@ services:
     build:
       context: ./src/frontend
       dockerfile: Dockerfile
-    container_name: psylink-frontend
     restart: unless-stopped
-    ports:
-      - "80:80"
+    expose:
+      - "80"
     depends_on:
       backend:
         condition: service_healthy
@@ -41,7 +37,6 @@ services:
     build:
       context: ./src/bot
       dockerfile: Dockerfile
-    container_name: psylink-bot
     restart: unless-stopped
     env_file:
       - .env

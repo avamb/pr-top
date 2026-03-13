@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { formatUserDateOnly } from '../utils/formatDate';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = '/api';
 
 export default function AdminSettings() {
   const { t } = useTranslation();

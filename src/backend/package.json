@@ -1,7 +1,7 @@
 {
-  "name": "psylink-backend",
+  "name": "prtop-backend",
   "version": "0.1.0",
-  "description": "PsyLink Backend API - Therapist assistant platform",
+  "description": "PR-TOP Backend API - Therapist assistant platform",
   "main": "src/index.js",
   "scripts": {
     "dev": "node src/index.js",

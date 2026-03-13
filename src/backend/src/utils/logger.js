@@ -13,7 +13,7 @@ class MemoryTransport extends winston.Transport {
       level: info.level,
       message: info.message,
       timestamp: info.timestamp || new Date().toISOString(),
-      service: info.service || 'psylink-api',
+      service: info.service || 'prtop-api',
       stack: info.stack || null,
       meta: {}
     };
@@ -40,7 +40,7 @@ const logger = winston.createLogger({
     winston.format.errors({ stack: true }),
     winston.format.json()
   ),
-  defaultMeta: { service: 'psylink-api' },
+  defaultMeta: { service: 'prtop-api' },
   transports: [
     new winston.transports.Console({
       format: winston.format.combine(

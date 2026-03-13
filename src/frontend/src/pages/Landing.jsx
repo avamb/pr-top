@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 /* ───────── Feature Highlights (icons only, text from i18n) ───────── */
 const highlightIcons = [
@@ -103,6 +104,7 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
           <span className="text-xl font-bold text-primary tracking-tight">{t('brand')}</span>
           <div className="flex items-center gap-4">
+            <LanguageSwitcher compact />
             <Link to="/login" className="text-sm font-medium text-secondary hover:text-text transition-colors min-h-[44px] flex items-center">
               {t('nav.login')}
             </Link>
@@ -160,55 +162,55 @@ export default function Landing() {
                 aria-label="Therapist dashboard illustration"
               >
                 {/* Background card / dashboard mockup */}
-                <rect x="60" y="40" width="380" height="280" rx="20" fill="#EEF2FF" stroke="#6366F1" strokeWidth="2" opacity="0.8" />
+                <rect x="60" y="40" width="380" height="280" rx="20" fill="#F4F7F6" stroke="#1F8A83" strokeWidth="2" opacity="0.8" />
                 {/* Header bar */}
-                <rect x="60" y="40" width="380" height="50" rx="20" fill="#6366F1" opacity="0.9" />
-                <rect x="60" y="70" width="380" height="20" fill="#6366F1" opacity="0.9" />
+                <rect x="60" y="40" width="380" height="50" rx="20" fill="#163A43" opacity="0.95" />
+                <rect x="60" y="70" width="380" height="20" fill="#163A43" opacity="0.95" />
                 {/* Header dots */}
                 <circle cx="90" cy="65" r="6" fill="#fff" opacity="0.6" />
                 <circle cx="110" cy="65" r="6" fill="#fff" opacity="0.6" />
                 <circle cx="130" cy="65" r="6" fill="#fff" opacity="0.6" />
 
                 {/* Sidebar */}
-                <rect x="60" y="90" width="100" height="230" fill="#F5F3FF" />
+                <rect x="60" y="90" width="100" height="230" fill="#ECE6DD" />
                 {/* Sidebar items */}
-                <rect x="75" y="110" width="70" height="8" rx="4" fill="#6366F1" opacity="0.4" />
-                <rect x="75" y="130" width="55" height="8" rx="4" fill="#6366F1" opacity="0.25" />
-                <rect x="75" y="150" width="65" height="8" rx="4" fill="#6366F1" opacity="0.25" />
-                <rect x="75" y="170" width="50" height="8" rx="4" fill="#6366F1" opacity="0.25" />
-                <rect x="75" y="190" width="60" height="8" rx="4" fill="#6366F1" opacity="0.25" />
+                <rect x="75" y="110" width="70" height="8" rx="4" fill="#1F8A83" opacity="0.5" />
+                <rect x="75" y="130" width="55" height="8" rx="4" fill="#1F8A83" opacity="0.3" />
+                <rect x="75" y="150" width="65" height="8" rx="4" fill="#1F8A83" opacity="0.3" />
+                <rect x="75" y="170" width="50" height="8" rx="4" fill="#1F8A83" opacity="0.3" />
+                <rect x="75" y="190" width="60" height="8" rx="4" fill="#1F8A83" opacity="0.3" />
 
                 {/* Main content area - client cards */}
-                <rect x="175" y="100" width="250" height="60" rx="10" fill="#fff" stroke="#E0E7FF" strokeWidth="1.5" />
-                <circle cx="200" cy="130" r="15" fill="#C7D2FE" />
-                <rect x="225" y="118" width="80" height="8" rx="4" fill="#312E81" opacity="0.6" />
-                <rect x="225" y="134" width="120" height="6" rx="3" fill="#6366F1" opacity="0.3" />
+                <rect x="175" y="100" width="250" height="60" rx="10" fill="#fff" stroke="#D9E2E0" strokeWidth="1.5" />
+                <circle cx="200" cy="130" r="15" fill="#A8C9BE" />
+                <rect x="225" y="118" width="80" height="8" rx="4" fill="#163A43" opacity="0.6" />
+                <rect x="225" y="134" width="120" height="6" rx="3" fill="#1F8A83" opacity="0.3" />
 
-                <rect x="175" y="170" width="250" height="60" rx="10" fill="#fff" stroke="#E0E7FF" strokeWidth="1.5" />
-                <circle cx="200" cy="200" r="15" fill="#A5B4FC" />
-                <rect x="225" y="188" width="90" height="8" rx="4" fill="#312E81" opacity="0.6" />
-                <rect x="225" y="204" width="100" height="6" rx="3" fill="#6366F1" opacity="0.3" />
+                <rect x="175" y="170" width="250" height="60" rx="10" fill="#fff" stroke="#D9E2E0" strokeWidth="1.5" />
+                <circle cx="200" cy="200" r="15" fill="#1F8A83" opacity="0.5" />
+                <rect x="225" y="188" width="90" height="8" rx="4" fill="#163A43" opacity="0.6" />
+                <rect x="225" y="204" width="100" height="6" rx="3" fill="#1F8A83" opacity="0.3" />
 
-                <rect x="175" y="240" width="250" height="60" rx="10" fill="#fff" stroke="#E0E7FF" strokeWidth="1.5" />
-                <circle cx="200" cy="270" r="15" fill="#818CF8" />
-                <rect x="225" y="258" width="70" height="8" rx="4" fill="#312E81" opacity="0.6" />
-                <rect x="225" y="274" width="110" height="6" rx="3" fill="#6366F1" opacity="0.3" />
+                <rect x="175" y="240" width="250" height="60" rx="10" fill="#fff" stroke="#D9E2E0" strokeWidth="1.5" />
+                <circle cx="200" cy="270" r="15" fill="#163A43" opacity="0.4" />
+                <rect x="225" y="258" width="70" height="8" rx="4" fill="#163A43" opacity="0.6" />
+                <rect x="225" y="274" width="110" height="6" rx="3" fill="#1F8A83" opacity="0.3" />
 
                 {/* Status indicators on cards */}
-                <circle cx="405" cy="125" r="6" fill="#22C55E" />
-                <circle cx="405" cy="195" r="6" fill="#22C55E" />
-                <circle cx="405" cy="265" r="6" fill="#F59E0B" />
+                <circle cx="405" cy="125" r="6" fill="#10B981" />
+                <circle cx="405" cy="195" r="6" fill="#10B981" />
+                <circle cx="405" cy="265" r="6" fill="#A8C9BE" />
 
                 {/* Chat bubble overlay */}
-                <rect x="320" y="310" width="140" height="70" rx="12" fill="#6366F1" opacity="0.95" />
-                <path d="M340 380 L350 395 L360 380" fill="#6366F1" opacity="0.95" />
+                <rect x="320" y="310" width="140" height="70" rx="12" fill="#1F8A83" opacity="0.95" />
+                <path d="M340 380 L350 395 L360 380" fill="#1F8A83" opacity="0.95" />
                 <rect x="340" y="325" width="100" height="6" rx="3" fill="#fff" opacity="0.7" />
                 <rect x="340" y="338" width="80" height="6" rx="3" fill="#fff" opacity="0.5" />
                 <rect x="340" y="351" width="90" height="6" rx="3" fill="#fff" opacity="0.5" />
 
                 {/* Shield / security icon */}
                 <g transform="translate(45, 290)">
-                  <path d="M20 5 L35 12 L35 25 C35 35 28 42 20 45 C12 42 5 35 5 25 L5 12 Z" fill="#22C55E" opacity="0.9" />
+                  <path d="M20 5 L35 12 L35 25 C35 35 28 42 20 45 C12 42 5 35 5 25 L5 12 Z" fill="#1F8A83" opacity="0.9" />
                   <path d="M15 25 L19 29 L27 20" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
                 </g>
               </svg>
@@ -359,7 +361,7 @@ export default function Landing() {
             <div>
               <h4 className="text-white font-semibold text-sm mb-3">{t('landing.footerContact')}</h4>
               <ul className="space-y-2 text-sm">
-                <li><a href="mailto:support@psylink.app" className="hover:text-white transition-colors">support@psylink.app</a></li>
+                <li><a href="mailto:support@pr-top.app" className="hover:text-white transition-colors">support@pr-top.app</a></li>
                 <li><span>{t('landing.privacyPolicy')}</span></li>
                 <li><span>{t('landing.termsOfService')}</span></li>
               </ul>

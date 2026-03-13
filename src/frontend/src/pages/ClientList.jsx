@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { formatUserDate, formatUserDateOnly } from '../utils/formatDate';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = '/api';
 
 function debounce(fn, ms) {
   let timer;

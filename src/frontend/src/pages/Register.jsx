@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import i18n from '../i18n';
 import { useCsrfToken } from '../hooks/useCsrfToken';
 import LoadingSpinner from '../components/LoadingSpinner';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -139,7 +140,10 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+    <div className="min-h-screen bg-background flex items-center justify-center px-4 relative">
+      <div className="absolute top-4 right-4">
+        <LanguageSwitcher compact />
+      </div>
       <a href="#main-content" className="skip-to-content">
         {t('nav.skipToContent')}
       </a>

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { formatUserDateOnly } from '../utils/formatDate';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = '/api';
 
 const LANGUAGES = [
   { code: 'en', label: 'English' },
@@ -162,6 +162,17 @@ export default function Settings() {
       // Switch i18n language immediately
       i18n.changeLanguage(language);
       localStorage.setItem('app_language', language);
+      // Also sync language to dedicated endpoint for consistency
+      try {
+        await fetch(`${API_URL}/profile/language`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ language })
+        });
+      } catch (e) { /* already saved via PUT */ }
       // Update user timezone in localStorage for formatDate utility
       try {
         var storedUser = JSON.parse(localStorage.getItem('user') || '{}');
