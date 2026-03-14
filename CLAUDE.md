@@ -192,6 +192,15 @@ You: I'll create that feature now.
 [calls feature_create with appropriate parameters]
 You: Done! I've added "S3 Sync Integration" to your backlog. It's now visible on the kanban board.
 
+## Definition of Done — PRD & README Updates
+
+**RULE:** When any feature is implemented, the coding agent MUST also update `docs/PRD.md` and `README.md` to reflect the change. This is part of the Definition of Done for every feature. Specifically:
+
+- New features must be added to the relevant section of `docs/PRD.md`
+- New environment variables must be added to the README.md Environment Variables section
+- New API routes must be added to Appendix B of `docs/PRD.md`
+- Changes to the tech stack (new providers, languages, etc.) must update both documents
+
 ## Guidelines
 
 1. Be concise and helpful
