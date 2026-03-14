@@ -152,6 +152,41 @@ export default function TherapistGuide() {
       ),
     },
     {
+      id: 'myExercises',
+      title: t('guide.section5bTitle'),
+      searchText: t('guide.section5bTitle') + ' ' + t('guide.section5bBody') + ' ' + t('guide.section5bStep1Desc') + ' ' + t('guide.section5bStep2Desc') + ' ' + t('guide.section5bStep3Desc') + ' ' + t('guide.section5bStep4Desc') + ' ' + t('guide.section5bStep5Desc'),
+      content: (
+        <>
+          <p>{t('guide.section5bBody')}</p>
+          <div className="mt-4 space-y-4">
+            <div>
+              <h4 className="font-semibold text-stone-700">1. {t('guide.section5bStep1Title')}</h4>
+              <p className="text-sm mt-1">{t('guide.section5bStep1Desc')}</p>
+            </div>
+            <div>
+              <h4 className="font-semibold text-stone-700">2. {t('guide.section5bStep2Title')}</h4>
+              <p className="text-sm mt-1">{t('guide.section5bStep2Desc')}</p>
+            </div>
+            <div>
+              <h4 className="font-semibold text-stone-700">3. {t('guide.section5bStep3Title')}</h4>
+              <p className="text-sm mt-1">{t('guide.section5bStep3Desc')}</p>
+            </div>
+            <div>
+              <h4 className="font-semibold text-stone-700">4. {t('guide.section5bStep4Title')}</h4>
+              <p className="text-sm mt-1">{t('guide.section5bStep4Desc')}</p>
+            </div>
+            <div>
+              <h4 className="font-semibold text-stone-700">5. {t('guide.section5bStep5Title')}</h4>
+              <p className="text-sm mt-1">{t('guide.section5bStep5Desc')}</p>
+            </div>
+          </div>
+          <div className="mt-4 p-3 bg-teal-50 border border-teal-200 rounded-lg">
+            <p className="text-sm text-teal-800">{t('guide.section5bTip')}</p>
+          </div>
+        </>
+      ),
+    },
+    {
       id: 'sos',
       title: t('guide.section6Title'),
       searchText: t('guide.section6Title') + ' ' + t('guide.section6Body'),
