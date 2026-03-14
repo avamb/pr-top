@@ -19,7 +19,30 @@
     "adminTherapists": "Therapists",
     "adminSettings": "Settings",
     "adminLogs": "Audit Logs",
-    "adminSystemLogs": "System Logs"
+    "adminSystemLogs": "System Logs",
+    "adminAIUsage": "AI Usage",
+    "adminAIModels": "AI Models"
+  },
+  "aiUsage": {
+    "title": "AI Usage & Costs",
+    "totalCost": "Total Cost",
+    "totalTokens": "Total Tokens",
+    "apiCalls": "API Calls",
+    "mostUsedModel": "Most Used Model",
+    "dailyCost": "Daily Cost",
+    "costByModel": "Cost by Model",
+    "costByTherapist": "Cost by Therapist",
+    "model": "Model",
+    "calls": "Calls",
+    "tokens": "Tokens",
+    "cost": "Cost",
+    "avgCost": "Avg/Call",
+    "therapist": "Therapist",
+    "noData": "No AI usage data yet.",
+    "today": "Today",
+    "last7Days": "7 days",
+    "last30Days": "30 days",
+    "last90Days": "90 days"
   },
   "landing": {
     "heroTitle1": "Keep Your Practice",
@@ -554,7 +577,30 @@
     "clear": "Clear",
     "noSystemLogs": "No system log entries found.",
     "userPrefix": "User #{{id}}",
-    "system": "System"
+    "system": "System",
+    "ai": {
+      "title": "AI Model Configuration",
+      "subtitle": "Select which AI models to use for summarization and transcription",
+      "loading": "Loading AI model configuration...",
+      "summarization": "Summarization Model",
+      "summarizationDesc": "Select the AI provider and model used for generating session summaries",
+      "transcription": "Transcription Model",
+      "transcriptionDesc": "Select the provider and model used for speech-to-text transcription",
+      "configured": "Configured",
+      "notConfigured": "Not Configured",
+      "active": "Active",
+      "modelsAvailable": "model(s) available",
+      "setEnvVar": "Set env var",
+      "selectModel": "Select Model",
+      "currentActive": "Currently active",
+      "testConnection": "Test Connection",
+      "testing": "Testing...",
+      "responseTime": "Response time",
+      "modelUsed": "Model used",
+      "save": "Save Model Settings",
+      "saving": "Saving...",
+      "saved": "AI model settings saved successfully"
+    }
   },
   "bulkImport": {
     "title": "Import Clients",

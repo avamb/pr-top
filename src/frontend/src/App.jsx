@@ -22,6 +22,8 @@ import AdminTherapists from './pages/AdminTherapists';
 import AdminSettings from './pages/AdminSettings';
 import AdminAuditLogs from './pages/AdminAuditLogs';
 import AdminSystemLogs from './pages/AdminSystemLogs';
+import AdminAIUsage from './pages/AdminAIUsage';
+import AdminAIModels from './pages/AdminAIModels';
 import TherapistGuide from './pages/TherapistGuide';
 import NotFound from './pages/NotFound';
 import InstallPrompt from './components/InstallPrompt';
@@ -88,6 +90,8 @@ function App() {
         <Route path="/admin/settings" element={<AdminLayout><AdminSettings /></AdminLayout>} />
         <Route path="/admin/logs" element={<AdminLayout><AdminAuditLogs /></AdminLayout>} />
         <Route path="/admin/system-logs" element={<AdminLayout><AdminSystemLogs /></AdminLayout>} />
+        <Route path="/admin/ai-usage" element={<AdminLayout><AdminAIUsage /></AdminLayout>} />
+        <Route path="/admin/ai-models" element={<AdminLayout><AdminAIModels /></AdminLayout>} />
         <Route path="/admin/*" element={<AdminLayout><AdminDashboard /></AdminLayout>} />
 
         <Route path="*" element={<NotFound />} />

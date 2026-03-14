@@ -19,7 +19,30 @@
     "adminTherapists": "Terapeutas",
     "adminSettings": "Configuración",
     "adminLogs": "Registro de auditoría",
-    "adminSystemLogs": "Registros del sistema"
+    "adminSystemLogs": "Registros del sistema",
+    "adminAIUsage": "Uso de IA",
+    "adminAIModels": "Modelos de IA"
+  },
+  "aiUsage": {
+    "title": "Uso de IA y costos",
+    "totalCost": "Costo total",
+    "totalTokens": "Tokens totales",
+    "apiCalls": "Llamadas API",
+    "mostUsedModel": "Modelo más usado",
+    "dailyCost": "Costo diario",
+    "costByModel": "Costo por modelo",
+    "costByTherapist": "Costo por terapeuta",
+    "model": "Modelo",
+    "calls": "Llamadas",
+    "tokens": "Tokens",
+    "cost": "Costo",
+    "avgCost": "Prom/llamada",
+    "therapist": "Terapeuta",
+    "noData": "Aún no hay datos de uso de IA.",
+    "today": "Hoy",
+    "last7Days": "7 días",
+    "last30Days": "30 días",
+    "last90Days": "90 días"
   },
   "landing": {
     "heroTitle1": "Mantén tu práctica",
@@ -554,7 +577,30 @@
     "clear": "Limpiar",
     "noSystemLogs": "No se encontraron registros del sistema.",
     "userPrefix": "Usuario #{{id}}",
-    "system": "Sistema"
+    "system": "Sistema",
+    "ai": {
+      "title": "Configuración de modelos de IA",
+      "subtitle": "Seleccione qué modelos de IA usar para resumen y transcripción",
+      "loading": "Cargando configuración de modelos de IA...",
+      "summarization": "Modelo de resumen",
+      "summarizationDesc": "Seleccione el proveedor y modelo de IA para generar resúmenes de sesiones",
+      "transcription": "Modelo de transcripción",
+      "transcriptionDesc": "Seleccione el proveedor y modelo para transcripción de voz a texto",
+      "configured": "Configurado",
+      "notConfigured": "No configurado",
+      "active": "Activo",
+      "modelsAvailable": "modelo(s) disponible(s)",
+      "setEnvVar": "Configure variable de entorno",
+      "selectModel": "Seleccionar modelo",
+      "currentActive": "Actualmente activo",
+      "testConnection": "Probar conexión",
+      "testing": "Probando...",
+      "responseTime": "Tiempo de respuesta",
+      "modelUsed": "Modelo utilizado",
+      "save": "Guardar configuración de modelos",
+      "saving": "Guardando...",
+      "saved": "Configuración de modelos de IA guardada"
+    }
   },
   "bulkImport": {
     "title": "Importar clientes",
