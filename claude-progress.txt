@@ -537,3 +537,45 @@
 ### Current Status
 - Features passing: 246/249 (98.8%)
 - Features #244, #246: BOTH PASSING
+
+## Session: 2026-03-14 - Feature #253
+
+### Completed: Create and maintain project specification (PRD) + keep README in sync (#253) - PASSING
+
+**What was created/changed:**
+- Created `docs/PRD.md` — full Product Requirements Document (583 lines) with 10 sections:
+  1. Product Overview
+  2. User Roles (therapist, client, superadmin)
+  3. Architecture (system diagram, tech stack, data flow)
+  4. Feature List by Module (11 subsections covering all features)
+  5. Security & Encryption (data classes, security measures)
+  6. Subscription Tiers
+  7. Internationalization (4 languages: EN, RU, ES, UK)
+  8. AI & ML Features (multi-provider, transcription, summarization, embeddings, NL queries, usage monitoring)
+  9. Integrations (Telegram, Stripe, SMTP)
+  10. Infrastructure (Docker Compose, env vars, backups, health checks, scheduled tasks, deployment)
+  - Plus Appendix A (project structure) and Appendix B (full API route table)
+
+- Updated `README.md`:
+  - Added Ukrainian to Languages row in Tech Stack table
+  - Added AI providers (OpenAI, Anthropic, Google Gemini, OpenRouter) to Tech Stack
+  - Added comprehensive Environment Variables section with all AI/transcription/email/backup vars
+  - Added "Custom Exercises" mention in Telegram Bot description
+  - Added link to docs/PRD.md
+  - Updated project name from PsyLink to PR-TOP throughout
+
+- Updated `CLAUDE.md`:
+  - Added "Definition of Done — PRD & README Updates" rule requiring coding agents to update docs/PRD.md and README.md when implementing features
+
+**Verification:**
+- docs/PRD.md exists with all 10 required sections ✅
+- README.md has Ukrainian language ✅
+- README.md has AI providers ✅
+- README.md has ANTHROPIC_API_KEY, GOOGLE_AI_API_KEY, OPENROUTER_API_KEY ✅
+- README.md mentions Custom Exercises ✅
+- CLAUDE.md contains PRD-update rule ✅
+- Zero broken links or formatting issues ✅
+
+### Current Status
+- Features passing: 251/253 (99.2%)
+- Feature #253: PASSING
