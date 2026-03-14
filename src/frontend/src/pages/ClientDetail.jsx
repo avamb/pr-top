@@ -1709,7 +1709,10 @@ function ClientDetail() {
                       >
                         <div className="flex items-center gap-2">
                           <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">{ex.category}</span>
-                          <span className="font-medium text-stone-700 text-sm">{ex.title_en}</span>
+                          <span className="font-medium text-stone-700 text-sm">{ex.title_en || ex.title_ru || ex.title_es}</span>
+                          {ex.is_custom === 1 && (
+                            <span className="text-xs px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded-full font-medium">My</span>
+                          )}
                         </div>
                         <p className="text-xs text-stone-500 mt-1 line-clamp-1">{ex.description_en}</p>
                         {sendingExercise === ex.id && <span className="text-xs text-teal-600 mt-1">Sending...</span>}
