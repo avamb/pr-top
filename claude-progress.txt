@@ -579,3 +579,43 @@
 ### Current Status
 - Features passing: 251/253 (99.2%)
 - Feature #253: PASSING
+
+## Session: 2026-03-14 - Features #251, #252
+
+### Completed: Ukrainian language — frontend translations, switcher, settings (#251) - PASSING
+
+**What was built:**
+- Created src/frontend/src/i18n/uk.json with all ~830 translation keys (Ukrainian)
+- Updated i18n/index.js: imported uk.json, added to resources, added 'uk' to supported languages detection
+- Updated LanguageSwitcher.jsx: added { code: 'uk', label: 'Українська', flag: '🇺🇦' }
+- Updated Settings.jsx: added { code: 'uk', label: 'Українська' } to LANGUAGES array
+- Updated ExerciseLibrary.jsx ExerciseFormModal: added UK tab for titles/descriptions/instructions, added title_uk/description_uk/instructions_uk to form submission
+
+**Verification:**
+- Language switcher shows 🇺🇦 Українська option ✅
+- Selecting Ukrainian changes all UI text to Ukrainian ✅
+- Page reload preserves Ukrainian language (localStorage) ✅
+- Settings page shows Ukrainian in language dropdown ✅
+- Login page fully translated ✅
+- Landing page fully translated ✅
+- Zero console errors ✅
+
+### Completed: Ukrainian language — Telegram bot messages (#252) - PASSING
+
+**What was built:**
+- Added uk block to src/bot/src/i18n.js with all ~65 translation keys
+- Includes: welcome, registration, help, exercises, SOS, diary, disconnect, consent flows
+- Ukraine-specific SOS hotline (7333) in sosConfirmed message
+- All function-type keys (welcomeBack, foundTherapist, alreadyRegistered, welcomeTherapist, exerciseDetail) properly implemented
+
+**Verification:**
+- All 42 translation unit tests passing ✅
+- t('uk', key) returns Ukrainian text for all keys ✅
+- Function keys return proper Ukrainian text with interpolation ✅
+- No mock data patterns in source code ✅
+- Backend health check OK ✅
+
+### Current Status
+- Features passing: 253/253 (100.0%)
+- Features #251, #252: BOTH PASSING
+- ALL FEATURES COMPLETE
