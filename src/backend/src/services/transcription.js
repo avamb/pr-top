@@ -105,8 +105,20 @@ async function transcribeAudio(audioRef) {
  */
 async function callTranscriptionAPI(audioBuffer) {
   const apiBase = process.env.TRANSCRIPTION_API_URL || 'https://api.openai.com/v1';
-  const model = process.env.TRANSCRIPTION_MODEL || 'whisper-1';
+  let model = process.env.TRANSCRIPTION_MODEL || 'whisper-1';
   const language = process.env.TRANSCRIPTION_LANGUAGE || undefined; // auto-detect if not set
+
+  // Read transcription model from platform_settings (DB override)
+  try {
+    const { getDatabase } = require('../db/connection');
+    const db = getDatabase();
+    const modResult = db.exec("SELECT value FROM platform_settings WHERE key = 'ai_transcription_model'");
+    if (modResult.length > 0 && modResult[0].values.length > 0 && modResult[0].values[0][0]) {
+      model = modResult[0].values[0][0];
+    }
+  } catch (e) {
+    // Fall back to env var
+  }
 
   // Build multipart/form-data body manually (no external dependency needed)
   const boundary = '----FormBoundary' + Date.now().toString(36) + Math.random().toString(36).slice(2);

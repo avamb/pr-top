@@ -199,7 +199,27 @@ async function callAIAPI(transcript, options = {}) {
 
   // Try provider registry first (supports all providers)
   const db = getDatabase();
-  const active = aiProviders.getActiveProvider(db);
+
+  // Read summarization-specific model/provider from platform_settings
+  let sumProvider = null;
+  let sumModel = null;
+  try {
+    const provResult = db.exec("SELECT value FROM platform_settings WHERE key = 'ai_summarization_provider'");
+    if (provResult.length > 0 && provResult[0].values.length > 0) sumProvider = provResult[0].values[0][0];
+    const modResult = db.exec("SELECT value FROM platform_settings WHERE key = 'ai_summarization_model'");
+    if (modResult.length > 0 && modResult[0].values.length > 0) sumModel = modResult[0].values[0][0];
+  } catch (e) {
+    logger.warn('Could not read summarization model settings from DB: ' + e.message);
+  }
+
+  // If summarization-specific settings exist, override the active provider
+  const active = (sumProvider || sumModel)
+    ? (() => {
+        const pName = sumProvider || 'openai';
+        const p = aiProviders.getProvider(pName) || aiProviders.getProvider('openai');
+        return { provider: p, providerName: pName, model: sumModel || AI_MODEL };
+      })()
+    : aiProviders.getActiveProvider(db);
 
   logger.info(`Calling AI API for summarization via ${active.providerName} (model=${active.model}, transcript=${transcript.length} chars)`);
 

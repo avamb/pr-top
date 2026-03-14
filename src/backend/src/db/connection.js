@@ -347,6 +347,12 @@ function applySchema(db) {
     ['basic_price_monthly', '1900'],
     ['pro_price_monthly', '4900'],
     ['premium_price_monthly', '9900'],
+    ['ai_summarization_provider', 'openai'],
+    ['ai_summarization_model', 'gpt-4o-mini'],
+    ['ai_transcription_provider', 'openai'],
+    ['ai_transcription_model', 'whisper-1'],
+    ['ai_monthly_limit_usd', '0'],
+    ['ai_limit_warning_percent', '80'],
   ];
 
   for (const [key, value] of defaultSettings) {
