@@ -1,13 +1,14 @@
 // Backend i18n - Translation helper for API responses
-// Supports: en, ru, es
+// Supports: en, ru, es, uk
 // Usage: const { t } = require('./i18n'); t('auth.invalidCredentials', 'ru')
 
 const en = require('./en.json');
 const ru = require('./ru.json');
 const es = require('./es.json');
+const uk = require('./uk.json');
 
-const translations = { en, ru, es };
-const SUPPORTED_LANGUAGES = ['en', 'ru', 'es'];
+const translations = { en, ru, es, uk };
+const SUPPORTED_LANGUAGES = ['en', 'ru', 'es', 'uk'];
 const DEFAULT_LANGUAGE = 'en';
 
 /**

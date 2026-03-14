@@ -819,9 +819,9 @@ router.get('/exercises/:telegram_id', botAuth, (req, res) => {
     // Get exercise deliveries for this client
     const result = db.exec(
       `SELECT ed.id, ed.exercise_id, ed.status, ed.sent_at, ed.completed_at,
-              e.title_en, e.title_ru, e.title_es, e.category,
-              e.description_en, e.description_ru,
-              e.instructions_en, e.instructions_ru
+              e.title_en, e.title_ru, e.title_es, e.title_uk, e.category,
+              e.description_en, e.description_ru, e.description_uk,
+              e.instructions_en, e.instructions_ru, e.instructions_uk
        FROM exercise_deliveries ed
        LEFT JOIN exercises e ON ed.exercise_id = e.id
        WHERE ed.client_id = ?
@@ -839,11 +839,14 @@ router.get('/exercises/:telegram_id', botAuth, (req, res) => {
         title_en: row[5],
         title_ru: row[6],
         title_es: row[7],
-        category: row[8],
-        description_en: row[9],
-        description_ru: row[10],
-        instructions_en: row[11],
-        instructions_ru: row[12]
+        title_uk: row[8],
+        category: row[9],
+        description_en: row[10],
+        description_ru: row[11],
+        description_uk: row[12],
+        instructions_en: row[13],
+        instructions_ru: row[14],
+        instructions_uk: row[15]
       };
     });
 

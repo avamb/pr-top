@@ -18,7 +18,7 @@
   "profile": {
     "updated": "Profile updated successfully",
     "languageUpdated": "Language preference updated",
-    "invalidLanguage": "Invalid language. Must be one of: en, ru, es",
+    "invalidLanguage": "Invalid language. Must be one of: en, ru, es, uk",
     "notFound": "User not found"
   },
   "clients": {
