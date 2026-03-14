@@ -161,17 +161,20 @@ function ExerciseFormModal({ exercise, onClose, onSave, t, saving }) {
   const [titles, setTitles] = useState({
     en: exercise?.title_en || '',
     ru: exercise?.title_ru || '',
-    es: exercise?.title_es || ''
+    es: exercise?.title_es || '',
+    uk: exercise?.title_uk || ''
   });
   const [descriptions, setDescriptions] = useState({
     en: exercise?.description_en || '',
     ru: exercise?.description_ru || '',
-    es: exercise?.description_es || ''
+    es: exercise?.description_es || '',
+    uk: exercise?.description_uk || ''
   });
   const [instructions, setInstructions] = useState({
     en: exercise?.instructions_en || '',
     ru: exercise?.instructions_ru || '',
-    es: exercise?.instructions_es || ''
+    es: exercise?.instructions_es || '',
+    uk: exercise?.instructions_uk || ''
   });
   const [formError, setFormError] = useState('');
 
@@ -184,11 +187,11 @@ function ExerciseFormModal({ exercise, onClose, onSave, t, saving }) {
 
     const effectiveCategory = useCustom ? customCategory : category;
 
-    if (!titles.en && !titles.ru && !titles.es) {
+    if (!titles.en && !titles.ru && !titles.es && !titles.uk) {
       setFormError(t('exerciseLibrary.titleRequired'));
       return;
     }
-    if (!instructions.en && !instructions.ru && !instructions.es) {
+    if (!instructions.en && !instructions.ru && !instructions.es && !instructions.uk) {
       setFormError(t('exerciseLibrary.instructionsRequired'));
       return;
     }
@@ -202,17 +205,20 @@ function ExerciseFormModal({ exercise, onClose, onSave, t, saving }) {
       title_en: titles.en || undefined,
       title_ru: titles.ru || undefined,
       title_es: titles.es || undefined,
+      title_uk: titles.uk || undefined,
       description_en: descriptions.en || undefined,
       description_ru: descriptions.ru || undefined,
       description_es: descriptions.es || undefined,
+      description_uk: descriptions.uk || undefined,
       instructions_en: instructions.en || undefined,
       instructions_ru: instructions.ru || undefined,
-      instructions_es: instructions.es || undefined
+      instructions_es: instructions.es || undefined,
+      instructions_uk: instructions.uk || undefined
     });
   }
 
-  const langTabs = ['en', 'ru', 'es'];
-  const langLabels = { en: 'EN', ru: 'RU', es: 'ES' };
+  const langTabs = ['en', 'ru', 'es', 'uk'];
+  const langLabels = { en: 'EN', ru: 'RU', es: 'ES', uk: 'UK' };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
