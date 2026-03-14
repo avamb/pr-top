@@ -492,3 +492,48 @@
 ### Current Status
 - Features passing: 242/246 (98.4%)
 - Feature #245: PASSING
+
+## Session: 2026-03-14 - Features #244, #246
+
+### Completed: Super Admin AI spending limits with auto-block (#244) - PASSING
+
+**What was verified (code already built by parallel agents):**
+- checkSpendingLimit() in aiUsageLogger.js: queries monthly spend, compares to limit
+- Warning at configurable threshold (default 80%), sets ai_limit_warning_sent flag
+- Limit reached at 100%, sets ai_limit_reached flag, blocks AI calls
+- summarization.js and transcription.js both check spending limit before API calls
+- SpendingLimitBar progress bar with color coding (green/amber/red)
+- SpendingLimitSettings form with Monthly Limit USD and Warning Threshold % inputs
+- Alert banners: red for limit reached, amber for warning
+- PUT /api/admin/ai/limits endpoint with audit logging and flag reset
+- i18n labels in EN/RU/ES for all limit UI elements
+
+**Verification:**
+- Set limit to $10 via UI, warning threshold 75% → "Spend vs Limit" shows $0.0000 / $10.00 ✅
+- Reset to $0 (unlimited) → shows "Unlimited" ✅
+- API PUT /api/admin/ai/limits works with correct validation ✅
+- Data persists after server restart ✅
+- Success message "Spending limits updated successfully" shown ✅
+- No mock data patterns in source code ✅
+- Zero console errors ✅
+
+### Completed: Expand model pricing table with latest models (#246) - PASSING
+
+**What was verified (code already built by parallel agents):**
+- aiUsageLogger.js pricing table: all OpenAI, Anthropic, Google, OpenRouter models with correct per-1M-token pricing
+- Provider modules listModels(): OpenAI (6), Anthropic (2), Google (3), OpenRouter (10)
+- AdminAIModels.jsx: price hints next to each model (e.g., "~$0.10/1M tokens")
+- Recommended badges: gpt-4.1-nano (Cheapest), gemini-2.0-flash (Cheapest), claude-3.5-haiku (Best Balance), deepseek-v3 (Best Value)
+
+**Verification:**
+- OpenAI dropdown shows 6 models with price hints ✅
+- Anthropic dropdown shows claude-3.5-haiku (⭐ Best Balance) and claude-4-sonnet ✅
+- Google dropdown shows gemini-2.0-flash (⭐ Cheapest), gemini-2.5-flash, gemini-2.5-pro ✅
+- OpenRouter dropdown shows deepseek-v3 (⭐ Best Value), deepseek-r1, qwen-2.5-72b + 7 more ✅
+- "Currently active" indicator shown for selected models ✅
+- Pricing text shown below dropdown ✅
+- Zero console errors ✅
+
+### Current Status
+- Features passing: 246/249 (98.8%)
+- Features #244, #246: BOTH PASSING
