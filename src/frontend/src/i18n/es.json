@@ -42,7 +42,21 @@
     "today": "Hoy",
     "last7Days": "7 días",
     "last30Days": "30 días",
-    "last90Days": "90 días"
+    "last90Days": "90 días",
+    "spendingLimit": "Límite de gasto",
+    "spendVsLimit": "Gasto vs Límite",
+    "currentMonthSpend": "Gasto del mes actual",
+    "monthlyLimit": "Límite mensual (USD)",
+    "warningThreshold": "Umbral de advertencia (%)",
+    "unlimited": "Sin límite",
+    "limitReached": "Límite de gasto de IA alcanzado",
+    "limitReachedDesc": "Se alcanzó el límite mensual de gasto de IA. Las funciones de IA (resumen, transcripción) están bloqueadas. Aumente el límite o espere al próximo mes.",
+    "limitWarning": "Advertencia de gasto de IA",
+    "limitWarningDesc": "El gasto mensual de IA alcanzó el {{percent}}% del límite de ${{limit}}.",
+    "saveLimits": "Guardar límites",
+    "savingLimits": "Guardando...",
+    "limitsSaved": "Límites de gasto actualizados",
+    "setToZeroForUnlimited": "Establezca 0 para ilimitado"
   },
   "landing": {
     "heroTitle1": "Mantén tu práctica",
@@ -599,7 +613,9 @@
       "modelUsed": "Modelo utilizado",
       "save": "Guardar configuración de modelos",
       "saving": "Guardando...",
-      "saved": "Configuración de modelos de IA guardada"
+      "saved": "Configuración de modelos de IA guardada",
+      "recommended": "Recomendado",
+      "pricing": "Precio"
     }
   },
   "bulkImport": {

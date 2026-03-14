@@ -769,13 +769,17 @@ router.get('/ai/usage/summary', (req, res) => {
     // Find most used model
     var mostUsedModel = byModel.length > 0 ? byModel.reduce(function(a, b) { return a.call_count > b.call_count ? a : b; }).model : null;
 
+    // Include spending limit status
+    var limitStatus = aiUsageLogger.getSpendingLimitStatus();
+
     res.json({
       total: total,
       by_model: byModel,
       by_therapist: byTherapist,
       most_used_model: mostUsedModel,
       date_from: dateFrom,
-      date_to: dateTo
+      date_to: dateTo,
+      spending_limit: limitStatus
     });
   } catch (error) {
     logger.error('Admin AI usage summary error: ' + error.message);
@@ -801,6 +805,72 @@ router.get('/ai/usage/daily', (req, res) => {
   } catch (error) {
     logger.error('Admin AI usage daily error: ' + error.message);
     res.status(500).json({ error: 'Failed to get daily AI usage' });
+  }
+});
+
+// ==================== AI Spending Limits ====================
+
+// GET /api/admin/ai/limits - Get current spending limit settings and status
+router.get('/ai/limits', (req, res) => {
+  try {
+    const status = aiUsageLogger.getSpendingLimitStatus();
+    res.json(status);
+  } catch (error) {
+    logger.error('Admin get AI limits error: ' + error.message);
+    res.status(500).json({ error: 'Failed to get AI spending limits' });
+  }
+});
+
+// PUT /api/admin/ai/limits - Update spending limit settings
+router.put('/ai/limits', (req, res) => {
+  try {
+    const { limit_usd, warning_percent } = req.body;
+    const db = getDatabase();
+    const updated = [];
+
+    if (limit_usd !== undefined) {
+      const val = parseFloat(limit_usd);
+      if (isNaN(val) || val < 0) {
+        return res.status(400).json({ error: 'limit_usd must be a non-negative number' });
+      }
+      db.run(
+        "INSERT INTO platform_settings (key, value, updated_by, updated_at) VALUES ('ai_monthly_limit_usd', ?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')",
+        [String(val), req.user.id, String(val), req.user.id]
+      );
+      updated.push('ai_monthly_limit_usd');
+
+      // Reset warning/reached flags when limit changes
+      db.run("DELETE FROM platform_settings WHERE key IN ('ai_limit_warning_sent', 'ai_limit_reached')");
+    }
+
+    if (warning_percent !== undefined) {
+      const val = parseInt(warning_percent, 10);
+      if (isNaN(val) || val < 1 || val > 99) {
+        return res.status(400).json({ error: 'warning_percent must be between 1 and 99' });
+      }
+      db.run(
+        "INSERT INTO platform_settings (key, value, updated_by, updated_at) VALUES ('ai_limit_warning_percent', ?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')",
+        [String(val), req.user.id, String(val), req.user.id]
+      );
+      updated.push('ai_limit_warning_percent');
+    }
+
+    if (updated.length > 0) {
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'update_ai_limits', 'platform_settings', NULL, ?, datetime('now'))",
+        [req.user.id, JSON.stringify({ updated, limit_usd, warning_percent })]
+      );
+      saveDatabase();
+    }
+
+    logger.info(`Superadmin ${req.user.id} updated AI spending limits: ${updated.join(', ')}`);
+
+    // Return updated status
+    const status = aiUsageLogger.getSpendingLimitStatus();
+    res.json({ message: 'AI spending limits updated successfully', ...status });
+  } catch (error) {
+    logger.error('Admin update AI limits error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update AI spending limits' });
   }
 });
 

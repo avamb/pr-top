@@ -97,6 +97,178 @@ function CostChart({ daily }) {
   );
 }
 
+function SpendingLimitBar({ spendingLimit, formatCost, t }) {
+  if (!spendingLimit) return null;
+
+  const { limit_usd, current_spend, percent_used, unlimited, warning, limit_reached, warning_percent } = spendingLimit;
+
+  // Progress bar color
+  let barColor = 'bg-green-500';
+  if (limit_reached) barColor = 'bg-red-500';
+  else if (warning) barColor = 'bg-amber-500';
+
+  return (
+    <div className="bg-white rounded-lg shadow-md p-6">
+      <h2 className="text-lg font-semibold text-text mb-4">{t('aiUsage.spendVsLimit', 'Spend vs Limit')}</h2>
+
+      {/* Alert banners */}
+      {limit_reached && (
+        <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">
+          <div className="flex items-center gap-2 font-semibold">
+            <span>🚫</span>
+            <span>{t('aiUsage.limitReached', 'AI Spending Limit Reached')}</span>
+          </div>
+          <p className="text-sm mt-1">{t('aiUsage.limitReachedDesc')}</p>
+        </div>
+      )}
+
+      {warning && !limit_reached && (
+        <div className="mb-4 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-700">
+          <div className="flex items-center gap-2 font-semibold">
+            <span>⚠️</span>
+            <span>{t('aiUsage.limitWarning', 'AI Spending Warning')}</span>
+          </div>
+          <p className="text-sm mt-1">
+            {t('aiUsage.limitWarningDesc', { percent: percent_used.toFixed(0), limit: limit_usd.toFixed(2) })}
+          </p>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm text-secondary">{t('aiUsage.currentMonthSpend', 'Current Month Spend')}</span>
+        <span className="text-sm font-semibold text-text">
+          {formatCost(current_spend)} / {unlimited ? t('aiUsage.unlimited', 'Unlimited') : formatCost(limit_usd)}
+        </span>
+      </div>
+
+      {/* Progress bar */}
+      <div className="w-full bg-stone-100 rounded-full h-6 relative overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+          style={{ width: unlimited ? '0%' : `${Math.max(percent_used > 0 ? 2 : 0, Math.min(percent_used, 100))}%` }}
+        />
+        {/* Warning threshold marker */}
+        {!unlimited && warning_percent > 0 && (
+          <div
+            className="absolute top-0 h-full w-0.5 bg-amber-600/50"
+            style={{ left: `${warning_percent}%` }}
+            title={`${t('aiUsage.warningThreshold', 'Warning Threshold')}: ${warning_percent}%`}
+          />
+        )}
+      </div>
+
+      <div className="flex items-center justify-between mt-1">
+        <span className="text-xs text-stone-400">$0</span>
+        {!unlimited && (
+          <>
+            <span className="text-xs text-stone-400">{percent_used.toFixed(0)}%</span>
+            <span className="text-xs text-stone-400">{formatCost(limit_usd)}</span>
+          </>
+        )}
+        {unlimited && <span className="text-xs text-stone-400">{t('aiUsage.unlimited', 'Unlimited')}</span>}
+      </div>
+    </div>
+  );
+}
+
+function SpendingLimitSettings({ spendingLimit, onSave, t }) {
+  const [limitUsd, setLimitUsd] = useState('');
+  const [warnPercent, setWarnPercent] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState(null);
+
+  useEffect(() => {
+    if (spendingLimit) {
+      setLimitUsd(String(spendingLimit.limit_usd || 0));
+      setWarnPercent(String(spendingLimit.warning_percent || 80));
+    }
+  }, [spendingLimit]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/admin/ai/limits`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          limit_usd: parseFloat(limitUsd) || 0,
+          warning_percent: parseInt(warnPercent, 10) || 80
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage({ type: 'success', text: t('aiUsage.limitsSaved', 'Spending limits updated successfully') });
+        if (onSave) onSave(data);
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to save' });
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: 'Network error: ' + err.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow-md p-6">
+      <h2 className="text-lg font-semibold text-text mb-4">{t('aiUsage.spendingLimit', 'Spending Limit')}</h2>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">
+            {t('aiUsage.monthlyLimit', 'Monthly Limit (USD)')}
+          </label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={limitUsd}
+            onChange={e => setLimitUsd(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm"
+            placeholder="0"
+          />
+          <p className="text-xs text-stone-400 mt-1">{t('aiUsage.setToZeroForUnlimited', 'Set to 0 for unlimited')}</p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">
+            {t('aiUsage.warningThreshold', 'Warning Threshold (%)')}
+          </label>
+          <input
+            type="number"
+            min="1"
+            max="99"
+            value={warnPercent}
+            onChange={e => setWarnPercent(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm"
+            placeholder="80"
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 text-sm font-medium"
+        >
+          {saving ? t('aiUsage.savingLimits', 'Saving...') : t('aiUsage.saveLimits', 'Save Limits')}
+        </button>
+
+        {message && (
+          <span className={`text-sm ${message.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+            {message.text}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminAIUsage() {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
@@ -105,6 +277,7 @@ export default function AdminAIUsage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [error, setError] = useState(null);
+  const [spendingLimit, setSpendingLimit] = useState(null);
 
   useEffect(() => {
     // Default to last 30 days
@@ -130,17 +303,27 @@ export default function AdminAIUsage() {
       if (from) params.set('date_from', from);
       if (to) params.set('date_to', to);
 
-      const [summaryRes, dailyRes] = await Promise.all([
+      const [summaryRes, dailyRes, limitsRes] = await Promise.all([
         fetch(`${API_URL}/admin/ai/usage/summary?${params}`, { headers }),
-        fetch(`${API_URL}/admin/ai/usage/daily?${params}`, { headers })
+        fetch(`${API_URL}/admin/ai/usage/daily?${params}`, { headers }),
+        fetch(`${API_URL}/admin/ai/limits`, { headers })
       ]);
 
       if (summaryRes.ok) {
-        setSummary(await summaryRes.json());
+        const data = await summaryRes.json();
+        setSummary(data);
+        // Also get spending limit from summary if present
+        if (data.spending_limit) {
+          setSpendingLimit(data.spending_limit);
+        }
       }
       if (dailyRes.ok) {
         const dailyData = await dailyRes.json();
         setDaily(dailyData.daily || []);
+      }
+      if (limitsRes.ok) {
+        const limitsData = await limitsRes.json();
+        setSpendingLimit(limitsData);
       }
     } catch (err) {
       setError(err.message);
@@ -153,6 +336,19 @@ export default function AdminAIUsage() {
     setDateFrom(from);
     setDateTo(to);
     loadData(from, to);
+  };
+
+  const handleLimitSave = (data) => {
+    // Update spending limit from save response
+    setSpendingLimit({
+      limit_usd: data.limit_usd,
+      warning_percent: data.warning_percent,
+      current_spend: data.current_spend,
+      percent_used: data.percent_used,
+      unlimited: data.unlimited,
+      warning: data.warning,
+      limit_reached: data.limit_reached
+    });
   };
 
   const formatCost = (cost) => {
@@ -189,6 +385,13 @@ export default function AdminAIUsage() {
         </div>
       )}
 
+      {/* Spending Limit Progress Bar */}
+      <SpendingLimitBar
+        spendingLimit={spendingLimit}
+        formatCost={formatCost}
+        t={t}
+      />
+
       {/* Section 1: Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
@@ -216,6 +419,9 @@ export default function AdminAIUsage() {
           color="bg-amber-100 text-amber-700"
         />
       </div>
+
+      {/* Spending Limit Settings */}
+      <SpendingLimitSettings spendingLimit={spendingLimit} onSave={handleLimitSave} t={t} />
 
       {/* Section 4: Daily Chart */}
       <div className="bg-white rounded-lg shadow-md p-6">

@@ -8,10 +8,8 @@ var API_KEY = process.env.ANTHROPIC_API_KEY;
 var API_URL = process.env.ANTHROPIC_API_URL || 'https://api.anthropic.com/v1';
 
 var SUPPORTED_MODELS = [
-  'claude-3-haiku-20241022',
-  'claude-3-5-sonnet-20241022',
-  'claude-3-sonnet-20240229',
-  'claude-3-opus-20240229'
+  'claude-3.5-haiku',
+  'claude-4-sonnet'
 ];
 
 // Aliases for convenience
@@ -19,7 +17,9 @@ var MODEL_ALIASES = {
   'claude-3-haiku': 'claude-3-haiku-20241022',
   'claude-3.5-sonnet': 'claude-3-5-sonnet-20241022',
   'claude-3-sonnet': 'claude-3-sonnet-20240229',
-  'claude-3-opus': 'claude-3-opus-20240229'
+  'claude-3-opus': 'claude-3-opus-20240229',
+  'claude-3-haiku-20241022': 'claude-3-haiku-20241022',
+  'claude-3-5-sonnet-20241022': 'claude-3-5-sonnet-20241022'
 };
 
 function isConfigured() {

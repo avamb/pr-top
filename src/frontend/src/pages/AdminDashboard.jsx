@@ -28,6 +28,7 @@ export default function AdminDashboard() {
   const [backupStatus, setBackupStatus] = useState(null);
   const [backingUp, setBackingUp] = useState(false);
   const [backupMessage, setBackupMessage] = useState(null);
+  const [aiLimits, setAiLimits] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -39,11 +40,12 @@ export default function AdminDashboard() {
     try {
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [statsRes, subStatsRes, utmRes, backupRes] = await Promise.all([
+      const [statsRes, subStatsRes, utmRes, backupRes, aiLimitsRes] = await Promise.all([
         fetch(`${API_URL}/admin/stats/users`, { headers }),
         fetch(`${API_URL}/admin/stats/subscriptions`, { headers }),
         fetch(`${API_URL}/admin/stats/utm`, { headers }),
-        fetch(`${API_URL}/admin/backup/status`, { headers })
+        fetch(`${API_URL}/admin/backup/status`, { headers }),
+        fetch(`${API_URL}/admin/ai/limits`, { headers })
       ]);
 
       if (statsRes.ok) {
@@ -61,6 +63,10 @@ export default function AdminDashboard() {
       if (backupRes.ok) {
         const data = await backupRes.json();
         setBackupStatus(data);
+      }
+      if (aiLimitsRes.ok) {
+        const data = await aiLimitsRes.json();
+        setAiLimits(data);
       }
     } catch (err) {
       console.error('Failed to load admin stats:', err);
@@ -88,6 +94,38 @@ export default function AdminDashboard() {
           <h2 className="text-xl font-semibold text-text">{t('admin.dashboardTitle')}</h2>
           <p className="text-secondary mt-1">{t('admin.dashboardSubtitle')}</p>
         </div>
+
+        {/* AI Spending Limit Alert Banners */}
+        {aiLimits && aiLimits.limit_reached && (
+          <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">
+            <div className="flex items-center gap-2 font-semibold">
+              <span>🚫</span>
+              <span>{t('aiUsage.limitReached', 'AI Spending Limit Reached')}</span>
+            </div>
+            <p className="text-sm mt-1">{t('aiUsage.limitReachedDesc')}</p>
+            <Link to="/admin/ai-usage" className="text-sm font-medium text-red-800 underline mt-2 inline-block">
+              {t('aiUsage.spendingLimit', 'Spending Limit')} →
+            </Link>
+          </div>
+        )}
+
+        {aiLimits && aiLimits.warning && !aiLimits.limit_reached && (
+          <div className="mb-6 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-700">
+            <div className="flex items-center gap-2 font-semibold">
+              <span>⚠️</span>
+              <span>{t('aiUsage.limitWarning', 'AI Spending Warning')}</span>
+            </div>
+            <p className="text-sm mt-1">
+              {t('aiUsage.limitWarningDesc', {
+                percent: (aiLimits.percent_used || 0).toFixed(0),
+                limit: (aiLimits.limit_usd || 0).toFixed(2)
+              })}
+            </p>
+            <Link to="/admin/ai-usage" className="text-sm font-medium text-amber-800 underline mt-2 inline-block">
+              {t('aiUsage.spendingLimit', 'Spending Limit')} →
+            </Link>
+          </div>
+        )}
 
         {/* User Statistics */}
         <h3 className="text-lg font-semibold text-text mb-4">{t('admin.userStats')}</h3>

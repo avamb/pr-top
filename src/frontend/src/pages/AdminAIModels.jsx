@@ -115,6 +115,30 @@ export default function AdminAIModels() {
     }
   };
 
+  // Model pricing per 1M input tokens (for price hints)
+  const modelPricing = {
+    'gpt-4o-mini': 0.15, 'gpt-4.1-nano': 0.10, 'gpt-4.1-mini': 0.40, 'gpt-4o': 2.50,
+    'gpt-4-turbo': 10.00, 'o4-mini': 1.10, 'whisper-1': 0.006,
+    'claude-3.5-haiku': 0.80, 'claude-4-sonnet': 3.00,
+    'gemini-2.0-flash': 0.10, 'gemini-2.5-flash': 0.15, 'gemini-2.5-pro': 1.25,
+    'deepseek/deepseek-chat-v3': 0.27, 'deepseek/deepseek-r1': 0.55, 'qwen/qwen-2.5-72b': 0.30
+  };
+
+  // Recommended models with badges
+  const recommendedModels = {
+    'gpt-4.1-nano': 'Cheapest',
+    'gemini-2.0-flash': 'Cheapest',
+    'claude-3.5-haiku': 'Best Balance',
+    'deepseek/deepseek-chat-v3': 'Best Value'
+  };
+
+  const getModelPriceHint = (model) => {
+    const price = modelPricing[model];
+    if (price == null) return '';
+    if (price < 0.01) return `~$${price}/min`;
+    return `~$${price.toFixed(2)}/1M tokens`;
+  };
+
   // Get models for selected provider
   const getModelsForProvider = (providers, provName) => {
     const prov = providers.find(p => p.provider === provName);
@@ -246,12 +270,24 @@ export default function AdminAIModels() {
                 onChange={(e) => setSumModel(e.target.value)}
                 className="w-full max-w-sm px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm"
               >
-                {getModelsForProvider(summarizationProviders, sumProvider).map(m => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
+                {getModelsForProvider(summarizationProviders, sumProvider).map(m => {
+                  const hint = getModelPriceHint(m);
+                  const badge = recommendedModels[m];
+                  return (
+                    <option key={m} value={m}>
+                      {m}{hint ? ` (${hint})` : ''}{badge ? ` \u2B50 ${badge}` : ''}
+                    </option>
+                  );
+                })}
               </select>
               {original.sumProvider === sumProvider && original.sumModel === sumModel && (
                 <p className="text-xs text-green-600 mt-1">{t('admin.ai.currentActive')}</p>
+              )}
+              {recommendedModels[sumModel] && (
+                <p className="text-xs text-amber-600 mt-1">\u2B50 {t('admin.ai.recommended')}: {recommendedModels[sumModel]}</p>
+              )}
+              {getModelPriceHint(sumModel) && (
+                <p className="text-xs text-secondary mt-0.5">{t('admin.ai.pricing')}: {getModelPriceHint(sumModel)}</p>
               )}
             </div>
           </div>
@@ -311,9 +347,10 @@ export default function AdminAIModels() {
                 onChange={(e) => setTransModel(e.target.value)}
                 className="w-full max-w-sm px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm"
               >
-                {getModelsForProvider(transcriptionProviders, transProvider).map(m => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
+                {getModelsForProvider(transcriptionProviders, transProvider).map(m => {
+                  const hint = getModelPriceHint(m);
+                  return <option key={m} value={m}>{m}{hint ? ` (${hint})` : ''}</option>;
+                })}
               </select>
               {original.transProvider === transProvider && original.transModel === transModel && (
                 <p className="text-xs text-green-600 mt-1">{t('admin.ai.currentActive')}</p>

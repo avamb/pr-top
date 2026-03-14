@@ -42,7 +42,21 @@
     "today": "Today",
     "last7Days": "7 days",
     "last30Days": "30 days",
-    "last90Days": "90 days"
+    "last90Days": "90 days",
+    "spendingLimit": "Spending Limit",
+    "spendVsLimit": "Spend vs Limit",
+    "currentMonthSpend": "Current Month Spend",
+    "monthlyLimit": "Monthly Limit (USD)",
+    "warningThreshold": "Warning Threshold (%)",
+    "unlimited": "Unlimited",
+    "limitReached": "AI Spending Limit Reached",
+    "limitReachedDesc": "Monthly AI spending limit has been reached. AI features (summarization, transcription) are blocked. Increase the limit or wait for the next month.",
+    "limitWarning": "AI Spending Warning",
+    "limitWarningDesc": "Monthly AI spending has reached {{percent}}% of the ${{limit}} limit.",
+    "saveLimits": "Save Limits",
+    "savingLimits": "Saving...",
+    "limitsSaved": "Spending limits updated successfully",
+    "setToZeroForUnlimited": "Set to 0 for unlimited"
   },
   "landing": {
     "heroTitle1": "Keep Your Practice",
@@ -599,7 +613,9 @@
       "modelUsed": "Model used",
       "save": "Save Model Settings",
       "saving": "Saving...",
-      "saved": "AI model settings saved successfully"
+      "saved": "AI model settings saved successfully",
+      "recommended": "Recommended",
+      "pricing": "Pricing"
     }
   },
   "bulkImport": {

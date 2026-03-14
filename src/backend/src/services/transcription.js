@@ -9,7 +9,7 @@ const { getDatabase, saveDatabase } = require('../db/connection');
 const { encrypt, decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
 const wsService = require('./websocketService');
-const { logUsage } = require('./aiUsageLogger');
+const { logUsage, checkSpendingLimit } = require('./aiUsageLogger');
 // Lazy-loaded to avoid circular dependency
 let summarizationService = null;
 function getSummarizationService() {
@@ -104,6 +104,12 @@ async function transcribeAudio(audioRef) {
  * @returns {Promise<string>} The transcription text
  */
 async function callTranscriptionAPI(audioBuffer) {
+  // Check spending limit before making API call
+  const spendingCheck = checkSpendingLimit();
+  if (!spendingCheck.allowed) {
+    throw new Error('AI spending limit reached. Contact admin.');
+  }
+
   const apiBase = process.env.TRANSCRIPTION_API_URL || 'https://api.openai.com/v1';
   let model = process.env.TRANSCRIPTION_MODEL || 'whisper-1';
   const language = process.env.TRANSCRIPTION_LANGUAGE || undefined; // auto-detect if not set

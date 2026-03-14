@@ -6,26 +6,45 @@ const { getDatabase, saveDatabase } = require('../db/connection');
 const { logger } = require('../utils/logger');
 
 // Model pricing per 1M tokens (input/output) in USD
-// Updated as of 2024-2025 pricing
+// Updated as of 2026 pricing
 const MODEL_PRICING = {
   // OpenAI models
   'gpt-4o-mini': { input: 0.15, output: 0.60 },
+  'gpt-4.1-nano': { input: 0.10, output: 0.40 },
+  'gpt-4.1-mini': { input: 0.40, output: 1.60 },
   'gpt-4o': { input: 2.50, output: 10.00 },
   'gpt-4-turbo': { input: 10.00, output: 30.00 },
   'gpt-4': { input: 30.00, output: 60.00 },
   'gpt-3.5-turbo': { input: 0.50, output: 1.50 },
-  'whisper-1': { input: 0.006, output: 0 }, // per second, approximated per 1M tokens
+  'o4-mini': { input: 1.10, output: 4.40 },
+  'whisper-1': { input: 0.006, output: 0 }, // per minute, approximated per 1M tokens
 
   // Anthropic models
-  'claude-3-haiku': { input: 0.25, output: 1.25 },
+  'claude-3.5-haiku': { input: 0.80, output: 4.00 },
+  'claude-3-haiku-20241022': { input: 0.80, output: 4.00 },
+  'claude-4-sonnet': { input: 3.00, output: 15.00 },
+  'claude-3-5-sonnet-20241022': { input: 3.00, output: 15.00 },
   'claude-3.5-sonnet': { input: 3.00, output: 15.00 },
+  'claude-3-sonnet-20240229': { input: 3.00, output: 15.00 },
   'claude-3-sonnet': { input: 3.00, output: 15.00 },
+  'claude-3-opus-20240229': { input: 15.00, output: 75.00 },
   'claude-3-opus': { input: 15.00, output: 75.00 },
+  'claude-3-haiku': { input: 0.25, output: 1.25 },
 
-  // Google models
+  // Google Gemini models
+  'gemini-2.0-flash': { input: 0.10, output: 0.40 },
+  'gemini-2.5-flash': { input: 0.15, output: 0.60 },
+  'gemini-2.5-pro': { input: 1.25, output: 10.00 },
   'gemini-1.5-flash': { input: 0.075, output: 0.30 },
   'gemini-1.5-pro': { input: 1.25, output: 5.00 },
-  'gemini-2.0-flash': { input: 0.10, output: 0.40 },
+
+  // OpenRouter / Chinese models
+  'deepseek/deepseek-chat-v3': { input: 0.27, output: 1.10 },
+  'deepseek/deepseek-r1': { input: 0.55, output: 2.19 },
+  'qwen/qwen-2.5-72b': { input: 0.30, output: 0.30 },
+  'deepseek-v3': { input: 0.27, output: 1.10 },
+  'deepseek-r1': { input: 0.55, output: 2.19 },
+  'qwen-2.5-72b': { input: 0.30, output: 0.30 },
 
   // Default fallback
   '_default': { input: 1.00, output: 3.00 }
@@ -237,11 +256,125 @@ function getTotalUsage(dateFrom, dateTo) {
   return obj;
 }
 
+/**
+ * Check if AI spending limit has been reached or is at warning level.
+ * Reads ai_monthly_limit_usd and ai_limit_warning_percent from platform_settings.
+ * Returns { allowed, warning, limitReached, currentSpend, limit, warningThreshold, percentUsed }
+ */
+function checkSpendingLimit() {
+  try {
+    const db = getDatabase();
+
+    // Read limit settings
+    const limitResult = db.exec("SELECT value FROM platform_settings WHERE key = 'ai_monthly_limit_usd'");
+    const limitUsd = limitResult.length > 0 && limitResult[0].values.length > 0
+      ? parseFloat(limitResult[0].values[0][0]) : 0;
+
+    // 0 means unlimited
+    if (!limitUsd || limitUsd <= 0) {
+      return { allowed: true, warning: false, limitReached: false, currentSpend: 0, limit: 0, warningThreshold: 0, percentUsed: 0 };
+    }
+
+    const warnResult = db.exec("SELECT value FROM platform_settings WHERE key = 'ai_limit_warning_percent'");
+    const warningPercent = warnResult.length > 0 && warnResult[0].values.length > 0
+      ? parseInt(warnResult[0].values[0][0], 10) : 80;
+
+    // Calculate current month spend
+    const now = new Date();
+    const monthStart = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-01';
+    const spendResult = db.exec(
+      "SELECT COALESCE(SUM(cost_usd), 0) as total FROM ai_usage_log WHERE timestamp >= ?",
+      [monthStart]
+    );
+    const currentSpend = spendResult.length > 0 && spendResult[0].values.length > 0
+      ? spendResult[0].values[0][0] : 0;
+
+    const percentUsed = (currentSpend / limitUsd) * 100;
+    const warningThreshold = limitUsd * (warningPercent / 100);
+    const warning = currentSpend >= warningThreshold && currentSpend < limitUsd;
+    const limitReached = currentSpend >= limitUsd;
+
+    // Update flags in platform_settings
+    if (warning && !limitReached) {
+      const warnSentResult = db.exec("SELECT value FROM platform_settings WHERE key = 'ai_limit_warning_sent'");
+      const alreadySent = warnSentResult.length > 0 && warnSentResult[0].values.length > 0 && warnSentResult[0].values[0][0] === 'true';
+      if (!alreadySent) {
+        db.run(
+          "INSERT INTO platform_settings (key, value, updated_at) VALUES ('ai_limit_warning_sent', 'true', datetime('now')) ON CONFLICT(key) DO UPDATE SET value = 'true', updated_at = datetime('now')"
+        );
+        saveDatabase();
+        logger.warn(`[AI Spending] Warning threshold reached: $${currentSpend.toFixed(4)} of $${limitUsd} limit (${percentUsed.toFixed(1)}%)`);
+      }
+    }
+
+    if (limitReached) {
+      db.run(
+        "INSERT INTO platform_settings (key, value, updated_at) VALUES ('ai_limit_reached', 'true', datetime('now')) ON CONFLICT(key) DO UPDATE SET value = 'true', updated_at = datetime('now')"
+      );
+      saveDatabase();
+      logger.warn(`[AI Spending] Monthly limit REACHED: $${currentSpend.toFixed(4)} of $${limitUsd} limit`);
+    }
+
+    return {
+      allowed: !limitReached,
+      warning,
+      limitReached,
+      currentSpend,
+      limit: limitUsd,
+      warningThreshold,
+      percentUsed: Math.min(percentUsed, 100)
+    };
+  } catch (err) {
+    logger.error(`[AI Spending] Failed to check spending limit: ${err.message}`);
+    // On error, allow the call (fail-open for spending checks)
+    return { allowed: true, warning: false, limitReached: false, currentSpend: 0, limit: 0, warningThreshold: 0, percentUsed: 0 };
+  }
+}
+
+/**
+ * Get current spending limit status for display.
+ */
+function getSpendingLimitStatus() {
+  const db = getDatabase();
+
+  const getSetting = (key, fallback) => {
+    const r = db.exec("SELECT value FROM platform_settings WHERE key = ?", [key]);
+    return (r.length > 0 && r[0].values.length > 0) ? r[0].values[0][0] : fallback;
+  };
+
+  const limitUsd = parseFloat(getSetting('ai_monthly_limit_usd', '0'));
+  const warningPercent = parseInt(getSetting('ai_limit_warning_percent', '80'), 10);
+
+  // Current month spend
+  const now = new Date();
+  const monthStart = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-01';
+  const spendResult = db.exec(
+    "SELECT COALESCE(SUM(cost_usd), 0) as total FROM ai_usage_log WHERE timestamp >= ?",
+    [monthStart]
+  );
+  const currentSpend = spendResult.length > 0 && spendResult[0].values.length > 0
+    ? spendResult[0].values[0][0] : 0;
+
+  const percentUsed = limitUsd > 0 ? Math.min((currentSpend / limitUsd) * 100, 100) : 0;
+
+  return {
+    limit_usd: limitUsd,
+    warning_percent: warningPercent,
+    current_spend: currentSpend,
+    percent_used: percentUsed,
+    unlimited: limitUsd <= 0,
+    warning: limitUsd > 0 && currentSpend >= (limitUsd * warningPercent / 100) && currentSpend < limitUsd,
+    limit_reached: limitUsd > 0 && currentSpend >= limitUsd
+  };
+}
+
 module.exports = {
   logUsage,
   calculateCost,
   getUsageStats,
   getUsageByTherapist,
   getTotalUsage,
+  checkSpendingLimit,
+  getSpendingLimitStatus,
   MODEL_PRICING
 };

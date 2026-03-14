@@ -8,15 +8,15 @@ var API_KEY = process.env.OPENROUTER_API_KEY;
 var API_URL = 'https://openrouter.ai/api/v1';
 
 var POPULAR_MODELS = [
+  'deepseek/deepseek-chat-v3',
+  'deepseek/deepseek-r1',
+  'qwen/qwen-2.5-72b',
   'openai/gpt-4o-mini',
   'openai/gpt-4o',
-  'anthropic/claude-3-haiku',
-  'anthropic/claude-3.5-sonnet',
-  'google/gemini-flash-1.5',
-  'google/gemini-pro-1.5',
-  'deepseek/deepseek-chat',
-  'qwen/qwen-turbo',
-  'mistralai/mistral-7b-instruct',
+  'anthropic/claude-3.5-haiku',
+  'anthropic/claude-4-sonnet',
+  'google/gemini-2.0-flash',
+  'google/gemini-2.5-pro',
   'meta-llama/llama-3-70b-instruct'
 ];
 

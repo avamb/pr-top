@@ -8,9 +8,9 @@ var API_KEY = process.env.GOOGLE_AI_API_KEY;
 var API_URL = 'https://generativelanguage.googleapis.com/v1beta';
 
 var SUPPORTED_MODELS = [
-  'gemini-1.5-flash',
-  'gemini-1.5-pro',
-  'gemini-2.0-flash'
+  'gemini-2.0-flash',
+  'gemini-2.5-flash',
+  'gemini-2.5-pro'
 ];
 
 function isConfigured() {

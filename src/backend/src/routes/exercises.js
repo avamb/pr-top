@@ -135,22 +135,36 @@ function seedDefaultExercises(db) {
   logger.info(`Seeded ${exercises.length} default exercises`);
 }
 
-// GET /api/exercises - List all exercises, optionally filtered by category
+// Allowed exercise categories
+const ALLOWED_CATEGORIES = ['breathing', 'mindfulness', 'cognitive', 'journaling', 'behavioral', 'self-compassion'];
+
+// GET /api/exercises - List all exercises, optionally filtered by category or filter=my
 router.get('/', requireAuth, (req, res) => {
   try {
     const db = getDatabase();
-    const { category } = req.query;
+    const { category, filter } = req.query;
 
     // Seed defaults on first access
     seedDefaultExercises(db);
 
     let query, params;
-    if (category) {
-      query = "SELECT id, category, title_ru, title_en, title_es, description_ru, description_en, description_es, instructions_ru, instructions_en, instructions_es, is_custom, therapist_id, created_at FROM exercises WHERE category = ? ORDER BY category, id";
-      params = [category];
+    if (filter === 'my') {
+      // Return only therapist's own custom exercises
+      if (category) {
+        query = "SELECT id, category, title_ru, title_en, title_es, description_ru, description_en, description_es, instructions_ru, instructions_en, instructions_es, is_custom, therapist_id, created_at, updated_at FROM exercises WHERE therapist_id = ? AND is_custom = 1 AND category = ? ORDER BY category, id";
+        params = [req.user.id, category];
+      } else {
+        query = "SELECT id, category, title_ru, title_en, title_es, description_ru, description_en, description_es, instructions_ru, instructions_en, instructions_es, is_custom, therapist_id, created_at, updated_at FROM exercises WHERE therapist_id = ? AND is_custom = 1 ORDER BY category, id";
+        params = [req.user.id];
+      }
+    } else if (category) {
+      // Filter by category: system exercises + own custom exercises
+      query = "SELECT id, category, title_ru, title_en, title_es, description_ru, description_en, description_es, instructions_ru, instructions_en, instructions_es, is_custom, therapist_id, created_at, updated_at FROM exercises WHERE category = ? AND (is_custom = 0 OR therapist_id = ?) ORDER BY category, id";
+      params = [category, req.user.id];
     } else {
-      query = "SELECT id, category, title_ru, title_en, title_es, description_ru, description_en, description_es, instructions_ru, instructions_en, instructions_es, is_custom, therapist_id, created_at FROM exercises ORDER BY category, id";
-      params = [];
+      // Default: all system exercises + own custom exercises
+      query = "SELECT id, category, title_ru, title_en, title_es, description_ru, description_en, description_es, instructions_ru, instructions_en, instructions_es, is_custom, therapist_id, created_at, updated_at FROM exercises WHERE is_custom = 0 OR therapist_id = ? ORDER BY category, id";
+      params = [req.user.id];
     }
 
     const results = db.exec(query, params);
@@ -167,6 +181,9 @@ router.get('/', requireAuth, (req, res) => {
     const exercises = results[0].values.map(row => {
       const obj = {};
       columns.forEach((col, i) => { obj[col] = row[i]; });
+
+      // Add is_own boolean: true if this exercise belongs to the requesting therapist
+      obj.is_own = obj.therapist_id === req.user.id;
 
       // If language specified, add convenience fields with localized content
       if (lang) {
@@ -227,6 +244,9 @@ router.get('/:id', requireAuth, (req, res) => {
     const exercise = {};
     columns.forEach((col, i) => { exercise[col] = row[i]; });
 
+    // Add is_own boolean
+    exercise.is_own = exercise.therapist_id === req.user.id;
+
     // Support language parameter
     const { language } = req.query;
     const validLangs = ['ru', 'en', 'es'];
@@ -241,6 +261,228 @@ router.get('/:id', requireAuth, (req, res) => {
   } catch (error) {
     logger.error('Get exercise error: ' + error.message);
     res.status(500).json({ error: 'Failed to fetch exercise' });
+  }
+});
+
+// POST /api/exercises - Create a custom exercise
+router.post('/', requireAuth, (req, res) => {
+  try {
+    const db = getDatabase();
+    const {
+      category, title_ru, title_en, title_es,
+      description_ru, description_en, description_es,
+      instructions_ru, instructions_en, instructions_es
+    } = req.body;
+
+    // Validate: at least one title required
+    if (!title_ru && !title_en && !title_es) {
+      return res.status(400).json({ error: 'At least one title (title_ru or title_en or title_es) is required' });
+    }
+
+    // Validate: at least one instructions field required
+    if (!instructions_ru && !instructions_en && !instructions_es) {
+      return res.status(400).json({ error: 'At least one instructions field is required' });
+    }
+
+    // Validate category
+    if (!category) {
+      return res.status(400).json({ error: 'Category is required' });
+    }
+    // Allow standard categories + custom categories (alphanumeric, hyphens, underscores)
+    if (!ALLOWED_CATEGORIES.includes(category) && !/^[a-zA-Z0-9_-]+$/.test(category)) {
+      return res.status(400).json({ error: `Invalid category. Allowed: ${ALLOWED_CATEGORIES.join(', ')} or a custom alphanumeric category` });
+    }
+
+    // Only therapists/superadmins can create exercises
+    if (req.user.role === 'client') {
+      return res.status(403).json({ error: 'Only therapists can create exercises' });
+    }
+
+    db.run(
+      `INSERT INTO exercises (category, title_ru, title_en, title_es, description_ru, description_en, description_es, instructions_ru, instructions_en, instructions_es, is_custom, therapist_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, datetime('now'), datetime('now'))`,
+      [
+        category,
+        title_ru || null, title_en || null, title_es || null,
+        description_ru || null, description_en || null, description_es || null,
+        instructions_ru || null, instructions_en || null, instructions_es || null,
+        req.user.id
+      ]
+    );
+
+    // Get the inserted ID
+    const idResult = db.exec("SELECT last_insert_rowid()");
+    const exerciseId = idResult[0].values[0][0];
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      [req.user.id, 'exercise_created', 'exercise', exerciseId, JSON.stringify({ category, title_en: title_en || title_ru || title_es })]
+    );
+
+    saveDatabase();
+
+    logger.info(`Exercise created: id=${exerciseId} by therapist=${req.user.id}`);
+
+    // Return the created exercise
+    const results = db.exec(
+      "SELECT id, category, title_ru, title_en, title_es, description_ru, description_en, description_es, instructions_ru, instructions_en, instructions_es, is_custom, therapist_id, created_at, updated_at FROM exercises WHERE id = ?",
+      [exerciseId]
+    );
+    const columns = results[0].columns;
+    const row = results[0].values[0];
+    const exercise = {};
+    columns.forEach((col, i) => { exercise[col] = row[i]; });
+    exercise.is_own = true;
+
+    res.status(201).json({ message: 'Exercise created successfully', exercise });
+  } catch (error) {
+    logger.error('Create exercise error: ' + error.message + ' | Stack: ' + error.stack);
+    res.status(500).json({ error: 'Failed to create exercise', detail: error.message });
+  }
+});
+
+// PUT /api/exercises/:id - Update a custom exercise (own only)
+router.put('/:id', requireAuth, (req, res) => {
+  try {
+    const db = getDatabase();
+    const exerciseId = req.params.id;
+
+    // Check exercise exists
+    const results = db.exec("SELECT id, is_custom, therapist_id FROM exercises WHERE id = ?", [exerciseId]);
+    if (!results.length || !results[0].values.length) {
+      return res.status(404).json({ error: 'Exercise not found' });
+    }
+
+    const [id, is_custom, therapist_id] = results[0].values[0];
+
+    // Check ownership: must be custom AND owned by this therapist
+    if (!is_custom) {
+      return res.status(403).json({ error: 'Cannot modify system exercises' });
+    }
+    if (therapist_id !== req.user.id) {
+      return res.status(403).json({ error: 'You can only modify your own exercises' });
+    }
+
+    const {
+      category, title_ru, title_en, title_es,
+      description_ru, description_en, description_es,
+      instructions_ru, instructions_en, instructions_es
+    } = req.body;
+
+    // Validate category if provided
+    if (category !== undefined) {
+      if (!category) {
+        return res.status(400).json({ error: 'Category cannot be empty' });
+      }
+      if (!ALLOWED_CATEGORIES.includes(category) && !/^[a-zA-Z0-9_-]+$/.test(category)) {
+        return res.status(400).json({ error: `Invalid category. Allowed: ${ALLOWED_CATEGORIES.join(', ')} or a custom alphanumeric category` });
+      }
+    }
+
+    // Build update query dynamically based on provided fields
+    const updates = [];
+    const params = [];
+
+    const fields = {
+      category, title_ru, title_en, title_es,
+      description_ru, description_en, description_es,
+      instructions_ru, instructions_en, instructions_es
+    };
+
+    for (const [key, value] of Object.entries(fields)) {
+      if (value !== undefined) {
+        updates.push(`${key} = ?`);
+        params.push(value || null);
+      }
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    updates.push("updated_at = datetime('now')");
+    params.push(exerciseId);
+
+    db.run(`UPDATE exercises SET ${updates.join(', ')} WHERE id = ?`, params);
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      [req.user.id, 'exercise_updated', 'exercise', exerciseId, JSON.stringify({ updated_fields: Object.keys(fields).filter(k => fields[k] !== undefined) })]
+    );
+
+    saveDatabase();
+
+    logger.info(`Exercise updated: id=${exerciseId} by therapist=${req.user.id}`);
+
+    // Return updated exercise
+    const updated = db.exec(
+      "SELECT id, category, title_ru, title_en, title_es, description_ru, description_en, description_es, instructions_ru, instructions_en, instructions_es, is_custom, therapist_id, created_at, updated_at FROM exercises WHERE id = ?",
+      [exerciseId]
+    );
+    const columns = updated[0].columns;
+    const row = updated[0].values[0];
+    const exercise = {};
+    columns.forEach((col, i) => { exercise[col] = row[i]; });
+    exercise.is_own = true;
+
+    res.json({ message: 'Exercise updated successfully', exercise });
+  } catch (error) {
+    logger.error('Update exercise error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update exercise' });
+  }
+});
+
+// DELETE /api/exercises/:id - Delete a custom exercise (own only, no active deliveries)
+router.delete('/:id', requireAuth, (req, res) => {
+  try {
+    const db = getDatabase();
+    const exerciseId = req.params.id;
+
+    // Check exercise exists
+    const results = db.exec("SELECT id, is_custom, therapist_id, title_en, title_ru FROM exercises WHERE id = ?", [exerciseId]);
+    if (!results.length || !results[0].values.length) {
+      return res.status(404).json({ error: 'Exercise not found' });
+    }
+
+    const [id, is_custom, therapist_id, title_en, title_ru] = results[0].values[0];
+
+    // Check ownership
+    if (!is_custom) {
+      return res.status(403).json({ error: 'Cannot delete system exercises' });
+    }
+    if (therapist_id !== req.user.id) {
+      return res.status(403).json({ error: 'You can only delete your own exercises' });
+    }
+
+    // Check for active deliveries (status != 'completed')
+    const activeDeliveries = db.exec(
+      "SELECT COUNT(*) FROM exercise_deliveries WHERE exercise_id = ? AND status != 'completed'",
+      [exerciseId]
+    );
+    const activeCount = activeDeliveries.length ? activeDeliveries[0].values[0][0] : 0;
+    if (activeCount > 0) {
+      return res.status(400).json({ error: 'Cannot delete exercise with active deliveries', active_deliveries: activeCount });
+    }
+
+    // Delete the exercise
+    db.run("DELETE FROM exercises WHERE id = ?", [exerciseId]);
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      [req.user.id, 'exercise_deleted', 'exercise', exerciseId, JSON.stringify({ title_en: title_en || title_ru })]
+    );
+
+    saveDatabase();
+
+    logger.info(`Exercise deleted: id=${exerciseId} by therapist=${req.user.id}`);
+
+    res.json({ message: 'Exercise deleted successfully', id: parseInt(exerciseId) });
+  } catch (error) {
+    logger.error('Delete exercise error: ' + error.message);
+    res.status(500).json({ error: 'Failed to delete exercise' });
   }
 });
 

@@ -9,7 +9,7 @@
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { encrypt, decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
-const { logUsage, calculateCost } = require('./aiUsageLogger');
+const { logUsage, calculateCost, checkSpendingLimit } = require('./aiUsageLogger');
 const aiProviders = require('./aiProviders');
 let vectorStoreService = null;
 function getVectorStoreService() {
@@ -182,6 +182,12 @@ function generateDevSummary(transcript, options = {}) {
  * @returns {Promise<{text: string, usage: object}>} The AI-generated summary with usage info
  */
 async function callAIAPI(transcript, options = {}) {
+  // Check spending limit before making API call
+  const spendingCheck = checkSpendingLimit();
+  if (!spendingCheck.allowed) {
+    throw new Error('AI spending limit reached. Contact admin.');
+  }
+
   const systemPrompt = buildSystemPrompt(options);
 
   // Truncate very long transcripts to stay within token limits (~60k chars ≈ 15k tokens)
