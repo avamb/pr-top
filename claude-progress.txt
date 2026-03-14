@@ -1,3 +1,38 @@
+## Session: 2026-03-14 - Features #240, #241, #243
+
+### Completed: AI usage logging - track every API call with tokens and cost (#240) - PASSING
+
+**What was built:**
+- Created ai_usage_log table: id, therapist_id, timestamp, provider, model, operation, input/output/total tokens, cost_usd, session_id, metadata
+- Created aiUsageLogger.js service: logUsage(), calculateCost(), getUsageStats(), getUsageByTherapist(), getTotalUsage()
+- Model pricing table for gpt-4o-mini, gpt-4o, gpt-4-turbo, claude-3-haiku, claude-3.5-sonnet, gemini-1.5-flash, etc.
+- Integrated logging into summarization.js and transcription.js
+- All query functions tested and verified
+
+### Completed: Multi-provider AI abstraction layer (#241) - PASSING
+
+**What was built:**
+- Created aiProviders/ directory with openai.js, anthropic.js, google.js, openrouter.js
+- Provider registry (index.js) with auto-detection from model name
+- Each provider: isConfigured(), chat(), listModels() interface
+- Refactored summarization.js to use provider abstraction
+- DB settings override support for provider/model selection
+- Updated .env.example with all provider API keys
+
+### Completed: Super Admin AI usage & cost dashboard (#243) - PASSING
+
+**What was built:**
+- AdminAIUsage.jsx with 4 sections: summary cards, daily cost chart, cost by model table, cost by therapist table
+- API endpoints: GET /admin/ai/usage, /admin/ai/usage/summary, /admin/ai/usage/daily
+- Date range picker with presets (Today, 7d, 30d, 90d) and custom range
+- Sidebar navigation link under Administration section
+- i18n labels in EN/RU/ES
+- Zero console errors, verified in browser
+
+### Current Status
+- Features #240, #241, #243: ALL PASSING
+- All 3 assigned features completed in this session
+
 ## Session: 2026-03-13 - Feature #235
 
 ### Completed: Bulk client import from CSV/JSON (#235) - PASSING
@@ -435,3 +470,25 @@
 - ForgotPassword.jsx, ResetPassword.jsx, "Forgot password?" link on Login
 - Full flow tested: request reset -> set new password -> login with new password
 - Rate limited, no user enumeration, i18n EN/RU/ES
+
+## Session: 2026-03-14 - Feature #245
+
+### Completed: Docker Compose — multi-provider AI environment variables (#245) - PASSING
+
+**What was changed:**
+- Updated .env.example with AI_PROVIDER (default: openai), AI_MODEL (default: gpt-4o-mini)
+- Added TRANSCRIPTION_PROVIDER (default: openai) and TRANSCRIPTION_MODEL (default: whisper-1)
+- Added commented AI_API_URL, ANTHROPIC_API_URL, TRANSCRIPTION_API_URL, TRANSCRIPTION_LANGUAGE
+- Reorganized AI section with clear per-provider comments and usage instructions
+- Updated docker-compose.yml backend service: passes through all AI/transcription env vars with safe defaults
+
+**Verification:**
+- .env.example has ANTHROPIC_API_KEY, GOOGLE_AI_API_KEY, OPENROUTER_API_KEY (all optional) ✅
+- .env.example has AI_PROVIDER, AI_MODEL, TRANSCRIPTION_PROVIDER, TRANSCRIPTION_MODEL ✅
+- docker-compose config shows all new env vars for backend service ✅
+- Backend starts without errors when new env vars are empty/missing ✅
+- Zero console errors ✅
+
+### Current Status
+- Features passing: 242/246 (98.4%)
+- Feature #245: PASSING
