@@ -10,6 +10,7 @@ const { getDatabase, saveDatabase } = require('../db/connection');
 const { encrypt, decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
 const { logUsage, calculateCost } = require('./aiUsageLogger');
+const aiProviders = require('./aiProviders');
 let vectorStoreService = null;
 function getVectorStoreService() {
   if (!vectorStoreService) {
@@ -36,11 +37,15 @@ function detectProvider(apiUrl) {
 
 /**
  * Check if a real AI service is configured.
+ * Checks all providers (OpenAI, Anthropic, Google, OpenRouter).
  */
 function isConfigured() {
-  return !!(AI_API_KEY &&
-    AI_API_KEY !== 'your-ai-api-key' &&
-    AI_API_KEY.length > 10);
+  // Check legacy env var first
+  if (AI_API_KEY && AI_API_KEY !== 'your-ai-api-key' && AI_API_KEY.length > 10) {
+    return true;
+  }
+  // Check any provider via registry
+  return aiProviders.isAnyConfigured();
 }
 
 /**
@@ -170,11 +175,11 @@ function generateDevSummary(transcript, options = {}) {
 
 /**
  * Call external AI API for summarization (production mode).
- * Uses OpenAI-compatible chat completions endpoint.
+ * Uses the multi-provider abstraction layer to support OpenAI, Anthropic, Google, OpenRouter.
  *
  * @param {string} transcript - Decrypted transcript text
  * @param {object} options - Client context (anamnesis, goals, contraindications, ai_instructions)
- * @returns {Promise<string>} The AI-generated summary
+ * @returns {Promise<{text: string, usage: object}>} The AI-generated summary with usage info
  */
 async function callAIAPI(transcript, options = {}) {
   const systemPrompt = buildSystemPrompt(options);
@@ -187,54 +192,76 @@ async function callAIAPI(transcript, options = {}) {
 
   const userMessage = `Please summarize the following therapy session transcript:\n\n${truncatedTranscript}`;
 
-  logger.info(`Calling AI API for summarization: ${AI_API_URL}/chat/completions (model=${AI_MODEL}, transcript=${transcript.length} chars)`);
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userMessage }
+  ];
 
-  const response = await fetch(`${AI_API_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${AI_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: AI_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage }
-      ],
-      temperature: 0.3,
-      max_tokens: 2000
-    }),
-    signal: AbortSignal.timeout(120000) // 2 minute timeout
-  });
+  // Try provider registry first (supports all providers)
+  const db = getDatabase();
+  const active = aiProviders.getActiveProvider(db);
 
-  if (!response.ok) {
-    let errorDetail = '';
-    try {
-      const errorBody = await response.text();
-      errorDetail = ` - ${errorBody.slice(0, 500)}`;
-    } catch (_) {}
-    throw new Error(`AI API returned ${response.status}${errorDetail}`);
+  logger.info(`Calling AI API for summarization via ${active.providerName} (model=${active.model}, transcript=${transcript.length} chars)`);
+
+  let result;
+  if (active.provider.isConfigured()) {
+    // Use multi-provider abstraction
+    result = await aiProviders.chat(messages, { temperature: 0.3, max_tokens: 2000 }, db);
+  } else {
+    // Fallback: direct OpenAI call (legacy behavior)
+    const response = await fetch(`${AI_API_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${AI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: AI_MODEL,
+        messages: messages,
+        temperature: 0.3,
+        max_tokens: 2000
+      }),
+      signal: AbortSignal.timeout(120000)
+    });
+
+    if (!response.ok) {
+      let errorDetail = '';
+      try {
+        const errorBody = await response.text();
+        errorDetail = ` - ${errorBody.slice(0, 500)}`;
+      } catch (_) {}
+      throw new Error(`AI API returned ${response.status}${errorDetail}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      throw new Error('AI API returned unexpected response format');
+    }
+
+    result = {
+      text: data.choices[0].message.content.trim(),
+      input_tokens: (data.usage && data.usage.prompt_tokens) || 0,
+      output_tokens: (data.usage && data.usage.completion_tokens) || 0,
+      model: data.model || AI_MODEL,
+      provider: 'openai'
+    };
   }
 
-  const data = await response.json();
-
-  if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-    throw new Error('AI API returned unexpected response format');
-  }
-
-  const summary = data.choices[0].message.content.trim();
-
-  if (!summary || summary.length < 20) {
+  if (!result.text || result.text.length < 20) {
     throw new Error('AI API returned empty or too-short summary');
   }
 
-  // Extract AI usage info from response
-  const usageModel = data.model || AI_MODEL;
-  const inputTokens = (data.usage && data.usage.prompt_tokens) || 0;
-  const outputTokens = (data.usage && data.usage.completion_tokens) || 0;
-
-  logger.info(`AI summary generated successfully (${summary.length} chars, model=${usageModel})`);
-  return { text: summary, usage: { model: usageModel, inputTokens, outputTokens } };
+  logger.info(`AI summary generated successfully (${result.text.length} chars, provider=${result.provider}, model=${result.model})`);
+  return {
+    text: result.text,
+    usage: {
+      model: result.model,
+      inputTokens: result.input_tokens,
+      outputTokens: result.output_tokens,
+      provider: result.provider
+    }
+  };
 }
 
 /**
@@ -344,7 +371,7 @@ async function processSessionSummary(sessionId) {
     // Log AI usage
     if (summaryResult.usage) {
       const u = summaryResult.usage;
-      const provider = detectProvider(AI_API_URL);
+      const provider = u.provider || detectProvider(AI_API_URL);
       logUsage(therapistId, provider, u.model, 'summarization', u.inputTokens, u.outputTokens, null, sessionId);
     }
 
