@@ -282,6 +282,27 @@ function applySchema(db) {
   db.run('CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token)');
   db.run('CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id)');
 
+  // AI usage logging table
+  db.run(`
+    CREATE TABLE IF NOT EXISTS ai_usage_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      therapist_id INTEGER NOT NULL REFERENCES users(id),
+      timestamp TEXT DEFAULT (datetime('now')),
+      provider TEXT NOT NULL,
+      model TEXT NOT NULL,
+      operation TEXT NOT NULL,
+      input_tokens INTEGER DEFAULT 0,
+      output_tokens INTEGER DEFAULT 0,
+      total_tokens INTEGER DEFAULT 0,
+      cost_usd REAL DEFAULT 0,
+      session_id INTEGER,
+      metadata TEXT
+    )
+  `);
+  db.run('CREATE INDEX IF NOT EXISTS idx_ai_usage_log_therapist ON ai_usage_log(therapist_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_ai_usage_log_timestamp ON ai_usage_log(timestamp)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_ai_usage_log_model ON ai_usage_log(model)');
+
   // Add pending_plan column for scheduled downgrades (migration)
   try {
     db.run('ALTER TABLE subscriptions ADD COLUMN pending_plan TEXT');

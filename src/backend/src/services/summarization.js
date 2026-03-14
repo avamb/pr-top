@@ -9,6 +9,7 @@
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { encrypt, decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
+const { logUsage, calculateCost } = require('./aiUsageLogger');
 let vectorStoreService = null;
 function getVectorStoreService() {
   if (!vectorStoreService) {
@@ -20,6 +21,18 @@ function getVectorStoreService() {
 const AI_API_KEY = process.env.AI_API_KEY;
 const AI_API_URL = process.env.AI_API_URL || 'https://api.openai.com/v1';
 const AI_MODEL = process.env.AI_MODEL || 'gpt-4o-mini';
+
+/**
+ * Detect the AI provider from the API URL.
+ */
+function detectProvider(apiUrl) {
+  if (!apiUrl) return 'openai';
+  if (apiUrl.includes('anthropic')) return 'anthropic';
+  if (apiUrl.includes('google') || apiUrl.includes('generativelanguage')) return 'google';
+  if (apiUrl.includes('openrouter')) return 'openrouter';
+  if (apiUrl.includes('openai')) return 'openai';
+  return 'openai'; // default
+}
 
 /**
  * Check if a real AI service is configured.
@@ -41,9 +54,15 @@ function isConfigured() {
  */
 async function generateSummary(transcript, options = {}) {
   if (isConfigured()) {
-    return await callAIAPI(transcript, options);
+    const result = await callAIAPI(transcript, options);
+    // result is { text, usage } from production API
+    return result;
   } else {
-    return generateDevSummary(transcript, options);
+    const text = generateDevSummary(transcript, options);
+    // Estimate tokens for dev mode logging
+    const inputTokens = Math.ceil(transcript.length / 4);
+    const outputTokens = Math.ceil(text.length / 4);
+    return { text, usage: { model: AI_MODEL, inputTokens, outputTokens } };
   }
 }
 
@@ -209,8 +228,13 @@ async function callAIAPI(transcript, options = {}) {
     throw new Error('AI API returned empty or too-short summary');
   }
 
-  logger.info(`AI summary generated successfully (${summary.length} chars, model=${data.model || AI_MODEL})`);
-  return summary;
+  // Extract AI usage info from response
+  const usageModel = data.model || AI_MODEL;
+  const inputTokens = (data.usage && data.usage.prompt_tokens) || 0;
+  const outputTokens = (data.usage && data.usage.completion_tokens) || 0;
+
+  logger.info(`AI summary generated successfully (${summary.length} chars, model=${usageModel})`);
+  return { text: summary, usage: { model: usageModel, inputTokens, outputTokens } };
 }
 
 /**
@@ -314,7 +338,15 @@ async function processSessionSummary(sessionId) {
 
     // Generate summary
     logger.info(`Generating summary for session ${sessionId}...`);
-    const summary = await generateSummary(transcript, context);
+    const summaryResult = await generateSummary(transcript, context);
+    const summary = summaryResult.text;
+
+    // Log AI usage
+    if (summaryResult.usage) {
+      const u = summaryResult.usage;
+      const provider = detectProvider(AI_API_URL);
+      logUsage(therapistId, provider, u.model, 'summarization', u.inputTokens, u.outputTokens, null, sessionId);
+    }
 
     // Encrypt the summary (Class A data)
     const { encrypted: summaryEncrypted, keyVersion, keyId } = encrypt(summary);

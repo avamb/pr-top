@@ -9,6 +9,7 @@ const { getDatabase, saveDatabase } = require('../db/connection');
 const { encrypt, decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
 const wsService = require('./websocketService');
+const { logUsage } = require('./aiUsageLogger');
 // Lazy-loaded to avoid circular dependency
 let summarizationService = null;
 function getSummarizationService() {
@@ -61,7 +62,8 @@ async function transcribeAudio(audioRef) {
     const decryptedBase64 = decrypt(encryptedContent);
     const audioBuffer = Buffer.from(decryptedBase64, 'base64');
 
-    return await callTranscriptionAPI(audioBuffer);
+    const result = await callTranscriptionAPI(audioBuffer);
+    return result;
   } else {
     // Development mode: generate a development transcript
     // This provides realistic-looking output for testing the pipeline
@@ -87,7 +89,10 @@ async function transcribeAudio(audioRef) {
     ].join('\n');
 
     logger.info(`Dev transcription generated for ${audioRef} (${fileSizeKB}KB)`);
-    return transcript;
+    // Estimate tokens for dev mode
+    const estimatedTokens = Math.ceil(transcript.length / 4);
+    const model = process.env.TRANSCRIPTION_MODEL || 'whisper-1';
+    return { text: transcript, usage: { model, inputTokens: estimatedTokens, outputTokens: estimatedTokens } };
   }
 }
 
@@ -171,7 +176,15 @@ async function callTranscriptionAPI(audioBuffer) {
   }
 
   logger.info(`Transcription API returned ${transcript.length} characters`);
-  return transcript.trim();
+
+  // Estimate tokens from transcript length (Whisper doesn't return token counts in text mode)
+  const estimatedInputTokens = Math.ceil(audioBuffer.length / 100); // rough estimate from audio size
+  const estimatedOutputTokens = Math.ceil(transcript.length / 4);
+
+  return {
+    text: transcript.trim(),
+    usage: { model, inputTokens: estimatedInputTokens, outputTokens: estimatedOutputTokens }
+  };
 }
 
 /**
@@ -210,7 +223,14 @@ async function processSessionTranscription(sessionId) {
 
     // Transcribe the audio
     logger.info(`Starting transcription for session ${sessionId}...`);
-    const transcript = await transcribeAudio(audioRef);
+    const transcriptionResult = await transcribeAudio(audioRef);
+    const transcript = transcriptionResult.text;
+
+    // Log AI usage for transcription
+    if (transcriptionResult.usage) {
+      const u = transcriptionResult.usage;
+      logUsage(therapistId, 'openai', u.model, 'transcription', u.inputTokens, u.outputTokens, null, sessionId);
+    }
 
     // Encrypt the transcript (Class A data)
     const { encrypted: transcriptEncrypted, keyVersion, keyId } = encrypt(transcript);
