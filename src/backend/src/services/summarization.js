@@ -9,6 +9,8 @@
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { encrypt, decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
+const { logUsage, calculateCost, checkSpendingLimit } = require('./aiUsageLogger');
+const aiProviders = require('./aiProviders');
 let vectorStoreService = null;
 function getVectorStoreService() {
   if (!vectorStoreService) {
@@ -18,14 +20,32 @@ function getVectorStoreService() {
 }
 
 const AI_API_KEY = process.env.AI_API_KEY;
+const AI_API_URL = process.env.AI_API_URL || 'https://api.openai.com/v1';
+const AI_MODEL = process.env.AI_MODEL || 'gpt-4o-mini';
+
+/**
+ * Detect the AI provider from the API URL.
+ */
+function detectProvider(apiUrl) {
+  if (!apiUrl) return 'openai';
+  if (apiUrl.includes('anthropic')) return 'anthropic';
+  if (apiUrl.includes('google') || apiUrl.includes('generativelanguage')) return 'google';
+  if (apiUrl.includes('openrouter')) return 'openrouter';
+  if (apiUrl.includes('openai')) return 'openai';
+  return 'openai'; // default
+}
 
 /**
  * Check if a real AI service is configured.
+ * Checks all providers (OpenAI, Anthropic, Google, OpenRouter).
  */
 function isConfigured() {
-  return !!(AI_API_KEY &&
-    AI_API_KEY !== 'your-ai-api-key' &&
-    AI_API_KEY.length > 10);
+  // Check legacy env var first
+  if (AI_API_KEY && AI_API_KEY !== 'your-ai-api-key' && AI_API_KEY.length > 10) {
+    return true;
+  }
+  // Check any provider via registry
+  return aiProviders.isAnyConfigured();
 }
 
 /**
@@ -39,9 +59,15 @@ function isConfigured() {
  */
 async function generateSummary(transcript, options = {}) {
   if (isConfigured()) {
-    return await callAIAPI(transcript, options);
+    const result = await callAIAPI(transcript, options);
+    // result is { text, usage } from production API
+    return result;
   } else {
-    return generateDevSummary(transcript, options);
+    const text = generateDevSummary(transcript, options);
+    // Estimate tokens for dev mode logging
+    const inputTokens = Math.ceil(transcript.length / 4);
+    const outputTokens = Math.ceil(text.length / 4);
+    return { text, usage: { model: AI_MODEL, inputTokens, outputTokens } };
   }
 }
 
@@ -81,7 +107,7 @@ function generateDevSummary(transcript, options = {}) {
 
   // Build summary - avoiding diagnosis language per product principles
   const summaryParts = [
-    `Session Summary`,
+    `[DEV MODE] Session Summary`,
     `Generated: ${timestamp}`,
     `Transcript length: ${wordCount} words, ${lineCount} lines`,
     ``
@@ -149,9 +175,164 @@ function generateDevSummary(transcript, options = {}) {
 
 /**
  * Call external AI API for summarization (production mode).
+ * Uses the multi-provider abstraction layer to support OpenAI, Anthropic, Google, OpenRouter.
+ *
+ * @param {string} transcript - Decrypted transcript text
+ * @param {object} options - Client context (anamnesis, goals, contraindications, ai_instructions)
+ * @returns {Promise<{text: string, usage: object}>} The AI-generated summary with usage info
  */
 async function callAIAPI(transcript, options = {}) {
-  throw new Error('Real AI API integration not yet implemented. Set AI_API_KEY to a valid key.');
+  // Check spending limit before making API call
+  const spendingCheck = checkSpendingLimit();
+  if (!spendingCheck.allowed) {
+    throw new Error('AI spending limit reached. Contact admin.');
+  }
+
+  const systemPrompt = buildSystemPrompt(options);
+
+  // Truncate very long transcripts to stay within token limits (~60k chars ≈ 15k tokens)
+  const maxTranscriptLength = 60000;
+  const truncatedTranscript = transcript.length > maxTranscriptLength
+    ? transcript.slice(0, maxTranscriptLength) + '\n\n[Transcript truncated due to length]'
+    : transcript;
+
+  const userMessage = `Please summarize the following therapy session transcript:\n\n${truncatedTranscript}`;
+
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userMessage }
+  ];
+
+  // Try provider registry first (supports all providers)
+  const db = getDatabase();
+
+  // Read summarization-specific model/provider from platform_settings
+  let sumProvider = null;
+  let sumModel = null;
+  try {
+    const provResult = db.exec("SELECT value FROM platform_settings WHERE key = 'ai_summarization_provider'");
+    if (provResult.length > 0 && provResult[0].values.length > 0) sumProvider = provResult[0].values[0][0];
+    const modResult = db.exec("SELECT value FROM platform_settings WHERE key = 'ai_summarization_model'");
+    if (modResult.length > 0 && modResult[0].values.length > 0) sumModel = modResult[0].values[0][0];
+  } catch (e) {
+    logger.warn('Could not read summarization model settings from DB: ' + e.message);
+  }
+
+  // If summarization-specific settings exist, override the active provider
+  const active = (sumProvider || sumModel)
+    ? (() => {
+        const pName = sumProvider || 'openai';
+        const p = aiProviders.getProvider(pName) || aiProviders.getProvider('openai');
+        return { provider: p, providerName: pName, model: sumModel || AI_MODEL };
+      })()
+    : aiProviders.getActiveProvider(db);
+
+  logger.info(`Calling AI API for summarization via ${active.providerName} (model=${active.model}, transcript=${transcript.length} chars)`);
+
+  let result;
+  if (active.provider.isConfigured()) {
+    // Use multi-provider abstraction
+    result = await aiProviders.chat(messages, { temperature: 0.3, max_tokens: 2000 }, db);
+  } else {
+    // Fallback: direct OpenAI call (legacy behavior)
+    const response = await fetch(`${AI_API_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${AI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: AI_MODEL,
+        messages: messages,
+        temperature: 0.3,
+        max_tokens: 2000
+      }),
+      signal: AbortSignal.timeout(120000)
+    });
+
+    if (!response.ok) {
+      let errorDetail = '';
+      try {
+        const errorBody = await response.text();
+        errorDetail = ` - ${errorBody.slice(0, 500)}`;
+      } catch (_) {}
+      throw new Error(`AI API returned ${response.status}${errorDetail}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      throw new Error('AI API returned unexpected response format');
+    }
+
+    result = {
+      text: data.choices[0].message.content.trim(),
+      input_tokens: (data.usage && data.usage.prompt_tokens) || 0,
+      output_tokens: (data.usage && data.usage.completion_tokens) || 0,
+      model: data.model || AI_MODEL,
+      provider: 'openai'
+    };
+  }
+
+  if (!result.text || result.text.length < 20) {
+    throw new Error('AI API returned empty or too-short summary');
+  }
+
+  logger.info(`AI summary generated successfully (${result.text.length} chars, provider=${result.provider}, model=${result.model})`);
+  return {
+    text: result.text,
+    usage: {
+      model: result.model,
+      inputTokens: result.input_tokens,
+      outputTokens: result.output_tokens,
+      provider: result.provider
+    }
+  };
+}
+
+/**
+ * Build the system prompt for session summarization.
+ * Includes therapist-supportive instructions and client context.
+ */
+function buildSystemPrompt(options = {}) {
+  const parts = [
+    `You are a clinical documentation assistant supporting a practicing psychologist/therapist.`,
+    `Your task is to summarize a therapy session transcript for the therapist's records.`,
+    ``,
+    `## Guidelines`,
+    `- Write from a professional, observational perspective`,
+    `- Highlight key themes, client concerns, and progress indicators`,
+    `- Note any significant emotional shifts or breakthroughs`,
+    `- Identify action items, homework assignments, or follow-up areas discussed`,
+    `- NEVER use diagnostic language or make clinical diagnoses`,
+    `- NEVER label the client with disorders, conditions, or pathologies`,
+    `- Use supportive, observational language (e.g., "client reported...", "client expressed...", "themes of... were explored")`,
+    `- Keep the summary concise but comprehensive (300-600 words)`,
+    `- Structure the summary with clear sections: Key Themes, Session Observations, Client-Reported Progress, Follow-up Areas`,
+    ``
+  ];
+
+  // Add client context if available
+  if (options.anamnesis || options.goals || options.contraindications || options.ai_instructions) {
+    parts.push(`## Client Context (provided by therapist)`);
+
+    if (options.anamnesis) {
+      parts.push(`### Background/Anamnesis`, options.anamnesis, ``);
+    }
+    if (options.goals) {
+      parts.push(`### Current Goals`, options.goals, ``);
+    }
+    if (options.contraindications) {
+      parts.push(`### Contraindications`, `The following topics or approaches should be avoided or handled with care:`, options.contraindications, ``);
+    }
+    if (options.ai_instructions) {
+      parts.push(`### Therapist Instructions for AI`, options.ai_instructions, ``);
+    }
+
+    parts.push(`Use this context to provide more relevant and tailored observations in the summary.`, ``);
+  }
+
+  return parts.join('\n');
 }
 
 /**
@@ -210,7 +391,15 @@ async function processSessionSummary(sessionId) {
 
     // Generate summary
     logger.info(`Generating summary for session ${sessionId}...`);
-    const summary = await generateSummary(transcript, context);
+    const summaryResult = await generateSummary(transcript, context);
+    const summary = summaryResult.text;
+
+    // Log AI usage
+    if (summaryResult.usage) {
+      const u = summaryResult.usage;
+      const provider = u.provider || detectProvider(AI_API_URL);
+      logUsage(therapistId, provider, u.model, 'summarization', u.inputTokens, u.outputTokens, null, sessionId);
+    }
 
     // Encrypt the summary (Class A data)
     const { encrypted: summaryEncrypted, keyVersion, keyId } = encrypt(summary);

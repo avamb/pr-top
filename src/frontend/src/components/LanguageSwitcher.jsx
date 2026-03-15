@@ -4,7 +4,8 @@ import { useTranslation } from 'react-i18next';
 const LANGUAGES = [
   { code: 'en', label: 'English', flag: '\u{1F1EC}\u{1F1E7}' },
   { code: 'ru', label: '\u0420\u0443\u0441\u0441\u043A\u0438\u0439', flag: '\u{1F1F7}\u{1F1FA}' },
-  { code: 'es', label: 'Espa\u00F1ol', flag: '\u{1F1EA}\u{1F1F8}' }
+  { code: 'es', label: 'Espa\u00F1ol', flag: '\u{1F1EA}\u{1F1F8}' },
+  { code: 'uk', label: '\u0423\u043A\u0440\u0430\u0457\u043D\u0441\u044C\u043A\u0430', flag: '\u{1F1FA}\u{1F1E6}' }
 ];
 
 /**

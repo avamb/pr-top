@@ -55,6 +55,12 @@ function ClientDetail() {
   const [sessions, setSessions] = useState([]);
   const [sessionsTotal, setSessionsTotal] = useState(0);
   const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionUploadFile, setSessionUploadFile] = useState(null);
+  const [sessionUploading, setSessionUploading] = useState(false);
+  const [sessionUploadProgress, setSessionUploadProgress] = useState(0);
+  const [sessionUploadMsg, setSessionUploadMsg] = useState('');
+  const [sessionUploadError, setSessionUploadError] = useState('');
+  const sessionFileInputRef = useRef(null);
   const [exercises, setExercises] = useState([]);
   const [exercisesTotal, setExercisesTotal] = useState(0);
   const [exercisesLoading, setExercisesLoading] = useState(false);
@@ -66,6 +72,18 @@ function ClientDetail() {
   const [importLoading, setImportLoading] = useState(false);
   const [importMsg, setImportMsg] = useState('');
   const [importError, setImportError] = useState('');
+  // NL Query state
+  const [nlQueryText, setNlQueryText] = useState('');
+  const [nlQueryLoading, setNlQueryLoading] = useState(false);
+  const [nlQueryResult, setNlQueryResult] = useState(null);
+  const [nlQueryError, setNlQueryError] = useState('');
+  const [nlQueryUpgradeRequired, setNlQueryUpgradeRequired] = useState(false);
+  const [showNlQuery, setShowNlQuery] = useState(false);
+  const [nlSortBy, setNlSortBy] = useState('relevance');
+  // Export state
+  const [exportFormat, setExportFormat] = useState('json');
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportMsg, setExportMsg] = useState('');
   const token = localStorage.getItem('token');
 
   // Warn user before leaving page with unsaved form data
@@ -579,6 +597,154 @@ function ClientDetail() {
     }
   }
 
+  async function handleSessionUpload() {
+    if (!sessionUploadFile || sessionUploading) return;
+    setSessionUploading(true);
+    setSessionUploadProgress(0);
+    setSessionUploadMsg('');
+    setSessionUploadError('');
+
+    try {
+      const formData = new FormData();
+      formData.append('audio', sessionUploadFile);
+      formData.append('client_id', id);
+
+      // Use XMLHttpRequest for progress tracking
+      const result = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API}/sessions`);
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+        // Get CSRF token from cookie or meta
+        const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+        if (csrfMeta) {
+          xhr.setRequestHeader('x-csrf-token', csrfMeta.content);
+        }
+
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            setSessionUploadProgress(Math.round((e.loaded / e.total) * 100));
+          }
+        };
+
+        xhr.onload = () => {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve(data);
+            } else {
+              reject(new Error(data.error || `Upload failed (${xhr.status})`));
+            }
+          } catch {
+            reject(new Error(`Upload failed (${xhr.status})`));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error('Network error during upload'));
+        xhr.ontimeout = () => reject(new Error('Upload timed out'));
+        xhr.timeout = 300000; // 5 minutes
+        xhr.send(formData);
+      });
+
+      setSessionUploadMsg(t('clientDetail.uploadSuccess', 'Session uploaded successfully! Transcription in progress...'));
+      setSessionUploadFile(null);
+      if (sessionFileInputRef.current) sessionFileInputRef.current.value = '';
+
+      // Refresh sessions list after a short delay to let transcription start
+      setTimeout(() => {
+        fetchSessions();
+      }, 2000);
+
+      // Refresh again after longer delay to catch completed transcription
+      setTimeout(() => {
+        fetchSessions();
+      }, 8000);
+
+    } catch (e) {
+      setSessionUploadError(e.message);
+    } finally {
+      setSessionUploading(false);
+      setSessionUploadProgress(0);
+    }
+  }
+
+  async function handleExport() {
+    if (exportLoading) return;
+    setExportLoading(true);
+    setExportMsg('');
+    try {
+      const res = await fetch(`${API}/export/client/${id}?format=${exportFormat}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.status === 403) {
+        const data = await res.json().catch(() => ({}));
+        if (data.required_plans) {
+          setExportMsg(t('clientDetail.exportUpgradeRequired'));
+        } else {
+          setExportMsg(data.error || t('clientDetail.exportFailed'));
+        }
+        return;
+      }
+      if (!res.ok) {
+        setExportMsg(t('clientDetail.exportFailed'));
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const ext = exportFormat === 'csv' ? 'zip' : 'json';
+      a.href = url;
+      a.download = `client_${id}_export.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      setExportMsg(t('clientDetail.exportSuccess'));
+    } catch (e) {
+      setExportMsg(t('clientDetail.exportFailed'));
+    } finally {
+      setExportLoading(false);
+    }
+  }
+
+  async function handleNlQuery(e) {
+    if (e) e.preventDefault();
+    if (!nlQueryText.trim() || nlQueryLoading) return;
+    setNlQueryLoading(true);
+    setNlQueryResult(null);
+    setNlQueryError('');
+    setNlQueryUpgradeRequired(false);
+
+    try {
+      const res = await fetch(`${API}/query`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ client_id: parseInt(id), query: nlQueryText.trim() })
+      });
+
+      const data = await res.json();
+
+      if (res.status === 403 && (data.error === 'Plan upgrade required' || data.required_plans)) {
+        setNlQueryUpgradeRequired(true);
+        setNlQueryError(data.message || t('clientDetail.nlUpgradeRequired', 'Natural language queries require a Pro or Premium plan.'));
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || data.message || 'Query failed');
+      }
+
+      setNlQueryResult(data);
+    } catch (err) {
+      setNlQueryError(err.message);
+    } finally {
+      setNlQueryLoading(false);
+    }
+  }
+
   async function fetchExercises(signal) {
     try {
       setExercisesLoading(true);
@@ -712,6 +878,30 @@ function ClientDetail() {
               <span>{t('clientDetail.consent')}: {client.consent_therapist_access ? t('clientDetail.consentGranted') : t('clientDetail.consentNotGranted')}</span>
               <span>{t('clientDetail.joined')}: {formatUserDateOnly(client.created_at)}</span>
             </div>
+            {/* Export All Data */}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <select
+                value={exportFormat}
+                onChange={(e) => setExportFormat(e.target.value)}
+                className="px-2 py-1.5 border border-stone-300 rounded text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+              >
+                <option value="json">{t('clientDetail.exportJSON', 'JSON')}</option>
+                <option value="csv">{t('clientDetail.exportCSV', 'CSV (ZIP)')}</option>
+              </select>
+              <button
+                onClick={handleExport}
+                disabled={exportLoading}
+                className="px-3 py-1.5 bg-stone-600 text-white rounded text-sm hover:bg-stone-700 disabled:opacity-50 flex items-center gap-1"
+              >
+                <span>📥</span>
+                {exportLoading ? t('clientDetail.exportDownloading', 'Exporting...') : t('clientDetail.exportAllData', 'Export All Data')}
+              </button>
+              {exportMsg && (
+                <span className={`text-sm ${exportMsg.includes(t('clientDetail.exportSuccess', 'success')) || exportMsg === t('clientDetail.exportSuccess') ? 'text-green-600' : 'text-amber-600'}`}>
+                  {exportMsg}
+                </span>
+              )}
+            </div>
           </div>
         )}
 
@@ -741,6 +931,197 @@ function ClientDetail() {
             onClick={() => setActiveTab('context')}
             className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'context' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >🧠 {t('clientDetail.contextTab')}</button>
+        </div>
+
+        {/* NL Query Panel */}
+        <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-4 mb-4">
+          <button
+            onClick={() => setShowNlQuery(!showNlQuery)}
+            className="flex items-center gap-2 w-full text-left"
+          >
+            <span className="text-lg">🔍</span>
+            <span className="font-medium text-stone-700">{t('clientDetail.askAboutClient', 'Ask about this client')}</span>
+            <span className="ml-auto text-stone-400 text-sm">{showNlQuery ? '▲' : '▼'}</span>
+          </button>
+
+          {showNlQuery && (
+            <div className="mt-3">
+              <form onSubmit={handleNlQuery} className="flex gap-2">
+                <input
+                  type="text"
+                  value={nlQueryText}
+                  onChange={(e) => setNlQueryText(e.target.value)}
+                  placeholder={t('clientDetail.nlQueryPlaceholder', 'e.g., "How has their anxiety been lately?" or "What exercises worked best?"')}
+                  className="flex-1 px-3 py-2 border border-stone-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  maxLength={1000}
+                  disabled={nlQueryLoading}
+                />
+                <button
+                  type="submit"
+                  disabled={nlQueryLoading || !nlQueryText.trim()}
+                  className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  {nlQueryLoading ? <LoadingSpinner size={16} /> : <span>🔍</span>}
+                  {t('clientDetail.nlSearch', 'Search')}
+                </button>
+              </form>
+
+              {/* Upgrade Required */}
+              {nlQueryUpgradeRequired && (
+                <div className="mt-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-lg">⭐</span>
+                    <span className="font-medium text-amber-800">{t('clientDetail.nlProFeature', 'Pro Feature')}</span>
+                  </div>
+                  <p className="text-sm text-amber-700">{nlQueryError}</p>
+                  <button
+                    onClick={() => navigate('/subscription')}
+                    className="mt-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors text-sm font-medium"
+                  >
+                    {t('clientDetail.nlUpgradeBtn', 'Upgrade Plan')}
+                  </button>
+                </div>
+              )}
+
+              {/* Query Error */}
+              {nlQueryError && !nlQueryUpgradeRequired && (
+                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  ❌ {nlQueryError}
+                </div>
+              )}
+
+              {/* Loading */}
+              {nlQueryLoading && (
+                <div className="mt-3 p-4 text-center text-stone-500">
+                  <LoadingSpinner size={24} className="mx-auto mb-2" />
+                  <p className="text-sm">{t('clientDetail.nlSearching', 'Searching client records...')}</p>
+                </div>
+              )}
+
+              {/* Query Results */}
+              {nlQueryResult && !nlQueryLoading && (
+                <div className="mt-3">
+                  {/* Expanded terms visualization */}
+                  {nlQueryResult.expanded_terms && nlQueryResult.expanded_terms.length > 0 && (
+                    <div className="mb-3 p-3 bg-teal-50 border border-teal-100 rounded-lg">
+                      <div className="flex items-center gap-2 flex-wrap text-xs">
+                        <span className="font-medium text-teal-800">{t('clientDetail.nlQueryExpansion', 'Search expansion:')}</span>
+                        <span className="text-teal-600 font-medium">"{nlQueryResult.query}"</span>
+                        <span className="text-teal-400">→</span>
+                        {nlQueryResult.expanded_terms.slice(0, 8).map((term, i) => (
+                          <span key={i} className="px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded text-xs">{term}</span>
+                        ))}
+                        {nlQueryResult.expanded_terms.length > 8 && (
+                          <span className="text-teal-500">+{nlQueryResult.expanded_terms.length - 8} {t('clientDetail.nlMore', 'more')}</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Results header with count, time, and sort */}
+                  <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                    <span className="text-sm text-stone-500">
+                      {nlQueryResult.total_matches > 0
+                        ? t('clientDetail.nlResultsFound', 'Found {{count}} relevant results (searched {{total}})', { count: nlQueryResult.total_matches, total: nlQueryResult.total_searched })
+                        : t('clientDetail.nlNoResults', 'No relevant results found')}
+                      {nlQueryResult.search_time_ms != null && (
+                        <span className="text-stone-400 ml-1">
+                          ({(nlQueryResult.search_time_ms / 1000).toFixed(1)}s)
+                        </span>
+                      )}
+                    </span>
+                    {nlQueryResult.results && nlQueryResult.results.length > 1 && (
+                      <div className="flex items-center gap-1 text-xs">
+                        <span className="text-stone-400">{t('clientDetail.nlSortBy', 'Sort by:')}</span>
+                        <button
+                          onClick={() => setNlSortBy('relevance')}
+                          className={`px-2 py-0.5 rounded ${nlSortBy === 'relevance' ? 'bg-teal-100 text-teal-700 font-medium' : 'text-stone-500 hover:bg-stone-100'}`}
+                        >
+                          {t('clientDetail.nlSortRelevance', 'Relevance')}
+                        </button>
+                        <button
+                          onClick={() => setNlSortBy('date')}
+                          className={`px-2 py-0.5 rounded ${nlSortBy === 'date' ? 'bg-teal-100 text-teal-700 font-medium' : 'text-stone-500 hover:bg-stone-100'}`}
+                        >
+                          {t('clientDetail.nlSortDate', 'Date')}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {nlQueryResult.results && nlQueryResult.results.length > 0 && (
+                    <div className="space-y-2">
+                      {[...nlQueryResult.results]
+                        .sort((a, b) => nlSortBy === 'date'
+                          ? new Date(b.created_at) - new Date(a.created_at)
+                          : (b.similarity_score || b.relevance) - (a.similarity_score || a.relevance)
+                        )
+                        .map((result, idx) => {
+                          const score = result.similarity_score != null ? result.similarity_score : 0;
+                          const scoreColor = score > 0.7 ? 'bg-green-500' : score > 0.4 ? 'bg-amber-400' : 'bg-stone-300';
+                          const scoreLabelColor = score > 0.7 ? 'text-green-700' : score > 0.4 ? 'text-amber-700' : 'text-stone-500';
+                          const scoreLabel = score > 0.7
+                            ? t('clientDetail.nlHighRelevance', 'High')
+                            : score > 0.4
+                            ? t('clientDetail.nlMedRelevance', 'Medium')
+                            : t('clientDetail.nlLowRelevance', 'Low');
+
+                          // Highlight matched terms in content
+                          const highlightTerms = [...(nlQueryResult.query_tokens || []), ...(nlQueryResult.expanded_terms || []).slice(0, 5)];
+                          const highlightContent = (text) => {
+                            if (!text || highlightTerms.length === 0) return text;
+                            const escapedTerms = highlightTerms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+                            const regex = new RegExp(`\\b(${escapedTerms.join('|')})\\b`, 'gi');
+                            const parts = text.split(regex);
+                            return parts.map((part, i) => {
+                              if (regex.test && highlightTerms.some(ht => part.toLowerCase() === ht.toLowerCase())) {
+                                return <mark key={i} className="bg-teal-100 text-teal-900 px-0.5 rounded">{part}</mark>;
+                              }
+                              return part;
+                            });
+                          };
+
+                          return (
+                            <div
+                              key={`${result.type}-${result.id}-${idx}`}
+                              className="border border-stone-200 rounded-lg p-3 hover:border-teal-300 transition-colors cursor-pointer"
+                              onClick={() => {
+                                if (result.type === 'session') navigate(`/sessions/${result.id}`);
+                              }}
+                            >
+                              <div className="flex items-center gap-2 mb-1.5">
+                                <span className="text-sm">
+                                  {result.type === 'diary' ? '📝' : result.type === 'note' ? '🗒️' : '🎧'}
+                                </span>
+                                <span className="text-xs font-medium text-stone-600 uppercase">
+                                  {result.type === 'diary' ? (result.entry_type || 'diary') : result.type}
+                                </span>
+                                <span className="text-xs text-stone-400">{new Date(result.created_at).toLocaleDateString()}</span>
+                                <div className="ml-auto flex items-center gap-1.5">
+                                  <span className={`text-xs font-medium ${scoreLabelColor}`}>{scoreLabel}</span>
+                                  <div className="w-16 h-1.5 bg-stone-100 rounded-full overflow-hidden" title={`${Math.round(score * 100)}%`}>
+                                    <div className={`h-full rounded-full ${scoreColor}`} style={{ width: `${Math.round(score * 100)}%` }}></div>
+                                  </div>
+                                  <span className="text-xs text-stone-400">{Math.round(score * 100)}%</span>
+                                </div>
+                              </div>
+                              <p className="text-sm text-stone-700 whitespace-pre-wrap line-clamp-3">{highlightContent(result.content)}</p>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+
+                  {nlQueryResult.total_matches === 0 && (
+                    <div className="text-center py-6">
+                      <div className="text-3xl mb-2">🔍</div>
+                      <p className="text-sm text-stone-500">{t('clientDetail.nlNoResultsHint', 'Try different keywords or a broader question.')}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Timeline Tab */}
@@ -1146,10 +1527,105 @@ function ClientDetail() {
         {/* Sessions Tab */}
         {activeTab === 'sessions' && (
           <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6 mb-6">
-            <h3 className="text-lg font-semibold text-stone-800 mb-4">{t('clientDetail.sessionHistory', { count: sessionsTotal })}</h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-stone-800">{t('clientDetail.sessionHistory', { count: sessionsTotal })}</h3>
+              <button
+                onClick={() => sessionFileInputRef.current && sessionFileInputRef.current.click()}
+                disabled={sessionUploading}
+                className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <span>🎙️</span> {t('clientDetail.uploadSession', 'Upload Session Recording')}
+              </button>
+              <input
+                ref={sessionFileInputRef}
+                type="file"
+                accept="audio/*,video/*,.webm,.mp3,.mp4,.wav,.ogg,.m4a"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (file) {
+                    setSessionUploadFile(file);
+                    setSessionUploadMsg('');
+                    setSessionUploadError('');
+                  }
+                }}
+              />
+            </div>
+
+            {/* Upload area */}
+            {sessionUploadFile && !sessionUploading && (
+              <div className="mb-4 border-2 border-dashed border-teal-300 rounded-lg p-4 bg-teal-50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">🎧</span>
+                    <div>
+                      <p className="text-sm font-medium text-stone-800">{sessionUploadFile.name}</p>
+                      <p className="text-xs text-stone-500">{(sessionUploadFile.size / (1024 * 1024)).toFixed(2)} MB</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSessionUpload}
+                      className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
+                    >
+                      {t('clientDetail.uploadBtn', 'Upload & Process')}
+                    </button>
+                    <button
+                      onClick={() => { setSessionUploadFile(null); if (sessionFileInputRef.current) sessionFileInputRef.current.value = ''; }}
+                      className="px-3 py-2 bg-stone-200 text-stone-600 rounded-lg hover:bg-stone-300 transition-colors text-sm"
+                    >
+                      {t('cancel', 'Cancel')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Upload progress */}
+            {sessionUploading && (
+              <div className="mb-4 border border-blue-200 rounded-lg p-4 bg-blue-50">
+                <div className="flex items-center gap-3 mb-2">
+                  <LoadingSpinner size={20} />
+                  <span className="text-sm font-medium text-blue-800">
+                    {sessionUploadProgress < 100
+                      ? t('clientDetail.uploading', 'Uploading...') + ` ${sessionUploadProgress}%`
+                      : t('clientDetail.processing', 'Processing...')}
+                  </span>
+                </div>
+                <div className="w-full bg-blue-200 rounded-full h-2">
+                  <div
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${sessionUploadProgress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Upload success message */}
+            {sessionUploadMsg && (
+              <div className="mb-4 p-3 rounded-lg bg-green-50 text-green-700 text-sm flex items-center gap-2">
+                <span>✅</span> {sessionUploadMsg}
+              </div>
+            )}
+
+            {/* Upload error message */}
+            {sessionUploadError && (
+              <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span>❌</span> {sessionUploadError}
+                </div>
+                <button
+                  onClick={() => { setSessionUploadError(''); handleSessionUpload(); }}
+                  className="text-red-600 hover:text-red-800 text-sm font-medium underline"
+                >
+                  {t('retry', 'Retry')}
+                </button>
+              </div>
+            )}
+
             {sessionsLoading ? (
-              <p className="text-stone-500 text-center py-8">Loading sessions...</p>
-            ) : sessions.length === 0 ? (
+              <p className="text-stone-500 text-center py-8">{t('clientDetail.loadingSessions', 'Loading sessions...')}</p>
+            ) : sessions.length === 0 && !sessionUploadMsg ? (
               <div className="text-center py-12">
                 <div className="text-5xl mb-4">🎧</div>
                 <h3 className="text-lg font-medium text-stone-600 mb-2">
@@ -1169,6 +1645,7 @@ function ClientDetail() {
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                           session.status === 'complete' ? 'bg-green-100 text-green-800' :
                           session.status === 'transcribing' ? 'bg-blue-100 text-blue-800' :
+                          (session.status === 'transcription_failed' || session.status === 'failed') ? 'bg-red-100 text-red-800' :
                           'bg-gray-100 text-gray-800'
                         }`}>
                           {session.status}
@@ -1232,7 +1709,10 @@ function ClientDetail() {
                       >
                         <div className="flex items-center gap-2">
                           <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">{ex.category}</span>
-                          <span className="font-medium text-stone-700 text-sm">{ex.title_en}</span>
+                          <span className="font-medium text-stone-700 text-sm">{ex.title_en || ex.title_ru || ex.title_es}</span>
+                          {ex.is_custom === 1 && (
+                            <span className="text-xs px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded-full font-medium">My</span>
+                          )}
                         </div>
                         <p className="text-xs text-stone-500 mt-1 line-clamp-1">{ex.description_en}</p>
                         {sendingExercise === ex.id && <span className="text-xs text-teal-600 mt-1">Sending...</span>}
@@ -1457,6 +1937,16 @@ function ClientDetail() {
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${typeBadgeColor(entry.entry_type)}`}>
                       {entry.entry_type}
                     </span>
+                    {/* Transcription status badge for voice/video entries */}
+                    {(entry.entry_type === 'voice' || entry.entry_type === 'video') && (
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        entry.transcript
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-amber-100 text-amber-700'
+                      }`}>
+                        {entry.transcript ? '✅ Transcribed' : '⏳ Pending transcription'}
+                      </span>
+                    )}
                     <span className="text-xs text-stone-400 ml-auto">
                       {formatUserDate(entry.created_at)}
                     </span>
@@ -1469,7 +1959,7 @@ function ClientDetail() {
                   <p className="text-stone-700 whitespace-pre-wrap">{entry.content}</p>
                   {entry.transcript && (
                     <div className="mt-2 p-2 bg-stone-50 rounded text-sm text-stone-600">
-                      <span className="font-medium">Transcript:</span> {entry.transcript}
+                      <span className="font-medium">📝 Transcript:</span> {entry.transcript}
                     </div>
                   )}
                 </div>

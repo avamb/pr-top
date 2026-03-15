@@ -10,6 +10,8 @@ const path = require('path');
 const { initDatabase, saveDatabase } = require('./db/connection');
 const { logger } = require('./utils/logger');
 const { initStripe, getStripeStatus, isConfigured: isStripeConfigured } = require('./services/stripe');
+const scheduler = require('./services/scheduler');
+const { initWebSocket, getStats: getWsStats } = require('./services/websocketService');
 const cookieParser = require('cookie-parser');
 const { csrfProtection, csrfTokenEndpoint } = require('./middleware/csrf');
 const { requireActiveSubscription, authenticate } = require('./middleware/auth');
@@ -145,6 +147,7 @@ app.get('/api/health', async (req, res) => {
     database: dbStatus,
     tableCount,
     stripe: stripeStatus,
+    websocket: getWsStats(),
     timestamp: new Date().toISOString(),
     version: '0.1.0'
   });
@@ -164,6 +167,7 @@ app.use('/api/exercises', requireActiveSubscription, require('./routes/exercises
 app.use('/api/settings', requireActiveSubscription, require('./routes/settings'));
 app.use('/api/search', requireActiveSubscription, require('./routes/search'));
 app.use('/api/query', requireActiveSubscription, require('./routes/query'));
+app.use('/api/export', requireActiveSubscription, require('./routes/export'));
 
 // Dev-only seed endpoint for testing with large datasets
 if (process.env.NODE_ENV !== 'production') {
@@ -212,6 +216,18 @@ if (process.env.NODE_ENV !== 'production') {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
+  app.post('/api/dev/set-consent', (req, res) => {
+    try {
+      const { client_id, consent } = req.body;
+      if (!client_id || consent === undefined) return res.status(400).json({ error: 'client_id and consent required' });
+      const { getDatabase, saveDatabase: save } = require('./db/connection');
+      const db = getDatabase();
+      db.run("UPDATE users SET consent_therapist_access = ?, updated_at = datetime('now') WHERE id = ? AND role = 'client'", [consent ? 1 : 0, client_id]);
+      save();
+      res.json({ updated: true, client_id, consent: !!consent });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
   app.post('/api/dev/expire-trial', (req, res) => {
     try {
       const { therapist_id } = req.body;
@@ -221,6 +237,21 @@ if (process.env.NODE_ENV !== 'production') {
       db.run("UPDATE subscriptions SET trial_ends_at = datetime('now', '-1 day') WHERE therapist_id = ? AND plan = 'trial'", [therapist_id]);
       save();
       res.json({ expired: true, therapist_id });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // DEV: Set subscription plan (for testing plan-gated features)
+  app.post('/api/dev/set-plan', (req, res) => {
+    try {
+      const { therapist_id, plan } = req.body;
+      if (!therapist_id || !plan) return res.status(400).json({ error: 'therapist_id and plan required' });
+      const validPlans = ['trial', 'basic', 'pro', 'premium'];
+      if (!validPlans.includes(plan)) return res.status(400).json({ error: 'Invalid plan. Must be: ' + validPlans.join(', ') });
+      const { getDatabase, saveDatabase: save } = require('./db/connection');
+      const db = getDatabase();
+      db.run("UPDATE subscriptions SET plan = ?, status = 'active' WHERE therapist_id = ?", [plan, therapist_id]);
+      save();
+      res.json({ success: true, therapist_id, plan });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 }
@@ -252,10 +283,17 @@ async function start() {
     const stripeReady = initStripe();
     logger.info(`Stripe initialized: ${stripeReady ? 'configured' : 'not configured (placeholder key)'}`);
 
-    app.listen(PORT, () => {
+    // Start scheduled task runner (after DB is ready)
+    scheduler.start();
+
+    const server = app.listen(PORT, () => {
       logger.info(`PR-TOP API server running on port ${PORT}`);
       logger.info(`Health check: http://localhost:${PORT}/api/health`);
     });
+
+    // Attach WebSocket server for real-time notifications
+    initWebSocket(server);
+    logger.info('WebSocket server attached for real-time notifications');
   } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);

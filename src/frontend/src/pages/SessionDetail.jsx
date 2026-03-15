@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { formatUserDate } from '../utils/formatDate';
+import AudioPlayer from '../components/AudioPlayer';
 
 const API = '/api';
 
@@ -63,7 +64,7 @@ function SessionDetail() {
     <div>
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 bg-teal-600 text-white px-4 py-2 rounded z-50">{t('nav.skipToContent')}</a>
 
-      <main id="main-content" className="max-w-6xl mx-auto px-6 py-8">
+      <main id="main-content" className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {loading ? (
           <p className="text-stone-500">{t('sessionDetail.loadingSession')}</p>
         ) : error ? (
@@ -97,17 +98,11 @@ function SessionDetail() {
               {session.scheduled_at && <span>{t('sessionDetail.scheduled', { date: formatUserDate(session.scheduled_at) })}</span>}
             </div>
 
-            {/* Audio Player Section */}
+            {/* Audio/Video Player Section */}
             <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6 mb-6">
               <h3 className="text-lg font-semibold text-stone-800 mb-3">{t('sessionDetail.audioRecording')}</h3>
               {session.audio_ref ? (
-                <div className="flex items-center gap-3 p-4 bg-stone-50 rounded-lg">
-                  <span className="text-2xl">🔊</span>
-                  <div>
-                    <p className="text-sm text-stone-700 font-medium">{t('sessionDetail.audioAvailable')}</p>
-                    <p className="text-xs text-stone-500">{t('sessionDetail.audioReference', { ref: session.audio_ref })}</p>
-                  </div>
-                </div>
+                <AudioPlayer sessionId={session.id} audioRef={session.audio_ref} />
               ) : (
                 <p className="text-stone-400">{t('sessionDetail.noAudioRecording')}</p>
               )}

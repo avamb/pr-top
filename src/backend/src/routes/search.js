@@ -5,6 +5,7 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { semanticSearch, getEmbedding, getStats } = require('../services/vectorStore');
 const { logger } = require('../utils/logger');
+const { verifyClientConsent } = require('../utils/consentCheck');
 
 // All search routes require authentication
 router.use(authenticate);
@@ -95,6 +96,31 @@ router.get('/embedding/:sourceType/:sourceId', (req, res) => {
     // Verify therapist has access
     if (req.user.role !== 'superadmin' && embedding.therapist_id !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Verify client consent based on source type
+    if (req.user.role !== 'superadmin') {
+      const db = getDatabase();
+      let clientId = null;
+
+      if (sourceType === 'diary_entry') {
+        const diaryResult = db.exec('SELECT client_id FROM diary_entries WHERE id = ?', [parseInt(sourceId)]);
+        if (diaryResult.length > 0 && diaryResult[0].values.length > 0) {
+          clientId = diaryResult[0].values[0][0];
+        }
+      } else if (sourceType === 'session_transcript' || sourceType === 'session_summary') {
+        const sessionResult = db.exec('SELECT client_id FROM sessions WHERE id = ?', [parseInt(sourceId)]);
+        if (sessionResult.length > 0 && sessionResult[0].values.length > 0) {
+          clientId = sessionResult[0].values[0][0];
+        }
+      }
+
+      if (clientId) {
+        const consentCheck = verifyClientConsent(req.user.id, clientId, 'embedding_view');
+        if (!consentCheck.allowed) {
+          return res.status(consentCheck.status).json({ error: consentCheck.error });
+        }
+      }
     }
 
     res.json({ success: true, embedding });

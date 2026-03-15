@@ -9,7 +9,8 @@ const API_URL = '/api';
 const LANGUAGES = [
   { code: 'en', label: 'English' },
   { code: 'ru', label: 'Русский' },
-  { code: 'es', label: 'Español' }
+  { code: 'es', label: 'Español' },
+  { code: 'uk', label: 'Українська' }
 ];
 
 const TIMEZONES = [

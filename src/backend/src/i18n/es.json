@@ -18,7 +18,7 @@
   "profile": {
     "updated": "Perfil actualizado exitosamente",
     "languageUpdated": "Preferencia de idioma actualizada",
-    "invalidLanguage": "Idioma inv\u00e1lido. Debe ser uno de: en, ru, es",
+    "invalidLanguage": "Idioma inv\u00e1lido. Debe ser uno de: en, ru, es, uk",
     "notFound": "Usuario no encontrado"
   },
   "clients": {
@@ -44,8 +44,12 @@
   "exercises": {
     "notFound": "Ejercicio no encontrado",
     "created": "Ejercicio creado exitosamente",
+    "updated": "Ejercicio actualizado exitosamente",
+    "deleted": "Ejercicio eliminado exitosamente",
     "sent": "Ejercicio enviado al cliente",
-    "completed": "Ejercicio completado"
+    "completed": "Ejercicio completado",
+    "cannotDeleteActive": "No se puede eliminar un ejercicio con entregas activas",
+    "notOwner": "Solo puede modificar sus propios ejercicios"
   },
   "subscription": {
     "required": "Se requiere suscripci\u00f3n activa",

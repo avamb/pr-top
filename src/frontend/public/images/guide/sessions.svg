@@ -1,10 +1,40 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="600" height="300" viewBox="0 0 600 300">
-  <rect width="600" height="300" fill="#f1f5f9" rx="12"/>
-  <rect x="40" y="30" width="520" height="240" fill="#e2e8f0" rx="8" stroke="#cbd5e1" stroke-width="1"/>
-  <rect x="60" y="50" width="160" height="20" fill="#94a3b8" rx="4"/>
-  <rect x="60" y="80" width="480" height="8" fill="#cbd5e1" rx="2"/>
-  <rect x="60" y="96" width="400" height="8" fill="#cbd5e1" rx="2"/>
-  <rect x="60" y="140" width="220" height="100" fill="#e0e7ff" rx="6"/>
-  <rect x="300" y="140" width="220" height="100" fill="#e0e7ff" rx="6"/>
-  <text x="300" y="270" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="13">Sessions screenshot placeholder</text>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F4F7F6"/>
+      <stop offset="100%" stop-color="#E6F5F3"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="300" fill="url(#bg)" rx="12"/>
+  <text x="30" y="35" fill="#1C2328" font-family="sans-serif" font-size="16" font-weight="bold">Sessions</text>
+  <!-- Upload button -->
+  <rect x="430" y="16" width="140" height="30" fill="#1F8A83" rx="6"/>
+  <text x="500" y="36" text-anchor="middle" fill="#fff" font-family="sans-serif" font-size="11">Upload Recording</text>
+  <!-- Session list -->
+  <rect x="30" y="55" width="540" height="65" fill="#fff" rx="8" stroke="#D9E2E0" stroke-width="1"/>
+  <circle cx="60" cy="87" r="16" fill="#E6F5F3"/>
+  <text x="60" y="92" text-anchor="middle" fill="#1F8A83" font-family="sans-serif" font-size="14">&#x1f399;</text>
+  <rect x="85" y="72" width="180" height="10" fill="#1C2328" rx="3" opacity="0.7"/>
+  <rect x="85" y="88" width="120" height="8" fill="#5E6A71" rx="2" opacity="0.3"/>
+  <rect x="85" y="102" width="80" height="8" fill="#5E6A71" rx="2" opacity="0.2"/>
+  <rect x="480" y="77" width="70" height="20" fill="#D1FAE5" rx="4"/>
+  <text x="515" y="91" text-anchor="middle" fill="#065F46" font-family="sans-serif" font-size="9">Complete</text>
+
+  <rect x="30" y="130" width="540" height="65" fill="#fff" rx="8" stroke="#D9E2E0" stroke-width="1"/>
+  <circle cx="60" cy="162" r="16" fill="#E6F5F3"/>
+  <text x="60" y="167" text-anchor="middle" fill="#1F8A83" font-family="sans-serif" font-size="14">&#x1f399;</text>
+  <rect x="85" y="147" width="160" height="10" fill="#1C2328" rx="3" opacity="0.7"/>
+  <rect x="85" y="163" width="140" height="8" fill="#5E6A71" rx="2" opacity="0.3"/>
+  <rect x="85" y="177" width="90" height="8" fill="#5E6A71" rx="2" opacity="0.2"/>
+  <rect x="480" y="152" width="70" height="20" fill="#D1FAE5" rx="4"/>
+  <text x="515" y="166" text-anchor="middle" fill="#065F46" font-family="sans-serif" font-size="9">Complete</text>
+
+  <rect x="30" y="205" width="540" height="65" fill="#fff" rx="8" stroke="#D9E2E0" stroke-width="1"/>
+  <circle cx="60" cy="237" r="16" fill="#FEF3C7"/>
+  <text x="60" y="242" text-anchor="middle" fill="#92400E" font-family="sans-serif" font-size="14">&#x23F3;</text>
+  <rect x="85" y="222" width="200" height="10" fill="#1C2328" rx="3" opacity="0.7"/>
+  <rect x="85" y="238" width="130" height="8" fill="#5E6A71" rx="2" opacity="0.3"/>
+  <rect x="85" y="252" width="100" height="8" fill="#5E6A71" rx="2" opacity="0.2"/>
+  <rect x="455" y="227" width="95" height="20" fill="#FEF3C7" rx="4"/>
+  <text x="502" y="241" text-anchor="middle" fill="#92400E" font-family="sans-serif" font-size="9">Transcribing</text>
 </svg>

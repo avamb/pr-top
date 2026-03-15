@@ -1,8 +1,10 @@
-# PsyLink
+# PR-TOP
 
 **Therapist-controlled between-session assistant platform**
 
-PsyLink helps practicing psychologists preserve client context, reduce double documentation, work deeper between sessions, and maintain therapist control over all sensitive client flows. Built on top of the MindSetHappyBot/3hours Telegram bot codebase.
+PR-TOP helps practicing psychologists preserve client context, reduce double documentation, work deeper between sessions, and maintain therapist control over all sensitive client flows. Built on top of the MindSetHappyBot/3hours Telegram bot codebase.
+
+> For the full Product Requirements Document, see [docs/PRD.md](docs/PRD.md).
 
 ## Architecture
 
@@ -11,29 +13,35 @@ The platform consists of three components:
 - **Web Application** (`src/frontend/`) - React + Tailwind CSS
   - Public landing page with pricing and registration
   - Therapist dashboard (client management, analytics, sessions)
-  - Superadmin panel (platform management, statistics, logs)
+  - Superadmin panel (platform management, AI configuration, statistics, logs)
 
 - **Backend API** (`src/backend/`) - Node.js REST API
   - SQLite database with application-layer encryption for sensitive data
   - Stripe integration for subscription management
   - Vector DB for semantic search
   - AI summarization and transcription pipelines
+  - WebSocket notifications for real-time updates
 
 - **Telegram Bot** (`src/bot/`) - Telegram Bot API
   - Client diary input (text, voice, video)
-  - Therapist workspace (client management, notes, queries)
-  - SOS/safety features
+  - Custom Exercises ("My Exercises") and pre-seeded exercise library
+  - SOS/safety features with escalation notifications
+  - Client consent management
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React, Tailwind CSS, React Router, Zustand, i18next |
-| Backend | Node.js, Express, SQLite, Stripe SDK |
+| Backend | Node.js, Express, SQLite, Stripe SDK, node-cron |
 | Bot | Telegram Bot API |
-| AI | Speech-to-text, AI summarization, embeddings |
-| Search | Vector DB for semantic search |
-| Languages | Russian, English, Spanish |
+| AI | OpenAI, Anthropic, Google Gemini, OpenRouter (configurable) |
+| Transcription | OpenAI Whisper (configurable provider) |
+| Search | Vector embeddings for semantic search |
+| Real-time | WebSocket (ws) |
+| Email | Nodemailer (SMTP) |
+| Languages | English, Russian, Spanish, Ukrainian |
+| PWA | Service worker, manifest.json |
 
 ## Getting Started
 
@@ -74,27 +82,29 @@ src/
     src/
       config/       # App configuration
       db/           # Database schema, migrations, connection
-      middleware/   # Auth, CSRF, rate limiting, encryption
+      middleware/   # Auth, CSRF, rate limiting, i18n, encryption
       models/       # Data models
       routes/       # API route handlers
       services/     # Business logic (encryption, AI, Stripe, etc.)
+        aiProviders/ # Multi-provider AI abstraction (OpenAI, Anthropic, Google, OpenRouter)
+      i18n/         # Backend translations (EN, RU, ES, UK)
       utils/        # Shared utilities
   frontend/
     src/
       components/   # Reusable UI components
       contexts/     # React context providers
       hooks/        # Custom hooks
-      i18n/         # Internationalization (RU/EN/ES)
+      i18n/         # Internationalization (EN, RU, ES, UK)
       pages/        # Page components
       styles/       # Global styles
       utils/        # Frontend utilities
-    public/         # Static assets
+    public/         # Static assets, PWA manifest, service worker
   bot/
     src/
-      commands/     # Telegram bot commands (/start, /clients, etc.)
-      handlers/     # Message and callback handlers
-      services/     # Bot business logic
-      utils/        # Bot utilities
+      index.js      # Telegram bot entry point
+      i18n.js       # Bot translations (EN, RU, ES, UK)
+docs/
+  PRD.md            # Full Product Requirements Document
 ```
 
 ## Security
@@ -104,6 +114,8 @@ src/
 - **Audit logging** for all sensitive data access
 - **Role-based access control** (therapist, client, superadmin)
 - **Consent-based data sharing** - clients explicitly grant/revoke therapist access
+- **CSRF protection** with double-submit cookie pattern
+- **Rate limiting** on authentication endpoints
 
 ## Subscription Tiers
 
@@ -115,9 +127,48 @@ src/
 | NL Queries | No | No | Yes | Yes |
 | Analytics | Basic | Basic | Full | Full + Export |
 
+## Environment Variables
+
+All secrets are injected via `.env` file (never baked into images). See `.env.example` for the full list.
+
+### Required Variables
+
+| Variable | Description |
+|----------|-------------|
+| `JWT_SECRET` | Random string for JWT signing |
+| `ENCRYPTION_MASTER_KEY` | Random string for data encryption |
+| `BOT_API_KEY` | Shared secret between bot and backend |
+| `TELEGRAM_BOT_TOKEN` | From BotFather |
+
+### Optional Variables
+
+| Variable | Description |
+|----------|-------------|
+| `STRIPE_SECRET_KEY` | Stripe API key for payments |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
+| `AI_PROVIDER` | AI provider: openai, anthropic, google, openrouter (default: openai) |
+| `AI_MODEL` | AI model name (default: gpt-4o-mini) |
+| `AI_API_KEY` | OpenAI API key |
+| `ANTHROPIC_API_KEY` | Anthropic API key (for Claude models) |
+| `GOOGLE_AI_API_KEY` | Google AI API key (for Gemini models) |
+| `OPENROUTER_API_KEY` | OpenRouter API key (unified model access) |
+| `TRANSCRIPTION_PROVIDER` | Transcription provider (default: openai) |
+| `TRANSCRIPTION_MODEL` | Transcription model (default: whisper-1) |
+| `TRANSCRIPTION_API_KEY` | Transcription API key |
+| `SMTP_HOST` | SMTP server host |
+| `SMTP_PORT` | SMTP server port (default: 587) |
+| `SMTP_USER` | SMTP username |
+| `SMTP_PASS` | SMTP password |
+| `SMTP_FROM` | Sender email address |
+| `SCHEDULER_ENABLED` | Enable scheduled tasks (default: true) |
+| `BACKUP_DIR` | Backup directory (default: ./backups) |
+| `BACKUP_RETENTION_COUNT` | Number of backups to retain (default: 30) |
+| `BACKUP_CRON` | Backup schedule (default: 0 3 * * *) |
+| `LOG_LEVEL` | Logging level (default: info) |
+
 ## Docker Deployment
 
-PsyLink is containerized for deployment via Docker Compose (compatible with Dokploy on Hetzner).
+PR-TOP is containerized for deployment via Docker Compose (compatible with Dokploy on Hetzner).
 
 ### Quick Start with Docker
 
@@ -147,16 +198,6 @@ docker-compose up --build -d
 - **Frontend**: Multi-stage build (Vite build + nginx). Nginx serves static files and reverse-proxies `/api/*` to the backend container.
 - **Backend**: Node.js 18 Alpine. SQLite data persisted in a Docker named volume (`backend-data`).
 - **Bot**: Node.js 18 Alpine. Connects to backend via internal Docker network.
-
-### Environment Variables
-
-All secrets are injected via `.env` file (never baked into images). See `.env.example` for the full list. Required variables for production:
-
-- `JWT_SECRET` - Random string for JWT signing
-- `ENCRYPTION_MASTER_KEY` - Random string for data encryption
-- `BOT_API_KEY` - Shared secret between bot and backend
-- `TELEGRAM_BOT_TOKEN` - From BotFather
-- `STRIPE_SECRET_KEY` - Stripe API key (optional)
 
 ### Production Notes
 

@@ -5,6 +5,7 @@ const express = require('express');
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { isConfigured, getStripeClient } = require('../services/stripe');
+const emailService = require('../services/emailService');
 
 const router = express.Router();
 
@@ -145,6 +146,28 @@ async function handlePaymentSucceeded(db, paymentIntent) {
   }
 
   logger.info(`Payment recorded for subscription ${subscriptionId}: ${paymentIntent.id}`);
+
+  // Send payment receipt email (non-blocking)
+  if (therapistResult.length > 0 && therapistResult[0].values.length > 0) {
+    const therapistId = therapistResult[0].values[0][0];
+    const userResult = db.exec('SELECT email, language FROM users WHERE id = ?', [therapistId]);
+    if (userResult.length > 0 && userResult[0].values.length > 0) {
+      const therapistEmail = userResult[0].values[0][0];
+      const therapistLang = userResult[0].values[0][1] || 'en';
+      const subInfo = db.exec('SELECT plan, current_period_end FROM subscriptions WHERE id = ?', [subscriptionId]);
+      const plan = (subInfo.length > 0 && subInfo[0].values.length > 0) ? subInfo[0].values[0][0] : 'pro';
+      const nextBilling = (subInfo.length > 0 && subInfo[0].values.length > 0) ? subInfo[0].values[0][1] : null;
+      emailService.sendPaymentReceipt(therapistEmail, {
+        amount: paymentIntent.amount,
+        currency: paymentIntent.currency || 'usd',
+        plan,
+        paymentIntentId: paymentIntent.id,
+        nextBilling
+      }, therapistLang).catch(err => {
+        logger.error(`Payment receipt email error: ${err.message}`);
+      });
+    }
+  }
 }
 
 /**

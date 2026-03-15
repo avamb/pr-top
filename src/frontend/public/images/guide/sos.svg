@@ -1,10 +1,39 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="600" height="300" viewBox="0 0 600 300">
-  <rect width="600" height="300" fill="#f1f5f9" rx="12"/>
-  <rect x="40" y="30" width="520" height="240" fill="#e2e8f0" rx="8" stroke="#cbd5e1" stroke-width="1"/>
-  <rect x="60" y="50" width="160" height="20" fill="#94a3b8" rx="4"/>
-  <rect x="60" y="80" width="480" height="8" fill="#cbd5e1" rx="2"/>
-  <rect x="60" y="96" width="400" height="8" fill="#cbd5e1" rx="2"/>
-  <rect x="60" y="140" width="220" height="100" fill="#e0e7ff" rx="6"/>
-  <rect x="300" y="140" width="220" height="100" fill="#e0e7ff" rx="6"/>
-  <text x="300" y="270" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="13">SOS alerts screenshot placeholder</text>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F4F7F6"/>
+      <stop offset="100%" stop-color="#E6F5F3"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="300" fill="url(#bg)" rx="12"/>
+  <text x="30" y="35" fill="#1C2328" font-family="sans-serif" font-size="16" font-weight="bold">SOS Alerts</text>
+  <!-- Alert banner -->
+  <rect x="30" y="50" width="540" height="50" fill="#FEF2F2" rx="8" stroke="#FECACA" stroke-width="1"/>
+  <circle cx="65" cy="75" r="14" fill="#DC2626"/>
+  <text x="65" y="80" text-anchor="middle" fill="#fff" font-family="sans-serif" font-size="12" font-weight="bold">!</text>
+  <text x="90" y="70" fill="#991B1B" font-family="sans-serif" font-size="11" font-weight="bold">New SOS Alert</text>
+  <text x="90" y="85" fill="#DC2626" font-family="sans-serif" font-size="9">Client sent an SOS 5 minutes ago</text>
+  <rect x="470" y="62" width="80" height="26" fill="#DC2626" rx="5"/>
+  <text x="510" y="80" text-anchor="middle" fill="#fff" font-family="sans-serif" font-size="10">Respond</text>
+  <!-- Alert list -->
+  <rect x="30" y="115" width="540" height="55" fill="#fff" rx="8" stroke="#D9E2E0" stroke-width="1"/>
+  <circle cx="55" cy="142" r="6" fill="#DC2626"/>
+  <rect x="70" y="128" width="150" height="10" fill="#1C2328" rx="3" opacity="0.7"/>
+  <text x="70" y="152" fill="#5E6A71" font-family="sans-serif" font-size="9">Severity: High - 5 min ago - Not acknowledged</text>
+  <rect x="490" y="132" width="65" height="20" fill="#FEF2F2" rx="4"/>
+  <text x="522" y="146" text-anchor="middle" fill="#DC2626" font-family="sans-serif" font-size="8">Pending</text>
+
+  <rect x="30" y="180" width="540" height="55" fill="#fff" rx="8" stroke="#D9E2E0" stroke-width="1"/>
+  <circle cx="55" cy="207" r="6" fill="#F59E0B"/>
+  <rect x="70" y="193" width="140" height="10" fill="#1C2328" rx="3" opacity="0.7"/>
+  <text x="70" y="217" fill="#5E6A71" font-family="sans-serif" font-size="9">Severity: Medium - 2 hours ago - Acknowledged</text>
+  <rect x="480" y="197" width="75" height="20" fill="#D1FAE5" rx="4"/>
+  <text x="517" y="211" text-anchor="middle" fill="#065F46" font-family="sans-serif" font-size="8">Acknowledged</text>
+
+  <rect x="30" y="245" width="540" height="45" fill="#fff" rx="8" stroke="#D9E2E0" stroke-width="1"/>
+  <circle cx="55" cy="267" r="6" fill="#10B981"/>
+  <rect x="70" y="256" width="130" height="10" fill="#1C2328" rx="3" opacity="0.7"/>
+  <text x="70" y="278" fill="#5E6A71" font-family="sans-serif" font-size="9">Severity: Low - Yesterday - Resolved</text>
+  <rect x="487" y="257" width="68" height="20" fill="#D1FAE5" rx="4"/>
+  <text x="521" y="271" text-anchor="middle" fill="#065F46" font-family="sans-serif" font-size="8">Resolved</text>
 </svg>

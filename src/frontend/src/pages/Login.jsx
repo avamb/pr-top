@@ -191,7 +191,13 @@ export default function Login() {
             </button>
           </form>
 
-          <p className="mt-4 text-center text-sm text-secondary">
+          <p className="mt-3 text-center text-sm">
+            <Link to="/forgot-password" className="text-primary hover:text-primary-600 font-medium">
+              {t('auth.forgotPassword', 'Forgot password?')}
+            </Link>
+          </p>
+
+          <p className="mt-2 text-center text-sm text-secondary">
             {t('auth.noAccount')}{' '}
             <Link to="/register" className="text-primary hover:text-primary-600 font-medium">
               {t('auth.registerTitle')}

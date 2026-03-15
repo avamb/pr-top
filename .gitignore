@@ -22,6 +22,8 @@ build/
 # Runtime data
 src/backend/data/
 src/backend/uploads/
+src/backend/backups/
+backups/
 
 # Testing tools
 .playwright-cli/
@@ -59,13 +61,33 @@ simulate_*.js
 test_*.js
 test_*.json
 test_*.txt
+test_*.csv
+test_*.webm
 verify_*.js
 _test_*.js
+regression_test_*.js
+create_test_*.js
+
+# Temporary files
+tmp_*.js
+.tmp_*.js
+*.tmp
 
 # Temporary response/data files
 *_resp.json
+*_resp.txt
+*_resp2.txt
+*_response.txt
 cookies*.txt
 tz_import_*.json
 diary_response.json
 login_resp.json
 audit_resp.json
+auth_f*.json
+
+# Screenshots (test artifacts)
+screenshot_*.png
+
+# Root-level package files (project packages are in src/)
+/package.json
+/package-lock.json

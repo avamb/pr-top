@@ -92,10 +92,12 @@ router.post('/', requireNLQueryAccess, (req, res) => {
       return res.status(403).json({ error: 'Client has not granted access consent' });
     }
 
-    // Execute NL query
+    // Execute NL query with timing
+    const queryStart = Date.now();
     const result = executeNLQuery(therapistId, client_id, query.trim(), {
       limit: Math.min(limit || 10, 50)
     });
+    result.search_time_ms = Date.now() - queryStart;
 
     // Audit log the query
     try {

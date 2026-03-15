@@ -18,7 +18,7 @@
   "profile": {
     "updated": "Profile updated successfully",
     "languageUpdated": "Language preference updated",
-    "invalidLanguage": "Invalid language. Must be one of: en, ru, es",
+    "invalidLanguage": "Invalid language. Must be one of: en, ru, es, uk",
     "notFound": "User not found"
   },
   "clients": {
@@ -44,8 +44,12 @@
   "exercises": {
     "notFound": "Exercise not found",
     "created": "Exercise created successfully",
+    "updated": "Exercise updated successfully",
+    "deleted": "Exercise deleted successfully",
     "sent": "Exercise sent to client",
-    "completed": "Exercise completed"
+    "completed": "Exercise completed",
+    "cannotDeleteActive": "Cannot delete exercise with active deliveries",
+    "notOwner": "You can only modify your own exercises"
   },
   "subscription": {
     "required": "Active subscription required",

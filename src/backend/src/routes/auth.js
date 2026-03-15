@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { logger } = require('../utils/logger');
+const emailService = require('../services/emailService');
 
 const router = express.Router();
 
@@ -55,8 +56,15 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Please enter a valid email address' });
     }
 
-    const validRoles = ['therapist', 'client', 'superadmin'];
-    const userRole = validRoles.includes(role) ? role : 'therapist';
+    // Public registration is restricted to therapist role only.
+    // Client accounts are created through bot invite flow.
+    // Superadmin accounts are created via CLI/seed only.
+    if (role && role !== 'therapist') {
+      return res.status(400).json({
+        error: 'Public registration is only available for therapist accounts. Client and superadmin accounts cannot be created through public registration.'
+      });
+    }
+    const userRole = 'therapist';
 
     const db = getDatabase();
 
@@ -102,8 +110,8 @@ router.post('/register', async (req, res) => {
     const userId = user[0];
 
     // Create trial subscription for therapists
+    let trialDays = 14;
     if (userRole === 'therapist') {
-      let trialDays = 14;
       try {
         const settingsResult = db.exec("SELECT value FROM platform_settings WHERE key = 'trial_duration_days'");
         if (settingsResult.length > 0 && settingsResult[0].values.length > 0) {
@@ -134,6 +142,19 @@ router.post('/register', async (req, res) => {
     );
 
     logger.info(`User registered successfully: id=${userId}, email=${user[1]}`);
+
+    // Send welcome email (non-blocking, failure won't break registration)
+    emailService.sendWelcomeEmail(user[1], trialDays, userLanguage)
+      .then(result => {
+        if (result.sent) {
+          logger.info(`Welcome email sent to ${user[1]}`);
+        } else {
+          logger.info(`[EMAIL] Welcome email for ${user[1]}: ${result.error || 'not sent'}`);
+        }
+      })
+      .catch(err => {
+        logger.error(`Welcome email error for ${user[1]}: ${err.message}`);
+      });
 
     // Set secure HttpOnly session cookie
     res.cookie('session_token', token, SESSION_COOKIE_OPTIONS);
@@ -286,6 +307,187 @@ router.get('/me', (req, res) => {
     }
     logger.error('Auth/me error:', error);
     res.status(500).json({ error: 'Failed to fetch user profile' });
+  }
+});
+
+// Forgot password rate limiting (in-memory, per email)
+const forgotPasswordRates = new Map(); // email -> { count, windowStart }
+const FORGOT_PW_RATE_WINDOW = 60 * 60 * 1000; // 1 hour
+const FORGOT_PW_RATE_MAX = 3;
+
+// POST /api/auth/forgot-password
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    // Always return success to prevent user enumeration
+    const successMessage = 'If an account with that email exists, a password reset link has been sent.';
+
+    // Rate limiting per email
+    const now = Date.now();
+    const rateEntry = forgotPasswordRates.get(email.toLowerCase());
+    if (rateEntry && (now - rateEntry.windowStart) < FORGOT_PW_RATE_WINDOW) {
+      if (rateEntry.count >= FORGOT_PW_RATE_MAX) {
+        logger.warn(`Forgot password rate limited for email: ${email}`);
+        return res.json({ message: successMessage }); // Don't reveal rate limit
+      }
+      rateEntry.count++;
+    } else {
+      forgotPasswordRates.set(email.toLowerCase(), { count: 1, windowStart: now });
+    }
+
+    const db = getDatabase();
+
+    // Find user by email (only therapists and superadmins can reset)
+    const userResult = db.exec(
+      'SELECT id, email, role, language, blocked_at FROM users WHERE email = ? AND role IN (\'therapist\', \'superadmin\')',
+      [email]
+    );
+
+    if (userResult.length === 0 || userResult[0].values.length === 0) {
+      logger.info(`Forgot password: no therapist/superadmin found for email ${email}`);
+      return res.json({ message: successMessage });
+    }
+
+    const user = userResult[0].values[0];
+    const userId = user[0];
+    const userEmail = user[1];
+    const userLang = user[3] || 'en';
+    const blockedAt = user[4];
+
+    if (blockedAt) {
+      logger.warn(`Forgot password: blocked user ${userId} attempted reset`);
+      return res.json({ message: successMessage });
+    }
+
+    // Generate reset token
+    const resetToken = uuidv4();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
+
+    // Invalidate any existing unused tokens for this user
+    db.run(
+      'UPDATE password_reset_tokens SET used = 1 WHERE user_id = ? AND used = 0',
+      [userId]
+    );
+
+    // Insert new token
+    db.run(
+      'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)',
+      [userId, resetToken, expiresAt]
+    );
+    saveDatabase();
+
+    // Send reset email (non-blocking)
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const resetUrl = frontendUrl + '/reset-password?token=' + encodeURIComponent(resetToken);
+
+    // Log to console in dev mode (as per EMAIL INTEGRATION instructions)
+    logger.info(`[PASSWORD RESET] Link for ${userEmail}: ${resetUrl}`);
+
+    emailService.sendPasswordReset(userEmail, resetToken, userLang)
+      .then(result => {
+        if (result.sent) {
+          logger.info(`Password reset email sent to ${userEmail}`);
+        } else {
+          logger.info(`[EMAIL] Password reset for ${userEmail}: ${result.error || 'not sent'}`);
+        }
+      })
+      .catch(err => {
+        logger.error(`Password reset email error for ${userEmail}: ${err.message}`);
+      });
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, created_at) VALUES (?, 'password_reset_requested', 'user', ?, datetime('now'))",
+      [userId, userId]
+    );
+    saveDatabase();
+
+    res.json({ message: successMessage });
+  } catch (error) {
+    logger.error('Forgot password error: ' + error.message);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
+  }
+});
+
+// POST /api/auth/reset-password
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ error: 'Token and new password are required' });
+    }
+
+    const db = getDatabase();
+
+    // Find the token
+    const tokenResult = db.exec(
+      'SELECT id, user_id, expires_at, used FROM password_reset_tokens WHERE token = ?',
+      [token]
+    );
+
+    if (tokenResult.length === 0 || tokenResult[0].values.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired reset link. Please request a new one.' });
+    }
+
+    const resetRecord = tokenResult[0].values[0];
+    const tokenId = resetRecord[0];
+    const userId = resetRecord[1];
+    const expiresAt = resetRecord[2];
+    const used = resetRecord[3];
+
+    // Check if token was already used
+    if (used) {
+      return res.status(400).json({ error: 'This reset link has already been used. Please request a new one.' });
+    }
+
+    // Check if token has expired
+    if (new Date(expiresAt) < new Date()) {
+      return res.status(400).json({ error: 'This reset link has expired. Please request a new one.' });
+    }
+
+    // Validate password strength
+    const pwdErrors = [];
+    if (password.length < 8) pwdErrors.push('at least 8 characters');
+    if (!/[A-Z]/.test(password)) pwdErrors.push('at least one uppercase letter');
+    if (!/[a-z]/.test(password)) pwdErrors.push('at least one lowercase letter');
+    if (!/[0-9]/.test(password)) pwdErrors.push('at least one number');
+    if (pwdErrors.length > 0) {
+      return res.status(400).json({ error: 'Password does not meet requirements: ' + pwdErrors.join(', ') });
+    }
+
+    // Hash new password
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    // Update user's password
+    db.run('UPDATE users SET password_hash = ?, updated_at = datetime(\'now\') WHERE id = ?', [passwordHash, userId]);
+
+    // Mark token as used
+    db.run('UPDATE password_reset_tokens SET used = 1 WHERE id = ?', [tokenId]);
+
+    // Invalidate all other reset tokens for this user
+    db.run('UPDATE password_reset_tokens SET used = 1 WHERE user_id = ? AND used = 0', [userId]);
+
+    saveDatabase();
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, created_at) VALUES (?, 'password_reset_completed', 'user', ?, datetime('now'))",
+      [userId, userId]
+    );
+    saveDatabase();
+
+    logger.info(`Password reset completed for user ${userId}`);
+
+    res.json({ message: 'Password has been reset successfully. You can now log in with your new password.' });
+  } catch (error) {
+    logger.error('Reset password error: ' + error.message);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
 });
 

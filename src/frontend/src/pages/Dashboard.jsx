@@ -382,6 +382,23 @@ export default function Dashboard() {
           </div>
         </section>
 
+        {/* Ask about a client - NL query shortcut */}
+        <section className="mt-6 bg-white rounded-lg shadow-md p-6">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-2xl">🔍</span>
+            <h2 className="text-lg font-semibold text-primary">{t('dashboard.askClient', 'Ask About a Client')}</h2>
+          </div>
+          <p className="text-sm text-secondary mb-3">
+            {t('dashboard.askClientHint', 'Use natural language to search through client records, diary entries, and session notes.')}
+          </p>
+          <button
+            onClick={() => navigate('/clients')}
+            className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
+          >
+            {t('dashboard.selectClient', 'Select a Client to Query')}
+          </button>
+        </section>
+
         {/* Need help? link */}
         <section className="mt-8 text-center">
           <button

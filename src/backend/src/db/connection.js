@@ -268,6 +268,41 @@ function applySchema(db) {
     )
   `);
 
+  db.run(`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      token TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      used INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  db.run('CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id)');
+
+  // AI usage logging table
+  db.run(`
+    CREATE TABLE IF NOT EXISTS ai_usage_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      therapist_id INTEGER NOT NULL REFERENCES users(id),
+      timestamp TEXT DEFAULT (datetime('now')),
+      provider TEXT NOT NULL,
+      model TEXT NOT NULL,
+      operation TEXT NOT NULL,
+      input_tokens INTEGER DEFAULT 0,
+      output_tokens INTEGER DEFAULT 0,
+      total_tokens INTEGER DEFAULT 0,
+      cost_usd REAL DEFAULT 0,
+      session_id INTEGER,
+      metadata TEXT
+    )
+  `);
+  db.run('CREATE INDEX IF NOT EXISTS idx_ai_usage_log_therapist ON ai_usage_log(therapist_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_ai_usage_log_timestamp ON ai_usage_log(timestamp)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_ai_usage_log_model ON ai_usage_log(model)');
+
   // Add pending_plan column for scheduled downgrades (migration)
   try {
     db.run('ALTER TABLE subscriptions ADD COLUMN pending_plan TEXT');
@@ -282,6 +317,57 @@ function applySchema(db) {
     logger.info('Added escalation_preferences column to users');
   } catch (e) {
     // Column already exists, ignore
+  }
+
+  // Add Ukrainian language columns to exercises table (migration)
+  try {
+    db.run('ALTER TABLE exercises ADD COLUMN title_uk TEXT');
+    logger.info('Added title_uk column to exercises');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE exercises ADD COLUMN description_uk TEXT');
+    logger.info('Added description_uk column to exercises');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE exercises ADD COLUMN instructions_uk TEXT');
+    logger.info('Added instructions_uk column to exercises');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  // Backfill Ukrainian translations for existing seed exercises
+  try {
+    const ukCheck = db.exec("SELECT COUNT(*) FROM exercises WHERE title_uk IS NOT NULL AND is_custom = 0");
+    if (ukCheck.length && ukCheck[0].values[0][0] === 0) {
+      const ukTranslations = [
+        { en: 'Diaphragmatic Breathing', title: 'Діафрагмальне дихання', desc: 'Техніка глибокого дихання для зниження тривожності', instr: '1. Сядьте зручно\n2. Покладіть руку на живіт\n3. Вдихніть через ніс на 4 рахунки\n4. Затримайте дихання на 4 рахунки\n5. Видихніть через рот на 6 рахунків\n6. Повторіть 5-10 разів' },
+        { en: 'Progressive Muscle Relaxation', title: 'Прогресивна м\'язова релаксація', desc: 'Послідовне напруження і розслаблення груп м\'язів', instr: '1. Почніть з м\'язів стоп\n2. Напружте на 5 секунд\n3. Розслабте на 10 секунд\n4. Просувайтесь вгору по тілу\n5. Завершіть м\'язами обличчя' },
+        { en: '4-7-8 Breathing', title: 'Дихання 4-7-8', desc: 'Техніка дихання для швидкого засинання та заспокоєння', instr: '1. Вдихніть через ніс на 4 рахунки\n2. Затримайте дихання на 7 рахунків\n3. Видихніть через рот на 8 рахунків\n4. Повторіть 3-4 цикли' },
+        { en: 'Body Scan Meditation', title: 'Сканування тіла', desc: 'Медитація усвідомленості для розвитку зв\'язку з тілом', instr: '1. Лягте зручно\n2. Закрийте очі\n3. Спрямуйте увагу на маківку\n4. Повільно переміщуйте увагу вниз по тілу\n5. Відмічайте відчуття без оцінки\n6. Приділіть 15-20 хвилин' },
+        { en: '5-4-3-2-1 Grounding', title: 'Техніка 5-4-3-2-1', desc: 'Техніка заземлення через п\'ять відчуттів', instr: '1. Назвіть 5 речей, які бачите\n2. Назвіть 4 речі, які можете торкнути\n3. Назвіть 3 звуки, які чуєте\n4. Назвіть 2 запахи\n5. Назвіть 1 смак' },
+        { en: 'Mindful Observation', title: 'Усвідомлене спостереження', desc: 'Практика усвідомленої уваги до навколишнього світу', instr: '1. Оберіть об\'єкт в оточенні\n2. Спостерігайте його 2 хвилини\n3. Відмітьте колір, текстуру, форму\n4. Відмітьте свої думки та почуття\n5. Поверніться до спостереження' },
+        { en: 'Thought Record', title: 'Щоденник думок', desc: 'Запис та аналіз автоматичних думок за методом КПТ', instr: '1. Опишіть ситуацію\n2. Запишіть автоматичну думку\n3. Визначте емоцію (0-100%)\n4. Знайдіть когнітивне спотворення\n5. Сформулюйте альтернативну думку\n6. Переоцініть емоцію' },
+        { en: 'Cognitive Reframing', title: 'Рефреймінг', desc: 'Техніка зміни перспективи на негативні події', instr: '1. Запишіть негативну ситуацію\n2. Визначте свою інтерпретацію\n3. Задайте питання: "Які ще пояснення можливі?"\n4. Запишіть 3 альтернативні інтерпретації\n5. Оберіть найбільш реалістичну' },
+        { en: 'Evidence Examination', title: 'Аналіз доказів', desc: 'Перевірка негативних переконань через збір доказів', instr: '1. Запишіть переконання\n2. Зберіть докази ЗА\n3. Зберіть докази ПРОТИ\n4. Оцініть об\'єктивно\n5. Сформулюйте збалансоване переконання' },
+        { en: 'Gratitude Journal', title: 'Щоденник вдячності', desc: 'Щоденна практика запису того, за що ви вдячні', instr: '1. Щовечора запишіть 3 речі\n2. За що ви вдячні сьогодні\n3. Будьте конкретні\n4. Поясніть чому це важливо\n5. Перечитайте за тиждень' },
+        { en: 'Free Writing', title: 'Вільне письмо', desc: 'Безперервне письмо без цензури для самовираження', instr: '1. Встановіть таймер на 10 хвилин\n2. Пишіть без зупинки\n3. Не редагуйте і не перечитуйте\n4. Пишіть все, що спадає на думку\n5. По закінченні відмітьте ключові теми' },
+        { en: 'Letter to Self', title: 'Лист до себе', desc: 'Написання співчутливого листа самому собі', instr: '1. Уявіть, що пишете другу\n2. Зверніться до себе з теплотою\n3. Визнайте свої труднощі\n4. Напишіть слова підтримки\n5. Завершіть добрим побажанням' },
+        { en: 'Behavioral Activation', title: 'Поведінкова активація', desc: 'Планування приємних та значущих активностей', instr: '1. Складіть список приємних активностей\n2. Оцініть кожну за задоволенням (1-10)\n3. Оцініть за значущістю (1-10)\n4. Заплануйте 1-2 активності на день\n5. Після виконання оцініть настрій' },
+        { en: 'Exposure Hierarchy', title: 'Експозиційні сходи', desc: 'Поступове наближення до лякаючих ситуацій', instr: '1. Визначте страх\n2. Створіть список ситуацій (від легкої до складної)\n3. Оцініть кожну за тривогою (0-100)\n4. Почніть з найлегшої\n5. Практикуйте до зниження тривоги на 50%' },
+        { en: 'Habit Tracking', title: 'Відстеження звичок', desc: 'Систематичне відстеження формування нових звичок', instr: '1. Оберіть одну звичку для формування\n2. Визначте тригер (після чого ви це робите)\n3. Визначте нагороду\n4. Відмічайте кожен день виконання\n5. Прагніть до 21-денної серії' },
+        { en: 'Self-Compassion Break', title: 'Самоспівчуття', desc: 'Коротка практика самоспівчуття у важкі моменти', instr: '1. Визнайте: "Зараз мені важко"\n2. Нагадайте: "Всі люди переживають труднощі"\n3. Покладіть руку на серце\n4. Скажіть: "Нехай я буду добрим до себе"\n5. Дихайте спокійно 1 хвилину' },
+      ];
+      for (const t of ukTranslations) {
+        db.run("UPDATE exercises SET title_uk = ?, description_uk = ?, instructions_uk = ? WHERE title_en = ? AND is_custom = 0", [t.title, t.desc, t.instr, t.en]);
+      }
+      logger.info('Backfilled Ukrainian translations for seed exercises');
+    }
+  } catch (e) {
+    logger.warn('Ukrainian backfill migration skipped: ' + e.message);
   }
 
   // Create indexes for performance
@@ -312,6 +398,12 @@ function applySchema(db) {
     ['basic_price_monthly', '1900'],
     ['pro_price_monthly', '4900'],
     ['premium_price_monthly', '9900'],
+    ['ai_summarization_provider', 'openai'],
+    ['ai_summarization_model', 'gpt-4o-mini'],
+    ['ai_transcription_provider', 'openai'],
+    ['ai_transcription_model', 'whisper-1'],
+    ['ai_monthly_limit_usd', '0'],
+    ['ai_limit_warning_percent', '80'],
   ];
 
   for (const [key, value] of defaultSettings) {

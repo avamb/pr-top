@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { formatUserDate } from '../utils/formatDate';
 
@@ -16,7 +15,6 @@ const LEVEL_OPTIONS = ['', 'error', 'warn', 'info', 'debug'];
 
 export default function AdminSystemLogs() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState([]);
   const [total, setTotal] = useState(0);
@@ -59,31 +57,9 @@ export default function AdminSystemLogs() {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/login');
-      return;
-    }
-
-    fetch(`${API_URL}/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('Unauthorized');
-        return res.json();
-      })
-      .then(data => {
-        if (data.user.role !== 'superadmin') {
-          navigate('/dashboard');
-          return;
-        }
-        loadLogs(1, '', '');
-      })
-      .catch(() => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        navigate('/login');
-      });
-  }, [navigate]);
+    if (!token) return;
+    loadLogs(1, '', '');
+  }, []);
 
   const handleLevelChange = (newLevel) => {
     setLevelFilter(newLevel);

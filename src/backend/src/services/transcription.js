@@ -8,6 +8,8 @@ const path = require('path');
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { encrypt, decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
+const wsService = require('./websocketService');
+const { logUsage, checkSpendingLimit } = require('./aiUsageLogger');
 // Lazy-loaded to avoid circular dependency
 let summarizationService = null;
 function getSummarizationService() {
@@ -60,7 +62,8 @@ async function transcribeAudio(audioRef) {
     const decryptedBase64 = decrypt(encryptedContent);
     const audioBuffer = Buffer.from(decryptedBase64, 'base64');
 
-    return await callTranscriptionAPI(audioBuffer);
+    const result = await callTranscriptionAPI(audioBuffer);
+    return result;
   } else {
     // Development mode: generate a development transcript
     // This provides realistic-looking output for testing the pipeline
@@ -69,7 +72,7 @@ async function transcribeAudio(audioRef) {
     const timestamp = new Date().toISOString();
 
     const transcript = [
-      `[Session Transcript - Generated ${timestamp}]`,
+      `[DEV MODE - Session Transcript - Generated ${timestamp}]`,
       `[Audio file: ${audioRef}, Size: ${fileSizeKB}KB, Est. duration: ${estimatedDurationMin}min]`,
       ``,
       `Therapist: Welcome to today's session. How have you been feeling since our last meeting?`,
@@ -86,19 +89,120 @@ async function transcribeAudio(audioRef) {
     ].join('\n');
 
     logger.info(`Dev transcription generated for ${audioRef} (${fileSizeKB}KB)`);
-    return transcript;
+    // Estimate tokens for dev mode
+    const estimatedTokens = Math.ceil(transcript.length / 4);
+    const model = process.env.TRANSCRIPTION_MODEL || 'whisper-1';
+    return { text: transcript, usage: { model, inputTokens: estimatedTokens, outputTokens: estimatedTokens } };
   }
 }
 
 /**
- * Call external transcription API (production mode).
- * Placeholder for real API integration.
+ * Call OpenAI Whisper API for speech-to-text transcription.
+ * Sends the raw audio buffer as a multipart/form-data upload.
+ *
+ * @param {Buffer} audioBuffer - Raw audio data (decrypted)
+ * @returns {Promise<string>} The transcription text
  */
 async function callTranscriptionAPI(audioBuffer) {
-  // When TRANSCRIPTION_API_KEY is set to a real key, this would call
-  // the configured speech-to-text API (e.g., OpenAI Whisper)
-  // For now, throw if we somehow get here without proper config
-  throw new Error('Real transcription API integration not yet implemented. Set TRANSCRIPTION_API_KEY to a valid key.');
+  // Check spending limit before making API call
+  const spendingCheck = checkSpendingLimit();
+  if (!spendingCheck.allowed) {
+    throw new Error('AI spending limit reached. Contact admin.');
+  }
+
+  const apiBase = process.env.TRANSCRIPTION_API_URL || 'https://api.openai.com/v1';
+  let model = process.env.TRANSCRIPTION_MODEL || 'whisper-1';
+  const language = process.env.TRANSCRIPTION_LANGUAGE || undefined; // auto-detect if not set
+
+  // Read transcription model from platform_settings (DB override)
+  try {
+    const { getDatabase } = require('../db/connection');
+    const db = getDatabase();
+    const modResult = db.exec("SELECT value FROM platform_settings WHERE key = 'ai_transcription_model'");
+    if (modResult.length > 0 && modResult[0].values.length > 0 && modResult[0].values[0][0]) {
+      model = modResult[0].values[0][0];
+    }
+  } catch (e) {
+    // Fall back to env var
+  }
+
+  // Build multipart/form-data body manually (no external dependency needed)
+  const boundary = '----FormBoundary' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+
+  const parts = [];
+
+  // model field
+  parts.push(
+    `--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="model"\r\n\r\n` +
+    `${model}\r\n`
+  );
+
+  // language field (optional)
+  if (language) {
+    parts.push(
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="language"\r\n\r\n` +
+      `${language}\r\n`
+    );
+  }
+
+  // response_format field
+  parts.push(
+    `--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="response_format"\r\n\r\n` +
+    `text\r\n`
+  );
+
+  // audio file field
+  const fileHeader = Buffer.from(
+    `--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="file"; filename="session_audio.webm"\r\n` +
+    `Content-Type: audio/webm\r\n\r\n`
+  );
+  const fileFooter = Buffer.from(`\r\n`);
+  const ending = Buffer.from(`--${boundary}--\r\n`);
+
+  const textParts = Buffer.from(parts.join(''));
+  const body = Buffer.concat([textParts, fileHeader, audioBuffer, fileFooter, ending]);
+
+  logger.info(`Calling transcription API: ${apiBase}/audio/transcriptions (model=${model}, audio=${Math.round(audioBuffer.length / 1024)}KB)`);
+
+  const response = await fetch(`${apiBase}/audio/transcriptions`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${TRANSCRIPTION_API_KEY}`,
+      'Content-Type': `multipart/form-data; boundary=${boundary}`
+    },
+    body: body,
+    signal: AbortSignal.timeout(300000) // 5 minute timeout for long audio
+  });
+
+  if (!response.ok) {
+    let errorDetail = '';
+    try {
+      const errorBody = await response.text();
+      errorDetail = errorBody.substring(0, 500);
+    } catch { /* ignore */ }
+    throw new Error(`Transcription API returned ${response.status}: ${errorDetail}`);
+  }
+
+  const transcript = await response.text();
+
+  if (!transcript || transcript.trim().length === 0) {
+    throw new Error('Transcription API returned empty result');
+  }
+
+  logger.info(`Transcription API returned ${transcript.length} characters`);
+
+  // Estimate tokens from transcript length (Whisper doesn't return token counts in text mode)
+  const estimatedInputTokens = Math.ceil(audioBuffer.length / 100); // rough estimate from audio size
+  const estimatedOutputTokens = Math.ceil(transcript.length / 4);
+
+  return {
+    text: transcript.trim(),
+    usage: { model, inputTokens: estimatedInputTokens, outputTokens: estimatedOutputTokens }
+  };
 }
 
 /**
@@ -137,7 +241,14 @@ async function processSessionTranscription(sessionId) {
 
     // Transcribe the audio
     logger.info(`Starting transcription for session ${sessionId}...`);
-    const transcript = await transcribeAudio(audioRef);
+    const transcriptionResult = await transcribeAudio(audioRef);
+    const transcript = transcriptionResult.text;
+
+    // Log AI usage for transcription
+    if (transcriptionResult.usage) {
+      const u = transcriptionResult.usage;
+      logUsage(therapistId, 'openai', u.model, 'transcription', u.inputTokens, u.outputTokens, null, sessionId);
+    }
 
     // Encrypt the transcript (Class A data)
     const { encrypted: transcriptEncrypted, keyVersion, keyId } = encrypt(transcript);
@@ -189,13 +300,20 @@ async function processSessionTranscription(sessionId) {
       // Don't fail the transcription if summary fails
     }
 
+    // Push real-time session status to therapist
+    try {
+      wsService.emitSessionStatus(therapistId, { sessionId, clientId, status: 'complete' });
+    } catch (wsErr) {
+      logger.warn(`[WS] Failed to emit session status: ${wsErr.message}`);
+    }
+
     return { success: true, sessionId };
   } catch (error) {
     logger.error(`Transcription failed for session ${sessionId}: ${error.message}`);
 
-    // Update session status to failed
+    // Update session status to transcription_failed
     db.run(
-      "UPDATE sessions SET status = 'failed', updated_at = datetime('now') WHERE id = ?",
+      "UPDATE sessions SET status = 'transcription_failed', updated_at = datetime('now') WHERE id = ?",
       [sessionId]
     );
     saveDatabase();

@@ -10,9 +10,25 @@ services:
       - NODE_ENV=production
       - PORT=3001
       - FRONTEND_URL=http://frontend
+      # AI provider configuration
+      - AI_PROVIDER=${AI_PROVIDER:-openai}
+      - AI_MODEL=${AI_MODEL:-gpt-4o-mini}
+      - AI_API_KEY=${AI_API_KEY:-}
+      - AI_API_URL=${AI_API_URL:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_API_URL=${ANTHROPIC_API_URL:-}
+      - GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      # Transcription configuration
+      - TRANSCRIPTION_PROVIDER=${TRANSCRIPTION_PROVIDER:-openai}
+      - TRANSCRIPTION_MODEL=${TRANSCRIPTION_MODEL:-whisper-1}
+      - TRANSCRIPTION_API_KEY=${TRANSCRIPTION_API_KEY:-}
+      - TRANSCRIPTION_API_URL=${TRANSCRIPTION_API_URL:-}
+      - TRANSCRIPTION_LANGUAGE=${TRANSCRIPTION_LANGUAGE:-}
     volumes:
       - backend-data:/app/data
       - backend-uploads:/app/data/sessions
+      - backend-backups:/app/backups
     expose:
       - "3001"
     healthcheck:
@@ -51,4 +67,6 @@ volumes:
   backend-data:
     driver: local
   backend-uploads:
+    driver: local
+  backend-backups:
     driver: local

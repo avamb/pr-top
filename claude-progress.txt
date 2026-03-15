@@ -1,0 +1,621 @@
+## Session: 2026-03-14 - Features #240, #241, #243
+
+### Completed: AI usage logging - track every API call with tokens and cost (#240) - PASSING
+
+**What was built:**
+- Created ai_usage_log table: id, therapist_id, timestamp, provider, model, operation, input/output/total tokens, cost_usd, session_id, metadata
+- Created aiUsageLogger.js service: logUsage(), calculateCost(), getUsageStats(), getUsageByTherapist(), getTotalUsage()
+- Model pricing table for gpt-4o-mini, gpt-4o, gpt-4-turbo, claude-3-haiku, claude-3.5-sonnet, gemini-1.5-flash, etc.
+- Integrated logging into summarization.js and transcription.js
+- All query functions tested and verified
+
+### Completed: Multi-provider AI abstraction layer (#241) - PASSING
+
+**What was built:**
+- Created aiProviders/ directory with openai.js, anthropic.js, google.js, openrouter.js
+- Provider registry (index.js) with auto-detection from model name
+- Each provider: isConfigured(), chat(), listModels() interface
+- Refactored summarization.js to use provider abstraction
+- DB settings override support for provider/model selection
+- Updated .env.example with all provider API keys
+
+### Completed: Super Admin AI usage & cost dashboard (#243) - PASSING
+
+**What was built:**
+- AdminAIUsage.jsx with 4 sections: summary cards, daily cost chart, cost by model table, cost by therapist table
+- API endpoints: GET /admin/ai/usage, /admin/ai/usage/summary, /admin/ai/usage/daily
+- Date range picker with presets (Today, 7d, 30d, 90d) and custom range
+- Sidebar navigation link under Administration section
+- i18n labels in EN/RU/ES
+- Zero console errors, verified in browser
+
+### Current Status
+- Features #240, #241, #243: ALL PASSING
+- All 3 assigned features completed in this session
+
+## Session: 2026-03-13 - Feature #235
+
+### Completed: Bulk client import from CSV/JSON (#235) - PASSING
+
+**What was fixed:**
+- Fixed critical encryption bug in bulk import endpoint: `encrypt()` returns an object `{encrypted, keyVersion, keyId}`, but the code was passing the whole object to SQL INSERT instead of `.encrypted` property
+- Updated INSERT for therapist_notes and client_context to use `encryptedNote.encrypted`, `encryptedNote.keyId`, `encryptedNote.keyVersion`
+- This caused 500 errors whenever importing clients with name, phone, or notes fields
+
+**Verification:**
+- API: CSV import with 3 clients (name, email, phone, notes) → 200, all 3 created ✅
+- API: JSON import with 2 clients → 200, both created ✅
+- API: Duplicate email detection → skipped with warning ✅
+- API: Invalid email format → error with row number ✅
+- API: Tier limit exceeded → 403 with details ✅
+- API: No file uploaded → 400 ✅
+- Browser: Import Clients button visible in ClientList ✅
+- Browser: Modal opens with file upload area ✅
+- Browser: CSV file parsed and previewed in table (name, email, phone, notes) ✅
+- Browser: Import Clients button executes import → success summary with created count ✅
+- Browser: Created clients show ID, email, name, invite code ✅
+- Browser: Client list auto-refreshes after import ✅
+- Data persists after server restart ✅
+- No mock data patterns in source ✅
+- i18n labels present in EN, RU, ES ✅
+- Zero console errors ✅
+
+### Current Status
+- Features passing: 239/239 (100%)
+- Feature #235: PASSING
+
+## Session: 2026-03-13 - Feature #239
+
+### Completed: Therapist Guide SVG illustrations — verify and create missing assets (#239) - PASSING
+
+**What was changed:**
+- Replaced all 8 placeholder SVG illustrations in public/images/guide/ with proper themed illustrations
+- Each SVG uses the app's teal/sage color palette (#1F8A83, #A8C9BE, #F4F7F6, etc.)
+- dashboard.svg: stat cards, activity feed, invite code with Copy button
+- clients.svg: client cards with avatar initials, activity dots, status badges
+- profile.svg: client header with consent badge, 6 tab navigation, anamnesis/goals, quick stats
+- sessions.svg: session list with upload button, Complete and Transcribing status badges
+- exercises.svg: exercise cards with category icons, status badges, category pills
+- sos.svg: red alert banner, severity indicators, Pending/Acknowledged/Resolved statuses
+- analytics.svg: bar chart (diary per day), line chart (sessions per day), client activity sidebar
+- settings.svg: language/timezone dropdowns, subscription plan card, payment history
+
+**Verification:**
+- All 8 SVGs exist and are under 5KB each ✅
+- Dashboard SVG renders correctly in accordion section ✅
+- Clients SVG renders correctly ✅
+- Profile SVG renders correctly with tabs and stats ✅
+- SOS SVG renders correctly with alert banner and severity levels ✅
+- Analytics SVG renders correctly with charts and export button ✅
+- Guide page loads in EN with all illustrations visible ✅
+- Guide page loads in RU with all illustrations visible ✅
+- Guide page loads in ES with all illustrations visible ✅
+- No broken image icons in any section ✅
+- No 404s for image assets ✅
+- Zero JS console errors related to guide/images ✅
+
+### Current Status
+- Features passing: 236/239 (98.7%)
+- Feature #239: PASSING
+
+## Session: 2026-03-13 - Feature #236
+
+### Completed: Automatic voice and video diary transcription on save (#236) - PASSING
+
+**What was changed:**
+- Updated GET /api/bot/diary/:telegram_id to return transcript (decrypted) and transcription_status fields
+- transcription_status: 'complete' (has transcript), 'pending' (voice/video without transcript), null (text entries)
+- Updated /history bot command to show transcript preview for transcribed entries, [Transcribing...] for pending
+- Added transcription status badges in therapist diary view: green "✅ Transcribed" / amber "⏳ Pending transcription"
+- Updated bot voice/video/video_note handlers with "Transcription in progress..." confirmation messages
+- Added i18n strings for transcription status in EN, RU, ES (bot i18n.js)
+- Backend auto-transcription was already wired in POST /api/bot/diary via processDiaryTranscription()
+
+**Verification:**
+- API: Voice diary entry → auto-transcribed → transcription_status=complete ✅
+- API: Video diary entry → auto-transcribed → transcription_status=complete ✅
+- API: Text diary entry → transcription_status=null (no transcription needed) ✅
+- API: Manual transcription endpoint → correctly reports already_transcribed ✅
+- Browser: Therapist diary view shows green "✅ Transcribed" badge on voice/video entries ✅
+- Browser: Transcript text displayed with "📝 Transcript:" prefix ✅
+- Browser: Text entries show no transcription badge ✅
+- Data persists after server restart ✅
+- No mock data patterns in source ✅
+- Zero console errors ✅
+
+### Current Status
+- Features passing: 234/239 (97.9%)
+- Feature #236: PASSING
+
+## Session: 2026-03-13 - Features #209, #222, #211
+
+### Completed: Restrict public registration to therapist-only (#209) - PASSING
+
+**What was changed:**
+- Hardcoded role='therapist' in POST /api/auth/register
+- Returns 400 if role=client or role=superadmin is explicitly requested
+- Bot invite flow (POST /api/bot/register) unaffected
+- Trial subscription bootstrap still works for therapist registration
+
+**Verification:**
+- API: role=client → 400, role=superadmin → 400, role=therapist → 201, no role → 201 (therapist)
+- Browser: registration form works, redirects to dashboard as therapist
+- Zero console errors
+
+### Completed: Replace ad hoc auth checks with explicit route guards (#222) - PASSING
+
+**What was built:**
+- Created AuthGuard (checks token, handles cross-tab sync, redirects to /login)
+- Created TherapistGuard (blocks client role, allows therapist/superadmin)
+- Created AdminGuard (requires superadmin, redirects others to /dashboard)
+- All in src/frontend/src/components/guards/
+- Refactored App.jsx: GuardedLayout (AuthGuard+TherapistGuard+AppLayout) for dashboard routes,
+  AdminLayout (AuthGuard+TherapistGuard+AdminGuard+AppLayout) for admin routes
+- Removed scattered auth/role checks from AppLayout.jsx (kept subscription check only)
+- Removed inline superadmin checks from AdminDashboard, AdminTherapists, AdminSettings, AdminAuditLogs, AdminSystemLogs
+
+**Verification:**
+- Unauthenticated → /login ✅
+- Therapist → /dashboard ✅, /admin → redirected to /dashboard ✅
+- Superadmin → /admin ✅, /dashboard ✅, all admin sub-pages ✅
+- Zero console errors across all pages ✅
+
+### Completed: Enforce consent on all therapist read paths (#211) - PASSING
+
+**What was built:**
+- Created reusable verifyClientConsent(therapistId, clientId, auditAction) in src/backend/src/utils/consentCheck.js
+- Applied consent checks to previously unprotected endpoints in clients.js:
+  - GET /:id/sessions, GET /:id/exercises, POST /:id/exercises
+  - GET /:id/sos, PUT /:id/sos/:sosId/acknowledge
+  - POST /:id/notes, PUT /:id/notes/:noteId
+  - GET /:id/context, PUT /:id/context
+  - POST /:id/import
+- Applied consent checks to sessions.js:
+  - GET /:id (session detail with transcript/summary)
+  - GET /:id/summary
+  - GET /:id/transcript
+- Added dev endpoint /api/dev/set-consent for testing consent flows
+
+**Verification:**
+- With consent=true: all endpoints return 200 ✅
+- With consent=false: all endpoints return 403 "Client has not granted consent for data access" ✅
+- Re-granting consent: immediately restores access (no caching) ✅
+- Browser test: client detail page shows data with consent, shows errors without ✅
+- No mock data patterns ✅
+
+## Session: 2026-03-13 - Features #212, #215, #213
+
+### Completed: Remove direct therapist-client linking bypass (#212) - PASSING
+
+**What was changed:**
+- POST /api/clients/link restricted to superadmin role only (was open to all therapists)
+- Therapists now get 403 "Insufficient permissions" when trying direct linking
+- Superadmin can still use it with audit logging
+- Sets consent_therapist_access=1 for superadmin overrides
+- Proper flow preserved: invite code → consent → link via bot
+
+### Completed: Add missing core Telegram commands (#215) - PASSING
+
+**What was built:**
+- /help command: role-aware (client sees diary/sos/history/disconnect, therapist sees web dashboard tip)
+- /sos command: sends SOS alert to connected therapist, shows emergency hotlines
+- /history command: shows last 10 decrypted diary entries with date/type/preview
+- /disconnect command: confirmation prompt, then revokes consent via backend
+- Updated backend GET /api/bot/diary/:id to decrypt content (was metadata-only)
+- All commands localized in EN, RU, ES (i18n.js)
+- Disconnect callback handling added to callback_query handler
+
+### Completed: Implement real session audio transcription STT (#213) - PASSING
+
+**What was built:**
+- callTranscriptionAPI: real OpenAI Whisper API integration using native fetch
+- Multipart/form-data upload with configurable model, language, API URL
+- Audio decrypted before sending to provider, transcript encrypted before DB storage
+- 5-minute timeout for long audio files
+- Error handling: API failures set session status to 'transcription_failed'
+- Dev mode fallback: generates placeholder transcript with [DEV MODE] prefix
+- Frontend: red badge for transcription_failed/failed session status
+- Status flow: pending → transcribing → complete/transcription_failed
+
+**Verification:**
+- Session upload triggers async transcription pipeline ✅
+- Dev mode produces [DEV MODE] transcript, encrypted, stored, decrypted on read ✅
+- Summary auto-generated from transcript ✅
+- Client detail page shows session with complete status, transcript, summary ✅
+- Zero console errors ✅
+
+## Session: 2026-03-13 - Feature #216
+
+### Completed: Add Telegram video diary support (#216) - PASSING
+
+**What was built:**
+- Added bot.on('video') handler: extracts file_id/duration, posts to /api/bot/diary with entry_type='video'
+- Added bot.on('video_note') handler: same flow for round video messages (Telegram video notes)
+- Both handlers check user role (client-only), send localized confirmation
+- Added i18n strings in all 3 languages (EN/RU/ES): videoSaved, failedVideoDiary, therapistVideoText
+- Updated help text to mention video messages alongside text and voice
+- Updated text message filter to exclude video_note messages (was already filtering video)
+- Backend already supported entry_type='video' in diary endpoint, DB schema, and transcription pipeline
+
+**Verification:**
+- API test: POST /api/bot/diary with entry_type='video' → 201, entry created with has_file=true ✅
+- API test: Video note entry also created successfully ✅
+- History endpoint shows video entries with correct type ✅
+- Data persists after server restart ✅
+- No mock data patterns in modified files ✅
+- Zero console errors in browser ✅
+- Frontend already displays 🎥 icon for video entries ✅
+
+## Session: 2026-03-13 - Features #217, #218, #219
+
+### Completed: Fix bot routing — therapist free text must not create diary entries (#217) - PASSING
+
+**What was changed:**
+- Added role check in bot text message handler: checks user role via checkExistingUser() before routing
+- Therapist/superadmin free text gets helpful guidance message instead of diary creation
+- Same role check added to voice, video, and video_note handlers
+- Backend already had defense-in-depth check (returns 400 for non-client diary submissions)
+- Added i18n strings for therapist guidance messages in EN, RU, ES
+
+### Completed: Add Telegram exercise delivery and completion UX (#218) - PASSING
+
+**What was built:**
+- /exercises command: lists assigned exercises with status (new/in progress/completed)
+- Inline keyboard buttons for exercise selection
+- Exercise detail view with localized title, category, instructions
+- Start button → acknowledges exercise, tracks active exercise session
+- Text response capture: next text message from client is routed to exercise response endpoint
+- Callback handlers: exercise_view_{id} and exercise_start_{id}
+- activeExercises map tracks which user has an in-progress exercise
+- i18n strings for all exercise flows in EN, RU, ES
+- Updated /help text to include /exercises command
+
+**Verification:**
+- Exercise list endpoint returns exercises with correct status ✅
+- Acknowledge endpoint updates status to 'acknowledged' ✅
+- Response endpoint completes exercise with encrypted response ✅
+- Full flow: assign → list → view → start → respond → completed ✅
+- Data persists in database ✅
+
+### Completed: Replace fake SOS and exercise notifications with real outbound delivery (#219) - PASSING
+
+**What was built:**
+- Created src/backend/src/utils/telegramNotify.js utility:
+  - Uses Telegram Bot API (fetch to api.telegram.org/bot{token}/sendMessage)
+  - Falls back to logging when bot token not configured
+  - All calls are async, non-blocking, failure-safe
+  - Specialized methods: sendSosAlert(), sendExerciseNotification(), sendMessage()
+  - 10s timeout, proper error handling
+- Replaced [DEV MODE] SOS notification in bot.js with real telegramNotify.sendSosAlert()
+- Replaced log-only exercise notification in clients.js with real telegramNotify.sendExerciseNotification()
+- Added exercise completion notification to therapist in bot.js
+- All notifications wrapped in .then()/.catch() — failures never break DB transactions
+- Exercise notifications are localized (EN/RU/ES)
+
+**Verification:**
+- SOS endpoint creates event and triggers notification path ✅
+- Exercise assignment triggers notification to client ✅
+- Exercise completion triggers notification to therapist ✅
+- No [DEV MODE] or [Would send] patterns remain in route files ✅
+- Zero console errors in browser ✅
+
+### Current Status
+- Features passing: 217/222 (97.7%)
+- Features #217, #218, #219: ALL PASSING
+
+## Session: 2026-03-13 - Features #214, #220, #221
+
+### Completed: Implement real AI summarization for sessions (#214) - PASSING
+
+**What was built:**
+- Implemented callAIAPI() in summarization.js using OpenAI-compatible chat completions endpoint
+- Configurable via AI_API_URL and AI_MODEL env vars (defaults: OpenAI API, gpt-4o-mini)
+- Therapist-supportive system prompt that avoids diagnosis language
+- Includes client context (anamnesis, goals, contraindications, AI instructions) in prompt
+- Transcript truncation for very long sessions (60k char limit)
+- Error handling: API failures logged, don't crash session workflow
+- Dev mode fallback: generates structured summary with [DEV MODE] prefix when no API key
+- 2-minute timeout for API calls, 300-600 word target summaries
+
+**Verification:**
+- Session upload → transcription → summarization pipeline works end-to-end ✅
+- Dev mode produces [DEV MODE] prefixed summary ✅
+- Summary stored encrypted in DB, decrypted on read ✅
+- Manual re-summarization endpoint works ✅
+- No diagnosis language in summaries ✅
+- Structured sections (Key Topics, Observations, Progress, Follow-up) ✅
+
+### Completed: Add therapist web UI for session audio upload (#220) - PASSING
+
+**What was built:**
+- Upload Session Recording button in ClientDetail Sessions tab
+- File picker (accept audio/*, video/*), preview with file name and size
+- Upload progress bar using XHR for real-time progress tracking
+- Success/error/retry states with auto-refresh of sessions list
+- Added video MIME types to backend multer file filter
+- i18n keys for EN, RU, ES
+
+**Verification:**
+- Therapist opens client → Sessions tab → clicks Upload → selects file → sees preview ✅
+- Upload & Process → progress bar → success message → session appears in list ✅
+- Session shows complete status with transcript and summary after processing ✅
+- Zero console errors ✅
+
+### Completed: Add therapist web UI for natural-language queries (#221) - PASSING
+
+**What was built:**
+- NL query panel in ClientDetail: expandable "Ask about this client" section
+- Text input with placeholder, Search button, loading spinner
+- Results display with type icon, date, relevance score, content snippet
+- Subscription gating: trial/basic shows ⭐ Pro Feature upgrade prompt with Upgrade Plan button
+- Pro/Premium therapists get actual search results with expanded terms
+- Dashboard "Ask About a Client" widget linking to client selection
+- Dev endpoint /api/dev/set-plan for testing plan-gated features
+- CSRF exemption for dev endpoints
+- i18n keys for EN, RU, ES
+
+**Verification:**
+- Trial therapist: query returns upgrade prompt with amber styling ✅
+- Pro therapist: query returns session results with relevance scores ✅
+- Expanded terms shown (e.g., "anxious, worried, worry, nervous, panic") ✅
+- Session results clickable, show content snippets ✅
+- Dashboard shows "Ask About a Client" widget ✅
+- Zero console errors in both scenarios ✅
+
+## Session: 2026-03-13 - Features #223, #224, #225
+
+### Completed: Consent enforcement — session transcribe, summarize, delete (#223) - PASSING
+
+**What was changed:**
+- Added verifyClientConsent() calls to POST /sessions/:id/transcribe, POST /sessions/:id/summarize, DELETE /sessions/:id
+- Updated SQL queries to include client_id column where missing (transcribe, summarize)
+- All three routes now return 403 when client has revoked consent
+- Audit logging on denial via consentCheck.js helper
+
+### Completed: Consent enforcement — dashboard aggregates filter by consent (#224) - PASSING
+
+**What was changed:**
+- GET /dashboard/stats: client count filters by consent_therapist_access=1, session/SOS counts JOIN users with consent filter
+- GET /dashboard/activity: diary, sessions, SOS queries all add AND u.consent_therapist_access = 1; therapist notes kept as-is (therapist IP)
+- GET /dashboard/notifications: SOS events query adds consent filter
+- GET /dashboard/analytics: diary per day, sessions per day, client activity all filter by consent; notes kept as-is (therapist IP)
+- Dashboard gracefully handles 0 consented clients (empty state renders correctly)
+
+### Completed: Consent enforcement — embedding endpoint and diary route consistency (#225) - PASSING
+
+**What was changed:**
+- GET /search/embedding/:sourceType/:sourceId: resolves client_id from diary_entries or sessions table, calls verifyClientConsent() with 'embedding_view' action
+- GET /clients/:id/diary: replaced inline consent check (30+ lines) with verifyClientConsent() helper call for consistency and audit logging
+- Added verifyClientConsent import to search.js
+
+## Session: 2026-03-13 - Feature #226
+
+### Completed: Therapist guide and i18n update for consent enforcement changes (#226) - PASSING
+
+**What was changed:**
+- Updated faq2A in en.json, ru.json, es.json to describe full scope of consent revocation (diary, sessions, transcripts, summaries, exercises, SOS, search, dashboard stats, activity feed, analytics)
+- Updated section2Consent in all 3 languages to mention data hidden from dashboard, search, and analytics when consent revoked
+- Therapist notes explicitly noted as remaining accessible
+- No old product name (PsyLink) references in any updated text
+
+**Verification:**
+- Guide page loads in EN with updated section2Consent and faq2A ✅
+- Guide page loads in RU with correct translations ✅
+- Guide page loads in ES with correct translations ✅
+- Zero console errors across all 3 languages ✅
+- No PsyLink references anywhere in guide ✅
+
+### Current Status
+- Features passing: 226/226 (100.0%) - Previous batch complete
+
+## Session: 2026-03-13 - Features #232, #237, #238
+
+### Completed: Session audio/video player in therapist dashboard (#232) - PASSING
+
+**What was built:**
+- GET /api/sessions/:id/stream endpoint: decrypts encrypted audio files, streams with proper Content-Type
+- HTTP 206 Partial Content range request support for seeking
+- Consent check and audit logging on stream endpoint
+- AudioPlayer component with HTML5 audio/video element
+- Auto-detect media type from file extension (audio default, video for mp4/mov/mkv)
+- Playback controls: play/pause, seek bar, volume slider, playback speed (0.5x, 1x, 1.5x, 2x)
+- Timestamp display (current / total duration)
+- Loading state while media buffers, error state for missing/corrupted files
+- Integrated into SessionDetail page replacing static audio reference display
+- i18n labels for player controls in EN/RU/ES
+
+### Completed: Progressive Web App (PWA) support with mobile optimization (#237) - PASSING
+
+**What was built:**
+- manifest.json with app name, icons (192x192, 512x512 SVG), theme color #1F8A83, standalone display
+- SVG app icons in public/icons/ with PR-TOP branding
+- Service worker (sw.js): cache app shell, network-first for API calls, offline fallback
+- Service worker registration in main.jsx with update detection
+- PWA meta tags in index.html (theme-color, apple-mobile-web-app-capable, manifest link)
+- InstallPrompt component: beforeinstallprompt detection, install/dismiss buttons
+- SW update notification banner with refresh button
+- Mobile-responsive padding adjustments for SessionDetail
+- i18n for install prompt, offline messages, update notification in EN/RU/ES
+- Existing mobile hamburger menu and responsive grids already in place
+
+### Completed: Semantic search visualization (#238) - PASSING
+
+**What was built:**
+- Normalized similarity_score (0-1) per result in API response
+- search_time_ms in API response for timing display
+- Color-coded relevance bars: green (>0.7 High), amber (>0.4 Medium), gray (<0.4 Low)
+- Highlighted matched terms in result snippets with teal background marks
+- Search expansion visualization: original query -> expanded terms with pill badges
+- Sort by toggle: Relevance (default) vs Date
+- Result count with search time display (e.g., "Found 3 results (0.0s)")
+- i18n labels for relevance levels and sort options in EN/RU/ES
+
+### Current Status
+- Features passing: 229/239 (95.8%)
+- Features #232, #237, #238: ALL PASSING
+
+## Session: 2026-03-13 - Features #227, #228, #229
+
+### Completed: Email notification service (#227) - PASSING
+- emailService.js with nodemailer SMTP, HTML templates (SOS/welcome/receipt/expiry/reset), EN/RU/ES
+- Rate limiting, graceful fallback when SMTP not configured
+- Wired to SOS route, registration, Stripe webhook
+
+### Completed: Scheduled tasks system (#228) - PASSING
+- scheduler.js with node-cron: 5 jobs (trial expiry, sub downgrade, expiry warning, diary reminder, CSRF cleanup)
+- SCHEDULER_ENABLED env var, audit logging for all automated actions
+
+### Completed: Password reset flow (#229) - PASSING
+- password_reset_tokens table, forgot-password/reset-password endpoints
+- ForgotPassword.jsx, ResetPassword.jsx, "Forgot password?" link on Login
+- Full flow tested: request reset -> set new password -> login with new password
+- Rate limited, no user enumeration, i18n EN/RU/ES
+
+## Session: 2026-03-14 - Feature #245
+
+### Completed: Docker Compose — multi-provider AI environment variables (#245) - PASSING
+
+**What was changed:**
+- Updated .env.example with AI_PROVIDER (default: openai), AI_MODEL (default: gpt-4o-mini)
+- Added TRANSCRIPTION_PROVIDER (default: openai) and TRANSCRIPTION_MODEL (default: whisper-1)
+- Added commented AI_API_URL, ANTHROPIC_API_URL, TRANSCRIPTION_API_URL, TRANSCRIPTION_LANGUAGE
+- Reorganized AI section with clear per-provider comments and usage instructions
+- Updated docker-compose.yml backend service: passes through all AI/transcription env vars with safe defaults
+
+**Verification:**
+- .env.example has ANTHROPIC_API_KEY, GOOGLE_AI_API_KEY, OPENROUTER_API_KEY (all optional) ✅
+- .env.example has AI_PROVIDER, AI_MODEL, TRANSCRIPTION_PROVIDER, TRANSCRIPTION_MODEL ✅
+- docker-compose config shows all new env vars for backend service ✅
+- Backend starts without errors when new env vars are empty/missing ✅
+- Zero console errors ✅
+
+### Current Status
+- Features passing: 242/246 (98.4%)
+- Feature #245: PASSING
+
+## Session: 2026-03-14 - Features #244, #246
+
+### Completed: Super Admin AI spending limits with auto-block (#244) - PASSING
+
+**What was verified (code already built by parallel agents):**
+- checkSpendingLimit() in aiUsageLogger.js: queries monthly spend, compares to limit
+- Warning at configurable threshold (default 80%), sets ai_limit_warning_sent flag
+- Limit reached at 100%, sets ai_limit_reached flag, blocks AI calls
+- summarization.js and transcription.js both check spending limit before API calls
+- SpendingLimitBar progress bar with color coding (green/amber/red)
+- SpendingLimitSettings form with Monthly Limit USD and Warning Threshold % inputs
+- Alert banners: red for limit reached, amber for warning
+- PUT /api/admin/ai/limits endpoint with audit logging and flag reset
+- i18n labels in EN/RU/ES for all limit UI elements
+
+**Verification:**
+- Set limit to $10 via UI, warning threshold 75% → "Spend vs Limit" shows $0.0000 / $10.00 ✅
+- Reset to $0 (unlimited) → shows "Unlimited" ✅
+- API PUT /api/admin/ai/limits works with correct validation ✅
+- Data persists after server restart ✅
+- Success message "Spending limits updated successfully" shown ✅
+- No mock data patterns in source code ✅
+- Zero console errors ✅
+
+### Completed: Expand model pricing table with latest models (#246) - PASSING
+
+**What was verified (code already built by parallel agents):**
+- aiUsageLogger.js pricing table: all OpenAI, Anthropic, Google, OpenRouter models with correct per-1M-token pricing
+- Provider modules listModels(): OpenAI (6), Anthropic (2), Google (3), OpenRouter (10)
+- AdminAIModels.jsx: price hints next to each model (e.g., "~$0.10/1M tokens")
+- Recommended badges: gpt-4.1-nano (Cheapest), gemini-2.0-flash (Cheapest), claude-3.5-haiku (Best Balance), deepseek-v3 (Best Value)
+
+**Verification:**
+- OpenAI dropdown shows 6 models with price hints ✅
+- Anthropic dropdown shows claude-3.5-haiku (⭐ Best Balance) and claude-4-sonnet ✅
+- Google dropdown shows gemini-2.0-flash (⭐ Cheapest), gemini-2.5-flash, gemini-2.5-pro ✅
+- OpenRouter dropdown shows deepseek-v3 (⭐ Best Value), deepseek-r1, qwen-2.5-72b + 7 more ✅
+- "Currently active" indicator shown for selected models ✅
+- Pricing text shown below dropdown ✅
+- Zero console errors ✅
+
+### Current Status
+- Features passing: 246/249 (98.8%)
+- Features #244, #246: BOTH PASSING
+
+## Session: 2026-03-14 - Feature #253
+
+### Completed: Create and maintain project specification (PRD) + keep README in sync (#253) - PASSING
+
+**What was created/changed:**
+- Created `docs/PRD.md` — full Product Requirements Document (583 lines) with 10 sections:
+  1. Product Overview
+  2. User Roles (therapist, client, superadmin)
+  3. Architecture (system diagram, tech stack, data flow)
+  4. Feature List by Module (11 subsections covering all features)
+  5. Security & Encryption (data classes, security measures)
+  6. Subscription Tiers
+  7. Internationalization (4 languages: EN, RU, ES, UK)
+  8. AI & ML Features (multi-provider, transcription, summarization, embeddings, NL queries, usage monitoring)
+  9. Integrations (Telegram, Stripe, SMTP)
+  10. Infrastructure (Docker Compose, env vars, backups, health checks, scheduled tasks, deployment)
+  - Plus Appendix A (project structure) and Appendix B (full API route table)
+
+- Updated `README.md`:
+  - Added Ukrainian to Languages row in Tech Stack table
+  - Added AI providers (OpenAI, Anthropic, Google Gemini, OpenRouter) to Tech Stack
+  - Added comprehensive Environment Variables section with all AI/transcription/email/backup vars
+  - Added "Custom Exercises" mention in Telegram Bot description
+  - Added link to docs/PRD.md
+  - Updated project name from PsyLink to PR-TOP throughout
+
+- Updated `CLAUDE.md`:
+  - Added "Definition of Done — PRD & README Updates" rule requiring coding agents to update docs/PRD.md and README.md when implementing features
+
+**Verification:**
+- docs/PRD.md exists with all 10 required sections ✅
+- README.md has Ukrainian language ✅
+- README.md has AI providers ✅
+- README.md has ANTHROPIC_API_KEY, GOOGLE_AI_API_KEY, OPENROUTER_API_KEY ✅
+- README.md mentions Custom Exercises ✅
+- CLAUDE.md contains PRD-update rule ✅
+- Zero broken links or formatting issues ✅
+
+### Current Status
+- Features passing: 251/253 (99.2%)
+- Feature #253: PASSING
+
+## Session: 2026-03-14 - Features #251, #252
+
+### Completed: Ukrainian language — frontend translations, switcher, settings (#251) - PASSING
+
+**What was built:**
+- Created src/frontend/src/i18n/uk.json with all ~830 translation keys (Ukrainian)
+- Updated i18n/index.js: imported uk.json, added to resources, added 'uk' to supported languages detection
+- Updated LanguageSwitcher.jsx: added { code: 'uk', label: 'Українська', flag: '🇺🇦' }
+- Updated Settings.jsx: added { code: 'uk', label: 'Українська' } to LANGUAGES array
+- Updated ExerciseLibrary.jsx ExerciseFormModal: added UK tab for titles/descriptions/instructions, added title_uk/description_uk/instructions_uk to form submission
+
+**Verification:**
+- Language switcher shows 🇺🇦 Українська option ✅
+- Selecting Ukrainian changes all UI text to Ukrainian ✅
+- Page reload preserves Ukrainian language (localStorage) ✅
+- Settings page shows Ukrainian in language dropdown ✅
+- Login page fully translated ✅
+- Landing page fully translated ✅
+- Zero console errors ✅
+
+### Completed: Ukrainian language — Telegram bot messages (#252) - PASSING
+
+**What was built:**
+- Added uk block to src/bot/src/i18n.js with all ~65 translation keys
+- Includes: welcome, registration, help, exercises, SOS, diary, disconnect, consent flows
+- Ukraine-specific SOS hotline (7333) in sosConfirmed message
+- All function-type keys (welcomeBack, foundTherapist, alreadyRegistered, welcomeTherapist, exerciseDetail) properly implemented
+
+**Verification:**
+- All 42 translation unit tests passing ✅
+- t('uk', key) returns Ukrainian text for all keys ✅
+- Function keys return proper Ukrainian text with interpolation ✅
+- No mock data patterns in source code ✅
+- Backend health check OK ✅
+
+### Current Status
+- Features passing: 253/253 (100.0%)
+- Features #251, #252: BOTH PASSING
+- ALL FEATURES COMPLETE

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { formatUserDateOnly } from '../utils/formatDate';
 
@@ -21,50 +21,31 @@ function StatCard({ label, value, icon, color }) {
 
 export default function AdminDashboard() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
-  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
   const [subStats, setSubStats] = useState(null);
   const [utmStats, setUtmStats] = useState(null);
+  const [backupStatus, setBackupStatus] = useState(null);
+  const [backingUp, setBackingUp] = useState(false);
+  const [backupMessage, setBackupMessage] = useState(null);
+  const [aiLimits, setAiLimits] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/login');
-      return;
-    }
-
-    fetch(`${API_URL}/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('Unauthorized');
-        return res.json();
-      })
-      .then(data => {
-        if (data.user.role !== 'superadmin') {
-          navigate('/dashboard');
-          return;
-        }
-        setUser(data.user);
-        loadStats(token);
-      })
-      .catch(() => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        navigate('/login');
-      });
-  }, [navigate]);
+    if (!token) return;
+    loadStats(token);
+  }, []);
 
   const loadStats = async (token) => {
     try {
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [statsRes, subStatsRes, utmRes] = await Promise.all([
+      const [statsRes, subStatsRes, utmRes, backupRes, aiLimitsRes] = await Promise.all([
         fetch(`${API_URL}/admin/stats/users`, { headers }),
         fetch(`${API_URL}/admin/stats/subscriptions`, { headers }),
-        fetch(`${API_URL}/admin/stats/utm`, { headers })
+        fetch(`${API_URL}/admin/stats/utm`, { headers }),
+        fetch(`${API_URL}/admin/backup/status`, { headers }),
+        fetch(`${API_URL}/admin/ai/limits`, { headers })
       ]);
 
       if (statsRes.ok) {
@@ -78,6 +59,14 @@ export default function AdminDashboard() {
       if (utmRes.ok) {
         const data = await utmRes.json();
         setUtmStats(data);
+      }
+      if (backupRes.ok) {
+        const data = await backupRes.json();
+        setBackupStatus(data);
+      }
+      if (aiLimitsRes.ok) {
+        const data = await aiLimitsRes.json();
+        setAiLimits(data);
       }
     } catch (err) {
       console.error('Failed to load admin stats:', err);
@@ -105,6 +94,38 @@ export default function AdminDashboard() {
           <h2 className="text-xl font-semibold text-text">{t('admin.dashboardTitle')}</h2>
           <p className="text-secondary mt-1">{t('admin.dashboardSubtitle')}</p>
         </div>
+
+        {/* AI Spending Limit Alert Banners */}
+        {aiLimits && aiLimits.limit_reached && (
+          <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">
+            <div className="flex items-center gap-2 font-semibold">
+              <span>🚫</span>
+              <span>{t('aiUsage.limitReached', 'AI Spending Limit Reached')}</span>
+            </div>
+            <p className="text-sm mt-1">{t('aiUsage.limitReachedDesc')}</p>
+            <Link to="/admin/ai-usage" className="text-sm font-medium text-red-800 underline mt-2 inline-block">
+              {t('aiUsage.spendingLimit', 'Spending Limit')} →
+            </Link>
+          </div>
+        )}
+
+        {aiLimits && aiLimits.warning && !aiLimits.limit_reached && (
+          <div className="mb-6 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-700">
+            <div className="flex items-center gap-2 font-semibold">
+              <span>⚠️</span>
+              <span>{t('aiUsage.limitWarning', 'AI Spending Warning')}</span>
+            </div>
+            <p className="text-sm mt-1">
+              {t('aiUsage.limitWarningDesc', {
+                percent: (aiLimits.percent_used || 0).toFixed(0),
+                limit: (aiLimits.limit_usd || 0).toFixed(2)
+              })}
+            </p>
+            <Link to="/admin/ai-usage" className="text-sm font-medium text-amber-800 underline mt-2 inline-block">
+              {t('aiUsage.spendingLimit', 'Spending Limit')} →
+            </Link>
+          </div>
+        )}
 
         {/* User Statistics */}
         <h3 className="text-lg font-semibold text-text mb-4">{t('admin.userStats')}</h3>
@@ -340,6 +361,78 @@ export default function AdminDashboard() {
             )}
           </>
         )}
+
+        {/* Database Backups */}
+        <h3 className="text-lg font-semibold text-text mb-4">{t('admin.databaseBackups')}</h3>
+        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">💾</span>
+              <div>
+                <p className="font-medium text-text">{t('admin.lastBackup')}</p>
+                <p className="text-sm text-secondary">
+                  {backupStatus?.last_backup
+                    ? new Date(backupStatus.last_backup).toLocaleString()
+                    : t('admin.noBackupsYet')}
+                  {backupStatus?.last_backup_size && ` (${backupStatus.last_backup_size})`}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                setBackingUp(true);
+                setBackupMessage(null);
+                try {
+                  const token = localStorage.getItem('token');
+                  const res = await fetch(`${API_URL}/admin/backup`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                  });
+                  const data = await res.json();
+                  if (res.ok) {
+                    setBackupMessage({ type: 'success', text: t('admin.backupCreated', { filename: data.filename }) });
+                    // Refresh backup status
+                    const statusRes = await fetch(`${API_URL}/admin/backup/status`, {
+                      headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (statusRes.ok) setBackupStatus(await statusRes.json());
+                  } else {
+                    setBackupMessage({ type: 'error', text: data.error || t('admin.backupFailed') });
+                  }
+                } catch (err) {
+                  setBackupMessage({ type: 'error', text: t('admin.backupFailed') });
+                } finally {
+                  setBackingUp(false);
+                }
+              }}
+              disabled={backingUp}
+              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+            >
+              {backingUp ? t('admin.creatingBackup') : t('admin.createBackup')}
+            </button>
+          </div>
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="bg-stone-50 rounded-lg p-3">
+              <p className="text-xs text-secondary">{t('admin.totalBackups')}</p>
+              <p className="text-lg font-bold text-text">{backupStatus?.backup_count ?? 0}</p>
+            </div>
+            <div className="bg-stone-50 rounded-lg p-3">
+              <p className="text-xs text-secondary">{t('admin.storageUsed')}</p>
+              <p className="text-lg font-bold text-text">{backupStatus?.total_size ?? '0 B'}</p>
+            </div>
+            <div className="bg-stone-50 rounded-lg p-3">
+              <p className="text-xs text-secondary">{t('admin.retentionLimit')}</p>
+              <p className="text-lg font-bold text-text">{backupStatus?.retention_limit ?? 30}</p>
+            </div>
+          </div>
+          {backupMessage && (
+            <div className={`mt-3 px-3 py-2 rounded text-sm ${
+              backupMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+            }`}>
+              {backupMessage.text}
+            </div>
+          )}
+        </div>
 
         {/* Quick Actions */}
         <div className="bg-white rounded-lg shadow-md p-6">

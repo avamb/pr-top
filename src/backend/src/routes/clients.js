@@ -3,8 +3,10 @@ const express = require('express');
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { authenticate, requireRole } = require('../middleware/auth');
-const { checkClientLimit } = require('../utils/planLimits');
+const { checkClientLimit, getClientCount, getClientLimit } = require('../utils/planLimits');
 const { encrypt, decrypt } = require('../services/encryption');
+const { verifyClientConsent } = require('../utils/consentCheck');
+const telegramNotify = require('../utils/telegramNotify');
 
 const router = express.Router();
 
@@ -207,39 +209,10 @@ router.get('/:id/diary', (req, res) => {
     const searchQuery = rawSearchQuery.toLowerCase();
     const offset = (page - 1) * perPage;
 
-    // Verify client exists
-    const clientExistsResult = db.exec(
-      "SELECT id, therapist_id, consent_therapist_access FROM users WHERE id = ? AND role = 'client'",
-      [clientId]
-    );
-
-    if (clientExistsResult.length === 0 || clientExistsResult[0].values.length === 0) {
-      return res.status(404).json({ error: 'Client not found' });
-    }
-
-    const clientRow = clientExistsResult[0].values[0];
-    const clientTherapistId = clientRow[1];
-    const hasConsent = clientRow[2];
-
-    // Check if client is linked to this therapist (use == for type coercion since sql.js may return different types)
-    if (!clientTherapistId || String(clientTherapistId) !== String(therapistId)) {
-      // Record access denial in audit log
-      db.run(
-        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
-        [therapistId, 'access_denied', 'diary', clientId, JSON.stringify({ reason: 'not_linked_therapist' })]
-      );
-      saveDatabase();
-      return res.status(403).json({ error: 'You are not authorized to access this client\'s data' });
-    }
-
-    if (!hasConsent) {
-      // Record access denial in audit log
-      db.run(
-        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
-        [therapistId, 'access_denied', 'diary', clientId, JSON.stringify({ reason: 'consent_not_granted' })]
-      );
-      saveDatabase();
-      return res.status(403).json({ error: 'Client has not granted consent for data access' });
+    // Verify client consent (uses shared helper with audit logging)
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'diary');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
     // Build query with optional type filter
@@ -445,14 +418,10 @@ router.post('/:id/notes', (req, res) => {
       return res.status(400).json({ error: 'Note content is required' });
     }
 
-    // Verify client belongs to this therapist
-    const clientResult = db.exec(
-      "SELECT id, consent_therapist_access FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
-      [clientId, therapistId]
-    );
-
-    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
-      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    // Verify client belongs to this therapist AND has granted consent
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'create_note');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
     // Encrypt the note content (Class A data)
@@ -507,6 +476,12 @@ router.put('/:id/notes/:noteId', (req, res) => {
 
     if (content.length > 50000) {
       return res.status(400).json({ error: 'Note content exceeds 50000 character limit' });
+    }
+
+    // Verify client consent
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'update_note');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
     // Verify the note belongs to this therapist and client
@@ -667,14 +642,10 @@ router.get('/:id/context', (req, res) => {
     const therapistId = req.user.id;
     const clientId = req.params.id;
 
-    // Verify client belongs to this therapist
-    const clientResult = db.exec(
-      "SELECT id, consent_therapist_access FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
-      [clientId, therapistId]
-    );
-
-    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
-      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    // Verify client belongs to this therapist AND has granted consent
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'context');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
     // Get context record
@@ -769,14 +740,10 @@ router.put('/:id/context', (req, res) => {
       }
     }
 
-    // Verify client belongs to this therapist
-    const clientResult = db.exec(
-      "SELECT id, consent_therapist_access FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
-      [clientId, therapistId]
-    );
-
-    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
-      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    // Verify client belongs to this therapist AND has granted consent
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'update_context');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
     // Encrypt each provided field (Class A data)
@@ -1152,14 +1119,10 @@ router.get('/:id/sessions', (req, res) => {
     const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page) || 25));
     const offset = (page - 1) * perPage;
 
-    // Verify client belongs to this therapist
-    const clientResult = db.exec(
-      "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
-      [clientId, therapistId]
-    );
-
-    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
-      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    // Verify client belongs to this therapist AND has granted consent
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'sessions');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
     // Get total count
@@ -1222,14 +1185,10 @@ router.get('/:id/exercises', (req, res) => {
     const therapistId = req.user.id;
     const clientId = req.params.id;
 
-    // Verify client belongs to this therapist
-    const clientResult = db.exec(
-      "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
-      [clientId, therapistId]
-    );
-
-    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
-      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    // Verify client belongs to this therapist AND has granted consent
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'exercises');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
     // Get exercise deliveries for this client
@@ -1276,17 +1235,18 @@ router.post('/:id/exercises', (req, res) => {
       return res.status(400).json({ error: 'exercise_id is required' });
     }
 
-    // Verify client belongs to this therapist
-    const clientResult = db.exec(
-      "SELECT id, telegram_id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
-      [clientId, therapistId]
-    );
-
-    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
-      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    // Verify client belongs to this therapist AND has granted consent
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'exercise_send');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
-    const clientTelegramId = clientResult[0].values[0][1];
+    // Get telegram_id for notification
+    const clientTgResult = db.exec(
+      "SELECT telegram_id FROM users WHERE id = ?",
+      [clientId]
+    );
+    const clientTelegramId = (clientTgResult.length > 0 && clientTgResult[0].values.length > 0) ? clientTgResult[0].values[0][0] : null;
 
     // Verify exercise exists
     const exerciseResult = db.exec(
@@ -1319,10 +1279,24 @@ router.post('/:id/exercises', (req, res) => {
 
     saveDatabase();
 
-    // Notify client via Telegram (dev mode: log to console)
+    // Notify client via Telegram (real outbound delivery, non-blocking)
     if (clientTelegramId) {
-      logger.info(`[TELEGRAM NOTIFICATION] Exercise sent to client ${clientTelegramId}: "${exerciseTitle}" (delivery #${deliveryId})`);
-      logger.info(`[TELEGRAM NOTIFICATION] Message: "Your therapist has assigned you a new exercise: ${exerciseTitle}"`);
+      // Get client language for localized notification
+      const clientLangResult = db.exec("SELECT language FROM users WHERE id = ?", [clientId]);
+      const clientLang = (clientLangResult.length > 0 && clientLangResult[0].values.length > 0) ? clientLangResult[0].values[0][0] : 'en';
+
+      logger.info(`[TELEGRAM NOTIFICATION] Sending exercise notification to client ${clientTelegramId}: "${exerciseTitle}" (delivery #${deliveryId})`);
+      telegramNotify.sendExerciseNotification(clientTelegramId, exerciseTitle, clientLang)
+        .then(result => {
+          if (result.sent) {
+            logger.info(`Exercise Telegram notification delivered to client ${clientTelegramId} (delivery #${deliveryId})`);
+          } else {
+            logger.warn(`Exercise Telegram notification not delivered to ${clientTelegramId}: ${result.error}`);
+          }
+        })
+        .catch(err => {
+          logger.error(`Exercise Telegram notification error for client ${clientTelegramId}: ${err.message}`);
+        });
     }
 
     res.status(201).json({
@@ -1345,19 +1319,23 @@ router.post('/:id/exercises', (req, res) => {
   }
 });
 
-// POST /api/clients/link - Link a client to this therapist (via invite code)
-router.post('/link', (req, res) => {
+// POST /api/clients/link - Superadmin-only direct client linking (bypasses invite+consent flow)
+// Normal therapists must use the proper flow: therapist shares invite code → client enters code → client consents → link created
+router.post('/link', requireRole('superadmin'), (req, res) => {
   try {
     const db = getDatabase();
     const therapistId = req.user.id;
-    const { client_id } = req.body;
+    const { client_id, target_therapist_id } = req.body;
 
     if (!client_id) {
       return res.status(400).json({ error: 'client_id is required' });
     }
 
+    // Superadmin can link to themselves or specify a target therapist
+    const linkToTherapistId = target_therapist_id || therapistId;
+
     // Check client limit before linking
-    const limitCheck = checkClientLimit(therapistId);
+    const limitCheck = checkClientLimit(linkToTherapistId);
     if (!limitCheck.allowed) {
       return res.status(403).json({
         error: 'Client limit reached',
@@ -1383,22 +1361,30 @@ router.post('/link', (req, res) => {
       return res.status(400).json({ error: 'User is not a client' });
     }
 
-    if (client[2] && client[2] !== therapistId) {
+    if (client[2] && client[2] !== linkToTherapistId) {
       return res.status(400).json({ error: 'Client is already linked to another therapist' });
     }
 
-    // Link the client
+    // Superadmin direct link - sets consent since this is an admin override
     db.run(
-      "UPDATE users SET therapist_id = ?, updated_at = datetime('now') WHERE id = ?",
-      [therapistId, client_id]
+      "UPDATE users SET therapist_id = ?, consent_therapist_access = 1, updated_at = datetime('now') WHERE id = ?",
+      [linkToTherapistId, client_id]
     );
+
+    // Record in audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      [req.user.id, 'superadmin_direct_link', 'user', client_id, JSON.stringify({ client_id: parseInt(client_id), therapist_id: linkToTherapistId, admin_id: req.user.id })]
+    );
+
     saveDatabase();
 
-    logger.info(`Therapist ${therapistId} linked client ${client_id}`);
+    logger.info(`Superadmin ${req.user.id} directly linked client ${client_id} to therapist ${linkToTherapistId}`);
 
     res.json({
-      message: 'Client linked successfully',
-      client_id: parseInt(client_id)
+      message: 'Client linked successfully (superadmin override)',
+      client_id: parseInt(client_id),
+      therapist_id: linkToTherapistId
     });
   } catch (error) {
     logger.error('Link client error: ' + error.message);
@@ -1413,14 +1399,10 @@ router.get('/:id/sos', (req, res) => {
     const therapistId = req.user.id;
     const clientId = req.params.id;
 
-    // Verify client belongs to this therapist
-    const clientResult = db.exec(
-      "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
-      [clientId, therapistId]
-    );
-
-    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
-      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    // Verify client belongs to this therapist AND has granted consent
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'sos');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
     const result = db.exec(
@@ -1465,14 +1447,10 @@ router.put('/:id/sos/:sosId/acknowledge', (req, res) => {
     const clientId = req.params.id;
     const sosId = req.params.sosId;
 
-    // Verify client belongs to this therapist
-    const clientResult = db.exec(
-      "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
-      [clientId, therapistId]
-    );
-
-    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
-      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    // Verify client belongs to this therapist AND has granted consent
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'sos_acknowledge');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
     // Verify SOS event exists and belongs to this therapist/client
@@ -1555,14 +1533,10 @@ router.post('/:id/import', (req, res, next) => {
       const therapistId = req.user.id;
       const clientId = req.params.id;
 
-      // Verify client belongs to this therapist
-      const clientResult = db.exec(
-        "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
-        [clientId, therapistId]
-      );
-
-      if (clientResult.length === 0 || clientResult[0].values.length === 0) {
-        return res.status(404).json({ error: 'Client not found or not linked to you' });
+      // Verify client belongs to this therapist AND has granted consent
+      const consentCheck = verifyClientConsent(therapistId, clientId, 'import');
+      if (!consentCheck.allowed) {
+        return res.status(consentCheck.status).json({ error: consentCheck.error });
       }
 
       if (!req.file) {
@@ -1821,6 +1795,300 @@ router.get('/:id/diary/export', (req, res) => {
     logger.error('Diary export error: ' + error.message);
     res.status(500).json({ error: 'Something went wrong. Please try again later.' });
   }
+});
+
+// POST /api/clients/import-bulk - Bulk client import from CSV or JSON file
+// Creates multiple client records at once, useful for platform migration
+const { v4: uuidv4 } = require('uuid');
+
+const bulkImportUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
+  fileFilter: (req, file, cb) => {
+    const allowed = ['application/json', 'text/csv', 'application/vnd.ms-excel'];
+    if (allowed.includes(file.mimetype) || file.originalname.endsWith('.json') || file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV and JSON files are accepted'), false);
+    }
+  }
+});
+
+function parseCSVContent(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return { error: 'CSV must have a header row and at least one data row' };
+
+  const headerLine = lines[0];
+  const headers = headerLine.split(',').map(h => h.trim().toLowerCase().replace(/^["']|["']$/g, ''));
+
+  // Validate required columns
+  if (!headers.includes('email') && !headers.includes('name')) {
+    return { error: 'CSV must have at least an "email" or "name" column' };
+  }
+
+  const clients = [];
+  const errors = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const values = parseCSVLine(lines[i]);
+    if (values.length !== headers.length) {
+      errors.push({ row: i + 1, error: 'Column count mismatch (expected ' + headers.length + ', got ' + values.length + ')' });
+      continue;
+    }
+
+    const obj = {};
+    headers.forEach((h, idx) => { obj[h] = values[idx].trim(); });
+    clients.push(obj);
+  }
+
+  return { clients, errors };
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+function validateEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+router.post('/import-bulk', (req, res, next) => {
+  bulkImportUpload.single('file')(req, res, (err) => {
+    if (err) {
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ error: 'File too large. Maximum size is 5MB.' });
+        }
+        return res.status(400).json({ error: 'File upload error: ' + err.message });
+      }
+      return res.status(400).json({ error: err.message });
+    }
+
+    try {
+      const db = getDatabase();
+      const therapistId = req.user.id;
+
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded. Please provide a CSV or JSON file.' });
+      }
+
+      // Check subscription - get plan and limits
+      const limitCheck = checkClientLimit(therapistId);
+      if (!limitCheck.plan) {
+        return res.status(403).json({ error: 'No active subscription' });
+      }
+
+      const rawText = req.file.buffer.toString('utf8');
+      let clientRows = [];
+      let parseErrors = [];
+      const isCSV = req.file.originalname.endsWith('.csv') || req.file.mimetype === 'text/csv' || req.file.mimetype === 'application/vnd.ms-excel';
+
+      if (isCSV) {
+        const parsed = parseCSVContent(rawText);
+        if (parsed.error) {
+          return res.status(400).json({ error: parsed.error });
+        }
+        clientRows = parsed.clients;
+        parseErrors = parsed.errors || [];
+      } else {
+        // JSON format
+        try {
+          const data = JSON.parse(rawText);
+          if (Array.isArray(data)) {
+            clientRows = data;
+          } else if (data.clients && Array.isArray(data.clients)) {
+            clientRows = data.clients;
+          } else {
+            return res.status(400).json({
+              error: 'Invalid JSON format. Expected an array of client objects or { "clients": [...] }'
+            });
+          }
+        } catch (parseErr) {
+          return res.status(400).json({ error: 'Invalid JSON file: ' + parseErr.message });
+        }
+      }
+
+      if (clientRows.length === 0) {
+        return res.status(400).json({ error: 'No client records found in the file' });
+      }
+
+      if (clientRows.length > 200) {
+        return res.status(400).json({ error: 'Too many records. Maximum 200 clients per import.' });
+      }
+
+      // Check tier limit
+      const currentCount = limitCheck.current;
+      const limit = limitCheck.limit;
+      const plan = limitCheck.plan;
+
+      if (plan !== 'premium' && limit > 0 && (currentCount + clientRows.length) > limit) {
+        const available = Math.max(0, limit - currentCount);
+        return res.status(403).json({
+          error: 'Import would exceed client limit',
+          message: 'Your ' + plan + ' plan allows ' + limit + ' clients. You have ' + currentCount + ' and are trying to import ' + clientRows.length + '. Available slots: ' + available + '.',
+          current: currentCount,
+          limit: limit,
+          plan: plan,
+          requested: clientRows.length,
+          available: available
+        });
+      }
+
+      // Check for existing emails in DB to detect duplicates
+      const existingEmails = new Set();
+      const emailResult = db.exec("SELECT email FROM users WHERE email IS NOT NULL");
+      if (emailResult.length > 0) {
+        emailResult[0].values.forEach(row => {
+          if (row[0]) existingEmails.add(row[0].toLowerCase());
+        });
+      }
+
+      // Process each client
+      const created = [];
+      const skipped = [];
+      const rowErrors = [...parseErrors];
+      const seenEmails = new Set();
+
+      clientRows.forEach((row, index) => {
+        const rowNum = index + (isCSV ? 2 : 1); // CSV has header row offset
+        const email = (row.email || '').trim().toLowerCase();
+        const name = (row.name || '').trim();
+        const phone = (row.phone || '').trim();
+        const notes = (row.notes || '').trim();
+        const language = (row.language || 'en').trim().toLowerCase();
+
+        // Validate required fields
+        if (!email && !name) {
+          rowErrors.push({ row: rowNum, error: 'Either email or name is required' });
+          return;
+        }
+
+        // Validate email format if provided
+        if (email && !validateEmail(email)) {
+          rowErrors.push({ row: rowNum, error: 'Invalid email format: ' + email });
+          return;
+        }
+
+        // Check for duplicates within the file
+        if (email && seenEmails.has(email)) {
+          skipped.push({ row: rowNum, email: email || name, reason: 'Duplicate within import file' });
+          return;
+        }
+
+        // Check for existing email in DB
+        if (email && existingEmails.has(email)) {
+          skipped.push({ row: rowNum, email: email, reason: 'Email already exists in the system' });
+          return;
+        }
+
+        if (email) seenEmails.add(email);
+
+        // Generate invite code for this client
+        var inviteCode = uuidv4().slice(0, 8).toUpperCase();
+        // Ensure uniqueness
+        var codeCheck = db.exec('SELECT id FROM users WHERE invite_code = ?', [inviteCode]);
+        while (codeCheck.length > 0 && codeCheck[0].values.length > 0) {
+          inviteCode = uuidv4().slice(0, 8).toUpperCase();
+          codeCheck = db.exec('SELECT id FROM users WHERE invite_code = ?', [inviteCode]);
+        }
+
+        // Create client record
+        db.run(
+          "INSERT INTO users (email, role, therapist_id, invite_code, language, consent_therapist_access, created_at, updated_at) VALUES (?, 'client', ?, ?, ?, 0, datetime('now'), datetime('now'))",
+          [email || null, therapistId, inviteCode, language]
+        );
+
+        // Get the new client ID
+        var newIdResult = db.exec('SELECT last_insert_rowid()');
+        var newClientId = newIdResult[0].values[0][0];
+
+        // If notes provided, create a therapist note (encrypted)
+        if (notes) {
+          var encryptedNote = encrypt(notes);
+          db.run(
+            "INSERT INTO therapist_notes (therapist_id, client_id, note_encrypted, encryption_key_id, payload_version, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+            [therapistId, newClientId, encryptedNote.encrypted, encryptedNote.keyId, encryptedNote.keyVersion]
+          );
+        }
+
+        // If name/phone provided, store in client context
+        if (name || phone) {
+          var contextParts = [];
+          if (name) contextParts.push('Name: ' + name);
+          if (phone) contextParts.push('Phone: ' + phone);
+          var contextText = contextParts.join('\n');
+          var encryptedContext = encrypt(contextText);
+          db.run(
+            "INSERT INTO client_context (client_id, therapist_id, anamnesis_encrypted, encryption_key_id, payload_version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
+            [newClientId, therapistId, encryptedContext.encrypted, encryptedContext.keyId, encryptedContext.keyVersion]
+          );
+        }
+
+        created.push({
+          id: newClientId,
+          email: email || null,
+          name: name || null,
+          invite_code: inviteCode,
+          row: rowNum
+        });
+      });
+
+      // Save to disk
+      saveDatabase();
+
+      // Audit log
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+        [therapistId, 'bulk_client_import', 'clients', 0, JSON.stringify({
+          file: req.file.originalname,
+          total_rows: clientRows.length,
+          created: created.length,
+          skipped: skipped.length,
+          errors: rowErrors.length
+        })]
+      );
+      saveDatabase();
+
+      logger.info('Bulk client import by therapist ' + therapistId + ': ' + created.length + ' created, ' + skipped.length + ' skipped, ' + rowErrors.length + ' errors');
+
+      res.json({
+        success: true,
+        summary: {
+          total_rows: clientRows.length,
+          created: created.length,
+          skipped: skipped.length,
+          errors: rowErrors.length
+        },
+        created: created,
+        skipped: skipped,
+        errors: rowErrors
+      });
+    } catch (error) {
+      logger.error('Bulk import error: ' + (error && error.message || error));
+      res.status(500).json({ error: 'Import failed. Please try again.' });
+    }
+  });
 });
 
 module.exports = router;

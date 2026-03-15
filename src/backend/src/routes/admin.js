@@ -3,6 +3,8 @@ const express = require('express');
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { logger, getSystemLogs } = require('../utils/logger');
 const { authenticate, requireRole } = require('../middleware/auth');
+const backupService = require('../services/backupService');
+const aiProviders = require('../services/aiProviders');
 
 const router = express.Router();
 
@@ -610,6 +612,436 @@ router.get('/stats/utm', (req, res) => {
   } catch (error) {
     logger.error('Admin UTM stats error: ' + error.message);
     res.status(500).json({ error: 'Failed to fetch UTM statistics' });
+  }
+});
+
+// POST /api/admin/backup - Trigger manual database backup
+router.post('/backup', (req, res) => {
+  try {
+    logger.info(`[BACKUP] Manual backup triggered by admin ${req.user.id}`);
+    const result = backupService.backup();
+
+    if (result.success) {
+      // Audit log
+      const db = getDatabase();
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'manual_backup', 'system', 0, ?, datetime('now'))",
+        [req.user.id, JSON.stringify({ filename: result.filename, size: result.size })]
+      );
+      saveDatabase();
+
+      res.json({
+        message: 'Backup created successfully',
+        filename: result.filename,
+        size: result.size,
+        raw_size: result.raw_size
+      });
+    } else {
+      res.status(500).json({ error: 'Backup failed: ' + result.error });
+    }
+  } catch (error) {
+    logger.error('Admin backup error: ' + error.message);
+    res.status(500).json({ error: 'Failed to create backup' });
+  }
+});
+
+// GET /api/admin/backups - List available backups
+router.get('/backups', (req, res) => {
+  try {
+    const result = backupService.listBackups();
+    res.json(result);
+  } catch (error) {
+    logger.error('Admin list backups error: ' + error.message);
+    res.status(500).json({ error: 'Failed to list backups' });
+  }
+});
+
+// GET /api/admin/backup/status - Get backup status summary
+router.get('/backup/status', (req, res) => {
+  try {
+    const status = backupService.getBackupStatus();
+    res.json(status);
+  } catch (error) {
+    logger.error('Admin backup status error: ' + error.message);
+    res.status(500).json({ error: 'Failed to get backup status' });
+  }
+});
+
+// POST /api/admin/restore - Restore from a specific backup
+router.post('/restore', (req, res) => {
+  try {
+    const { filename, confirm } = req.body;
+
+    if (!filename) {
+      return res.status(400).json({ error: 'filename is required' });
+    }
+
+    if (!confirm) {
+      return res.status(400).json({
+        error: 'Confirmation required',
+        message: 'Set confirm=true to proceed. WARNING: This will replace the current database with the backup. A safety snapshot will be created first.'
+      });
+    }
+
+    logger.info(`[BACKUP] Database restore triggered by admin ${req.user.id} from: ${filename}`);
+
+    // Audit log BEFORE restore (in current DB)
+    const db = getDatabase();
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'database_restore', 'system', 0, ?, datetime('now'))",
+      [req.user.id, JSON.stringify({ filename, initiated_by: req.user.email })]
+    );
+    saveDatabase();
+
+    const result = backupService.restore(filename);
+
+    if (result.success) {
+      res.json({
+        message: 'Database restored successfully. Server restart recommended.',
+        filename: result.filename,
+        size: result.size,
+        restart_required: true
+      });
+    } else {
+      res.status(500).json({ error: 'Restore failed: ' + result.error });
+    }
+  } catch (error) {
+    logger.error('Admin restore error: ' + error.message);
+    res.status(500).json({ error: 'Failed to restore backup' });
+  }
+});
+
+// ==================== AI Usage & Cost Dashboard ====================
+
+const aiUsageLogger = require('../services/aiUsageLogger');
+
+// GET /api/admin/ai/usage - Aggregated usage with optional grouping/filtering
+router.get('/ai/usage', (req, res) => {
+  try {
+    var dateFrom = req.query.date_from || null;
+    var dateTo = req.query.date_to || null;
+    var groupBy = req.query.group_by || null; // day, model, therapist, operation
+    var period = req.query.period || null; // day, week, month
+    var therapistId = req.query.therapist_id ? parseInt(req.query.therapist_id) : null;
+
+    var filters = {};
+    if (dateFrom) filters.dateFrom = dateFrom;
+    if (dateTo) filters.dateTo = dateTo;
+    if (groupBy) filters.groupBy = groupBy;
+    if (period) filters.period = period;
+    if (therapistId) filters.therapistId = therapistId;
+
+    var data = aiUsageLogger.getUsageStats(filters);
+    res.json({ usage: data });
+  } catch (error) {
+    logger.error('Admin AI usage error: ' + error.message);
+    res.status(500).json({ error: 'Failed to get AI usage data' });
+  }
+});
+
+// GET /api/admin/ai/usage/summary - Summary for current month
+router.get('/ai/usage/summary', (req, res) => {
+  try {
+    var dateFrom = req.query.date_from || null;
+    var dateTo = req.query.date_to || null;
+
+    // Default to current month
+    if (!dateFrom) {
+      var now = new Date();
+      dateFrom = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-01';
+    }
+
+    var total = aiUsageLogger.getTotalUsage(dateFrom, dateTo);
+    var byModel = aiUsageLogger.getUsageStats({ groupBy: 'model', dateFrom: dateFrom, dateTo: dateTo });
+    var byTherapist = aiUsageLogger.getUsageStats({ groupBy: 'therapist', dateFrom: dateFrom, dateTo: dateTo });
+
+    // Get therapist emails for display
+    var db = getDatabase();
+    byTherapist.forEach(function(item) {
+      if (item.therapist_id) {
+        var userResult = db.exec('SELECT email FROM users WHERE id = ?', [item.therapist_id]);
+        if (userResult.length > 0 && userResult[0].values.length > 0) {
+          item.email = userResult[0].values[0][0];
+        }
+      }
+    });
+
+    // Find most used model
+    var mostUsedModel = byModel.length > 0 ? byModel.reduce(function(a, b) { return a.call_count > b.call_count ? a : b; }).model : null;
+
+    // Include spending limit status
+    var limitStatus = aiUsageLogger.getSpendingLimitStatus();
+
+    res.json({
+      total: total,
+      by_model: byModel,
+      by_therapist: byTherapist,
+      most_used_model: mostUsedModel,
+      date_from: dateFrom,
+      date_to: dateTo,
+      spending_limit: limitStatus
+    });
+  } catch (error) {
+    logger.error('Admin AI usage summary error: ' + error.message);
+    res.status(500).json({ error: 'Failed to get AI usage summary' });
+  }
+});
+
+// GET /api/admin/ai/usage/daily - Daily cost/tokens for charts
+router.get('/ai/usage/daily', (req, res) => {
+  try {
+    var dateFrom = req.query.date_from || null;
+    var dateTo = req.query.date_to || null;
+
+    // Default to last 30 days
+    if (!dateFrom) {
+      var d = new Date();
+      d.setDate(d.getDate() - 30);
+      dateFrom = d.toISOString().split('T')[0];
+    }
+
+    var daily = aiUsageLogger.getUsageStats({ period: 'day', dateFrom: dateFrom, dateTo: dateTo });
+    res.json({ daily: daily, date_from: dateFrom, date_to: dateTo });
+  } catch (error) {
+    logger.error('Admin AI usage daily error: ' + error.message);
+    res.status(500).json({ error: 'Failed to get daily AI usage' });
+  }
+});
+
+// ==================== AI Spending Limits ====================
+
+// GET /api/admin/ai/limits - Get current spending limit settings and status
+router.get('/ai/limits', (req, res) => {
+  try {
+    const status = aiUsageLogger.getSpendingLimitStatus();
+    res.json(status);
+  } catch (error) {
+    logger.error('Admin get AI limits error: ' + error.message);
+    res.status(500).json({ error: 'Failed to get AI spending limits' });
+  }
+});
+
+// PUT /api/admin/ai/limits - Update spending limit settings
+router.put('/ai/limits', (req, res) => {
+  try {
+    const { limit_usd, warning_percent } = req.body;
+    const db = getDatabase();
+    const updated = [];
+
+    if (limit_usd !== undefined) {
+      const val = parseFloat(limit_usd);
+      if (isNaN(val) || val < 0) {
+        return res.status(400).json({ error: 'limit_usd must be a non-negative number' });
+      }
+      db.run(
+        "INSERT INTO platform_settings (key, value, updated_by, updated_at) VALUES ('ai_monthly_limit_usd', ?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')",
+        [String(val), req.user.id, String(val), req.user.id]
+      );
+      updated.push('ai_monthly_limit_usd');
+
+      // Reset warning/reached flags when limit changes
+      db.run("DELETE FROM platform_settings WHERE key IN ('ai_limit_warning_sent', 'ai_limit_reached')");
+    }
+
+    if (warning_percent !== undefined) {
+      const val = parseInt(warning_percent, 10);
+      if (isNaN(val) || val < 1 || val > 99) {
+        return res.status(400).json({ error: 'warning_percent must be between 1 and 99' });
+      }
+      db.run(
+        "INSERT INTO platform_settings (key, value, updated_by, updated_at) VALUES ('ai_limit_warning_percent', ?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')",
+        [String(val), req.user.id, String(val), req.user.id]
+      );
+      updated.push('ai_limit_warning_percent');
+    }
+
+    if (updated.length > 0) {
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'update_ai_limits', 'platform_settings', NULL, ?, datetime('now'))",
+        [req.user.id, JSON.stringify({ updated, limit_usd, warning_percent })]
+      );
+      saveDatabase();
+    }
+
+    logger.info(`Superadmin ${req.user.id} updated AI spending limits: ${updated.join(', ')}`);
+
+    // Return updated status
+    const status = aiUsageLogger.getSpendingLimitStatus();
+    res.json({ message: 'AI spending limits updated successfully', ...status });
+  } catch (error) {
+    logger.error('Admin update AI limits error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update AI spending limits' });
+  }
+});
+
+// ==================== AI Model Selector ====================
+
+// GET /api/admin/ai/models - Get available models grouped by provider
+router.get('/ai/models', (req, res) => {
+  try {
+    const db = getDatabase();
+    const allModels = aiProviders.getAllModels();
+
+    // Transcription models (only OpenAI Whisper for now)
+    const transcriptionModels = [
+      { provider: 'openai', configured: allModels.find(p => p.provider === 'openai')?.configured || false, models: ['whisper-1'] }
+    ];
+
+    // Read current settings from DB
+    const getSettingValue = (key, fallback) => {
+      const r = db.exec("SELECT value FROM platform_settings WHERE key = ?", [key]);
+      return (r.length > 0 && r[0].values.length > 0) ? r[0].values[0][0] : fallback;
+    };
+
+    const current = {
+      summarization: {
+        provider: getSettingValue('ai_summarization_provider', 'openai'),
+        model: getSettingValue('ai_summarization_model', 'gpt-4o-mini')
+      },
+      transcription: {
+        provider: getSettingValue('ai_transcription_provider', 'openai'),
+        model: getSettingValue('ai_transcription_model', 'whisper-1')
+      }
+    };
+
+    res.json({
+      summarization_providers: allModels,
+      transcription_providers: transcriptionModels,
+      current
+    });
+  } catch (error) {
+    logger.error('Admin AI models error: ' + error.message);
+    res.status(500).json({ error: 'Failed to get AI models' });
+  }
+});
+
+// PUT /api/admin/ai/models - Save selected AI models
+router.put('/ai/models', (req, res) => {
+  try {
+    const { summarization, transcription } = req.body;
+    const db = getDatabase();
+    const updated = [];
+
+    if (summarization) {
+      if (summarization.provider) {
+        db.run(
+          "INSERT INTO platform_settings (key, value, updated_by, updated_at) VALUES ('ai_summarization_provider', ?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')",
+          [summarization.provider, req.user.id, summarization.provider, req.user.id]
+        );
+        updated.push('ai_summarization_provider');
+      }
+      if (summarization.model) {
+        db.run(
+          "INSERT INTO platform_settings (key, value, updated_by, updated_at) VALUES ('ai_summarization_model', ?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')",
+          [summarization.model, req.user.id, summarization.model, req.user.id]
+        );
+        updated.push('ai_summarization_model');
+      }
+    }
+
+    if (transcription) {
+      if (transcription.provider) {
+        db.run(
+          "INSERT INTO platform_settings (key, value, updated_by, updated_at) VALUES ('ai_transcription_provider', ?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')",
+          [transcription.provider, req.user.id, transcription.provider, req.user.id]
+        );
+        updated.push('ai_transcription_provider');
+      }
+      if (transcription.model) {
+        db.run(
+          "INSERT INTO platform_settings (key, value, updated_by, updated_at) VALUES ('ai_transcription_model', ?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')",
+          [transcription.model, req.user.id, transcription.model, req.user.id]
+        );
+        updated.push('ai_transcription_model');
+      }
+    }
+
+    if (updated.length > 0) {
+      // Audit log
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'update_ai_models', 'platform_settings', NULL, ?, datetime('now'))",
+        [req.user.id, JSON.stringify({ updated })]
+      );
+      saveDatabase();
+    }
+
+    logger.info(`Superadmin ${req.user.id} updated AI model settings: ${updated.join(', ')}`);
+
+    // Return updated current settings
+    const getSettingValue = (key, fallback) => {
+      const r = db.exec("SELECT value FROM platform_settings WHERE key = ?", [key]);
+      return (r.length > 0 && r[0].values.length > 0) ? r[0].values[0][0] : fallback;
+    };
+
+    res.json({
+      message: 'AI model settings updated successfully',
+      updated,
+      current: {
+        summarization: {
+          provider: getSettingValue('ai_summarization_provider', 'openai'),
+          model: getSettingValue('ai_summarization_model', 'gpt-4o-mini')
+        },
+        transcription: {
+          provider: getSettingValue('ai_transcription_provider', 'openai'),
+          model: getSettingValue('ai_transcription_model', 'whisper-1')
+        }
+      }
+    });
+  } catch (error) {
+    logger.error('Admin update AI models error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update AI model settings' });
+  }
+});
+
+// GET /api/admin/ai/test - Test connection to a provider
+router.get('/ai/test', async (req, res) => {
+  try {
+    const providerName = req.query.provider;
+    if (!providerName) {
+      return res.status(400).json({ error: 'provider query parameter required' });
+    }
+
+    const provider = aiProviders.getProvider(providerName);
+    if (!provider) {
+      return res.status(400).json({ error: 'Unknown provider: ' + providerName });
+    }
+
+    if (!provider.isConfigured()) {
+      return res.json({
+        provider: providerName,
+        success: false,
+        configured: false,
+        message: 'Provider is not configured (missing API key)'
+      });
+    }
+
+    // Try a minimal API call
+    const testMessages = [
+      { role: 'user', content: 'Reply with exactly: OK' }
+    ];
+
+    const model = provider.listModels()[0];
+    const startTime = Date.now();
+    const result = await provider.chat(testMessages, { model, temperature: 0, max_tokens: 10 });
+    const elapsed = Date.now() - startTime;
+
+    res.json({
+      provider: providerName,
+      success: true,
+      configured: true,
+      message: 'Connection successful',
+      response_time_ms: elapsed,
+      model_used: result.model || model,
+      response_text: (result.text || '').substring(0, 50)
+    });
+  } catch (error) {
+    logger.error('Admin AI test connection error: ' + error.message);
+    res.json({
+      provider: req.query.provider,
+      success: false,
+      configured: true,
+      message: 'Connection failed: ' + error.message
+    });
   }
 });
 
