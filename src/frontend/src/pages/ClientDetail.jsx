@@ -868,12 +868,14 @@ function ClientDetail() {
             <Breadcrumb items={[
               { label: t('nav.dashboard'), to: '/dashboard' },
               { label: t('nav.clients'), to: '/clients' },
-              { label: client.email || client.telegram_id || `#${client.id}` }
+              { label: [client.first_name, client.last_name].filter(Boolean).join(' ') || client.email || client.telegram_id || `#${client.id}` }
             ]} />
             <h2 className="text-2xl font-bold text-stone-800">
-              Client: {client.email || client.telegram_id || `#${client.id}`}
+              {[client.first_name, client.last_name].filter(Boolean).join(' ') || client.email || client.telegram_id || `#${client.id}`}
             </h2>
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-stone-500">
+              {client.phone && <span>{t('clientDetail.phone')}: {client.phone}</span>}
+              {client.telegram_username && <span>{t('clientDetail.telegram')}: @{client.telegram_username}</span>}
               <span>{t('clientDetail.language')}: {(client.language || 'en').toUpperCase()}</span>
               <span>{t('clientDetail.consent')}: {client.consent_therapist_access ? t('clientDetail.consentGranted') : t('clientDetail.consentNotGranted')}</span>
               <span>{t('clientDetail.joined')}: {formatUserDateOnly(client.created_at)}</span>

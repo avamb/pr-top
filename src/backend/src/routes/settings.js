@@ -23,7 +23,7 @@ router.get('/profile', authenticate, (req, res) => {
   try {
     const db = getDatabase();
     const result = db.exec(
-      'SELECT id, email, role, language, timezone, created_at, escalation_preferences FROM users WHERE id = ?',
+      'SELECT id, email, role, language, timezone, created_at, escalation_preferences, first_name, last_name, phone, telegram_username FROM users WHERE id = ?',
       [req.user.id]
     );
 
@@ -49,7 +49,11 @@ router.get('/profile', authenticate, (req, res) => {
         language: user[3] || 'en',
         timezone: user[4] || 'UTC',
         created_at: user[5],
-        escalation_preferences: escalationPrefs
+        escalation_preferences: escalationPrefs,
+        first_name: user[7] || '',
+        last_name: user[8] || '',
+        phone: user[9] || '',
+        telegram_username: user[10] || ''
       }
     });
   } catch (error) {
@@ -61,11 +65,11 @@ router.get('/profile', authenticate, (req, res) => {
 // PUT /api/settings/profile - Update user profile settings
 router.put('/profile', authenticate, (req, res) => {
   try {
-    const { language, timezone } = req.body;
+    const { language, timezone, first_name, last_name, phone, telegram_username } = req.body;
     const db = getDatabase();
 
     // Validate language
-    const validLanguages = ['en', 'ru', 'es'];
+    const validLanguages = ['en', 'ru', 'es', 'uk'];
     if (language && !validLanguages.includes(language)) {
       return res.status(400).json({ error: `Invalid language. Must be one of: ${validLanguages.join(', ')}` });
     }
@@ -76,6 +80,19 @@ router.put('/profile', authenticate, (req, res) => {
     }
     if (timezone && timezone.length > 100) {
       return res.status(400).json({ error: 'Timezone value too long' });
+    }
+
+    // Validate phone (allow flexible format: digits, spaces, dashes, plus, parens)
+    if (phone !== undefined && phone !== '' && !/^[+\d\s\-().]{5,20}$/.test(phone)) {
+      return res.status(400).json({ error: 'Invalid phone format' });
+    }
+
+    // Validate first_name and last_name length
+    if (first_name !== undefined && first_name.length > 100) {
+      return res.status(400).json({ error: 'First name too long (max 100 characters)' });
+    }
+    if (last_name !== undefined && last_name.length > 100) {
+      return res.status(400).json({ error: 'Last name too long (max 100 characters)' });
     }
 
     // Build update query dynamically based on provided fields
@@ -89,6 +106,23 @@ router.put('/profile', authenticate, (req, res) => {
     if (timezone) {
       updates.push('timezone = ?');
       params.push(timezone);
+    }
+    if (first_name !== undefined) {
+      updates.push('first_name = ?');
+      params.push(first_name.trim());
+    }
+    if (last_name !== undefined) {
+      updates.push('last_name = ?');
+      params.push(last_name.trim());
+    }
+    if (phone !== undefined) {
+      updates.push('phone = ?');
+      params.push(phone.trim());
+    }
+    if (telegram_username !== undefined) {
+      // Auto-strip @ prefix
+      updates.push('telegram_username = ?');
+      params.push(telegram_username.replace(/^@/, '').trim());
     }
 
     if (updates.length === 0) {
@@ -104,7 +138,7 @@ router.put('/profile', authenticate, (req, res) => {
 
     // Return updated profile
     const result = db.exec(
-      'SELECT id, email, role, language, timezone, created_at, escalation_preferences FROM users WHERE id = ?',
+      'SELECT id, email, role, language, timezone, created_at, escalation_preferences, first_name, last_name, phone, telegram_username FROM users WHERE id = ?',
       [req.user.id]
     );
 
@@ -127,7 +161,11 @@ router.put('/profile', authenticate, (req, res) => {
         language: user[3] || 'en',
         timezone: user[4] || 'UTC',
         created_at: user[5],
-        escalation_preferences: escalationPrefs
+        escalation_preferences: escalationPrefs,
+        first_name: user[7] || '',
+        last_name: user[8] || '',
+        phone: user[9] || '',
+        telegram_username: user[10] || ''
       }
     });
   } catch (error) {

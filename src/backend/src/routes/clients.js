@@ -117,7 +117,8 @@ router.get('/', (req, res) => {
                 SELECT created_at FROM therapist_notes WHERE client_id = u.id
                 UNION ALL
                 SELECT created_at FROM sessions WHERE client_id = u.id
-              )) AS last_activity
+              )) AS last_activity,
+              u.first_name, u.last_name, u.phone, u.telegram_username
        FROM users u
        WHERE ${whereClause}
        ORDER BY last_activity DESC NULLS LAST, u.created_at DESC
@@ -133,7 +134,11 @@ router.get('/', (req, res) => {
       language: row[4],
       created_at: row[5],
       updated_at: row[6],
-      last_activity: row[7] || null
+      last_activity: row[7] || null,
+      first_name: row[8] || '',
+      last_name: row[9] || '',
+      phone: row[10] || '',
+      telegram_username: row[11] || ''
     }));
 
     // Also include limit info
@@ -165,7 +170,7 @@ router.get('/:id', (req, res) => {
 
     // Verify client belongs to this therapist
     const clientResult = db.exec(
-      "SELECT id, telegram_id, email, consent_therapist_access, language, created_at, updated_at FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      "SELECT id, telegram_id, email, consent_therapist_access, language, created_at, updated_at, first_name, last_name, phone, telegram_username FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
       [clientId, therapistId]
     );
 
@@ -182,7 +187,11 @@ router.get('/:id', (req, res) => {
         consent_therapist_access: !!row[3],
         language: row[4],
         created_at: row[5],
-        updated_at: row[6]
+        updated_at: row[6],
+        first_name: row[7] || '',
+        last_name: row[8] || '',
+        phone: row[9] || '',
+        telegram_username: row[10] || ''
       }
     });
   } catch (error) {

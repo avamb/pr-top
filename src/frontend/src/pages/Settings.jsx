@@ -63,13 +63,19 @@ export default function Settings() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
   const [savingEscalation, setSavingEscalation] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [profileSuccess, setProfileSuccess] = useState(null);
   const [escalationSuccess, setEscalationSuccess] = useState(null);
   const [language, setLanguage] = useState('en');
   const [timezone, setTimezone] = useState('UTC');
   const [escalation, setEscalation] = useState(DEFAULT_ESCALATION);
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [telegramUsername, setTelegramUsername] = useState('');
 
   const abortControllerRef = React.useRef(null);
 
@@ -111,6 +117,10 @@ export default function Settings() {
         setLanguage(data.profile.language || 'en');
         setTimezone(data.profile.timezone || 'UTC');
         setEscalation({ ...DEFAULT_ESCALATION, ...(data.profile.escalation_preferences || {}) });
+        setFirstName(data.profile.first_name || '');
+        setLastName(data.profile.last_name || '');
+        setPhone(data.profile.phone || '');
+        setTelegramUsername(data.profile.telegram_username || '');
         // Sync i18n language with profile
         const lang = data.profile.language || 'en';
         if (i18n.language !== lang) {
@@ -189,6 +199,49 @@ export default function Settings() {
     }
   }
 
+  async function handleSaveProfile(e) {
+    e.preventDefault();
+    if (savingProfile) return;
+    setSavingProfile(true);
+    setError(null);
+    setProfileSuccess(null);
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/settings/profile`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ first_name: firstName, last_name: lastName, phone, telegram_username: telegramUsername })
+      });
+
+      if (res.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/login');
+        return;
+      }
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to update profile');
+      }
+
+      const data = await res.json();
+      setProfile(data.profile);
+      setFirstName(data.profile.first_name || '');
+      setLastName(data.profile.last_name || '');
+      setPhone(data.profile.phone || '');
+      setTelegramUsername(data.profile.telegram_username || '');
+      setProfileSuccess(t('settings.profileSaved'));
+      setTimeout(() => setProfileSuccess(null), 3000);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
   async function handleSaveEscalation(e) {
     e.preventDefault();
     if (savingEscalation) return;
@@ -263,6 +316,90 @@ export default function Settings() {
           </div>
         ) : profile ? (
           <>
+            {/* Personal Information Section */}
+            <div className="bg-white rounded-lg shadow-md p-8 mb-6">
+              <h3 className="text-lg font-semibold text-stone-700 mb-4">{t('settings.personalInfo')}</h3>
+
+              {profileSuccess && (
+                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+                  {profileSuccess}
+                </div>
+              )}
+
+              <form onSubmit={handleSaveProfile}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                  <div>
+                    <label htmlFor="firstName" className="block text-sm font-medium text-stone-700 mb-2">
+                      {t('settings.firstName')}
+                    </label>
+                    <input
+                      id="firstName"
+                      type="text"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder={t('settings.firstNamePlaceholder')}
+                      maxLength={100}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="lastName" className="block text-sm font-medium text-stone-700 mb-2">
+                      {t('settings.lastName')}
+                    </label>
+                    <input
+                      id="lastName"
+                      type="text"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      placeholder={t('settings.lastNamePlaceholder')}
+                      maxLength={100}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="phone" className="block text-sm font-medium text-stone-700 mb-2">
+                      {t('settings.phone')}
+                    </label>
+                    <input
+                      id="phone"
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder={t('settings.phonePlaceholder')}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="telegramUsername" className="block text-sm font-medium text-stone-700 mb-2">
+                      {t('settings.telegramUsername')}
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400">@</span>
+                      <input
+                        id="telegramUsername"
+                        type="text"
+                        value={telegramUsername}
+                        onChange={(e) => setTelegramUsername(e.target.value.replace(/^@/, ''))}
+                        placeholder={t('settings.telegramUsernamePlaceholder')}
+                        className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-colors"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <button
+                    type="submit"
+                    disabled={savingProfile}
+                    className="px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                  >
+                    {savingProfile && <LoadingSpinner size={16} className="mr-2" />}
+                    {savingProfile ? t('settings.saving') : t('settings.saveProfile')}
+                  </button>
+                </div>
+              </form>
+            </div>
+
             <div className="bg-white rounded-lg shadow-md p-8 mb-6">
               {/* Account info (read-only) */}
               <div className="mb-8 pb-6 border-b border-gray-200">

@@ -218,7 +218,18 @@
     "delayLabel": "Затримка перед ескалацією (хвилини)",
     "delayImmediate": "Негайно (без затримки)",
     "delayMinutes": "{{count}} хвилин",
-    "saveEscalation": "Зберегти налаштування сповіщень"
+    "saveEscalation": "Зберегти налаштування сповіщень",
+    "personalInfo": "Особисті дані",
+    "firstName": "Ім'я",
+    "lastName": "Прізвище",
+    "phone": "Телефон",
+    "telegramUsername": "Telegram ім'я користувача",
+    "firstNamePlaceholder": "Введіть ім'я",
+    "lastNamePlaceholder": "Введіть прізвище",
+    "phonePlaceholder": "+380 (99) 123-45-67",
+    "telegramUsernamePlaceholder": "username (без @)",
+    "saveProfile": "Зберегти профіль",
+    "profileSaved": "Профіль збережено!"
   },
   "clientList": {
     "title": "Клієнти",
@@ -285,6 +296,8 @@
     "consentGranted": "✅ Надано",
     "consentNotGranted": "❌ Не надано",
     "joined": "Дата реєстрації",
+    "phone": "Телефон",
+    "telegram": "Telegram",
     "unifiedTimeline": "Єдина хронологія ({{count}})",
     "filterByDate": "Фільтр за датою:",
     "to": "до",

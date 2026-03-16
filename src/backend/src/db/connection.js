@@ -370,6 +370,32 @@ function applySchema(db) {
     logger.warn('Ukrainian backfill migration skipped: ' + e.message);
   }
 
+  // Add profile fields to users table (migration)
+  try {
+    db.run('ALTER TABLE users ADD COLUMN first_name TEXT');
+    logger.info('Added first_name column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE users ADD COLUMN last_name TEXT');
+    logger.info('Added last_name column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE users ADD COLUMN phone TEXT');
+    logger.info('Added phone column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE users ADD COLUMN telegram_username TEXT');
+    logger.info('Added telegram_username column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
   // Create indexes for performance
   db.run('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
   db.run('CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)');

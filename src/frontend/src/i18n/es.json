@@ -218,7 +218,18 @@
     "delayLabel": "Retraso antes de escalar (minutos)",
     "delayImmediate": "Inmediato (sin retraso)",
     "delayMinutes": "{{count}} minutos",
-    "saveEscalation": "Guardar preferencias de escalación"
+    "saveEscalation": "Guardar preferencias de escalación",
+    "personalInfo": "Información personal",
+    "firstName": "Nombre",
+    "lastName": "Apellido",
+    "phone": "Teléfono",
+    "telegramUsername": "Usuario de Telegram",
+    "firstNamePlaceholder": "Ingresa tu nombre",
+    "lastNamePlaceholder": "Ingresa tu apellido",
+    "phonePlaceholder": "+34 612 345 678",
+    "telegramUsernamePlaceholder": "usuario (sin @)",
+    "saveProfile": "Guardar perfil",
+    "profileSaved": "¡Perfil guardado!"
   },
   "clientList": {
     "title": "Clientes",
@@ -285,6 +296,8 @@
     "consentGranted": "✅ Otorgado",
     "consentNotGranted": "❌ No otorgado",
     "joined": "Registrado",
+    "phone": "Teléfono",
+    "telegram": "Telegram",
     "unifiedTimeline": "Cronología unificada ({{count}})",
     "filterByDate": "Filtrar por fecha:",
     "to": "hasta",

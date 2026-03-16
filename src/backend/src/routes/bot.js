@@ -32,7 +32,7 @@ function botAuth(req, res, next) {
 // POST /api/bot/register - Register or update a Telegram user with role
 router.post('/register', botAuth, (req, res) => {
   try {
-    const { telegram_id, role, language } = req.body;
+    const { telegram_id, role, language, first_name, last_name, username } = req.body;
 
     if (!telegram_id) {
       return res.status(400).json({ error: 'telegram_id is required' });
@@ -50,6 +50,20 @@ router.post('/register', botAuth, (req, res) => {
 
     if (existing.length > 0 && existing[0].values.length > 0) {
       const existingUser = existing[0].values[0];
+      // Update Telegram profile info on re-registration attempts
+      if (first_name || last_name || username) {
+        const updateParts = [];
+        const updateParams = [];
+        if (first_name) { updateParts.push('first_name = ?'); updateParams.push(first_name); }
+        if (last_name) { updateParts.push('last_name = ?'); updateParams.push(last_name); }
+        if (username) { updateParts.push('telegram_username = ?'); updateParams.push(username.replace(/^@/, '')); }
+        if (updateParts.length > 0) {
+          updateParts.push("updated_at = datetime('now')");
+          updateParams.push(existingUser[0]);
+          db.run(`UPDATE users SET ${updateParts.join(', ')} WHERE id = ?`, updateParams);
+          saveDatabase();
+        }
+      }
       logger.info(`Telegram user already exists: telegram_id=${telegram_id}, role=${existingUser[1]}`);
       return res.json({
         message: 'User already registered',
@@ -65,10 +79,13 @@ router.post('/register', botAuth, (req, res) => {
     // Generate invite code for therapists
     const inviteCode = role === 'therapist' ? uuidv4().slice(0, 8) : null;
 
-    // Insert new user
+    // Clean telegram username (strip @ prefix)
+    const cleanUsername = username ? username.replace(/^@/, '') : null;
+
+    // Insert new user with profile fields from Telegram
     db.run(
-      'INSERT INTO users (telegram_id, role, invite_code, language) VALUES (?, ?, ?, ?)',
-      [String(telegram_id), role, inviteCode, language || 'en']
+      'INSERT INTO users (telegram_id, role, invite_code, language, first_name, last_name, telegram_username) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [String(telegram_id), role, inviteCode, language || 'en', first_name || null, last_name || null, cleanUsername]
     );
 
     saveDatabase();
@@ -113,7 +130,7 @@ router.get('/user/:telegram_id', botAuth, (req, res) => {
     const db = getDatabase();
 
     const result = db.exec(
-      'SELECT id, telegram_id, role, invite_code, language, consent_therapist_access, therapist_id, created_at FROM users WHERE telegram_id = ?',
+      'SELECT id, telegram_id, role, invite_code, language, consent_therapist_access, therapist_id, created_at, first_name, last_name, phone, telegram_username FROM users WHERE telegram_id = ?',
       [String(telegram_id)]
     );
 
@@ -132,12 +149,63 @@ router.get('/user/:telegram_id', botAuth, (req, res) => {
         language: user[4],
         consent_therapist_access: !!user[5],
         therapist_id: user[6],
-        created_at: user[7]
+        created_at: user[7],
+        first_name: user[8] || '',
+        last_name: user[9] || '',
+        phone: user[10] || '',
+        telegram_username: user[11] || ''
       }
     });
   } catch (error) {
     logger.error('Bot get user error: ' + error.message);
     res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
+// PUT /api/bot/profile/:telegram_id - Update user profile fields from bot
+router.put('/profile/:telegram_id', botAuth, (req, res) => {
+  try {
+    const { telegram_id } = req.params;
+    const { first_name, last_name, phone } = req.body;
+    const db = getDatabase();
+
+    // Verify user exists
+    const existing = db.exec('SELECT id FROM users WHERE telegram_id = ?', [String(telegram_id)]);
+    if (existing.length === 0 || existing[0].values.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const updates = [];
+    const params = [];
+
+    if (first_name !== undefined) {
+      updates.push('first_name = ?');
+      params.push(first_name.trim());
+    }
+    if (last_name !== undefined) {
+      updates.push('last_name = ?');
+      params.push(last_name.trim());
+    }
+    if (phone !== undefined) {
+      updates.push('phone = ?');
+      params.push(phone.trim());
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    updates.push("updated_at = datetime('now')");
+    params.push(String(telegram_id));
+
+    db.run(`UPDATE users SET ${updates.join(', ')} WHERE telegram_id = ?`, params);
+    saveDatabase();
+
+    logger.info(`Bot profile updated for telegram_id=${telegram_id}`);
+    res.json({ message: 'Profile updated' });
+  } catch (error) {
+    logger.error('Bot profile update error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update profile' });
   }
 });
 

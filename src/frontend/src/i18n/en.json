@@ -218,7 +218,18 @@
     "delayLabel": "Delay before escalating (minutes)",
     "delayImmediate": "Immediate (no delay)",
     "delayMinutes": "{{count}} minutes",
-    "saveEscalation": "Save Escalation Preferences"
+    "saveEscalation": "Save Escalation Preferences",
+    "personalInfo": "Personal Information",
+    "firstName": "First Name",
+    "lastName": "Last Name",
+    "phone": "Phone",
+    "telegramUsername": "Telegram Username",
+    "firstNamePlaceholder": "Enter your first name",
+    "lastNamePlaceholder": "Enter your last name",
+    "phonePlaceholder": "+1 (555) 123-4567",
+    "telegramUsernamePlaceholder": "username (without @)",
+    "saveProfile": "Save Profile",
+    "profileSaved": "Profile saved successfully!"
   },
   "clientList": {
     "title": "Clients",
@@ -285,6 +296,8 @@
     "consentGranted": "✅ Granted",
     "consentNotGranted": "❌ Not granted",
     "joined": "Joined",
+    "phone": "Phone",
+    "telegram": "Telegram",
     "unifiedTimeline": "Unified Timeline ({{count}})",
     "filterByDate": "Filter by date:",
     "to": "to",

@@ -218,7 +218,18 @@
     "delayLabel": "Задержка перед эскалацией (минуты)",
     "delayImmediate": "Немедленно (без задержки)",
     "delayMinutes": "{{count}} минут",
-    "saveEscalation": "Сохранить настройки уведомлений"
+    "saveEscalation": "Сохранить настройки уведомлений",
+    "personalInfo": "Личные данные",
+    "firstName": "Имя",
+    "lastName": "Фамилия",
+    "phone": "Телефон",
+    "telegramUsername": "Telegram имя пользователя",
+    "firstNamePlaceholder": "Введите имя",
+    "lastNamePlaceholder": "Введите фамилию",
+    "phonePlaceholder": "+7 (999) 123-45-67",
+    "telegramUsernamePlaceholder": "username (без @)",
+    "saveProfile": "Сохранить профиль",
+    "profileSaved": "Профиль сохранён!"
   },
   "clientList": {
     "title": "Клиенты",
@@ -285,6 +296,8 @@
     "consentGranted": "✅ Получено",
     "consentNotGranted": "❌ Не получено",
     "joined": "Дата регистрации",
+    "phone": "Телефон",
+    "telegram": "Telegram",
     "unifiedTimeline": "Единая хронология ({{count}})",
     "filterByDate": "Фильтр по дате:",
     "to": "до",
