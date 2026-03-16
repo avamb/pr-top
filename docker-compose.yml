@@ -5,11 +5,8 @@ services:
       context: ./nginx
       dockerfile: Dockerfile
     restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/certs:/etc/nginx/certs:ro
+    expose:
+      - "80"
     depends_on:
       frontend:
         condition: service_started
