@@ -909,5 +909,72 @@
       "clientOwnershipP1": "Clients own their data. They can export their diary entries and exercise responses at any time, and they can request complete data deletion. Therapists maintain ownership of their own notes and session recordings.",
       "clientOwnershipP2": "PR-TOP acts as a data processor, not a data controller — the therapist and client remain the decision-makers about how their data is used."
     }
+  },
+  "privacy": {
+    "title": "Privacy Policy",
+    "lastUpdated": "Last updated: {{date}}",
+    "tableOfContents": "Table of Contents",
+    "dataCollection": {
+      "title": "What Data We Collect",
+      "intro": "PR-TOP collects only the data necessary to provide its therapist assistant services. We distinguish between the following categories:",
+      "personalTitle": "Personal Information",
+      "personalDesc": "When you register, we collect your email address, name, and chosen password (stored as a cryptographic hash). Therapists may also provide a practice name and professional credentials.",
+      "clinicalTitle": "Clinical & Session Data",
+      "clinicalDesc": "Clients may submit diary entries (text, voice messages, video messages), exercise responses, and SOS alerts through Telegram. Therapists may upload session recordings, write private notes, and create AI-assisted summaries. All clinical data is classified as Class A sensitive data and encrypted at the application layer.",
+      "usageTitle": "Usage Data",
+      "usageDesc": "We collect anonymized usage analytics through Umami, a privacy-first analytics platform that uses no cookies and stores no personal identifiers. This includes page views, traffic sources, and device types — but never individual user behavior."
+    },
+    "dataUsage": {
+      "title": "How We Use Your Data",
+      "intro": "Your data is used exclusively to provide and improve the PR-TOP therapeutic assistant service:",
+      "item1": "Providing therapist-client workflows: diary access, session management, exercise delivery, SOS alerts",
+      "item2": "AI-powered features: speech-to-text transcription, session summarization, semantic search, natural language queries",
+      "item3": "Account management: authentication, subscription billing, email notifications",
+      "item4": "Service improvement: anonymized aggregate analytics to understand feature usage patterns",
+      "noAds": "We never use your data for advertising, user profiling, or model training purposes."
+    },
+    "dataStorage": {
+      "title": "Data Storage & Encryption",
+      "intro": "PR-TOP employs multiple layers of protection to safeguard your data:",
+      "classATitle": "Class A Data (Highly Sensitive)",
+      "classADesc": "Diary entries, session transcripts, therapist notes, AI summaries, SOS content, and exercise responses are encrypted at the application layer using AES-256 before being stored in the database. Even database administrators cannot read this data without the application encryption keys.",
+      "classBTitle": "Class B Data (Metadata)",
+      "classBDesc": "Timestamps, user role information, subscription status, and scheduling metadata are access-controlled but may remain as plaintext in the database. Payment data is handled entirely by Stripe and never touches our servers.",
+      "transit": "All data in transit is protected with TLS 1.3 encryption. We enforce HSTS headers with a two-year duration to prevent connection downgrades."
+    },
+    "thirdParties": {
+      "title": "Third-Party Services",
+      "intro": "PR-TOP integrates with the following third-party services to provide its features:",
+      "stripe": "Payment processing for subscriptions. Stripe handles all payment card data in compliance with PCI DSS standards. We never store card numbers on our servers.",
+      "aiLabel": "AI Providers",
+      "aiDesc": "Transcription and summarization services (e.g., OpenAI, Anthropic, Google). Only the minimum necessary content is sent for processing, and AI providers do not retain your data after processing is complete.",
+      "telegram": "Client-facing messaging interface. Telegram delivers messages between clients and the bot; message content is encrypted in our database upon receipt.",
+      "noSale": "We never sell, rent, or trade your personal or clinical data to any third party, for any reason."
+    },
+    "dataRetention": {
+      "title": "Data Retention & Deletion",
+      "intro": "We retain your data only for as long as you maintain an active account and have an ongoing therapeutic relationship that requires it.",
+      "deletion": "You may request complete deletion of your account and all associated data at any time. Upon receiving a deletion request, we permanently and irreversibly remove all personal information, clinical data, session recordings, transcripts, notes, and AI-generated content from our active database.",
+      "backups": "Encrypted backups are rotated on a scheduled basis. Deleted data will be purged from backup storage within the backup retention window (typically 30 days)."
+    },
+    "cookies": {
+      "title": "Cookies & Tracking",
+      "intro": "PR-TOP is designed with a privacy-first approach to analytics and tracking.",
+      "umami": "We use Umami for web analytics — a self-hosted, open-source analytics platform that is fully GDPR-compliant. Umami does not use cookies, does not track individual users, and does not collect personal data. All analytics data is aggregated and anonymized.",
+      "essential": "We use only essential browser storage (localStorage) for authentication tokens and language preferences. No third-party tracking cookies, advertising pixels, or fingerprinting technologies are used."
+    },
+    "children": {
+      "title": "Children's Privacy",
+      "desc": "PR-TOP is a professional tool designed for licensed therapists and their adult clients. Our service is intended for users aged 18 and older. We do not knowingly collect personal information from children under 18. If you believe a minor has provided us with personal data, please contact us immediately so we can delete it."
+    },
+    "contact": {
+      "title": "Contact Information",
+      "desc": "If you have any questions about this Privacy Policy, your data, or wish to exercise your rights (access, correction, deletion, data portability), please contact us at:"
+    },
+    "updates": {
+      "title": "Updates to This Policy",
+      "desc": "We may update this Privacy Policy from time to time to reflect changes in our practices, technology, or legal requirements. The \"Last updated\" date at the top of this page indicates when the policy was last revised.",
+      "notification": "For material changes, we will notify registered users via email and/or an in-app notification at least 14 days before the changes take effect. Continued use of PR-TOP after the effective date constitutes acceptance of the updated policy."
+    }
   }
 }

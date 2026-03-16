@@ -909,5 +909,72 @@
       "clientOwnershipP1": "Los clientes son dueños de sus datos. Pueden exportar sus entradas de diario y respuestas a ejercicios en cualquier momento, y pueden solicitar la eliminación completa de datos.",
       "clientOwnershipP2": "PR-TOP actúa como procesador de datos, no como controlador: el terapeuta y el cliente siguen siendo los que toman las decisiones sobre cómo se utilizan sus datos."
     }
+  },
+  "privacy": {
+    "title": "Política de Privacidad",
+    "lastUpdated": "Última actualización: {{date}}",
+    "tableOfContents": "Tabla de contenidos",
+    "dataCollection": {
+      "title": "Qué datos recopilamos",
+      "intro": "PR-TOP recopila solo los datos necesarios para proporcionar sus servicios de asistente terapéutico. Distinguimos entre las siguientes categorías:",
+      "personalTitle": "Información personal",
+      "personalDesc": "Al registrarse, recopilamos su dirección de correo electrónico, nombre y contraseña elegida (almacenada como hash criptográfico). Los terapeutas también pueden proporcionar el nombre de su consulta y credenciales profesionales.",
+      "clinicalTitle": "Datos clínicos y de sesiones",
+      "clinicalDesc": "Los clientes pueden enviar entradas de diario (texto, mensajes de voz, mensajes de video), respuestas a ejercicios y alertas SOS a través de Telegram. Los terapeutas pueden subir grabaciones de sesiones, escribir notas privadas y crear resúmenes con IA. Todos los datos clínicos se clasifican como datos sensibles de Clase A y se cifran a nivel de aplicación.",
+      "usageTitle": "Datos de uso",
+      "usageDesc": "Recopilamos análisis de uso anonimizados a través de Umami, una plataforma de análisis sin cookies que no almacena identificadores personales. Esto incluye vistas de página, fuentes de tráfico y tipos de dispositivo, pero nunca comportamiento individual del usuario."
+    },
+    "dataUsage": {
+      "title": "Cómo usamos sus datos",
+      "intro": "Sus datos se utilizan exclusivamente para proporcionar y mejorar el servicio de asistente terapéutico PR-TOP:",
+      "item1": "Flujos de trabajo terapeuta-cliente: acceso al diario, gestión de sesiones, entrega de ejercicios, alertas SOS",
+      "item2": "Funciones impulsadas por IA: transcripción de voz a texto, resumen de sesiones, búsqueda semántica, consultas en lenguaje natural",
+      "item3": "Gestión de cuenta: autenticación, facturación de suscripciones, notificaciones por correo electrónico",
+      "item4": "Mejora del servicio: análisis agregados anónimos para entender patrones de uso de funciones",
+      "noAds": "Nunca usamos sus datos para publicidad, perfilado de usuarios o entrenamiento de modelos."
+    },
+    "dataStorage": {
+      "title": "Almacenamiento y cifrado de datos",
+      "intro": "PR-TOP emplea múltiples capas de protección para salvaguardar sus datos:",
+      "classATitle": "Datos Clase A (altamente sensibles)",
+      "classADesc": "Las entradas del diario, transcripciones de sesiones, notas del terapeuta, resúmenes de IA, contenido SOS y respuestas a ejercicios se cifran a nivel de aplicación usando AES-256 antes de almacenarse en la base de datos.",
+      "classBTitle": "Datos Clase B (metadatos)",
+      "classBDesc": "Las marcas de tiempo, información de roles, estado de suscripción y metadatos de programación están controlados por acceso pero pueden permanecer en texto plano. Los datos de pago son manejados completamente por Stripe y nunca tocan nuestros servidores.",
+      "transit": "Todos los datos en tránsito están protegidos con cifrado TLS 1.3. Aplicamos encabezados HSTS con una duración de dos años para prevenir degradaciones de conexión."
+    },
+    "thirdParties": {
+      "title": "Servicios de terceros",
+      "intro": "PR-TOP se integra con los siguientes servicios de terceros:",
+      "stripe": "Procesamiento de pagos para suscripciones. Stripe maneja todos los datos de tarjetas de pago en cumplimiento con los estándares PCI DSS. Nunca almacenamos números de tarjeta en nuestros servidores.",
+      "aiLabel": "Proveedores de IA",
+      "aiDesc": "Servicios de transcripción y resumen (p. ej., OpenAI, Anthropic, Google). Solo se envía el contenido mínimo necesario, y los proveedores de IA no retienen sus datos después del procesamiento.",
+      "telegram": "Interfaz de mensajería para clientes. Telegram entrega mensajes entre clientes y el bot; el contenido se cifra en nuestra base de datos al recibirlo.",
+      "noSale": "Nunca vendemos, alquilamos ni intercambiamos sus datos personales o clínicos con terceros, por ningún motivo."
+    },
+    "dataRetention": {
+      "title": "Retención y eliminación de datos",
+      "intro": "Retenemos sus datos solo mientras mantenga una cuenta activa y una relación terapéutica que lo requiera.",
+      "deletion": "Puede solicitar la eliminación completa de su cuenta y todos los datos asociados en cualquier momento. Al recibir una solicitud de eliminación, eliminamos permanente e irreversiblemente toda la información personal, datos clínicos, grabaciones, transcripciones, notas y contenido generado por IA.",
+      "backups": "Las copias de seguridad cifradas se rotan según un calendario. Los datos eliminados se purgarán del almacenamiento de respaldo dentro de la ventana de retención (normalmente 30 días)."
+    },
+    "cookies": {
+      "title": "Cookies y seguimiento",
+      "intro": "PR-TOP está diseñado con un enfoque de privacidad primero para el análisis y seguimiento.",
+      "umami": "Usamos Umami para análisis web — una plataforma autoalojada de código abierto totalmente compatible con el RGPD. Umami no usa cookies, no rastrea usuarios individuales y no recopila datos personales.",
+      "essential": "Solo usamos almacenamiento esencial del navegador (localStorage) para tokens de autenticación y preferencias de idioma. No se utilizan cookies de seguimiento de terceros, píxeles publicitarios ni tecnologías de fingerprinting."
+    },
+    "children": {
+      "title": "Privacidad de menores",
+      "desc": "PR-TOP es una herramienta profesional diseñada para terapeutas licenciados y sus clientes adultos. Nuestro servicio está destinado a usuarios de 18 años o más. No recopilamos conscientemente información personal de menores de 18 años."
+    },
+    "contact": {
+      "title": "Información de contacto",
+      "desc": "Si tiene alguna pregunta sobre esta Política de Privacidad, sus datos o desea ejercer sus derechos (acceso, corrección, eliminación, portabilidad de datos), contáctenos en:"
+    },
+    "updates": {
+      "title": "Actualizaciones de esta política",
+      "desc": "Podemos actualizar esta Política de Privacidad periódicamente para reflejar cambios en nuestras prácticas, tecnología o requisitos legales. La fecha de \"Última actualización\" indica cuándo se revisó por última vez.",
+      "notification": "Para cambios materiales, notificaremos a los usuarios registrados por correo electrónico y/o notificación en la aplicación al menos 14 días antes de que los cambios entren en vigor."
+    }
   }
 }
