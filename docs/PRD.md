@@ -436,15 +436,24 @@ See Section 4.9 for full plan comparison.
 
 ### 10.1 Docker Compose
 
-Five services defined in `docker-compose.yml`:
+Six services defined in `docker-compose.yml`:
 
 | Service | Image | Port | Description |
 |---------|-------|------|-------------|
-| frontend | Node 18 + nginx | 80 (exposed) | React SPA build, nginx reverse proxy |
+| nginx | nginx:alpine | 80, 443 (public) | Reverse proxy — single entry point for all traffic |
+| frontend | Node 18 + nginx | 80 (internal) | React SPA build, serves static assets |
 | backend | Node 18 Alpine | 3001 (internal) | Express API, SQLite |
 | bot | Node 18 Alpine | none | Telegram long-polling |
 | umami | ghcr.io/umami-software/umami:postgresql-latest | 3000 (internal) | Privacy-first web analytics |
 | umami-db | postgres:15-alpine | 5432 (internal) | PostgreSQL for Umami analytics data |
+
+**Nginx Reverse Proxy Routing:**
+- `/` → frontend (SPA)
+- `/api/` → backend:3001 (rate limited: 30 req/s)
+- `/analytics/` → umami:3000 (rate limited: 10 req/s)
+- `/umami/script.js` → umami:3000 (tracking script)
+
+**Security features:** X-Frame-Options, X-Content-Type-Options, HSTS, X-XSS-Protection, Referrer-Policy headers. Gzip compression. SSL/TLS support with Let's Encrypt.
 
 **Volumes:**
 - `backend-data` — SQLite database persistence
@@ -470,6 +479,7 @@ All configuration via `.env` file. Key variable groups:
 | Scheduler | SCHEDULER_ENABLED |
 | Backups | BACKUP_DIR, BACKUP_RETENTION_COUNT, BACKUP_CRON |
 | Umami Analytics | UMAMI_WEBSITE_ID, UMAMI_DATABASE_URL, UMAMI_APP_SECRET, UMAMI_DB_USER, UMAMI_DB_PASSWORD |
+| Domain & SSL | DOMAIN, SSL_EMAIL |
 | Logging | LOG_LEVEL |
 
 ### 10.3 Database Backups
@@ -499,7 +509,8 @@ All configuration via `.env` file. Key variable groups:
 ### 10.6 Deployment
 
 - **Target:** Dokploy on Hetzner (or any Docker-compatible host)
-- **SSL:** Via reverse proxy (Traefik, Caddy, or Dokploy built-in)
+- **Reverse Proxy:** Built-in Nginx container as single entry point (ports 80/443)
+- **SSL:** Let's Encrypt / certbot via Nginx (set DOMAIN and SSL_EMAIL in .env)
 - **CI/CD:** Git-based deployment via Dokploy
 
 ---

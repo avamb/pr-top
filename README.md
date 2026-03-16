@@ -8,7 +8,7 @@ PR-TOP helps practicing psychologists preserve client context, reduce double doc
 
 ## Architecture
 
-The platform consists of three components:
+The platform consists of four components:
 
 - **Web Application** (`src/frontend/`) - React + Tailwind CSS
   - Public landing page with pricing and registration
@@ -27,6 +27,10 @@ The platform consists of three components:
   - Custom Exercises ("My Exercises") and pre-seeded exercise library
   - SOS/safety features with escalation notifications
   - Client consent management
+
+- **Nginx Reverse Proxy** (`nginx/`) - Single entry point
+  - Routes `/` to frontend, `/api/` to backend, `/analytics/` to Umami
+  - SSL/TLS termination (Let's Encrypt), rate limiting, security headers, gzip
 
 ## Tech Stack
 
@@ -103,6 +107,11 @@ src/
     src/
       index.js      # Telegram bot entry point
       i18n.js       # Bot translations (EN, RU, ES, UK)
+nginx/
+  nginx.conf          # Reverse proxy server blocks (HTTP/HTTPS)
+  locations.conf      # Shared location routing rules
+  Dockerfile          # nginx:alpine with config
+  certs/              # SSL certificates (not in repo)
 docs/
   PRD.md            # Full Product Requirements Document
 ```
@@ -165,6 +174,8 @@ All secrets are injected via `.env` file (never baked into images). See `.env.ex
 | `BACKUP_RETENTION_COUNT` | Number of backups to retain (default: 30) |
 | `BACKUP_CRON` | Backup schedule (default: 0 3 * * *) |
 | `LOG_LEVEL` | Logging level (default: info) |
+| `DOMAIN` | Production domain name (e.g., prtop.example.com) |
+| `SSL_EMAIL` | Email for Let's Encrypt certificate |
 
 ## Docker Deployment
 
@@ -181,31 +192,45 @@ cp .env.example .env
 docker-compose up --build -d
 
 # 3. Access the application
-# Frontend: http://localhost (port 80)
-# Backend API: http://localhost/api/health (proxied through nginx)
+# All traffic goes through the Nginx reverse proxy:
+# Landing page:   http://localhost/
+# Backend API:    http://localhost/api/health
+# Umami analytics: http://localhost/analytics/
 ```
 
 ### Services
 
 | Service | Description | Port |
 |---------|-------------|------|
-| **frontend** | React SPA served via nginx, proxies /api/* to backend | 80 (exposed) |
+| **nginx** | Reverse proxy — single entry point for all traffic | 80, 443 (public) |
+| **frontend** | React SPA served via nginx (internal) | 80 (internal) |
 | **backend** | Node.js Express API with SQLite | 3001 (internal) |
 | **bot** | Telegram bot (long-polling, no port) | none |
+| **umami** | Umami web analytics (privacy-first) | 3000 (internal) |
+| **umami-db** | PostgreSQL for Umami data | 5432 (internal) |
 
 ### Architecture
 
-- **Frontend**: Multi-stage build (Vite build + nginx). Nginx serves static files and reverse-proxies `/api/*` to the backend container.
+- **Nginx Reverse Proxy**: Single entry point on ports 80/443. Routes `/` to frontend, `/api/` to backend, `/analytics/` to Umami. Includes rate limiting (30 req/s for API, 10 req/s for analytics), security headers (HSTS, X-Frame-Options, etc.), gzip compression, and WebSocket proxy support.
+- **Frontend**: Multi-stage build (Vite build + nginx). Serves static SPA files only; API proxying handled by the external nginx reverse proxy.
 - **Backend**: Node.js 18 Alpine. SQLite data persisted in a Docker named volume (`backend-data`).
 - **Bot**: Node.js 18 Alpine. Connects to backend via internal Docker network.
+- **Umami**: Privacy-first analytics accessible at `/analytics/` via the reverse proxy.
+
+### SSL Setup (Production)
+
+1. Set `DOMAIN` and `SSL_EMAIL` in `.env`
+2. Place SSL certificates in `nginx/certs/` (or configure certbot)
+3. Uncomment the HTTPS server block in `nginx/nginx.conf`
+4. Uncomment the HTTP→HTTPS redirect
 
 ### Production Notes
 
 - Change all default secrets in `.env` before deploying
+- Only the nginx container exposes ports to the host — all other services are internal
 - The `backend-data` volume persists the SQLite database across container restarts
 - The `backend-uploads` volume persists encrypted audio/video session files separately
-- For HTTPS, configure a reverse proxy (Traefik, Caddy, or Dokploy's built-in SSL) in front of the frontend container
-- Health checks are configured on the backend; frontend waits for backend to be healthy before starting
+- Health checks are configured on all services; nginx waits for backend, frontend, and umami to be healthy
 
 ### Common Commands
 
