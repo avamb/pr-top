@@ -56,11 +56,73 @@ if (!token || token === 'your-telegram-bot-token') {
 
   console.log('PR-TOP Telegram Bot starting...');
 
-  // /start command - role selection
-  bot.onText(/\/start/, async (msg) => {
+  // /start command - role selection or deep link connect
+  bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
+    const deepLinkCode = match[1] ? match[1].trim() : null;
 
+    // Deep link: /start CODE — treat as invite code connect flow
+    if (deepLinkCode) {
+      const lang = await getUserLang(telegramId).catch(() => detectLang(msg));
+
+      try {
+        // Check if user exists; if not, auto-register as client first
+        let existingUser = null;
+        try {
+          existingUser = await checkExistingUser(telegramId);
+        } catch {
+          // Not registered — auto-register as client
+        }
+
+        if (!existingUser) {
+          try {
+            await api.post('/api/bot/register', {
+              telegram_id: String(telegramId),
+              role: 'client',
+              language: detectLang(msg),
+              first_name: msg.from.first_name || '',
+              last_name: msg.from.last_name || '',
+              username: msg.from.username || ''
+            });
+            userLangCache[telegramId] = detectLang(msg);
+          } catch (regErr) {
+            // Registration may fail if already exists — continue anyway
+          }
+        }
+
+        // Now attempt connect with the invite code
+        const connectResult = await api.post('/api/bot/connect', {
+          telegram_id: String(telegramId),
+          invite_code: deepLinkCode
+        });
+
+        const { therapist } = connectResult.data;
+        const foundTherapist = t(lang, 'foundTherapist');
+
+        // Show consent prompt (same as /connect flow)
+        bot.sendMessage(chatId,
+          foundTherapist(therapist.display_name),
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  { text: t(lang, 'consentYes'), callback_data: `consent_yes_${therapist.id}` },
+                  { text: t(lang, 'consentNo'), callback_data: `consent_no_${therapist.id}` }
+                ]
+              ]
+            }
+          }
+        );
+      } catch (error) {
+        const errorMsg = error.response?.data?.error || t(lang, 'deepLinkInvalidCode');
+        bot.sendMessage(chatId, `❌ ${errorMsg}\n\n${t(lang, 'deepLinkFallbackHint')}`);
+      }
+      return;
+    }
+
+    // Normal /start without deep link code
     try {
       // Check if user already exists
       const existingUser = await checkExistingUser(telegramId);

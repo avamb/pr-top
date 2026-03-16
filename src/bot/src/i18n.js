@@ -62,6 +62,9 @@ const messages = {
     exerciseNotFound: 'Exercise not found or already completed.',
     exerciseAwaitingResponse: '✍️ Please type your response to the exercise now.',
     exerciseNoActiveExercise: 'You don\'t have an active exercise. Use /exercises to see your exercises.',
+    // Deep link connect
+    deepLinkInvalidCode: 'Invite code not found or invalid.',
+    deepLinkFallbackHint: 'You can also try manually with /connect YOUR_CODE',
     // Transcription status
     transcribing: '⏳ [Transcribing...]',
     voiceSavedTranscribing: '🎤 Voice diary entry saved! Transcription in progress...',
@@ -133,6 +136,9 @@ const messages = {
     exerciseNotFound: 'Упражнение не найдено или уже выполнено.',
     exerciseAwaitingResponse: '✍️ Напишите ваш ответ на упражнение.',
     exerciseNoActiveExercise: 'У вас нет активного упражнения. Используйте /exercises для просмотра упражнений.',
+    // Deep link connect
+    deepLinkInvalidCode: 'Код приглашения не найден или недействителен.',
+    deepLinkFallbackHint: 'Вы также можете попробовать вручную: /connect ВАШ_КОД',
     // Transcription status
     transcribing: '⏳ [Транскрибирование...]',
     voiceSavedTranscribing: '🎤 Голосовая запись дневника сохранена! Транскрибирование в процессе...',
@@ -204,6 +210,9 @@ const messages = {
     exerciseNotFound: 'Ejercicio no encontrado o ya completado.',
     exerciseAwaitingResponse: '✍️ Escribe tu respuesta al ejercicio ahora.',
     exerciseNoActiveExercise: 'No tienes un ejercicio activo. Usa /exercises para ver tus ejercicios.',
+    // Deep link connect
+    deepLinkInvalidCode: 'Código de invitación no encontrado o no válido.',
+    deepLinkFallbackHint: 'También puedes intentar manualmente con /connect TU_CÓDIGO',
     // Transcription status
     transcribing: '⏳ [Transcribiendo...]',
     voiceSavedTranscribing: '🎤 ¡Entrada de diario de voz guardada! Transcripción en progreso...',
@@ -275,6 +284,9 @@ const messages = {
     exerciseNotFound: 'Вправу не знайдено або вже виконано.',
     exerciseAwaitingResponse: '✍️ Напишіть вашу відповідь на вправу.',
     exerciseNoActiveExercise: 'У вас немає активної вправи. Використовуйте /exercises для перегляду вправ.',
+    // Deep link connect
+    deepLinkInvalidCode: 'Код запрошення не знайдено або недійсний.',
+    deepLinkFallbackHint: 'Ви також можете спробувати вручну: /connect ВАШ_КОД',
     // Transcription status
     transcribing: '⏳ [Транскрибування...]',
     voiceSavedTranscribing: '🎤 Голосовий запис щоденника збережено! Транскрибування в процесі...',

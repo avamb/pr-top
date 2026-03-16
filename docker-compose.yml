@@ -20,6 +20,7 @@ services:
       - ANTHROPIC_API_URL=${ANTHROPIC_API_URL:-}
       - GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - BOT_USERNAME=${BOT_USERNAME:-}
       # Transcription configuration
       - TRANSCRIPTION_PROVIDER=${TRANSCRIPTION_PROVIDER:-openai}
       - TRANSCRIPTION_MODEL=${TRANSCRIPTION_MODEL:-whisper-1}
@@ -64,6 +65,7 @@ services:
     environment:
       - NODE_ENV=production
       - BACKEND_URL=http://backend:3001
+      - BOT_USERNAME=${BOT_USERNAME:-}
     depends_on:
       backend:
         condition: service_healthy

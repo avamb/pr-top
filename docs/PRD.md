@@ -47,7 +47,7 @@ Therapists are the primary users. They register via the web application and mana
 
 ### 2.2 Client
 
-Clients interact exclusively through the Telegram bot. They connect to their therapist via an invite code.
+Clients interact exclusively through the Telegram bot. They connect to their therapist via an invite code or a one-click deep link (`https://t.me/BOT?start=CODE`).
 
 **Capabilities:**
 - Write diary entries (text, voice, video)
@@ -136,7 +136,7 @@ Superadmins manage the platform through a dedicated admin panel.
 | Login/Logout | JWT-based auth with HttpOnly cookies |
 | Password Reset | Email-based reset flow with tokenized links |
 | Profile Settings | Language, timezone, escalation preferences |
-| Invite Code System | Generate/refresh codes for client onboarding |
+| Invite Code System | Generate/refresh codes for client onboarding; deep link invites (`t.me/BOT?start=CODE`) with copy & share buttons |
 | Account Blocking | Superadmin can block/unblock therapist accounts |
 
 ### 4.2 Client Management
@@ -397,7 +397,7 @@ See Section 4.9 for full plan comparison.
 ### 9.1 Telegram Bot
 
 - **Framework:** node-telegram-bot-api (long-polling)
-- **Commands:** /start (role selection), /connect (invite code), /register
+- **Commands:** /start (role selection + deep link connect via `?start=CODE`), /connect (manual invite code), /register
 - **Client Features:** Diary input (text/voice/video), exercises, SOS, history, consent
 - **Therapist Features:** Client management, notes, queries (via bot interface)
 - **Language:** Auto-detect from Telegram settings, user-configurable
@@ -468,7 +468,7 @@ All configuration via `.env` file. Key variable groups:
 |-------|-----------|
 | Security | JWT_SECRET, ENCRYPTION_MASTER_KEY, BOT_API_KEY |
 | Admin | SUPERADMIN_EMAIL, SUPERADMIN_PASSWORD |
-| Telegram | TELEGRAM_BOT_TOKEN |
+| Telegram | TELEGRAM_BOT_TOKEN, BOT_USERNAME |
 | Stripe | STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET |
 | AI Provider | AI_PROVIDER, AI_MODEL, AI_API_KEY |
 | Anthropic | ANTHROPIC_API_KEY, ANTHROPIC_API_URL |
@@ -593,6 +593,7 @@ docs/
 | GET | /api/subscription/current | Therapist | Current subscription |
 | POST | /api/subscription/checkout | Therapist | Create checkout session |
 | GET | /api/invite-code | Therapist | Get invite code |
+| GET | /api/invite-code/link | Therapist | Get invite deep link (t.me/BOT?start=CODE) |
 | POST | /api/invite-code/regenerate | Therapist | Regenerate invite code |
 | GET | /api/settings/profile | Therapist | Get profile settings |
 | PUT | /api/settings/profile | Therapist | Update profile settings |

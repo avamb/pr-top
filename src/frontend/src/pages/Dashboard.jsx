@@ -101,13 +101,17 @@ function SubscriptionBadge({ subscription, t }) {
 
 function InviteCodeSection({ t }) {
   const [inviteCode, setInviteCode] = useState(null);
+  const [inviteLink, setInviteLink] = useState(null);
   const [loading, setLoading] = useState(true);
   const [regenerating, setRegenerating] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [error, setError] = useState(null);
+  const [linkError, setLinkError] = useState(null);
 
   useEffect(() => {
     fetchInviteCode();
+    fetchInviteLink();
   }, []);
 
   async function fetchInviteCode() {
@@ -130,6 +134,26 @@ function InviteCodeSection({ t }) {
     }
   }
 
+  async function fetchInviteLink() {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/invite-code/link`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 400 && data.error?.includes('BOT_USERNAME')) {
+          setLinkError('bot_not_configured');
+        }
+        return;
+      }
+      const data = await res.json();
+      setInviteLink(data.invite_link);
+    } catch {
+      // Link not available — silently degrade
+    }
+  }
+
   async function handleRegenerate() {
     try {
       setRegenerating(true);
@@ -143,6 +167,9 @@ function InviteCodeSection({ t }) {
       const data = await res.json();
       setInviteCode(data.invite_code);
       setCopied(false);
+      setLinkCopied(false);
+      // Refresh invite link with new code
+      fetchInviteLink();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -167,6 +194,43 @@ function InviteCodeSection({ t }) {
     }
   }
 
+  async function handleCopyLink() {
+    if (!inviteLink) return;
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2500);
+    } catch {
+      const textArea = document.createElement('textarea');
+      textArea.value = inviteLink;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2500);
+    }
+  }
+
+  async function handleShare() {
+    if (!inviteLink) return;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'PR-TOP',
+          text: t('dashboard.inviteLinkDesc'),
+          url: inviteLink
+        });
+      } catch {
+        // User cancelled share — fallback to copy
+        handleCopyLink();
+      }
+    } else {
+      // Web Share API not available — fallback to copy
+      handleCopyLink();
+    }
+  }
+
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <h3 className="text-lg font-semibold text-text mb-3">{t('dashboard.inviteCode')}</h3>
@@ -176,29 +240,69 @@ function InviteCodeSection({ t }) {
       ) : error ? (
         <p className="text-red-500 text-sm">{error}</p>
       ) : (
-        <div className="flex items-center gap-3 flex-wrap">
-          <span
-            className="inline-block bg-primary/10 text-primary font-mono text-2xl font-bold px-6 py-3 rounded-lg tracking-widest select-all"
-            data-testid="invite-code"
-          >
-            {inviteCode}
-          </span>
-          <button
-            onClick={handleCopy}
-            className="px-4 py-2 text-sm font-medium text-primary border border-primary rounded-lg hover:bg-primary/5 transition-colors"
-            title="Copy invite code"
-          >
-            {copied ? t('dashboard.copied') : t('dashboard.copy')}
-          </button>
-          <button
-            onClick={handleRegenerate}
-            disabled={regenerating}
-            className="px-4 py-2 text-sm font-medium text-secondary border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-            title="Generate a new invite code"
-          >
-            {regenerating ? t('dashboard.regenerating') : t('dashboard.regenerate')}
-          </button>
-        </div>
+        <>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span
+              className="inline-block bg-primary/10 text-primary font-mono text-2xl font-bold px-6 py-3 rounded-lg tracking-widest select-all"
+              data-testid="invite-code"
+            >
+              {inviteCode}
+            </span>
+            <button
+              onClick={handleCopy}
+              className="px-4 py-2 text-sm font-medium text-primary border border-primary rounded-lg hover:bg-primary/5 transition-colors"
+              title="Copy invite code"
+            >
+              {copied ? t('dashboard.copied') : t('dashboard.copy')}
+            </button>
+            <button
+              onClick={handleRegenerate}
+              disabled={regenerating}
+              className="px-4 py-2 text-sm font-medium text-secondary border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              title="Generate a new invite code"
+            >
+              {regenerating ? t('dashboard.regenerating') : t('dashboard.regenerate')}
+            </button>
+          </div>
+
+          {/* Invite deep link section */}
+          {inviteLink && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <p className="text-sm text-secondary mb-3">{t('dashboard.inviteLinkDesc')}</p>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="inline-block bg-gray-50 text-gray-700 font-mono text-sm px-3 py-2 rounded-lg break-all select-all border border-gray-200" data-testid="invite-link">
+                  {inviteLink}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleCopyLink}
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-1.5"
+                  data-testid="copy-invite-link-btn"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                  {linkCopied ? t('dashboard.inviteLinkCopied') : t('dashboard.copyInviteLink')}
+                </button>
+                <button
+                  onClick={handleShare}
+                  className="px-4 py-2 text-sm font-medium text-primary border border-primary rounded-lg hover:bg-primary/5 transition-colors flex items-center gap-1.5"
+                  data-testid="share-invite-link-btn"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                  {t('dashboard.shareInviteLink')}
+                </button>
+              </div>
+            </div>
+          )}
+          {linkError === 'bot_not_configured' && (
+            <p className="mt-3 text-xs text-amber-600">{t('dashboard.botNotConfigured')}</p>
+          )}
+          {linkCopied && (
+            <div className="mt-2 text-sm text-green-600 font-medium animate-pulse">
+              {t('dashboard.inviteLinkCopied')}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
