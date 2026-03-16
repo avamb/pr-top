@@ -73,8 +73,8 @@ services:
     environment:
       - DATABASE_URL=${UMAMI_DATABASE_URL:-postgresql://umami:umami@umami-db:5432/umami}
       - APP_SECRET=${UMAMI_APP_SECRET:-replace-me-with-a-random-string}
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     depends_on:
       umami-db:
         condition: service_healthy
