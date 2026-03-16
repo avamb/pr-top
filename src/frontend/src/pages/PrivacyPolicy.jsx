@@ -184,8 +184,8 @@ export default function PrivacyPolicy() {
             <Section id="contact" number={8} title={t('privacy.contact.title')}>
               <p>{t('privacy.contact.desc')}</p>
               <p>
-                <a href="mailto:support@pr-top.app" className="text-primary hover:underline">
-                  support@pr-top.app
+                <a href="mailto:support@pr-top.com" className="text-primary hover:underline">
+                  support@pr-top.com
                 </a>
               </p>
             </Section>

@@ -386,7 +386,7 @@ export default function Landing() {
             <div>
               <h4 className="text-white font-semibold text-sm mb-3">{t('landing.footerContact')}</h4>
               <ul className="space-y-2 text-sm">
-                <li><a href="mailto:support@pr-top.app" className="hover:text-white transition-colors">support@pr-top.app</a></li>
+                <li><a href="mailto:support@pr-top.com" className="hover:text-white transition-colors">support@pr-top.com</a></li>
                 <li><Link to="/privacy" className="hover:text-white transition-colors">{t('landing.privacyPolicy')}</Link></li>
                 <li><Link to="/terms" className="hover:text-white transition-colors">{t('landing.termsOfService')}</Link></li>
               </ul>
