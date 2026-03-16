@@ -1,3 +1,33 @@
+## Session: 2026-03-16 - Feature #259
+
+### Completed: Invite link with embedded code — one-click client connection (#259) - PASSING
+
+**What was built:**
+- **Bot deep link handler**: Modified /start command in src/bot/src/index.js to detect `/start CODE` parameter. When CODE is present, auto-registers user as client if not registered, then initiates connect flow (consent prompt → link to therapist). Invalid codes show error with /connect fallback hint.
+- **Backend endpoint**: Added `GET /api/invite-code/link` in inviteCode.js — returns `{ invite_link: "https://t.me/BOT_USERNAME?start=CODE", invite_code, bot_username }`. Uses BOT_USERNAME from env. Returns 400 if BOT_USERNAME not configured.
+- **Frontend Dashboard**: Enhanced InviteCodeSection with:
+  - Deep link display below existing invite code
+  - "Copy Invite Link" primary button (clipboard API with fallback)
+  - "Share" button (Web Share API with clipboard fallback)
+  - Link auto-refreshes when code is regenerated
+  - Toast confirmation on copy
+- **i18n**: Added keys in all 4 languages (EN/RU/ES/UK) for both bot (deepLinkInvalidCode, deepLinkFallbackHint) and frontend (copyInviteLink, inviteLinkCopied, shareInviteLink, inviteLinkDesc, botNotConfigured)
+- **Config**: Added BOT_USERNAME to .env.example, docker-compose.yml (backend + bot services)
+- **PRD**: Updated docs/PRD.md with deep link flow, new API endpoint, BOT_USERNAME env var
+
+**Verification:**
+- Backend endpoint returns valid deep link ✅
+- Dashboard shows invite link with Copy and Share buttons ✅
+- Regenerate code updates the deep link automatically ✅
+- Russian translations display correctly ✅
+- No mock data patterns in source code ✅
+- Only pre-existing console errors (Umami 400, React Router warnings) ✅
+- Data persists after regeneration ✅
+
+### Current Status
+- Features passing: 259/259 (100.0%)
+- Feature #259: PASSING
+
 ## Session: 2026-03-14 - Features #240, #241, #243
 
 ### Completed: AI usage logging - track every API call with tokens and cost (#240) - PASSING
