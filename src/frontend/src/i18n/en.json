@@ -21,7 +21,8 @@
     "adminLogs": "Audit Logs",
     "adminSystemLogs": "System Logs",
     "adminAIUsage": "AI Usage",
-    "adminAIModels": "AI Models"
+    "adminAIModels": "AI Models",
+    "adminUmami": "Web Analytics"
   },
   "aiUsage": {
     "title": "AI Usage & Costs",

@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import { trackUmamiEvent } from '../utils/umami';
 
 /* ───────── Feature Highlights (icons only, text from i18n) ───────── */
 const highlightIcons = [
@@ -27,6 +28,27 @@ const featureKeys = [
 /* ═══════════════════════════════════════════ */
 export default function Landing() {
   const { t } = useTranslation();
+  const pricingRef = useRef(null);
+  const pricingTrackedRef = useRef(false);
+
+  // Track scroll-to-pricing when pricing section enters viewport
+  useEffect(() => {
+    const el = pricingRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !pricingTrackedRef.current) {
+          pricingTrackedRef.current = true;
+          trackUmamiEvent('scroll-to-pricing');
+        }
+      },
+      { threshold: 0.3 }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   /* ───────── Pricing Data ───────── */
   const tiers = [
@@ -105,11 +127,12 @@ export default function Landing() {
           <span className="text-xl font-bold text-primary tracking-tight">{t('brand')}</span>
           <div className="flex items-center gap-4">
             <LanguageSwitcher compact />
-            <Link to="/login" className="text-sm font-medium text-secondary hover:text-text transition-colors min-h-[44px] flex items-center">
+            <Link to="/login" onClick={() => trackUmamiEvent('click-login')} className="text-sm font-medium text-secondary hover:text-text transition-colors min-h-[44px] flex items-center">
               {t('nav.login')}
             </Link>
             <Link
               to="/register"
+              onClick={() => trackUmamiEvent('click-register')}
               className="text-sm font-semibold px-4 py-2.5 rounded-lg bg-primary text-white hover:bg-primary-600 transition-colors min-h-[44px] flex items-center"
             >
               {t('nav.register')}
@@ -138,6 +161,7 @@ export default function Landing() {
               <div className="mt-10 flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
                 <Link
                   to="/register"
+                  onClick={() => trackUmamiEvent('click-register', { location: 'hero' })}
                   className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3 rounded-lg bg-primary text-white font-semibold text-base hover:bg-primary-600 transition-colors shadow-lg shadow-primary/20"
                 >
                   {t('landing.startTrial')}
@@ -254,7 +278,7 @@ export default function Landing() {
       </section>
 
       {/* ─── Pricing ─── */}
-      <section id="pricing" aria-label="Pricing" className="py-20 bg-background">
+      <section id="pricing" ref={pricingRef} aria-label="Pricing" className="py-20 bg-background">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold text-text">
@@ -307,6 +331,7 @@ export default function Landing() {
                 </ul>
                 <Link
                   to="/register"
+                  onClick={() => trackUmamiEvent('click-register', { location: 'pricing', tier: tier.name })}
                   className={`mt-8 block text-center py-2.5 min-h-[44px] flex items-center justify-center rounded-lg font-semibold text-sm transition-colors ${
                     tier.highlight
                       ? 'bg-white text-primary hover:bg-white/90'

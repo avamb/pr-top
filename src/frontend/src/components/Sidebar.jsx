@@ -93,6 +93,12 @@ const AIModelsIcon = () => (
   </svg>
 );
 
+const UmamiAnalyticsIcon = () => (
+  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
+  </svg>
+);
+
 const LogoutIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
@@ -118,6 +124,7 @@ const adminNavItems = [
   { key: 'admin-system-logs', path: '/admin/system-logs', icon: SystemLogIcon, labelKey: 'nav.adminSystemLogs', section: 'admin' },
   { key: 'admin-ai-usage', path: '/admin/ai-usage', icon: AIUsageIcon, labelKey: 'nav.adminAIUsage', section: 'admin' },
   { key: 'admin-ai-models', path: '/admin/ai-models', icon: AIModelsIcon, labelKey: 'nav.adminAIModels', section: 'admin' },
+  { key: 'admin-umami', path: '__umami_external__', icon: UmamiAnalyticsIcon, labelKey: 'nav.adminUmami', section: 'admin', external: true },
 ];
 
 /* ── Helper: is active? ───────────────────────────────── */
@@ -234,6 +241,28 @@ export default function Sidebar({ user, isOpen, onToggle }) {
               {extraItems.map(item => {
                 const active = isActive(item.path, location.pathname);
                 const Icon = item.icon;
+
+                // External links (e.g., Umami dashboard) open in new tab
+                if (item.external) {
+                  const umamiUrl = window.__UMAMI_DASHBOARD_URL__ || '/umami';
+                  return (
+                    <li key={item.key}>
+                      <a
+                        href={umamiUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1 text-stone-600 hover:bg-stone-50 hover:text-stone-900"
+                      >
+                        <Icon />
+                        {t(item.labelKey)}
+                        <svg className="w-3.5 h-3.5 ml-auto text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                        </svg>
+                      </a>
+                    </li>
+                  );
+                }
+
                 return (
                   <li key={item.key}>
                     <button

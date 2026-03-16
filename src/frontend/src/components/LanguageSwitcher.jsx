@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { trackUmamiEvent } from '../utils/umami';
 
 const LANGUAGES = [
   { code: 'en', label: 'English', flag: '\u{1F1EC}\u{1F1E7}' },
@@ -39,6 +40,9 @@ export default function LanguageSwitcher({ variant = 'dark', compact = false, pe
       setIsOpen(false);
       return;
     }
+
+    // Track language switch event
+    trackUmamiEvent('language-switch', { from: i18n.language, to: langCode });
 
     // Update i18n and localStorage immediately
     i18n.changeLanguage(langCode);
