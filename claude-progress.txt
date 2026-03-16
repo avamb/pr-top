@@ -1,3 +1,42 @@
+## Session: 2026-03-16 - Feature #260
+
+### Completed: Profile fields — first name, last name, phone, telegram username (#260) - PASSING
+
+**What was built:**
+- **Database migration**: Added first_name TEXT, last_name TEXT, phone TEXT, telegram_username TEXT columns to users table
+- **Backend GET /api/settings/profile**: Returns all 4 new profile fields
+- **Backend PUT /api/settings/profile**: Accepts and validates new fields (phone regex, name length 100, telegram_username auto-strips @)
+- **Backend PUT /api/bot/profile/:telegram_id**: New endpoint for bot to update client profile fields
+- **Backend POST /api/bot/register**: Saves Telegram first_name, last_name, username on registration; updates on re-registration
+- **Backend GET /api/bot/user/:telegram_id**: Returns profile fields
+- **Backend GET /api/clients** and **GET /api/clients/:id**: Include profile fields in response
+- **Frontend Settings.jsx**: New "Personal Information" section at top with 4 input fields + Save Profile button
+  - First Name, Last Name (text), Phone (tel), Telegram Username (with @ prefix display)
+  - Separate save from language/timezone preferences
+- **Frontend ClientDetail.jsx**: Shows client full name (first_name + last_name) instead of raw telegram_id in header and breadcrumb; shows phone and @telegram in info bar
+- **Bot /profile command**: Clients can view and edit name/phone via inline keyboard + text input flow
+- **Bot /help**: Updated client help text to include /profile command in all 4 languages
+- **Bot registration**: Passes msg.from.first_name, last_name, username to backend on register/connect
+- **i18n**: All new labels in EN, RU, ES, UK (frontend and bot)
+- **Language validation**: Updated backend to accept 'uk' (Ukrainian) in addition to en, ru, es
+
+**Verification:**
+- Settings page shows Personal Information section with all 4 fields ✅
+- Save Profile persists data to database ✅
+- Page reload shows saved values ✅
+- Server restart preserves all data (SQLite persistence verified) ✅
+- Russian translation labels show correctly (Личные данные, Имя, Фамилия, Телефон) ✅
+- ClientDetail shows client name when available, falls back to email/telegram_id ✅
+- Bot API register stores Telegram profile data ✅
+- Bot API profile update endpoint works ✅
+- No mock data patterns in source code ✅
+- Zero new JS console errors ✅
+
+### Current Status
+- Features passing: 260/260 (100.0%)
+- Feature #260: PASSING
+- ALL FEATURES COMPLETE
+
 ## Session: 2026-03-16 - Feature #261
 
 ### Completed: Bot onboarding — BotFather description + role-specific welcome messages (#261) - PASSING
