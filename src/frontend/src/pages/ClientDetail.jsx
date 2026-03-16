@@ -11,7 +11,8 @@ const API = '/api';
 function ClientDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language || 'en';
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Initialize filter state from URL query parameters
@@ -772,7 +773,7 @@ function ClientDetail() {
     if (exerciseLibrary.length > 0) return; // already loaded
     try {
       setExerciseLibraryLoading(true);
-      const res = await fetch(`${API}/exercises`, {
+      const res = await fetch(`${API}/exercises?language=${lang}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Failed to fetch exercise library');
@@ -1697,7 +1698,7 @@ function ClientDetail() {
             )}
             {showExercisePicker && (
               <div className="mb-6 border border-teal-200 rounded-lg bg-teal-50 p-4">
-                <h4 className="font-medium text-stone-700 mb-3">Select an exercise to send:</h4>
+                <h4 className="font-medium text-stone-700 mb-3">{t('exercises.selectToSend', 'Select an exercise to send:')}</h4>
                 {exerciseLibraryLoading ? (
                   <p className="text-stone-500 text-center py-4">Loading exercise library...</p>
                 ) : (
@@ -1710,13 +1711,13 @@ function ClientDetail() {
                         className="text-left p-3 bg-white border border-stone-200 rounded-lg hover:border-teal-400 hover:shadow-sm transition-all disabled:opacity-50"
                       >
                         <div className="flex items-center gap-2">
-                          <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">{ex.category}</span>
-                          <span className="font-medium text-stone-700 text-sm">{ex.title_en || ex.title_ru || ex.title_es}</span>
+                          <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">{t(`exercises.categories.${ex.category}`, ex.category)}</span>
+                          <span className="font-medium text-stone-700 text-sm">{ex[`title_${lang}`] || ex.title || ex.title_en || ''}</span>
                           {ex.is_custom === 1 && (
                             <span className="text-xs px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded-full font-medium">My</span>
                           )}
                         </div>
-                        <p className="text-xs text-stone-500 mt-1 line-clamp-1">{ex.description_en}</p>
+                        <p className="text-xs text-stone-500 mt-1 line-clamp-1">{ex[`description_${lang}`] || ex.description || ex.description_en || ''}</p>
                         {sendingExercise === ex.id && <span className="text-xs text-teal-600 mt-1">Sending...</span>}
                       </button>
                     ))}
