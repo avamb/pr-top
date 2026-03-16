@@ -244,7 +244,7 @@ export default function Sidebar({ user, isOpen, onToggle }) {
 
                 // External links (e.g., Umami dashboard) open in new tab
                 if (item.external) {
-                  const umamiUrl = window.__UMAMI_DASHBOARD_URL__ || '/umami';
+                  const umamiUrl = window.__UMAMI_DASHBOARD_URL__ || 'https://app.pr-top.com';
                   return (
                     <li key={item.key}>
                       <a
