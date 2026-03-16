@@ -1,3 +1,30 @@
+## Session: 2026-03-16 - Feature #262
+
+### Completed: SuperAdmin manual plan override for therapists (#262) - PASSING ✅ (262/262 ALL FEATURES COMPLETE!)
+
+**What was built:**
+- **Database migration** (connection.js): Added `is_manual_override`, `override_reason`, `override_expires_at`, `override_set_by` columns to subscriptions table. Also added missing `canceled_at` column migration.
+- **Admin API** (admin.js):
+  - `GET /api/admin/therapists` now JOINs subscriptions to show plan, override status
+  - `PUT /api/admin/therapists/:id/plan` - Set manual plan override with optional reason and expiry
+  - `DELETE /api/admin/therapists/:id/plan-override` - Remove override, revert to trial
+  - Both endpoints write audit log entries
+- **Subscription API** (subscription.js):
+  - Returns override fields (is_manual_override, override_reason, override_expires_at)
+  - Auto-expires overrides on each request check, reverts to trial with audit log
+  - Defensive fallback queries for backward compatibility with older DB schemas
+- **AdminTherapists.jsx**: Plan column with color-coded badges (trial/basic/pro/premium), "Manual" teal badge for overrides, Plan Management modal with plan selector, reason field, date picker
+- **Subscription.jsx**: Admin-granted plan display with purple badge, reason, validity info. Hides Stripe plan cards/payment UI for override users. Expiry warning banner.
+- **i18n**: ~28 new keys across all 4 languages (en, ru, es, uk) for admin and subscription override strings
+
+**Verification:**
+- Created test therapist, set Pro plan override via modal → confirmed badge appears in therapists table
+- Verified subscription page shows "Granted by administrator" with reason and expiry
+- Verified persistence across server restarts (real SQLite storage)
+- Removed override → confirmed revert to trial plan
+
+---
+
 ## Session: 2026-03-16 - Feature #260
 
 ### Completed: Profile fields — first name, last name, phone, telegram username (#260) - PASSING
