@@ -141,35 +141,27 @@ router.get('/current', requireAuth, (req, res) => {
     const db = getDatabase();
     const userId = req.user.userId;
 
-    // Try with pending_plan and canceled_at columns, fall back gracefully
+    // Ensure canceled_at column exists (migration may not have run yet)
+    try { db.run('ALTER TABLE subscriptions ADD COLUMN canceled_at TEXT'); } catch (e) { /* exists */ }
+
     let result;
-    let hasPendingPlan = true;
-    let hasCanceledAt = true;
     try {
       result = db.exec(
         `SELECT id, stripe_customer_id, stripe_subscription_id, plan, status,
-                trial_ends_at, current_period_start, current_period_end, created_at, pending_plan, canceled_at
+                trial_ends_at, current_period_start, current_period_end, created_at,
+                pending_plan, canceled_at, is_manual_override, override_reason, override_expires_at
          FROM subscriptions WHERE therapist_id = ?`,
         [userId]
       );
     } catch (e) {
-      hasCanceledAt = false;
-      try {
-        result = db.exec(
-          `SELECT id, stripe_customer_id, stripe_subscription_id, plan, status,
-                  trial_ends_at, current_period_start, current_period_end, created_at, pending_plan
-           FROM subscriptions WHERE therapist_id = ?`,
-          [userId]
-        );
-      } catch (e2) {
-        hasPendingPlan = false;
-        result = db.exec(
-          `SELECT id, stripe_customer_id, stripe_subscription_id, plan, status,
-                  trial_ends_at, current_period_start, current_period_end, created_at
-           FROM subscriptions WHERE therapist_id = ?`,
-          [userId]
-        );
-      }
+      // Fallback if override columns don't exist yet
+      result = db.exec(
+        `SELECT id, stripe_customer_id, stripe_subscription_id, plan, status,
+                trial_ends_at, current_period_start, current_period_end, created_at,
+                pending_plan, canceled_at
+         FROM subscriptions WHERE therapist_id = ?`,
+        [userId]
+      );
     }
 
     if (result.length === 0 || result[0].values.length === 0) {
@@ -177,6 +169,50 @@ router.get('/current', requireAuth, (req, res) => {
     }
 
     const sub = result[0].values[0];
+    const isManualOverride = sub.length > 11 ? !!sub[11] : false;
+    const overrideExpiresAt = sub.length > 13 ? sub[13] : null;
+
+    // Check if manual override has expired
+    if (isManualOverride && overrideExpiresAt) {
+      const now = new Date();
+      const expiresAt = new Date(overrideExpiresAt);
+      if (now > expiresAt) {
+        // Override expired - reset to trial
+        db.run(
+          `UPDATE subscriptions SET plan = 'trial', is_manual_override = 0, override_reason = NULL, override_expires_at = NULL, override_set_by = NULL, status = 'active', updated_at = datetime('now') WHERE therapist_id = ?`,
+          [userId]
+        );
+        // Audit log
+        db.run(
+          "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (NULL, 'override_expired', 'user', ?, ?, datetime('now'))",
+          [userId, JSON.stringify({ previous_plan: sub[3], expired_at: overrideExpiresAt })]
+        );
+        saveDatabase();
+
+        logger.info(`Manual plan override expired for therapist ${userId}. Reverted to trial.`);
+
+        return res.json({
+          subscription: {
+            id: sub[0],
+            stripe_customer_id: sub[1],
+            stripe_subscription_id: sub[2],
+            plan: 'trial',
+            status: 'active',
+            trial_ends_at: sub[5],
+            current_period_start: sub[6],
+            current_period_end: sub[7],
+            created_at: sub[8],
+            pending_plan: null,
+            canceled_at: null,
+            is_manual_override: false,
+            override_reason: null,
+            override_expires_at: null,
+            override_expired: true
+          }
+        });
+      }
+    }
+
     res.json({
       subscription: {
         id: sub[0],
@@ -188,8 +224,11 @@ router.get('/current', requireAuth, (req, res) => {
         current_period_start: sub[6],
         current_period_end: sub[7],
         created_at: sub[8],
-        pending_plan: hasPendingPlan ? (sub[9] || null) : null,
-        canceled_at: hasCanceledAt ? (sub[10] || null) : null
+        pending_plan: sub[9] || null,
+        canceled_at: sub[10] || null,
+        is_manual_override: isManualOverride,
+        override_reason: sub.length > 12 ? sub[12] : null,
+        override_expires_at: overrideExpiresAt
       }
     });
   } catch (error) {

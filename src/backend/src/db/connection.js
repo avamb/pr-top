@@ -396,6 +396,40 @@ function applySchema(db) {
     // Column already exists, ignore
   }
 
+  // Add canceled_at column to subscriptions (migration)
+  try {
+    db.run('ALTER TABLE subscriptions ADD COLUMN canceled_at TEXT');
+    logger.info('Added canceled_at column to subscriptions');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  // Add manual plan override columns to subscriptions (migration)
+  try {
+    db.run('ALTER TABLE subscriptions ADD COLUMN is_manual_override INTEGER DEFAULT 0');
+    logger.info('Added is_manual_override column to subscriptions');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE subscriptions ADD COLUMN override_reason TEXT');
+    logger.info('Added override_reason column to subscriptions');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE subscriptions ADD COLUMN override_expires_at TEXT');
+    logger.info('Added override_expires_at column to subscriptions');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE subscriptions ADD COLUMN override_set_by INTEGER');
+    logger.info('Added override_set_by column to subscriptions');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
   // Create indexes for performance
   db.run('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
   db.run('CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)');

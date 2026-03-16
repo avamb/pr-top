@@ -17,10 +17,13 @@ router.get('/therapists', (req, res) => {
   try {
     const db = getDatabase();
     const result = db.exec(`
-      SELECT id, email, telegram_id, role, invite_code, language,
-             created_at, updated_at, blocked_at
-      FROM users WHERE role = 'therapist'
-      ORDER BY created_at DESC
+      SELECT u.id, u.email, u.telegram_id, u.role, u.invite_code, u.language,
+             u.created_at, u.updated_at, u.blocked_at,
+             s.plan, s.is_manual_override, s.override_reason, s.override_expires_at
+      FROM users u
+      LEFT JOIN subscriptions s ON s.therapist_id = u.id
+      WHERE u.role = 'therapist'
+      ORDER BY u.created_at DESC
     `);
 
     const therapists = (result.length > 0 ? result[0].values : []).map(row => ({
@@ -33,13 +36,134 @@ router.get('/therapists', (req, res) => {
       created_at: row[6],
       updated_at: row[7],
       blocked_at: row[8],
-      is_blocked: !!row[8]
+      is_blocked: !!row[8],
+      plan: row[9] || 'trial',
+      is_manual_override: !!row[10],
+      override_reason: row[11],
+      override_expires_at: row[12]
     }));
 
     res.json({ therapists });
   } catch (error) {
     logger.error('Admin list therapists error: ' + error.message);
     res.status(500).json({ error: 'Failed to list therapists' });
+  }
+});
+
+// PUT /api/admin/therapists/:id/plan - Manually assign a plan to a therapist
+router.put('/therapists/:id/plan', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { plan, reason, expires_at } = req.body;
+    const db = getDatabase();
+
+    const validPlans = ['trial', 'basic', 'pro', 'premium'];
+    if (!plan || !validPlans.includes(plan)) {
+      return res.status(400).json({ error: 'Invalid plan. Must be one of: ' + validPlans.join(', ') });
+    }
+
+    // Verify the user exists and is a therapist
+    const userResult = db.exec('SELECT id, role FROM users WHERE id = ?', [id]);
+    if (userResult.length === 0 || userResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Therapist not found' });
+    }
+    if (userResult[0].values[0][1] !== 'therapist') {
+      return res.status(400).json({ error: 'User is not a therapist' });
+    }
+
+    // Check if subscription exists
+    const subResult = db.exec('SELECT id, plan FROM subscriptions WHERE therapist_id = ?', [id]);
+
+    let previousPlan = 'trial';
+
+    if (subResult.length > 0 && subResult[0].values.length > 0) {
+      // Update existing subscription
+      previousPlan = subResult[0].values[0][1];
+      db.run(
+        `UPDATE subscriptions SET plan = ?, is_manual_override = 1, override_reason = ?, override_expires_at = ?, override_set_by = ?, stripe_subscription_id = NULL, status = 'active', updated_at = datetime('now') WHERE therapist_id = ?`,
+        [plan, reason || null, expires_at || null, req.user.id, id]
+      );
+    } else {
+      // Create new subscription with manual override
+      previousPlan = null;
+      db.run(
+        `INSERT INTO subscriptions (therapist_id, plan, status, is_manual_override, override_reason, override_expires_at, override_set_by, created_at, updated_at) VALUES (?, ?, 'active', 1, ?, ?, ?, datetime('now'), datetime('now'))`,
+        [id, plan, reason || null, expires_at || null, req.user.id]
+      );
+    }
+
+    // Write audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'manual_plan_override', 'user', ?, ?, datetime('now'))",
+      [req.user.id, parseInt(id), JSON.stringify({ plan, reason: reason || null, expires_at: expires_at || null, previous_plan: previousPlan })]
+    );
+    saveDatabase();
+
+    logger.info(`Superadmin ${req.user.id} set manual plan override for therapist ${id}: ${plan} (reason: ${reason || 'none'})`);
+
+    res.json({
+      message: 'Plan override set successfully',
+      therapist_id: parseInt(id),
+      plan,
+      is_manual_override: true,
+      override_reason: reason || null,
+      override_expires_at: expires_at || null,
+      previous_plan: previousPlan
+    });
+  } catch (error) {
+    logger.error('Admin set plan override error: ' + error.message);
+    res.status(500).json({ error: 'Failed to set plan override' });
+  }
+});
+
+// DELETE /api/admin/therapists/:id/plan-override - Remove manual override, revert to trial
+router.delete('/therapists/:id/plan-override', (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = getDatabase();
+
+    // Verify the user exists and is a therapist
+    const userResult = db.exec('SELECT id, role FROM users WHERE id = ?', [id]);
+    if (userResult.length === 0 || userResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Therapist not found' });
+    }
+    if (userResult[0].values[0][1] !== 'therapist') {
+      return res.status(400).json({ error: 'User is not a therapist' });
+    }
+
+    // Check subscription
+    const subResult = db.exec('SELECT id, plan, is_manual_override FROM subscriptions WHERE therapist_id = ?', [id]);
+    if (subResult.length === 0 || subResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'No subscription found for this therapist' });
+    }
+
+    const previousPlan = subResult[0].values[0][1];
+
+    // Reset to trial
+    db.run(
+      `UPDATE subscriptions SET plan = 'trial', is_manual_override = 0, override_reason = NULL, override_expires_at = NULL, override_set_by = NULL, status = 'active', updated_at = datetime('now') WHERE therapist_id = ?`,
+      [id]
+    );
+
+    // Write audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'remove_plan_override', 'user', ?, ?, datetime('now'))",
+      [req.user.id, parseInt(id), JSON.stringify({ previous_plan: previousPlan })]
+    );
+    saveDatabase();
+
+    logger.info(`Superadmin ${req.user.id} removed plan override for therapist ${id}. Reverted from ${previousPlan} to trial.`);
+
+    res.json({
+      message: 'Plan override removed. Therapist reverted to trial plan.',
+      therapist_id: parseInt(id),
+      plan: 'trial',
+      is_manual_override: false,
+      previous_plan: previousPlan
+    });
+  } catch (error) {
+    logger.error('Admin remove plan override error: ' + error.message);
+    res.status(500).json({ error: 'Failed to remove plan override' });
   }
 });
 

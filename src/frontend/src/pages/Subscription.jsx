@@ -71,7 +71,6 @@ export default function Subscription() {
       const data = await res.json();
       setPayments(data.payments || []);
     } catch (err) {
-      // Non-critical - don't show error for payment history
       setPayments([]);
     } finally {
       setPaymentsLoading(false);
@@ -214,6 +213,8 @@ export default function Subscription() {
 
   const currentPlan = subscription?.plan || 'trial';
   const pendingPlan = subscription?.pending_plan;
+  const isManualOverride = subscription?.is_manual_override;
+  const overrideExpired = subscription?.override_expired;
 
   return (
     <div>
@@ -226,8 +227,16 @@ export default function Subscription() {
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8">
+        {/* Expired Override Banner */}
+        {overrideExpired && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-300 rounded-lg">
+            <h3 className="text-amber-800 font-semibold text-lg">{t('subscription.overrideExpiredTitle')}</h3>
+            <p className="text-amber-700 mt-1">{t('subscription.overrideExpiredDesc')}</p>
+          </div>
+        )}
+
         {/* Expired Trial Banner */}
-        {(isExpiredRedirect || subscription?.status === 'expired') && (
+        {!overrideExpired && (isExpiredRedirect || subscription?.status === 'expired') && (
           <div className="mb-6 p-4 bg-amber-50 border border-amber-300 rounded-lg">
             <h3 className="text-amber-800 font-semibold text-lg">{t('subscription.trialExpiredTitle')}</h3>
             <p className="text-amber-700 mt-1">{t('subscription.trialExpiredDesc')}</p>
@@ -253,23 +262,50 @@ export default function Subscription() {
             <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-teal-100 text-teal-800 capitalize">
               {currentPlan}
             </span>
+            {isManualOverride && (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800">
+                {t('subscription.grantedByAdmin')}
+              </span>
+            )}
             <span className="text-stone-500">
               {t('subscription.status')}: <span className={`font-medium ${subscription?.status === 'active' ? 'text-green-600' : 'text-red-600'}`}>
                 {subscription?.status || 'N/A'}
               </span>
             </span>
-            {subscription?.trial_ends_at && currentPlan === 'trial' && (
+            {!isManualOverride && subscription?.trial_ends_at && currentPlan === 'trial' && (
               <span className="text-stone-500">
                 {t('subscription.trialEnds', { date: formatUserDateOnly(subscription.trial_ends_at) })}
               </span>
             )}
-            {subscription?.current_period_end && currentPlan !== 'trial' && (
+            {!isManualOverride && subscription?.current_period_end && currentPlan !== 'trial' && (
               <span className="text-stone-500">
                 {t('subscription.periodEnds', { date: formatUserDateOnly(subscription.current_period_end) })}
               </span>
             )}
           </div>
-          {pendingPlan && (
+
+          {/* Manual override details */}
+          {isManualOverride && (
+            <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg text-sm">
+              <div className="text-purple-800 font-medium">{t('subscription.grantedByAdmin')}</div>
+              {subscription.override_reason && (
+                <div className="text-purple-700 mt-1">
+                  {t('subscription.overrideReasonLabel')}: {subscription.override_reason}
+                </div>
+              )}
+              {subscription.override_expires_at ? (
+                <div className="text-purple-700 mt-1">
+                  {t('subscription.validUntil', { date: formatUserDateOnly(subscription.override_expires_at) })}
+                </div>
+              ) : (
+                <div className="text-purple-700 mt-1">
+                  {t('subscription.unlimitedDuration')}
+                </div>
+              )}
+            </div>
+          )}
+
+          {pendingPlan && !isManualOverride && (
             <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
               {t('subscription.downgradeScheduled', {
                 plan: pendingPlan,
@@ -278,7 +314,7 @@ export default function Subscription() {
               })}
             </div>
           )}
-          {subscription?.status === 'canceled' && (
+          {subscription?.status === 'canceled' && !isManualOverride && (
             <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
               {t('subscription.subscriptionCanceled')}
               {subscription?.current_period_end && (
@@ -289,7 +325,8 @@ export default function Subscription() {
               )}
             </div>
           )}
-          {subscription?.status === 'active' && currentPlan !== 'trial' && !pendingPlan && (
+          {/* Cancel button - only for non-manual-override, active paid plans */}
+          {!isManualOverride && subscription?.status === 'active' && currentPlan !== 'trial' && !pendingPlan && (
             <div className="mt-3">
               <button
                 onClick={handleCancel}
@@ -303,122 +340,128 @@ export default function Subscription() {
           )}
         </div>
 
-        {/* Plan Cards */}
-        <h2 className="text-lg font-semibold text-stone-900 mb-4">{t('subscription.availablePlans')}</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {Object.entries(PLAN_DETAILS).map(([planKey, plan]) => {
-            const isCurrent = planKey === currentPlan;
-            const isUpgrade = PLAN_ORDER[planKey] > PLAN_ORDER[currentPlan];
-            const isDowngrade = PLAN_ORDER[planKey] < PLAN_ORDER[currentPlan];
-            const isPending = planKey === pendingPlan;
+        {/* Plan Cards - hidden for manual override users */}
+        {!isManualOverride && (
+          <>
+            <h2 className="text-lg font-semibold text-stone-900 mb-4">{t('subscription.availablePlans')}</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {Object.entries(PLAN_DETAILS).map(([planKey, plan]) => {
+                const isCurrent = planKey === currentPlan;
+                const isUpgrade = PLAN_ORDER[planKey] > PLAN_ORDER[currentPlan];
+                const isDowngrade = PLAN_ORDER[planKey] < PLAN_ORDER[currentPlan];
+                const isPending = planKey === pendingPlan;
 
-            return (
-              <div
-                key={planKey}
-                className={`p-6 rounded-xl border-2 ${
-                  isCurrent
-                    ? 'border-teal-500 bg-teal-50'
-                    : isPending
-                    ? 'border-amber-400 bg-amber-50'
-                    : 'border-stone-200 bg-white hover:border-stone-300'
-                } shadow-sm transition-all`}
-              >
-                <h3 className="text-xl font-bold text-stone-900">{plan.name}</h3>
-                <p className="text-3xl font-bold text-teal-600 mt-2">{plan.price}</p>
-                <div className="mt-4 space-y-2 text-sm text-stone-600">
-                  <p>{t('subscription.clients')}: <span className="font-medium">{plan.clients}</span></p>
-                  <p>{t('subscription.sessionsPerMonth')}: <span className="font-medium">{plan.sessions}</span></p>
-                </div>
-                <ul className="mt-4 space-y-1">
-                  {plan.features.map((feature, i) => (
-                    <li key={i} className="text-sm text-stone-600 flex items-start gap-1">
-                      <span className="text-green-500 mt-0.5">✓</span>
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-6">
-                  {isCurrent ? (
-                    <button
-                      disabled
-                      className="w-full py-2 px-4 rounded-lg bg-teal-600 text-white font-medium opacity-50 cursor-not-allowed"
-                    >
-                      {t('subscription.currentPlanBtn')}
-                    </button>
-                  ) : isPending ? (
-                    <button
-                      disabled
-                      className="w-full py-2 px-4 rounded-lg bg-amber-500 text-white font-medium opacity-70 cursor-not-allowed"
-                    >
-                      {t('subscription.downgradeScheduledBtn')}
-                    </button>
-                  ) : isUpgrade ? (
-                    <button
-                      onClick={() => handleUpgrade(planKey)}
-                      disabled={processing === planKey}
-                      className="w-full py-2 px-4 rounded-lg bg-teal-600 text-white font-medium hover:bg-teal-700 transition-colors disabled:opacity-50"
-                    >
-                      {processing === planKey && <LoadingSpinner size={16} className="mr-2" />}
-                      {processing === planKey ? t('subscription.processing') : t('subscription.upgradeTo', { plan: plan.name })}
-                    </button>
-                  ) : isDowngrade && planKey !== 'trial' ? (
-                    <button
-                      onClick={() => handleDowngrade(planKey)}
-                      disabled={processing === planKey}
-                      className="w-full py-2 px-4 rounded-lg border border-stone-300 text-stone-600 font-medium hover:bg-stone-50 transition-colors disabled:opacity-50"
-                    >
-                      {processing === planKey && <LoadingSpinner size={16} className="mr-2" />}
-                      {processing === planKey ? t('subscription.processing') : t('subscription.downgradeTo', { plan: plan.name })}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                return (
+                  <div
+                    key={planKey}
+                    className={`p-6 rounded-xl border-2 ${
+                      isCurrent
+                        ? 'border-teal-500 bg-teal-50'
+                        : isPending
+                        ? 'border-amber-400 bg-amber-50'
+                        : 'border-stone-200 bg-white hover:border-stone-300'
+                    } shadow-sm transition-all`}
+                  >
+                    <h3 className="text-xl font-bold text-stone-900">{plan.name}</h3>
+                    <p className="text-3xl font-bold text-teal-600 mt-2">{plan.price}</p>
+                    <div className="mt-4 space-y-2 text-sm text-stone-600">
+                      <p>{t('subscription.clients')}: <span className="font-medium">{plan.clients}</span></p>
+                      <p>{t('subscription.sessionsPerMonth')}: <span className="font-medium">{plan.sessions}</span></p>
+                    </div>
+                    <ul className="mt-4 space-y-1">
+                      {plan.features.map((feature, i) => (
+                        <li key={i} className="text-sm text-stone-600 flex items-start gap-1">
+                          <span className="text-green-500 mt-0.5">✓</span>
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-6">
+                      {isCurrent ? (
+                        <button
+                          disabled
+                          className="w-full py-2 px-4 rounded-lg bg-teal-600 text-white font-medium opacity-50 cursor-not-allowed"
+                        >
+                          {t('subscription.currentPlanBtn')}
+                        </button>
+                      ) : isPending ? (
+                        <button
+                          disabled
+                          className="w-full py-2 px-4 rounded-lg bg-amber-500 text-white font-medium opacity-70 cursor-not-allowed"
+                        >
+                          {t('subscription.downgradeScheduledBtn')}
+                        </button>
+                      ) : isUpgrade ? (
+                        <button
+                          onClick={() => handleUpgrade(planKey)}
+                          disabled={processing === planKey}
+                          className="w-full py-2 px-4 rounded-lg bg-teal-600 text-white font-medium hover:bg-teal-700 transition-colors disabled:opacity-50"
+                        >
+                          {processing === planKey && <LoadingSpinner size={16} className="mr-2" />}
+                          {processing === planKey ? t('subscription.processing') : t('subscription.upgradeTo', { plan: plan.name })}
+                        </button>
+                      ) : isDowngrade && planKey !== 'trial' ? (
+                        <button
+                          onClick={() => handleDowngrade(planKey)}
+                          disabled={processing === planKey}
+                          className="w-full py-2 px-4 rounded-lg border border-stone-300 text-stone-600 font-medium hover:bg-stone-50 transition-colors disabled:opacity-50"
+                        >
+                          {processing === planKey && <LoadingSpinner size={16} className="mr-2" />}
+                          {processing === planKey ? t('subscription.processing') : t('subscription.downgradeTo', { plan: plan.name })}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
 
-        {/* Payment History */}
-        <div className="mt-10">
-          <h2 className="text-lg font-semibold text-stone-900 mb-4">Payment History</h2>
-          <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
-            {paymentsLoading ? (
-              <div className="p-6 text-center text-stone-500">Loading payment history...</div>
-            ) : payments.length === 0 ? (
-              <div className="p-6 text-center text-stone-400">No payments yet</div>
-            ) : (
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-stone-50 border-b border-stone-200">
-                    <th className="text-left px-6 py-3 text-xs font-medium text-stone-500 uppercase tracking-wider">Date</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-stone-500 uppercase tracking-wider">Amount</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-stone-500 uppercase tracking-wider">Status</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-stone-500 uppercase tracking-wider">Payment ID</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-100">
-                  {payments.map((payment) => (
-                    <tr key={payment.id} className="hover:bg-stone-50">
-                      <td className="px-6 py-4 text-sm text-stone-900">
-                        {formatUserDateOnly(payment.created_at)}
-                      </td>
-                      <td className="px-6 py-4 text-sm font-medium text-stone-900">
-                        {formatAmount(payment.amount, payment.currency)}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusBadge(payment.status)}`}>
-                          {payment.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-stone-400 font-mono truncate max-w-[200px]">
-                        {payment.stripe_payment_intent_id || '-'}
-                      </td>
+        {/* Payment History - hidden for manual override users */}
+        {!isManualOverride && (
+          <div className="mt-10">
+            <h2 className="text-lg font-semibold text-stone-900 mb-4">Payment History</h2>
+            <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+              {paymentsLoading ? (
+                <div className="p-6 text-center text-stone-500">Loading payment history...</div>
+              ) : payments.length === 0 ? (
+                <div className="p-6 text-center text-stone-400">No payments yet</div>
+              ) : (
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-stone-50 border-b border-stone-200">
+                      <th className="text-left px-6 py-3 text-xs font-medium text-stone-500 uppercase tracking-wider">Date</th>
+                      <th className="text-left px-6 py-3 text-xs font-medium text-stone-500 uppercase tracking-wider">Amount</th>
+                      <th className="text-left px-6 py-3 text-xs font-medium text-stone-500 uppercase tracking-wider">Status</th>
+                      <th className="text-left px-6 py-3 text-xs font-medium text-stone-500 uppercase tracking-wider">Payment ID</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {payments.map((payment) => (
+                      <tr key={payment.id} className="hover:bg-stone-50">
+                        <td className="px-6 py-4 text-sm text-stone-900">
+                          {formatUserDateOnly(payment.created_at)}
+                        </td>
+                        <td className="px-6 py-4 text-sm font-medium text-stone-900">
+                          {formatAmount(payment.amount, payment.currency)}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusBadge(payment.status)}`}>
+                            {payment.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-stone-400 font-mono truncate max-w-[200px]">
+                          {payment.stripe_payment_intent_id || '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </main>
     </div>
   );
