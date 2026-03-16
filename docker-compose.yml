@@ -95,13 +95,14 @@ services:
     environment:
       - DATABASE_URL=${UMAMI_DATABASE_URL:-postgresql://umami:umami@umami-db:5432/umami}
       - APP_SECRET=${UMAMI_APP_SECRET:-replace-me-with-a-random-string}
+      - BASE_PATH=/umami
     expose:
       - "3000"
     depends_on:
       umami-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/heartbeat', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/umami/api/heartbeat', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 5
