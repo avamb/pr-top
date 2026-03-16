@@ -21,7 +21,8 @@
     "adminLogs": "Журнал аудиту",
     "adminSystemLogs": "Системні логи",
     "adminAIUsage": "Використання ШІ",
-    "adminAIModels": "Моделі ШІ"
+    "adminAIModels": "Моделі ШІ",
+    "adminUmami": "Веб-аналітика"
   },
   "aiUsage": {
     "title": "Використання ШІ та витрати",

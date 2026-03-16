@@ -21,7 +21,8 @@
     "adminLogs": "Журнал аудита",
     "adminSystemLogs": "Системные логи",
     "adminAIUsage": "Использование ИИ",
-    "adminAIModels": "Модели ИИ"
+    "adminAIModels": "Модели ИИ",
+    "adminUmami": "Веб-аналитика"
   },
   "aiUsage": {
     "title": "Использование ИИ и расходы",

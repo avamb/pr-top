@@ -417,23 +417,39 @@ See Section 4.9 for full plan comparison.
 - **Fallback:** Console logging when SMTP not configured (development mode)
 - **Rate Limiting:** Prevents email abuse
 
+### 9.4 Umami Web Analytics
+
+- **Purpose:** Privacy-first, cookieless, GDPR-compliant web analytics for landing page tracking
+- **Deployment:** Self-hosted via Docker Compose (PostgreSQL-backed)
+- **Tracking Script:** Loaded via reverse proxy (`/umami/script.js`) to avoid AdBlock
+- **Custom Events:**
+  - `click-register` — Register/Start Trial button clicks (with location: hero/navbar/pricing)
+  - `click-login` — Login button clicks
+  - `scroll-to-pricing` — IntersectionObserver fires when pricing section enters viewport
+  - `language-switch` — Language switcher usage (with from/to language codes)
+- **Dashboard:** Accessible to SuperAdmin only via sidebar link (opens in new tab)
+- **Configuration:** UMAMI_WEBSITE_ID, UMAMI_DATABASE_URL, UMAMI_APP_SECRET env vars
+
 ---
 
 ## 10. Infrastructure
 
 ### 10.1 Docker Compose
 
-Three services defined in `docker-compose.yml`:
+Five services defined in `docker-compose.yml`:
 
 | Service | Image | Port | Description |
 |---------|-------|------|-------------|
 | frontend | Node 18 + nginx | 80 (exposed) | React SPA build, nginx reverse proxy |
 | backend | Node 18 Alpine | 3001 (internal) | Express API, SQLite |
 | bot | Node 18 Alpine | none | Telegram long-polling |
+| umami | ghcr.io/umami-software/umami:postgresql-latest | 3000 (internal) | Privacy-first web analytics |
+| umami-db | postgres:15-alpine | 5432 (internal) | PostgreSQL for Umami analytics data |
 
 **Volumes:**
 - `backend-data` — SQLite database persistence
 - `backend-uploads` — Encrypted session files
+- `umami-db-data` — Umami analytics PostgreSQL data
 
 ### 10.2 Environment Variables
 
@@ -453,6 +469,7 @@ All configuration via `.env` file. Key variable groups:
 | Email | SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM |
 | Scheduler | SCHEDULER_ENABLED |
 | Backups | BACKUP_DIR, BACKUP_RETENTION_COUNT, BACKUP_CRON |
+| Umami Analytics | UMAMI_WEBSITE_ID, UMAMI_DATABASE_URL, UMAMI_APP_SECRET, UMAMI_DB_USER, UMAMI_DB_PASSWORD |
 | Logging | LOG_LEVEL |
 
 ### 10.3 Database Backups

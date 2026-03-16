@@ -21,7 +21,8 @@
     "adminLogs": "Registro de auditoría",
     "adminSystemLogs": "Registros del sistema",
     "adminAIUsage": "Uso de IA",
-    "adminAIModels": "Modelos de IA"
+    "adminAIModels": "Modelos de IA",
+    "adminUmami": "Analítica web"
   },
   "aiUsage": {
     "title": "Uso de IA y costos",
