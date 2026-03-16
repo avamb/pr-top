@@ -26,6 +26,9 @@ const userLangCache = {};
 // Track active exercise sessions (telegramId -> deliveryId)
 const activeExercises = {};
 
+// Track active profile edit sessions (telegramId -> 'name' | 'phone')
+const activeProfileEdits = {};
+
 // Get user language from cache or API
 async function getUserLang(telegramId) {
   if (userLangCache[telegramId]) return userLangCache[telegramId];
@@ -42,6 +45,7 @@ async function getUserLang(telegramId) {
 // Detect language from Telegram user's language_code
 function detectLang(msg) {
   const code = msg.from?.language_code || 'en';
+  if (code.startsWith('uk')) return 'uk';
   if (code.startsWith('es')) return 'es';
   if (code.startsWith('ru')) return 'ru';
   return 'en';
@@ -55,6 +59,30 @@ if (!token || token === 'your-telegram-bot-token') {
   const bot = new TelegramBot(token, { polling: true });
 
   console.log('PR-TOP Telegram Bot starting...');
+
+  // Set BotFather About and Description via Telegram API on startup
+  async function setBotDescriptions() {
+    const languages = ['en', 'ru', 'es', 'uk'];
+
+    for (const lang of languages) {
+      try {
+        const about = t(lang, 'botAbout');
+        const description = t(lang, 'botDescription');
+
+        // setMyShortDescription = About (shown in profile, 120 chars)
+        await bot.setMyShortDescription({ short_description: about, language_code: lang });
+        // setMyDescription = Description (shown before /start)
+        await bot.setMyDescription({ description: description, language_code: lang });
+
+        console.log(`BotFather descriptions set for language: ${lang}`);
+      } catch (err) {
+        console.warn(`Failed to set BotFather descriptions for ${lang}:`, err.message);
+      }
+    }
+  }
+
+  // Run on startup (non-blocking)
+  setBotDescriptions().catch(err => console.warn('BotFather setup failed:', err.message));
 
   // /start command - role selection or deep link connect
   bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
@@ -100,6 +128,9 @@ if (!token || token === 'your-telegram-bot-token') {
         const { therapist } = connectResult.data;
         const foundTherapist = t(lang, 'foundTherapist');
 
+        // Send deep link welcome (no "enter code" — client came via link)
+        await bot.sendMessage(chatId, t(lang, 'deepLinkClientWelcome'));
+
         // Show consent prompt (same as /connect flow)
         bot.sendMessage(chatId,
           foundTherapist(therapist.display_name),
@@ -140,12 +171,12 @@ if (!token || token === 'your-telegram-bot-token') {
     // For new users, detect language from Telegram settings
     const lang = detectLang(msg);
     const msgs = {
-      chooseRole: t(lang, 'chooseRole'),
+      chooseRoleIntro: t(lang, 'chooseRoleIntro'),
       roleTherapist: t(lang, 'roleTherapist'),
       roleClient: t(lang, 'roleClient')
     };
 
-    bot.sendMessage(chatId, msgs.chooseRole, {
+    bot.sendMessage(chatId, msgs.chooseRoleIntro, {
       reply_markup: {
         inline_keyboard: [
           [
@@ -202,6 +233,35 @@ if (!token || token === 'your-telegram-bot-token') {
       t(lang, 'connectUsage'),
       { parse_mode: 'Markdown' }
     );
+  });
+
+  // /profile command - view/edit client profile
+  bot.onText(/\/profile/, async (msg) => {
+    const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+    const lang = await getUserLang(telegramId);
+
+    try {
+      const user = await checkExistingUser(telegramId);
+      if (!user) {
+        bot.sendMessage(chatId, t(lang, 'helpUnregistered'), { parse_mode: 'Markdown' });
+        return;
+      }
+
+      // Show current profile with edit buttons
+      const profileText = t(lang, 'profileView');
+      bot.sendMessage(chatId, profileText(user.first_name || '', user.last_name || '', user.phone || '', user.telegram_username || ''), {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: t(lang, 'profileEditName'), callback_data: 'profile_edit_name' }],
+            [{ text: t(lang, 'profileEditPhone'), callback_data: 'profile_edit_phone' }]
+          ]
+        }
+      });
+    } catch (error) {
+      bot.sendMessage(chatId, `❌ ${t(lang, 'profileFailed')}`);
+    }
   });
 
   // /help command - role-aware command list
@@ -455,6 +515,22 @@ if (!token || token === 'your-telegram-bot-token') {
       return;
     }
 
+    // Handle profile edit callbacks
+    if (data === 'profile_edit_name') {
+      const lang = await getUserLang(telegramId);
+      activeProfileEdits[telegramId] = 'name';
+      bot.sendMessage(chatId, t(lang, 'profileEnterName'), { parse_mode: 'Markdown' });
+      bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
+    if (data === 'profile_edit_phone') {
+      const lang = await getUserLang(telegramId);
+      activeProfileEdits[telegramId] = 'phone';
+      bot.sendMessage(chatId, t(lang, 'profileEnterPhone'), { parse_mode: 'Markdown' });
+      bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
+
     // Handle consent callbacks
     if (data.startsWith('consent_yes_') || data.startsWith('consent_no_')) {
       const consent = data.startsWith('consent_yes_');
@@ -489,7 +565,7 @@ if (!token || token === 'your-telegram-bot-token') {
       const lang = detectLang(callbackQuery);
 
       try {
-        const result = await registerUser(telegramId, role, lang);
+        const result = await registerUser(telegramId, role, lang, callbackQuery.from);
         userLangCache[telegramId] = lang;
 
         if (result.already_existed) {
@@ -632,6 +708,29 @@ if (!token || token === 'your-telegram-bot-token') {
         return;
       }
 
+      // Check if user has an active profile edit
+      if (activeProfileEdits[telegramId]) {
+        const editType = activeProfileEdits[telegramId];
+        delete activeProfileEdits[telegramId];
+
+        try {
+          if (editType === 'name') {
+            // Parse "First Last" format
+            const parts = msg.text.trim().split(/\s+/);
+            const firstName = parts[0] || '';
+            const lastName = parts.slice(1).join(' ') || '';
+            await api.put(`/api/bot/profile/${telegramId}`, { first_name: firstName, last_name: lastName });
+            bot.sendMessage(chatId, t(lang, 'profileNameSaved'));
+          } else if (editType === 'phone') {
+            await api.put(`/api/bot/profile/${telegramId}`, { phone: msg.text.trim() });
+            bot.sendMessage(chatId, t(lang, 'profilePhoneSaved'));
+          }
+        } catch (error) {
+          bot.sendMessage(chatId, `❌ ${t(lang, 'profileSaveFailed')}`);
+        }
+        return;
+      }
+
       // Check if user has an active exercise - route text as exercise response
       if (activeExercises[telegramId]) {
         const deliveryId = activeExercises[telegramId];
@@ -670,12 +769,15 @@ if (!token || token === 'your-telegram-bot-token') {
 
 // Helper functions for API communication
 
-async function registerUser(telegramId, role, language) {
+async function registerUser(telegramId, role, language, fromUser) {
   try {
     const response = await api.post('/api/bot/register', {
       telegram_id: String(telegramId),
       role: role,
-      language: language || 'en'
+      language: language || 'en',
+      first_name: fromUser?.first_name || '',
+      last_name: fromUser?.last_name || '',
+      username: fromUser?.username || ''
     });
     return response.data;
   } catch (error) {

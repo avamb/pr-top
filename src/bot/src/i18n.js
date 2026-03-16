@@ -3,7 +3,23 @@
 
 const messages = {
   en: {
+    // BotFather About (120 chars max, shown before /start)
+    botAbout: 'PR-TOP — platform for psychotherapists. Client context, diaries, exercises, SOS button. Encryption & GDPR.',
+    // BotFather Description (profile, max 512 chars)
+    botDescription: `PR-TOP — secure between-session platform for psychotherapists.
+
+For therapists:
+• Preserve context between sessions — no double documentation
+• Client diaries (text, voice, video) with auto-transcription
+• Assign exercises, track completion
+• SOS notifications for crisis situations
+• Web dashboard with analytics and timeline
+
+Connect clients with one link — simple and secure.
+
+🔒 Encryption · GDPR · Your data belongs only to you`,
     welcomeBack: (role) => `Welcome back! You are registered as a ${role}.\n\nUse /help to see available commands.`,
+    chooseRoleIntro: '🧠 PR-TOP — your professional between-session assistant\n\nA secure platform that helps therapists and clients work more effectively between meetings.\n\n🔒 All data is protected with end-to-end encryption\n\nWho are you?',
     chooseRole: 'Welcome to PR-TOP! Please choose your role:',
     roleTherapist: '🧑‍⚕️ I am a Therapist',
     roleClient: '🙋 I am a Client',
@@ -14,8 +30,9 @@ const messages = {
     connected: '✅ You are now connected to your therapist!\n\nYou can now:\n• Write diary entries by sending text messages\n• Send voice messages for your diary\n• Use /sos for emergency contact\n\nUse /help to see all available commands.',
     connectionCancelled: '❌ Connection cancelled. You can try again with /connect <code>.',
     alreadyRegistered: (role) => `You are already registered as a ${role}. Use /help to see available commands.`,
-    welcomeTherapist: (code) => `✅ Welcome, Therapist! Your workspace has been set up.\n\nYour invite code: *${code}*\nShare this code with your clients so they can connect with you.\n\nUse /help to see available commands.`,
-    welcomeClient: '✅ Welcome! You\'ve been registered as a client.\n\nPlease enter your therapist\'s invite code to get started:\nUse /connect <code> to link with your therapist.',
+    welcomeTherapist: (code) => `✅ Welcome to PR-TOP!\n\nHere's what the platform gives you as a therapist:\n\n📊 *Context between sessions* — all client information in one place, no double documentation\n📝 *Client diaries* — text, voice and video with automatic transcription and AI summaries\n📋 *Exercises* — assign from the library or create your own, track completion\n🆘 *SOS notifications* — instant alert if a client needs urgent support\n🎤 *Smart search* — ask questions about a client by voice or text, AI finds the answer\n📈 *Web dashboard* — dashboard, timeline, analytics at pr-top.com\n\n*Your invite code:* \`${code}\`\n📎 Send the link to clients — they connect in one click.\n\nUse /help for the list of commands.`,
+    welcomeClient: '✅ Welcome to PR-TOP!\n\nThis bot is your safe space for between-session work with your therapist.\n\nWhat you can do:\n📝 *Thought diary* — write text, voice or video at any time. Your therapist will see them before the next session\n📋 *Exercises* — complete assignments from your therapist at your own pace\n🆘 *SOS button* — instant contact with your therapist if you need urgent support\n🔒 *Privacy* — all data is encrypted, only you and your therapist have access\n\nTo get started, connect with your therapist:\n/connect INVITE\\_CODE\n\n💡 Your therapist will send you the code.',
+    deepLinkClientWelcome: '✅ Welcome to PR-TOP!\n\nThis bot is your safe space for between-session work with your therapist.\n\n📝 Thought diary — text, voice, video\n📋 Exercises from your therapist\n🆘 SOS button for urgent contact\n🔒 All data is encrypted\n\nConnecting you to your therapist now...',
     registrationError: '❌ Sorry, there was an error during registration. Please try again with /start.',
     voiceSaved: '🎤 Voice diary entry saved! Your therapist will be able to listen to it.',
     videoSaved: '🎥 Video diary entry saved! Your therapist will be able to view it.',
@@ -30,7 +47,7 @@ const messages = {
     failedConsent: 'Failed to process consent. Please try again.',
     // /help command
     helpUnregistered: '👋 Welcome to *PR-TOP*!\n\nUse /start to register and get started.',
-    helpClient: '📋 *Available Commands:*\n\n/start - Register or check your status\n/help - Show this help message\n/connect `CODE` - Connect with your therapist\n/exercises - View your assigned exercises\n/sos - Emergency alert to your therapist\n/history - View your recent diary entries\n/disconnect - Disconnect from your therapist\n\n💡 *Diary:* Simply send a text, voice, or video message to save a diary entry.',
+    helpClient: '📋 *Available Commands:*\n\n/start - Register or check your status\n/help - Show this help message\n/profile - View and edit your profile\n/connect `CODE` - Connect with your therapist\n/exercises - View your assigned exercises\n/sos - Emergency alert to your therapist\n/history - View your recent diary entries\n/disconnect - Disconnect from your therapist\n\n💡 *Diary:* Simply send a text, voice, or video message to save a diary entry.',
     helpTherapist: '📋 *Available Commands:*\n\n/start - Check your registration status\n/help - Show this help message\n\n💡 *Tip:* Use the web dashboard at pr-top.com to manage your clients, view diaries, and more.',
     // /sos command
     sosConfirmed: '🆘 *SOS alert sent!*\n\nYour therapist has been notified. If you are in immediate danger, please contact emergency services.\n\n🇺🇸 USA: 988 (Suicide & Crisis Lifeline)\n🌍 International: https://findahelpline.com',
@@ -68,13 +85,37 @@ const messages = {
     // Transcription status
     transcribing: '⏳ [Transcribing...]',
     voiceSavedTranscribing: '🎤 Voice diary entry saved! Transcription in progress...',
-    videoSavedTranscribing: '🎥 Video diary entry saved! Transcription in progress...'
+    videoSavedTranscribing: '🎥 Video diary entry saved! Transcription in progress...',
+    // /profile command
+    profileView: (firstName, lastName, phone, username) => `👤 *Your Profile:*\n\n*Name:* ${firstName || '-'} ${lastName || ''}\n*Phone:* ${phone || '-'}\n*Telegram:* ${username ? '@' + username : '-'}\n\nPress a button below to edit:`,
+    profileEditName: '✏️ Edit Name',
+    profileEditPhone: '📱 Edit Phone',
+    profileEnterName: '✏️ Enter your name (First Last):',
+    profileEnterPhone: '📱 Enter your phone number:',
+    profileNameSaved: '✅ Name updated!',
+    profilePhoneSaved: '✅ Phone updated!',
+    profileSaveFailed: 'Failed to save profile. Please try again.',
+    profileFailed: 'Failed to load profile. Please try again.'
   },
   ru: {
+    botAbout: 'PR-TOP — платформа для психотерапевтов. Контекст клиента, дневники, упражнения, SOS-кнопка. Шифрование и GDPR.',
+    botDescription: `PR-TOP — безопасная платформа между сессиями для психотерапевтов.
+
+Для терапевтов:
+• Контекст между сессиями — без двойной документации
+• Дневники клиентов (текст, голос, видео) с транскрипцией
+• Упражнения из библиотеки или свои
+• SOS-уведомления при кризисах
+• Веб-панель с аналитикой и таймлайном
+
+Подключайте клиентов одной ссылкой.
+
+🔒 Шифрование · GDPR · Данные только ваши`,
     welcomeBack: (role) => {
       const roleLabel = role === 'therapist' ? 'Терапевт' : 'Клиент';
       return `С возвращением! Вы зарегистрированы как ${roleLabel}.\n\nИспользуйте /help для просмотра доступных команд.`;
     },
+    chooseRoleIntro: '🧠 PR-TOP — ваш профессиональный помощник между сессиями\n\nБезопасная платформа, которая помогает терапевтам и клиентам работать эффективнее между встречами.\n\n🔒 Все данные защищены сквозным шифрованием\n\nКто вы?',
     chooseRole: 'Добро пожаловать в PR-TOP! Выберите вашу роль:',
     roleTherapist: '🧑‍⚕️ Я терапевт',
     roleClient: '🙋 Я клиент',
@@ -88,8 +129,9 @@ const messages = {
       const roleLabel = role === 'therapist' ? 'терапевт' : 'клиент';
       return `Вы уже зарегистрированы как ${roleLabel}. Используйте /help для просмотра команд.`;
     },
-    welcomeTherapist: (code) => `✅ Добро пожаловать, Терапевт! Ваше рабочее пространство настроено.\n\nВаш код приглашения: *${code}*\nПоделитесь этим кодом с клиентами для подключения.\n\nИспользуйте /help для просмотра команд.`,
-    welcomeClient: '✅ Добро пожаловать! Вы зарегистрированы как клиент.\n\nВведите код приглашения терапевта:\nИспользуйте /connect <код> для подключения.',
+    welcomeTherapist: (code) => `✅ Добро пожаловать в PR-TOP!\n\nВот что платформа даёт вам как терапевту:\n\n📊 *Контекст между сессиями* — вся информация о клиенте в одном месте, без двойной документации\n📝 *Дневники клиентов* — текст, голос и видео с автоматической транскрипцией и AI-саммари\n📋 *Упражнения* — назначайте из библиотеки или создавайте свои, отслеживайте выполнение\n🆘 *SOS-уведомления* — мгновенный сигнал, если клиенту нужна экстренная поддержка\n🎤 *Умный поиск* — задавайте вопросы о клиенте голосом или текстом, AI найдёт ответ в контексте\n📈 *Веб-панель* — дашборд, таймлайн, аналитика на pr-top.com\n\n*Ваш код приглашения:* \`${code}\`\n📎 Отправьте ссылку клиентам — они подключатся в один клик.\n\nИспользуйте /help для списка команд.`,
+    welcomeClient: '✅ Добро пожаловать в PR-TOP!\n\nЭтот бот — ваше безопасное пространство для работы между сессиями с терапевтом.\n\nЧто вы можете:\n📝 *Дневник мыслей* — записывайте текст, голосовые или видео в любое время. Терапевт увидит их к следующей сессии\n📋 *Упражнения* — выполняйте задания от терапевта в удобном темпе\n🆘 *SOS-кнопка* — мгновенная связь с терапевтом, если нужна срочная поддержка\n🔒 *Приватность* — все данные зашифрованы, доступ только у вас и вашего терапевта\n\nЧтобы начать, подключитесь к терапевту:\n/connect КОД\\_ПРИГЛАШЕНИЯ\n\n💡 Код вам отправит ваш терапевт.',
+    deepLinkClientWelcome: '✅ Добро пожаловать в PR-TOP!\n\nЭтот бот — ваше безопасное пространство для работы между сессиями с терапевтом.\n\n📝 Дневник мыслей — текст, голос, видео\n📋 Упражнения от терапевта\n🆘 SOS-кнопка для экстренной связи\n🔒 Все данные зашифрованы\n\nСейчас подключим вас к терапевту...',
     registrationError: '❌ Произошла ошибка при регистрации. Попробуйте снова с /start.',
     voiceSaved: '🎤 Голосовая запись дневника сохранена! Ваш терапевт сможет её прослушать.',
     videoSaved: '🎥 Видеозапись дневника сохранена! Ваш терапевт сможет её просмотреть.',
@@ -104,7 +146,7 @@ const messages = {
     failedConsent: 'Не удалось обработать согласие. Попробуйте снова.',
     // /help
     helpUnregistered: '👋 Добро пожаловать в *PR-TOP*!\n\nИспользуйте /start для регистрации.',
-    helpClient: '📋 *Доступные команды:*\n\n/start - Регистрация или проверка статуса\n/help - Показать эту справку\n/connect `КОД` - Подключиться к терапевту\n/exercises - Просмотр назначенных упражнений\n/sos - Экстренный сигнал терапевту\n/history - Просмотр последних записей дневника\n/disconnect - Отключиться от терапевта\n\n💡 *Дневник:* Просто отправьте текстовое, голосовое или видеосообщение для записи в дневник.',
+    helpClient: '📋 *Доступные команды:*\n\n/start - Регистрация или проверка статуса\n/help - Показать эту справку\n/profile - Просмотр и редактирование профиля\n/connect `КОД` - Подключиться к терапевту\n/exercises - Просмотр назначенных упражнений\n/sos - Экстренный сигнал терапевту\n/history - Просмотр последних записей дневника\n/disconnect - Отключиться от терапевта\n\n💡 *Дневник:* Просто отправьте текстовое, голосовое или видеосообщение для записи в дневник.',
     helpTherapist: '📋 *Доступные команды:*\n\n/start - Проверка статуса регистрации\n/help - Показать эту справку\n\n💡 *Совет:* Используйте веб-панель на pr-top.com для управления клиентами, просмотра дневников и многого другого.',
     // /sos
     sosConfirmed: '🆘 *SOS-сигнал отправлен!*\n\nВаш терапевт уведомлён. Если вы в непосредственной опасности, обратитесь в службу экстренной помощи.\n\n🇷🇺 Россия: 8-800-2000-122 (телефон доверия)\n🌍 Международный: https://findahelpline.com',
@@ -142,13 +184,37 @@ const messages = {
     // Transcription status
     transcribing: '⏳ [Транскрибирование...]',
     voiceSavedTranscribing: '🎤 Голосовая запись дневника сохранена! Транскрибирование в процессе...',
-    videoSavedTranscribing: '🎥 Видеозапись дневника сохранена! Транскрибирование в процессе...'
+    videoSavedTranscribing: '🎥 Видеозапись дневника сохранена! Транскрибирование в процессе...',
+    // /profile command
+    profileView: (firstName, lastName, phone, username) => `👤 *Ваш профиль:*\n\n*Имя:* ${firstName || '-'} ${lastName || ''}\n*Телефон:* ${phone || '-'}\n*Telegram:* ${username ? '@' + username : '-'}\n\nНажмите кнопку для редактирования:`,
+    profileEditName: '✏️ Изменить имя',
+    profileEditPhone: '📱 Изменить телефон',
+    profileEnterName: '✏️ Введите ваше имя (Имя Фамилия):',
+    profileEnterPhone: '📱 Введите номер телефона:',
+    profileNameSaved: '✅ Имя обновлено!',
+    profilePhoneSaved: '✅ Телефон обновлён!',
+    profileSaveFailed: 'Не удалось сохранить профиль. Попробуйте ещё раз.',
+    profileFailed: 'Не удалось загрузить профиль. Попробуйте ещё раз.'
   },
   es: {
+    botAbout: 'PR-TOP — plataforma para psicoterapeutas. Contexto del cliente, diarios, ejercicios, botón SOS. Cifrado y RGPD.',
+    botDescription: `PR-TOP — plataforma segura entre sesiones para psicoterapeutas.
+
+Para terapeutas:
+• Contexto entre sesiones — sin doble documentación
+• Diarios de clientes (texto, voz, video) con transcripción
+• Ejercicios de la biblioteca o propios
+• Notificaciones SOS en crisis
+• Panel web con analítica y línea temporal
+
+Conecta clientes con un enlace — simple y seguro.
+
+🔒 Cifrado · RGPD · Tus datos te pertenecen solo a ti`,
     welcomeBack: (role) => {
       const roleLabel = role === 'therapist' ? 'Terapeuta' : 'Cliente';
       return `¡Bienvenido de nuevo! Estás registrado como ${roleLabel}.\n\nUsa /help para ver los comandos disponibles.`;
     },
+    chooseRoleIntro: '🧠 PR-TOP — tu asistente profesional entre sesiones\n\nUna plataforma segura que ayuda a terapeutas y clientes a trabajar de manera más efectiva entre reuniones.\n\n🔒 Todos los datos están protegidos con cifrado de extremo a extremo\n\n¿Quién eres?',
     chooseRole: '¡Bienvenido a PR-TOP! Elige tu rol:',
     roleTherapist: '🧑‍⚕️ Soy terapeuta',
     roleClient: '🙋 Soy cliente',
@@ -162,8 +228,9 @@ const messages = {
       const roleLabel = role === 'therapist' ? 'terapeuta' : 'cliente';
       return `Ya estás registrado como ${roleLabel}. Usa /help para ver los comandos.`;
     },
-    welcomeTherapist: (code) => `✅ ¡Bienvenido, Terapeuta! Tu espacio de trabajo está configurado.\n\nTu código de invitación: *${code}*\nComparte este código con tus clientes para que puedan conectarse contigo.\n\nUsa /help para ver los comandos disponibles.`,
-    welcomeClient: '✅ ¡Bienvenido! Te has registrado como cliente.\n\nIngresa el código de invitación de tu terapeuta para comenzar:\nUsa /connect <código> para vincularte con tu terapeuta.',
+    welcomeTherapist: (code) => `✅ ¡Bienvenido a PR-TOP!\n\nEsto es lo que la plataforma te ofrece como terapeuta:\n\n📊 *Contexto entre sesiones* — toda la información del cliente en un solo lugar, sin doble documentación\n📝 *Diarios de clientes* — texto, voz y video con transcripción automática y resúmenes IA\n📋 *Ejercicios* — asigna de la biblioteca o crea los tuyos, sigue el progreso\n🆘 *Notificaciones SOS* — alerta instantánea si un cliente necesita apoyo urgente\n🎤 *Búsqueda inteligente* — haz preguntas sobre un cliente por voz o texto, la IA encuentra la respuesta\n📈 *Panel web* — dashboard, línea temporal, analítica en pr-top.com\n\n*Tu código de invitación:* \`${code}\`\n📎 Envía el enlace a tus clientes — se conectan con un solo clic.\n\nUsa /help para la lista de comandos.`,
+    welcomeClient: '✅ ¡Bienvenido a PR-TOP!\n\nEste bot es tu espacio seguro para el trabajo entre sesiones con tu terapeuta.\n\nLo que puedes hacer:\n📝 *Diario de pensamientos* — escribe texto, voz o video en cualquier momento. Tu terapeuta los verá antes de la próxima sesión\n📋 *Ejercicios* — completa las tareas de tu terapeuta a tu propio ritmo\n🆘 *Botón SOS* — contacto instantáneo con tu terapeuta si necesitas apoyo urgente\n🔒 *Privacidad* — todos los datos están cifrados, solo tú y tu terapeuta tienen acceso\n\nPara empezar, conéctate con tu terapeuta:\n/connect CÓDIGO\\_INVITACIÓN\n\n💡 Tu terapeuta te enviará el código.',
+    deepLinkClientWelcome: '✅ ¡Bienvenido a PR-TOP!\n\nEste bot es tu espacio seguro para el trabajo entre sesiones con tu terapeuta.\n\n📝 Diario de pensamientos — texto, voz, video\n📋 Ejercicios de tu terapeuta\n🆘 Botón SOS para contacto urgente\n🔒 Todos los datos están cifrados\n\nConectándote con tu terapeuta ahora...',
     registrationError: '❌ Lo sentimos, hubo un error durante el registro. Intenta de nuevo con /start.',
     voiceSaved: '🎤 ¡Entrada de diario de voz guardada! Tu terapeuta podrá escucharla.',
     videoSaved: '🎥 ¡Entrada de diario de video guardada! Tu terapeuta podrá verla.',
@@ -178,7 +245,7 @@ const messages = {
     failedConsent: 'No se pudo procesar el consentimiento. Inténtalo de nuevo.',
     // /help
     helpUnregistered: '👋 ¡Bienvenido a *PR-TOP*!\n\nUsa /start para registrarte y comenzar.',
-    helpClient: '📋 *Comandos disponibles:*\n\n/start - Registrarse o verificar tu estado\n/help - Mostrar esta ayuda\n/connect `CÓDIGO` - Conectarte con tu terapeuta\n/exercises - Ver tus ejercicios asignados\n/sos - Alerta de emergencia a tu terapeuta\n/history - Ver tus entradas recientes del diario\n/disconnect - Desconectarte de tu terapeuta\n\n💡 *Diario:* Simplemente envía un mensaje de texto, voz o video para guardar una entrada de diario.',
+    helpClient: '📋 *Comandos disponibles:*\n\n/start - Registrarse o verificar tu estado\n/help - Mostrar esta ayuda\n/profile - Ver y editar tu perfil\n/connect `CÓDIGO` - Conectarte con tu terapeuta\n/exercises - Ver tus ejercicios asignados\n/sos - Alerta de emergencia a tu terapeuta\n/history - Ver tus entradas recientes del diario\n/disconnect - Desconectarte de tu terapeuta\n\n💡 *Diario:* Simplemente envía un mensaje de texto, voz o video para guardar una entrada de diario.',
     helpTherapist: '📋 *Comandos disponibles:*\n\n/start - Verificar tu estado de registro\n/help - Mostrar esta ayuda\n\n💡 *Consejo:* Usa el panel web en pr-top.com para gestionar tus clientes, ver diarios y más.',
     // /sos
     sosConfirmed: '🆘 *¡Alerta SOS enviada!*\n\nTu terapeuta ha sido notificado. Si estás en peligro inmediato, contacta a los servicios de emergencia.\n\n🇪🇸 España: 024 (Línea de Atención a la Conducta Suicida)\n🌍 Internacional: https://findahelpline.com',
@@ -216,13 +283,37 @@ const messages = {
     // Transcription status
     transcribing: '⏳ [Transcribiendo...]',
     voiceSavedTranscribing: '🎤 ¡Entrada de diario de voz guardada! Transcripción en progreso...',
-    videoSavedTranscribing: '🎥 ¡Entrada de diario de video guardada! Transcripción en progreso...'
+    videoSavedTranscribing: '🎥 ¡Entrada de diario de video guardada! Transcripción en progreso...',
+    // /profile command
+    profileView: (firstName, lastName, phone, username) => `👤 *Tu perfil:*\n\n*Nombre:* ${firstName || '-'} ${lastName || ''}\n*Teléfono:* ${phone || '-'}\n*Telegram:* ${username ? '@' + username : '-'}\n\nPresiona un botón para editar:`,
+    profileEditName: '✏️ Editar nombre',
+    profileEditPhone: '📱 Editar teléfono',
+    profileEnterName: '✏️ Ingresa tu nombre (Nombre Apellido):',
+    profileEnterPhone: '📱 Ingresa tu número de teléfono:',
+    profileNameSaved: '✅ ¡Nombre actualizado!',
+    profilePhoneSaved: '✅ ¡Teléfono actualizado!',
+    profileSaveFailed: 'No se pudo guardar el perfil. Inténtalo de nuevo.',
+    profileFailed: 'No se pudo cargar el perfil. Inténtalo de nuevo.'
   },
   uk: {
+    botAbout: 'PR-TOP — платформа для психотерапевтів. Контекст клієнта, щоденники, вправи, SOS-кнопка. Шифрування та GDPR.',
+    botDescription: `PR-TOP — безпечна платформа між сесіями для психотерапевтів.
+
+Для терапевтів:
+• Контекст між сесіями — без подвійної документації
+• Щоденники клієнтів (текст, голос, відео) з транскрипцією
+• Вправи з бібліотеки або власні
+• SOS-сповіщення при кризах
+• Веб-панель з аналітикою та таймлайном
+
+Під'єднуйте клієнтів одним посиланням.
+
+🔒 Шифрування · GDPR · Дані тільки ваші`,
     welcomeBack: (role) => {
       const roleLabel = role === 'therapist' ? 'Терапевт' : 'Клієнт';
       return `З поверненням! Ви зареєстровані як ${roleLabel}.\n\nВикористовуйте /help для перегляду доступних команд.`;
     },
+    chooseRoleIntro: '🧠 PR-TOP — ваш професійний помічник між сесіями\n\nБезпечна платформа, що допомагає терапевтам і клієнтам працювати ефективніше між зустрічами.\n\n🔒 Усі дані захищені наскрізним шифруванням\n\nХто ви?',
     chooseRole: 'Ласкаво просимо до PR-TOP! Оберіть вашу роль:',
     roleTherapist: '🧑‍⚕️ Я терапевт',
     roleClient: '🙋 Я клієнт',
@@ -236,8 +327,9 @@ const messages = {
       const roleLabel = role === 'therapist' ? 'терапевт' : 'клієнт';
       return `Ви вже зареєстровані як ${roleLabel}. Використовуйте /help для перегляду команд.`;
     },
-    welcomeTherapist: (code) => `✅ Ласкаво просимо, Терапевте! Ваш робочий простір налаштовано.\n\nВаш код запрошення: *${code}*\nПоділіться цим кодом з клієнтами для під'єднання.\n\nВикористовуйте /help для перегляду команд.`,
-    welcomeClient: '✅ Ласкаво просимо! Ви зареєстровані як клієнт.\n\nВведіть код запрошення терапевта:\nВикористовуйте /connect <код> для під\'єднання.',
+    welcomeTherapist: (code) => `✅ Ласкаво просимо до PR-TOP!\n\nОсь що платформа дає вам як терапевту:\n\n📊 *Контекст між сесіями* — вся інформація про клієнта в одному місці, без подвійної документації\n📝 *Щоденники клієнтів* — текст, голос і відео з автоматичною транскрипцією та AI-підсумками\n📋 *Вправи* — призначайте з бібліотеки або створюйте власні, відстежуйте виконання\n🆘 *SOS-сповіщення* — миттєвий сигнал, якщо клієнту потрібна екстрена підтримка\n🎤 *Розумний пошук* — задавайте питання про клієнта голосом або текстом, AI знайде відповідь\n📈 *Веб-панель* — дашборд, таймлайн, аналітика на pr-top.com\n\n*Ваш код запрошення:* \`${code}\`\n📎 Надішліть посилання клієнтам — вони під\'єднаються в один клік.\n\nВикористовуйте /help для списку команд.`,
+    welcomeClient: '✅ Ласкаво просимо до PR-TOP!\n\nЦей бот — ваш безпечний простір для роботи між сесіями з терапевтом.\n\nЩо ви можете:\n📝 *Щоденник думок* — записуйте текст, голосові або відео в будь-який час. Терапевт побачить їх до наступної сесії\n📋 *Вправи* — виконуйте завдання від терапевта у зручному темпі\n🆘 *SOS-кнопка* — миттєвий зв\'язок з терапевтом, якщо потрібна термінова підтримка\n🔒 *Приватність* — всі дані зашифровані, доступ тільки у вас і вашого терапевта\n\nЩоб почати, під\'єднайтеся до терапевта:\n/connect КОД\\_ЗАПРОШЕННЯ\n\n💡 Код вам надішле ваш терапевт.',
+    deepLinkClientWelcome: '✅ Ласкаво просимо до PR-TOP!\n\nЦей бот — ваш безпечний простір для роботи між сесіями з терапевтом.\n\n📝 Щоденник думок — текст, голос, відео\n📋 Вправи від терапевта\n🆘 SOS-кнопка для екстреного зв\'язку\n🔒 Усі дані зашифровані\n\nЗараз під\'єднаємо вас до терапевта...',
     registrationError: '❌ Виникла помилка під час реєстрації. Спробуйте знову з /start.',
     voiceSaved: '🎤 Голосовий запис щоденника збережено! Ваш терапевт зможе його прослухати.',
     videoSaved: '🎥 Відеозапис щоденника збережено! Ваш терапевт зможе його переглянути.',
@@ -252,7 +344,7 @@ const messages = {
     failedConsent: 'Не вдалося обробити згоду. Спробуйте знову.',
     // /help
     helpUnregistered: '👋 Ласкаво просимо до *PR-TOP*!\n\nВикористовуйте /start для реєстрації.',
-    helpClient: '📋 *Доступні команди:*\n\n/start - Реєстрація або перевірка статусу\n/help - Показати цю довідку\n/connect `КОД` - Під\'єднатися до терапевта\n/exercises - Переглянути призначені вправи\n/sos - Екстрений сигнал терапевту\n/history - Переглянути останні записи щоденника\n/disconnect - Від\'єднатися від терапевта\n\n💡 *Щоденник:* Просто надішліть текстове, голосове або відеоповідомлення для запису в щоденник.',
+    helpClient: '📋 *Доступні команди:*\n\n/start - Реєстрація або перевірка статусу\n/help - Показати цю довідку\n/profile - Переглянути та редагувати профіль\n/connect `КОД` - Під\'єднатися до терапевта\n/exercises - Переглянути призначені вправи\n/sos - Екстрений сигнал терапевту\n/history - Переглянути останні записи щоденника\n/disconnect - Від\'єднатися від терапевта\n\n💡 *Щоденник:* Просто надішліть текстове, голосове або відеоповідомлення для запису в щоденник.',
     helpTherapist: '📋 *Доступні команди:*\n\n/start - Перевірка статусу реєстрації\n/help - Показати цю довідку\n\n💡 *Порада:* Використовуйте веб-панель на pr-top.com для керування клієнтами, перегляду щоденників та іншого.',
     // /sos
     sosConfirmed: '🆘 *SOS-сигнал надіслано!*\n\nВашого терапевта сповіщено. Якщо ви в безпосередній небезпеці, зверніться до служби екстреної допомоги.\n\n🇺🇦 Україна: 7333 (гаряча лінія з питань психічного здоров\'я)\n🌍 Міжнародний: https://findahelpline.com',
@@ -290,7 +382,17 @@ const messages = {
     // Transcription status
     transcribing: '⏳ [Транскрибування...]',
     voiceSavedTranscribing: '🎤 Голосовий запис щоденника збережено! Транскрибування в процесі...',
-    videoSavedTranscribing: '🎥 Відеозапис щоденника збережено! Транскрибування в процесі...'
+    videoSavedTranscribing: '🎥 Відеозапис щоденника збережено! Транскрибування в процесі...',
+    // /profile command
+    profileView: (firstName, lastName, phone, username) => `👤 *Ваш профіль:*\n\n*Ім'я:* ${firstName || '-'} ${lastName || ''}\n*Телефон:* ${phone || '-'}\n*Telegram:* ${username ? '@' + username : '-'}\n\nНатисніть кнопку для редагування:`,
+    profileEditName: '✏️ Змінити ім\'я',
+    profileEditPhone: '📱 Змінити телефон',
+    profileEnterName: '✏️ Введіть ваше ім\'я (Ім\'я Прізвище):',
+    profileEnterPhone: '📱 Введіть номер телефону:',
+    profileNameSaved: '✅ Ім\'я оновлено!',
+    profilePhoneSaved: '✅ Телефон оновлено!',
+    profileSaveFailed: 'Не вдалося зберегти профіль. Спробуйте ще раз.',
+    profileFailed: 'Не вдалося завантажити профіль. Спробуйте ще раз.'
   }
 };
 

@@ -397,10 +397,17 @@ See Section 4.9 for full plan comparison.
 ### 9.1 Telegram Bot
 
 - **Framework:** node-telegram-bot-api (long-polling)
+- **BotFather Setup:** About (120 chars) and Description (512 chars) set via Telegram API on bot startup, localized in EN/RU/ES/UK
+- **Onboarding Flow:**
+  - New user: Role intro with platform description → role selection buttons (therapist/client)
+  - Therapist: Detailed welcome with feature list + invite code
+  - Client (manual): Welcome with feature list + /connect instruction
+  - Client (deep link `?start=CODE`): Welcome + auto-consent flow (no "enter code" duplication)
+  - Returning user: Brief "Welcome back" + /help
 - **Commands:** /start (role selection + deep link connect via `?start=CODE`), /connect (manual invite code), /register
 - **Client Features:** Diary input (text/voice/video), exercises, SOS, history, consent
 - **Therapist Features:** Client management, notes, queries (via bot interface)
-- **Language:** Auto-detect from Telegram settings, user-configurable
+- **Language:** Auto-detect from Telegram settings (EN/RU/ES/UK), user-configurable
 - **Communication:** REST API calls to backend with BOT_API_KEY authentication
 
 ### 9.2 Stripe
