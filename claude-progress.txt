@@ -619,3 +619,40 @@
 - Features passing: 253/253 (100.0%)
 - Features #251, #252: BOTH PASSING
 - ALL FEATURES COMPLETE
+
+## Session: 2026-03-16 - Feature #254
+
+### Completed: Umami web analytics integration for landing page (#254) - PASSING
+
+**What was built:**
+- Added Umami + PostgreSQL services to docker-compose.yml (umami: ghcr.io/umami-software/umami:postgresql-latest, umami-db: postgres:15-alpine)
+- Added Umami tracking script to index.html via /umami reverse proxy (deferred load, data-website-id from env var)
+- Added Vite dev proxy /umami -> localhost:3002 (prevents AdBlock blocking)
+- Created src/frontend/src/utils/umami.js utility for safe event tracking (no-op when Umami not loaded)
+- Added custom event tracking on Landing.jsx:
+  - `click-register` on Register/Start Trial buttons (with location: hero/navbar/pricing + tier name)
+  - `click-login` on Login button
+  - `scroll-to-pricing` via IntersectionObserver when pricing section enters viewport
+- Added `language-switch` event tracking in LanguageSwitcher.jsx (with from/to language codes)
+- Added "Web Analytics" link to SuperAdmin sidebar (Sidebar.jsx) with external link icon, opens in new tab
+- Added i18n labels for "Web Analytics" / "Веб-аналитика" / "Analítica web" / "Веб-аналітика" in EN/RU/ES/UK
+- Added UMAMI_WEBSITE_ID, VITE_UMAMI_WEBSITE_ID, UMAMI_DATABASE_URL, UMAMI_DB_USER, UMAMI_DB_PASSWORD, UMAMI_APP_SECRET, UMAMI_DASHBOARD_URL to .env.example
+- Updated docs/PRD.md: added section 9.4 Umami Web Analytics, updated Docker Compose table to 5 services, added umami-db-data volume, added Umami env vars
+
+**Verification:**
+- Landing page renders correctly with tracking script in HTML ✅
+- Register/Login buttons have click tracking attached ✅
+- Pricing section has IntersectionObserver for scroll tracking ✅
+- Language switcher fires language-switch event ✅
+- SuperAdmin sidebar shows "Web Analytics" link with external icon ✅
+- Non-superadmin therapist does NOT see "Web Analytics" link ✅
+- docker-compose.yml has Umami service with health checks ✅
+- .env.example has all Umami configuration variables ✅
+- No mock data patterns in source code ✅
+- Only expected 500 for /umami/script.js (Umami container not running in dev) ✅
+- PRD updated with Umami integration details ✅
+
+### Current Status
+- Features passing: 254/254 (100.0%)
+- Feature #254: PASSING
+- ALL FEATURES COMPLETE
