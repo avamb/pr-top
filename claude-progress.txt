@@ -656,3 +656,51 @@
 - Features passing: 254/254 (100.0%)
 - Feature #254: PASSING
 - ALL FEATURES COMPLETE
+
+## Session: 2026-03-16 - Feature #255
+
+### Completed: Nginx reverse proxy (entry point) (#255) - PASSING
+
+**What was built:**
+- Created `nginx/nginx.conf` — main server config with upstream blocks for frontend:80, backend:3001, umami:3000. HTTP server block with include for shared locations. Commented HTTPS server block ready for SSL activation with TLS 1.2/1.3, OCSP stapling.
+- Created `nginx/locations.conf` — shared location routing:
+  - `/api/` → backend (rate limited 30r/s, burst 60, WebSocket support, 120s timeouts for AI calls)
+  - `/analytics/` → umami (rate limited 10r/s, burst 20, prefix strip via rewrite)
+  - `/umami/script.js` → umami (tracking script with 1h cache)
+  - `/` → frontend (catch-all SPA proxy)
+  - Security headers: X-Frame-Options SAMEORIGIN, X-Content-Type-Options nosniff, HSTS 2yr, X-XSS-Protection, Referrer-Policy
+  - Gzip compression for text/html, CSS, JSON, JS, SVG, XML
+- Created `nginx/Dockerfile` — FROM nginx:alpine, copies nginx.conf + locations.conf
+- Updated `docker-compose.yml`:
+  - Added nginx service with ports 80:80 and 443:443
+  - Added ./nginx/certs volume mount for SSL certificates
+  - nginx depends_on frontend, backend (healthy), umami (healthy)
+  - nginx has its own healthcheck via /api/health
+  - All other services remain expose-only (no public ports)
+- Updated `src/frontend/nginx.conf` — removed /api/ proxy_pass block (now handled by external nginx), kept SPA fallback and static asset caching only
+- Updated `.env.example` — added DOMAIN and SSL_EMAIL variables, fixed header to say PR-TOP
+- Updated `docs/PRD.md` — 6 services table, nginx routing table, security features, DOMAIN/SSL_EMAIL env vars, updated deployment section
+- Updated `README.md` — added nginx component to architecture, updated services table (6 services), SSL setup section, nginx directory in project structure
+
+**Verification:**
+- Landing page renders correctly (port 3002 in dev) ✅
+- Login works — superadmin dashboard loads with real API data ✅
+- API proxy through Vite dev server still works ✅
+- Frontend nginx.conf correctly simplified (no /api/ proxy) ✅
+- docker-compose.yml has nginx service as sole public entry point ✅
+- Rate limiting configured: 30r/s for API, 10r/s for analytics ✅
+- Security headers: HSTS, X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, Referrer-Policy ✅
+- Gzip compression enabled for all relevant MIME types ✅
+- SSL config commented and ready to enable ✅
+- WebSocket proxy headers included (Upgrade, Connection) ✅
+- /umami/script.js route maintained for tracking script ✅
+- .env.example has DOMAIN and SSL_EMAIL ✅
+- docs/PRD.md updated with nginx architecture ✅
+- README.md updated with nginx section and SSL setup instructions ✅
+- No mock data patterns in source code ✅
+- Zero relevant console errors (only expected Umami 500 in dev) ✅
+
+### Current Status
+- Features passing: 255/255 (100.0%)
+- Feature #255: PASSING
+- ALL FEATURES COMPLETE
