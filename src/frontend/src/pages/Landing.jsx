@@ -375,10 +375,10 @@ export default function Landing() {
             <div>
               <h4 className="text-white font-semibold text-sm mb-3">{t('landing.footerSecurity')}</h4>
               <ul className="space-y-2 text-sm">
-                <li><span>{t('landing.encryption')}</span></li>
-                <li><span>{t('landing.gdpr')}</span></li>
-                <li><span>{t('landing.auditLogging')}</span></li>
-                <li><span>{t('landing.dataSovereignty')}</span></li>
+                <li><Link to="/security/encryption" className="hover:text-white transition-colors">{t('landing.encryption')}</Link></li>
+                <li><Link to="/security/gdpr" className="hover:text-white transition-colors">{t('landing.gdpr')}</Link></li>
+                <li><Link to="/security/audit-log" className="hover:text-white transition-colors">{t('landing.auditLogging')}</Link></li>
+                <li><Link to="/security/data-sovereignty" className="hover:text-white transition-colors">{t('landing.dataSovereignty')}</Link></li>
               </ul>
             </div>
 

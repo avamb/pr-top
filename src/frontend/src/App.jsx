@@ -25,6 +25,10 @@ import AdminSystemLogs from './pages/AdminSystemLogs';
 import AdminAIUsage from './pages/AdminAIUsage';
 import AdminAIModels from './pages/AdminAIModels';
 import TherapistGuide from './pages/TherapistGuide';
+import SecurityEncryption from './pages/SecurityEncryption';
+import SecurityGDPR from './pages/SecurityGDPR';
+import SecurityAuditLog from './pages/SecurityAuditLog';
+import SecurityDataSovereignty from './pages/SecurityDataSovereignty';
 import NotFound from './pages/NotFound';
 import InstallPrompt from './components/InstallPrompt';
 import NotificationToast from './components/NotificationToast';
@@ -71,6 +75,10 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/security/encryption" element={<SecurityEncryption />} />
+        <Route path="/security/gdpr" element={<SecurityGDPR />} />
+        <Route path="/security/audit-log" element={<SecurityAuditLog />} />
+        <Route path="/security/data-sovereignty" element={<SecurityDataSovereignty />} />
 
         {/* Authenticated therapist routes - AuthGuard + TherapistGuard + AppLayout */}
         <Route path="/dashboard" element={<GuardedLayout><Dashboard /></GuardedLayout>} />
