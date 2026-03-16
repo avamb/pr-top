@@ -5,9 +5,11 @@ require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const { t } = require('./i18n');
+const { getClientKeyboard, getTherapistKeyboard, getKeyboardForRole, BUTTON_ACTION_MAP } = require('./keyboards');
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://pr-top.com';
 const BOT_API_KEY = process.env.BOT_API_KEY || 'dev-bot-api-key';
 
 // Create axios instance for backend API calls
@@ -81,8 +83,165 @@ if (!token || token === 'your-telegram-bot-token') {
     }
   }
 
+  // Set bot menu commands (≡ button) with scoped commands
+  async function setBotMenuCommands() {
+    try {
+      // Client commands (default for all private chats)
+      await bot.setMyCommands([
+        { command: 'exercises', description: 'My exercises' },
+        { command: 'history', description: 'Diary history' },
+        { command: 'sos', description: 'Emergency contact' },
+        { command: 'profile', description: 'My profile' },
+        { command: 'help', description: 'Help' },
+        { command: 'disconnect', description: 'Disconnect from therapist' }
+      ], { scope: { type: 'all_private_chats' } });
+      console.log('Bot menu commands set for all_private_chats');
+    } catch (err) {
+      console.warn('Failed to set bot menu commands:', err.message);
+    }
+  }
+
   // Run on startup (non-blocking)
   setBotDescriptions().catch(err => console.warn('BotFather setup failed:', err.message));
+  setBotMenuCommands().catch(err => console.warn('Bot menu commands setup failed:', err.message));
+
+  // === Extracted handler functions (shared by slash commands and keyboard buttons) ===
+
+  async function handleHelp(chatId, telegramId, lang) {
+    try {
+      const user = await checkExistingUser(telegramId);
+      if (!user) {
+        bot.sendMessage(chatId, t(lang, 'helpUnregistered'), { parse_mode: 'Markdown' });
+        return;
+      }
+      if (user.role === 'therapist') {
+        bot.sendMessage(chatId, t(lang, 'helpTherapist'), { parse_mode: 'Markdown' });
+      } else {
+        bot.sendMessage(chatId, t(lang, 'helpClient'), { parse_mode: 'Markdown' });
+      }
+    } catch (error) {
+      bot.sendMessage(chatId, t(lang, 'helpClient'), { parse_mode: 'Markdown' });
+    }
+  }
+
+  async function handleProfile(chatId, telegramId, lang) {
+    try {
+      const user = await checkExistingUser(telegramId);
+      if (!user) {
+        bot.sendMessage(chatId, t(lang, 'helpUnregistered'), { parse_mode: 'Markdown' });
+        return;
+      }
+      const profileText = t(lang, 'profileView');
+      bot.sendMessage(chatId, profileText(user.first_name || '', user.last_name || '', user.phone || '', user.telegram_username || ''), {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: t(lang, 'profileEditName'), callback_data: 'profile_edit_name' }],
+            [{ text: t(lang, 'profileEditPhone'), callback_data: 'profile_edit_phone' }]
+          ]
+        }
+      });
+    } catch (error) {
+      bot.sendMessage(chatId, `❌ ${t(lang, 'profileFailed')}`);
+    }
+  }
+
+  async function handleSos(chatId, telegramId, lang, sosMessage) {
+    try {
+      await api.post('/api/bot/sos', {
+        telegram_id: String(telegramId),
+        message: sosMessage || undefined
+      });
+      bot.sendMessage(chatId, t(lang, 'sosConfirmed'));
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || t(lang, 'sosFailed');
+      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+    }
+  }
+
+  async function handleHistory(chatId, telegramId, lang) {
+    try {
+      const result = await api.get(`/api/bot/diary/${telegramId}?limit=10`);
+      const entries = result.data.entries;
+
+      if (!entries || entries.length === 0) {
+        bot.sendMessage(chatId, t(lang, 'historyEmpty'));
+        return;
+      }
+
+      let text = t(lang, 'historyHeader') + '\n\n';
+      entries.forEach((entry, i) => {
+        const date = new Date(entry.created_at).toLocaleDateString(lang === 'ru' ? 'ru-RU' : lang === 'es' ? 'es-ES' : 'en-US', {
+          day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+        const typeIcon = entry.entry_type === 'voice' ? '🎤' : entry.entry_type === 'video' ? '🎥' : '📝';
+        let preview;
+        if ((entry.entry_type === 'voice' || entry.entry_type === 'video') && entry.transcript) {
+          const transcriptPreview = entry.transcript.substring(0, 100) + (entry.transcript.length > 100 ? '...' : '');
+          preview = transcriptPreview;
+        } else if ((entry.entry_type === 'voice' || entry.entry_type === 'video') && entry.transcription_status === 'pending') {
+          preview = t(lang, 'transcribing');
+        } else {
+          preview = entry.content ? entry.content.substring(0, 100) + (entry.content.length > 100 ? '...' : '') : '[no content]';
+        }
+        text += `${i + 1}. ${typeIcon} ${date}\n${preview}\n\n`;
+      });
+
+      bot.sendMessage(chatId, text);
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || t(lang, 'historyFailed');
+      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+    }
+  }
+
+  async function handleExercises(chatId, telegramId, lang) {
+    try {
+      const result = await api.get(`/api/bot/exercises/${telegramId}`);
+      const exercises = result.data.exercises;
+
+      if (!exercises || exercises.length === 0) {
+        bot.sendMessage(chatId, t(lang, 'exercisesEmpty'));
+        return;
+      }
+
+      let text = t(lang, 'exercisesHeader') + '\n';
+      const inlineButtons = [];
+
+      exercises.forEach((ex, i) => {
+        const title = lang === 'ru' ? (ex.title_ru || ex.title_en || 'Exercise') :
+                      lang === 'es' ? (ex.title_es || ex.title_en || 'Exercise') :
+                      (ex.title_en || 'Exercise');
+
+        let statusLabel;
+        if (ex.status === 'completed') {
+          statusLabel = t(lang, 'exerciseStatusCompleted');
+        } else if (ex.status === 'acknowledged') {
+          statusLabel = t(lang, 'exerciseStatusAcknowledged');
+        } else {
+          statusLabel = t(lang, 'exerciseStatusSent');
+        }
+
+        text += `${i + 1}. ${statusLabel} *${title}*\n`;
+
+        if (ex.status !== 'completed') {
+          inlineButtons.push([{
+            text: `${i + 1}. ${title}`,
+            callback_data: `exercise_view_${ex.delivery_id}`
+          }]);
+        }
+      });
+
+      const opts = { parse_mode: 'Markdown' };
+      if (inlineButtons.length > 0) {
+        opts.reply_markup = { inline_keyboard: inlineButtons };
+      }
+
+      bot.sendMessage(chatId, text, opts);
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || t(lang, 'exercisesFailed');
+      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+    }
+  }
 
   // /start command - role selection or deep link connect
   bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
@@ -161,7 +320,9 @@ if (!token || token === 'your-telegram-bot-token') {
         const lang = existingUser.language || 'en';
         userLangCache[telegramId] = lang;
         const welcomeBack = t(lang, 'welcomeBack');
-        bot.sendMessage(chatId, welcomeBack(existingUser.role));
+        bot.sendMessage(chatId, welcomeBack(existingUser.role), {
+          reply_markup: getKeyboardForRole(existingUser.role, lang)
+        });
         return;
       }
     } catch (err) {
@@ -240,28 +401,7 @@ if (!token || token === 'your-telegram-bot-token') {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
-
-    try {
-      const user = await checkExistingUser(telegramId);
-      if (!user) {
-        bot.sendMessage(chatId, t(lang, 'helpUnregistered'), { parse_mode: 'Markdown' });
-        return;
-      }
-
-      // Show current profile with edit buttons
-      const profileText = t(lang, 'profileView');
-      bot.sendMessage(chatId, profileText(user.first_name || '', user.last_name || '', user.phone || '', user.telegram_username || ''), {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: t(lang, 'profileEditName'), callback_data: 'profile_edit_name' }],
-            [{ text: t(lang, 'profileEditPhone'), callback_data: 'profile_edit_phone' }]
-          ]
-        }
-      });
-    } catch (error) {
-      bot.sendMessage(chatId, `❌ ${t(lang, 'profileFailed')}`);
-    }
+    await handleProfile(chatId, telegramId, lang);
   });
 
   // /help command - role-aware command list
@@ -269,21 +409,7 @@ if (!token || token === 'your-telegram-bot-token') {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
-
-    try {
-      const user = await checkExistingUser(telegramId);
-      if (!user) {
-        bot.sendMessage(chatId, t(lang, 'helpUnregistered'), { parse_mode: 'Markdown' });
-        return;
-      }
-      if (user.role === 'therapist') {
-        bot.sendMessage(chatId, t(lang, 'helpTherapist'), { parse_mode: 'Markdown' });
-      } else {
-        bot.sendMessage(chatId, t(lang, 'helpClient'), { parse_mode: 'Markdown' });
-      }
-    } catch (error) {
-      bot.sendMessage(chatId, t(lang, 'helpClient'), { parse_mode: 'Markdown' });
-    }
+    await handleHelp(chatId, telegramId, lang);
   });
 
   // /sos command - client emergency alert
@@ -292,18 +418,7 @@ if (!token || token === 'your-telegram-bot-token') {
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
     const sosMessage = match[1] ? match[1].trim() : '';
-
-    try {
-      const result = await api.post('/api/bot/sos', {
-        telegram_id: String(telegramId),
-        message: sosMessage || undefined
-      });
-
-      bot.sendMessage(chatId, t(lang, 'sosConfirmed'));
-    } catch (error) {
-      const errorMsg = error.response?.data?.error || t(lang, 'sosFailed');
-      bot.sendMessage(chatId, `❌ ${errorMsg}`);
-    }
+    await handleSos(chatId, telegramId, lang, sosMessage);
   });
 
   // /history command - show recent diary entries
@@ -311,41 +426,7 @@ if (!token || token === 'your-telegram-bot-token') {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
-
-    try {
-      const result = await api.get(`/api/bot/diary/${telegramId}?limit=10`);
-      const entries = result.data.entries;
-
-      if (!entries || entries.length === 0) {
-        bot.sendMessage(chatId, t(lang, 'historyEmpty'));
-        return;
-      }
-
-      let text = t(lang, 'historyHeader') + '\n\n';
-      entries.forEach((entry, i) => {
-        const date = new Date(entry.created_at).toLocaleDateString(lang === 'ru' ? 'ru-RU' : lang === 'es' ? 'es-ES' : 'en-US', {
-          day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-        });
-        const typeIcon = entry.entry_type === 'voice' ? '🎤' : entry.entry_type === 'video' ? '🎥' : '📝';
-        // For voice/video entries, show transcript preview or transcription status
-        let preview;
-        if ((entry.entry_type === 'voice' || entry.entry_type === 'video') && entry.transcript) {
-          // Show transcript preview for transcribed voice/video entries
-          const transcriptPreview = entry.transcript.substring(0, 100) + (entry.transcript.length > 100 ? '...' : '');
-          preview = transcriptPreview;
-        } else if ((entry.entry_type === 'voice' || entry.entry_type === 'video') && entry.transcription_status === 'pending') {
-          preview = t(lang, 'transcribing');
-        } else {
-          preview = entry.content ? entry.content.substring(0, 100) + (entry.content.length > 100 ? '...' : '') : '[no content]';
-        }
-        text += `${i + 1}. ${typeIcon} ${date}\n${preview}\n\n`;
-      });
-
-      bot.sendMessage(chatId, text);
-    } catch (error) {
-      const errorMsg = error.response?.data?.error || t(lang, 'historyFailed');
-      bot.sendMessage(chatId, `❌ ${errorMsg}`);
-    }
+    await handleHistory(chatId, telegramId, lang);
   });
 
   // /exercises command - client views assigned exercises
@@ -353,56 +434,7 @@ if (!token || token === 'your-telegram-bot-token') {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
-
-    try {
-      const result = await api.get(`/api/bot/exercises/${telegramId}`);
-      const exercises = result.data.exercises;
-
-      if (!exercises || exercises.length === 0) {
-        bot.sendMessage(chatId, t(lang, 'exercisesEmpty'));
-        return;
-      }
-
-      let text = t(lang, 'exercisesHeader') + '\n';
-      const inlineButtons = [];
-
-      exercises.forEach((ex, i) => {
-        // Get localized title
-        const title = lang === 'ru' ? (ex.title_ru || ex.title_en || 'Exercise') :
-                      lang === 'es' ? (ex.title_es || ex.title_en || 'Exercise') :
-                      (ex.title_en || 'Exercise');
-
-        // Get status label
-        let statusLabel;
-        if (ex.status === 'completed') {
-          statusLabel = t(lang, 'exerciseStatusCompleted');
-        } else if (ex.status === 'acknowledged') {
-          statusLabel = t(lang, 'exerciseStatusAcknowledged');
-        } else {
-          statusLabel = t(lang, 'exerciseStatusSent');
-        }
-
-        text += `${i + 1}. ${statusLabel} *${title}*\n`;
-
-        // Only show buttons for non-completed exercises
-        if (ex.status !== 'completed') {
-          inlineButtons.push([{
-            text: `${i + 1}. ${title}`,
-            callback_data: `exercise_view_${ex.delivery_id}`
-          }]);
-        }
-      });
-
-      const opts = { parse_mode: 'Markdown' };
-      if (inlineButtons.length > 0) {
-        opts.reply_markup = { inline_keyboard: inlineButtons };
-      }
-
-      bot.sendMessage(chatId, text, opts);
-    } catch (error) {
-      const errorMsg = error.response?.data?.error || t(lang, 'exercisesFailed');
-      bot.sendMessage(chatId, `❌ ${errorMsg}`);
-    }
+    await handleExercises(chatId, telegramId, lang);
   });
 
   // /disconnect command - client revokes therapist access
@@ -545,7 +577,9 @@ if (!token || token === 'your-telegram-bot-token') {
         });
 
         if (consent && result.data.linked) {
-          bot.sendMessage(chatId, t(lang, 'connected'));
+          bot.sendMessage(chatId, t(lang, 'connected'), {
+            reply_markup: getClientKeyboard(lang)
+          });
         } else {
           bot.sendMessage(chatId, t(lang, 'connectionCancelled'));
         }
@@ -570,15 +604,19 @@ if (!token || token === 'your-telegram-bot-token') {
 
         if (result.already_existed) {
           const alreadyRegistered = t(lang, 'alreadyRegistered');
-          bot.sendMessage(chatId, alreadyRegistered(result.user.role));
+          bot.sendMessage(chatId, alreadyRegistered(result.user.role), {
+            reply_markup: getKeyboardForRole(result.user.role, lang)
+          });
         } else if (role === 'therapist') {
           const welcomeTherapist = t(lang, 'welcomeTherapist');
           bot.sendMessage(chatId,
             welcomeTherapist(result.user.invite_code),
-            { parse_mode: 'Markdown' }
+            { parse_mode: 'Markdown', reply_markup: getTherapistKeyboard(lang) }
           );
         } else {
-          bot.sendMessage(chatId, t(lang, 'welcomeClient'));
+          bot.sendMessage(chatId, t(lang, 'welcomeClient'), {
+            reply_markup: getClientKeyboard(lang)
+          });
         }
       } catch (error) {
         console.error('Registration error:', error.message);
@@ -691,7 +729,7 @@ if (!token || token === 'your-telegram-bot-token') {
     }
   });
 
-  // Handle text messages as diary entries or exercise responses (clients only, non-command messages)
+  // Handle text messages as diary entries, exercise responses, or keyboard button presses
   bot.on('message', async (msg) => {
     // Skip commands and non-text messages
     if (!msg.text || msg.text.startsWith('/') || msg.voice || msg.video || msg.video_note) return;
@@ -699,6 +737,47 @@ if (!token || token === 'your-telegram-bot-token') {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
+
+    // Check if message matches a persistent keyboard button
+    const buttonAction = BUTTON_ACTION_MAP[msg.text];
+    if (buttonAction) {
+      try {
+        const user = await checkExistingUser(telegramId);
+        switch (buttonAction) {
+          case 'diary':
+            bot.sendMessage(chatId, t(lang, 'diaryHint'), {
+              reply_markup: getKeyboardForRole(user?.role || 'client', lang)
+            });
+            return;
+          case 'exercises':
+            await handleExercises(chatId, telegramId, lang);
+            return;
+          case 'history':
+            await handleHistory(chatId, telegramId, lang);
+            return;
+          case 'sos':
+            await handleSos(chatId, telegramId, lang, '');
+            return;
+          case 'profile':
+            await handleProfile(chatId, telegramId, lang);
+            return;
+          case 'help':
+            await handleHelp(chatId, telegramId, lang);
+            return;
+          case 'open_dashboard':
+            bot.sendMessage(chatId, t(lang, 'dashboardLink'), {
+              reply_markup: {
+                inline_keyboard: [[
+                  { text: t(lang, 'btnOpenDashboard'), url: `${FRONTEND_URL}/dashboard` }
+                ]]
+              }
+            });
+            return;
+        }
+      } catch (err) {
+        // If user check fails, fall through to normal processing
+      }
+    }
 
     try {
       // Check user role - only clients can create diary entries

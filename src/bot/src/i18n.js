@@ -95,7 +95,17 @@ Connect clients with one link — simple and secure.
     profileNameSaved: '✅ Name updated!',
     profilePhoneSaved: '✅ Phone updated!',
     profileSaveFailed: 'Failed to save profile. Please try again.',
-    profileFailed: 'Failed to load profile. Please try again.'
+    profileFailed: 'Failed to load profile. Please try again.',
+    // Persistent keyboard buttons
+    btnDiary: '📝 Diary',
+    btnExercises: '📋 Exercises',
+    btnHistory: '📖 History',
+    btnSOS: '🆘 SOS',
+    btnProfile: '👤 Profile',
+    btnHelp: '❓ Help',
+    btnOpenDashboard: '🌐 Open dashboard',
+    diaryHint: '📝 Write a text, send a voice or video — it will become a diary entry. Your therapist will see it before the next session.',
+    dashboardLink: '🌐 Open the web dashboard to manage clients, view diaries, and analytics.'
   },
   ru: {
     botAbout: 'PR-TOP — платформа для психотерапевтов. Контекст клиента, дневники, упражнения, SOS-кнопка. Шифрование и GDPR.',
@@ -194,7 +204,17 @@ Connect clients with one link — simple and secure.
     profileNameSaved: '✅ Имя обновлено!',
     profilePhoneSaved: '✅ Телефон обновлён!',
     profileSaveFailed: 'Не удалось сохранить профиль. Попробуйте ещё раз.',
-    profileFailed: 'Не удалось загрузить профиль. Попробуйте ещё раз.'
+    profileFailed: 'Не удалось загрузить профиль. Попробуйте ещё раз.',
+    // Persistent keyboard buttons
+    btnDiary: '📝 Дневник',
+    btnExercises: '📋 Упражнения',
+    btnHistory: '📖 История',
+    btnSOS: '🆘 SOS',
+    btnProfile: '👤 Профиль',
+    btnHelp: '❓ Помощь',
+    btnOpenDashboard: '🌐 Открыть панель',
+    diaryHint: '📝 Напишите текст, отправьте голосовое или видео — это станет записью в дневнике. Терапевт увидит её к следующей сессии.',
+    dashboardLink: '🌐 Откройте веб-панель для управления клиентами, просмотра дневников и аналитики.'
   },
   es: {
     botAbout: 'PR-TOP — plataforma para psicoterapeutas. Contexto del cliente, diarios, ejercicios, botón SOS. Cifrado y RGPD.',
@@ -293,7 +313,17 @@ Conecta clientes con un enlace — simple y seguro.
     profileNameSaved: '✅ ¡Nombre actualizado!',
     profilePhoneSaved: '✅ ¡Teléfono actualizado!',
     profileSaveFailed: 'No se pudo guardar el perfil. Inténtalo de nuevo.',
-    profileFailed: 'No se pudo cargar el perfil. Inténtalo de nuevo.'
+    profileFailed: 'No se pudo cargar el perfil. Inténtalo de nuevo.',
+    // Persistent keyboard buttons
+    btnDiary: '📝 Diario',
+    btnExercises: '📋 Ejercicios',
+    btnHistory: '📖 Historial',
+    btnSOS: '🆘 SOS',
+    btnProfile: '👤 Perfil',
+    btnHelp: '❓ Ayuda',
+    btnOpenDashboard: '🌐 Abrir panel',
+    diaryHint: '📝 Escribe un texto, envía una nota de voz o video — se guardará como entrada de diario. Tu terapeuta lo verá antes de la próxima sesión.',
+    dashboardLink: '🌐 Abre el panel web para gestionar clientes, ver diarios y analítica.'
   },
   uk: {
     botAbout: 'PR-TOP — платформа для психотерапевтів. Контекст клієнта, щоденники, вправи, SOS-кнопка. Шифрування та GDPR.',
@@ -392,7 +422,17 @@ Conecta clientes con un enlace — simple y seguro.
     profileNameSaved: '✅ Ім\'я оновлено!',
     profilePhoneSaved: '✅ Телефон оновлено!',
     profileSaveFailed: 'Не вдалося зберегти профіль. Спробуйте ще раз.',
-    profileFailed: 'Не вдалося завантажити профіль. Спробуйте ще раз.'
+    profileFailed: 'Не вдалося завантажити профіль. Спробуйте ще раз.',
+    // Persistent keyboard buttons
+    btnDiary: '📝 Щоденник',
+    btnExercises: '📋 Вправи',
+    btnHistory: '📖 Історія',
+    btnSOS: '🆘 SOS',
+    btnProfile: '👤 Профіль',
+    btnHelp: '❓ Допомога',
+    btnOpenDashboard: '🌐 Відкрити панель',
+    diaryHint: '📝 Напишіть текст, надішліть голосове або відео — це стане записом у щоденнику. Терапевт побачить його до наступної сесії.',
+    dashboardLink: '🌐 Відкрийте веб-панель для керування клієнтами, перегляду щоденників та аналітики.'
   }
 };
 
