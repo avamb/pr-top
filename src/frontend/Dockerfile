@@ -12,6 +12,10 @@ RUN npm ci
 # Copy application source
 COPY . .
 
+# Build-time env vars (pass via docker-compose build args)
+ARG VITE_UMAMI_WEBSITE_ID
+ENV VITE_UMAMI_WEBSITE_ID=$VITE_UMAMI_WEBSITE_ID
+
 # Build the production bundle
 RUN npm run build
 
