@@ -30,6 +30,7 @@ import SecurityGDPR from './pages/SecurityGDPR';
 import SecurityAuditLog from './pages/SecurityAuditLog';
 import SecurityDataSovereignty from './pages/SecurityDataSovereignty';
 import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsOfService from './pages/TermsOfService';
 import NotFound from './pages/NotFound';
 import InstallPrompt from './components/InstallPrompt';
 import NotificationToast from './components/NotificationToast';
@@ -81,6 +82,7 @@ function App() {
         <Route path="/security/audit-log" element={<SecurityAuditLog />} />
         <Route path="/security/data-sovereignty" element={<SecurityDataSovereignty />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsOfService />} />
 
         {/* Authenticated therapist routes - AuthGuard + TherapistGuard + AppLayout */}
         <Route path="/dashboard" element={<GuardedLayout><Dashboard /></GuardedLayout>} />

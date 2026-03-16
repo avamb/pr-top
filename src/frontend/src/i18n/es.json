@@ -976,5 +976,90 @@
       "desc": "Podemos actualizar esta Política de Privacidad periódicamente para reflejar cambios en nuestras prácticas, tecnología o requisitos legales. La fecha de \"Última actualización\" indica cuándo se revisó por última vez.",
       "notification": "Para cambios materiales, notificaremos a los usuarios registrados por correo electrónico y/o notificación en la aplicación al menos 14 días antes de que los cambios entren en vigor."
     }
+  },
+  "terms": {
+    "title": "Términos de Servicio",
+    "lastUpdated": "Última actualización: {{date}}",
+    "tableOfContents": "Tabla de contenidos",
+    "acceptance": {
+      "title": "Aceptación de los Términos",
+      "p1": "Al acceder o usar PR-TOP (el \"Servicio\"), usted acepta quedar vinculado por estos Términos de Servicio (\"Términos\"). Si no está de acuerdo, no podrá acceder ni usar el Servicio.",
+      "p2": "Estos Términos constituyen un acuerdo legalmente vinculante entre usted y PR-TOP. Al crear una cuenta, usted declara que tiene al menos 18 años y capacidad legal para celebrar este acuerdo."
+    },
+    "service": {
+      "title": "Descripción del Servicio",
+      "p1": "PR-TOP es una plataforma de asistente terapéutico entre sesiones controlada por el terapeuta, diseñada para psicólogos y terapeutas en ejercicio. El Servicio proporciona herramientas para gestión de diarios, transcripción y resumen de sesiones, entrega de ejercicios, alertas SOS y análisis de la práctica.",
+      "p2": "El Servicio opera a través de un panel web para terapeutas y una interfaz de bot de Telegram para clientes. Las funciones de IA incluyen transcripción de voz a texto, resumen de sesiones, búsqueda semántica y consultas en lenguaje natural.",
+      "p3": "PR-TOP se esfuerza por mantener un tiempo de actividad y disponibilidad razonables. Aunque aspiramos a una alta fiabilidad, no garantizamos el acceso ininterrumpido."
+    },
+    "accounts": {
+      "title": "Cuentas de usuario y registro",
+      "p1": "Las cuentas de terapeutas se crean a través del formulario de registro web. Usted es responsable de mantener la confidencialidad de sus credenciales y de todas las actividades realizadas bajo su cuenta.",
+      "p2": "El acceso de clientes se otorga exclusivamente a través de códigos de invitación generados por el terapeuta. Los clientes interactúan con el Servicio a través del bot de Telegram.",
+      "p3": "Debe proporcionar información de registro precisa y completa. Acepta actualizar su información de cuenta si cambia. Nos reservamos el derecho de suspender cuentas con información falsa."
+    },
+    "acceptableUse": {
+      "title": "Política de uso aceptable",
+      "intro": "Usted acepta usar el Servicio solo para su propósito previsto y en cumplimiento con todas las leyes y estándares éticos profesionales aplicables. No debe:",
+      "item1": "Usar el Servicio para fines ilegales o facilitar actividades ilícitas",
+      "item2": "Intentar acceder sin autorización a cuentas, datos o recursos del sistema de otros usuarios",
+      "item3": "Cargar código malicioso, virus o contenido diseñado para interrumpir el Servicio",
+      "item4": "Usar el Servicio para almacenar datos no relacionados con la práctica terapéutica legítima",
+      "item5": "Tergiversar sus cualificaciones profesionales, credenciales o estado de licencia"
+    },
+    "subscriptions": {
+      "title": "Suscripciones y pagos",
+      "p1": "PR-TOP ofrece niveles de suscripción (Prueba, Básico, Pro, Premium) con diferentes funciones y límites de uso. Los precios se muestran en nuestro sitio web.",
+      "p2": "Los pagos son procesados por Stripe. Al suscribirse, acepta los términos de Stripe. Todos los datos de tarjetas son manejados por Stripe conforme a PCI DSS — nunca almacenamos números de tarjeta.",
+      "p3": "Las suscripciones se renuevan automáticamente al final de cada período de facturación, a menos que se cancelen. Puede cancelar en cualquier momento desde la configuración de la cuenta. No se proporcionan reembolsos parciales.",
+      "p4": "Podemos ofrecer un período de prueba gratuito para nuevas cuentas. Si no cancela antes de que expire la prueba, su cuenta puede ser degradada o se le puede cobrar."
+    },
+    "ip": {
+      "title": "Propiedad intelectual",
+      "p1": "La plataforma PR-TOP, incluyendo su software, diseño, logotipos, documentación y toda la propiedad intelectual relacionada, es propiedad de PR-TOP y está protegida por leyes de derechos de autor y marcas registradas.",
+      "p2": "Los terapeutas conservan la plena propiedad de todo el contenido creado a través del Servicio, incluyendo notas privadas, grabaciones de sesiones y materiales cargados.",
+      "p3": "Los clientes conservan la propiedad de sus datos personales, incluyendo entradas de diario, respuestas a ejercicios y mensajes de voz/video."
+    },
+    "dataPrivacy": {
+      "title": "Privacidad de datos",
+      "p1": "La protección de sus datos personales y clínicos es fundamental para nuestro Servicio. Empleamos cifrado a nivel de aplicación (AES-256) para todos los datos clínicos sensibles, TLS 1.3 para datos en tránsito y controles de acceso estrictos.",
+      "p2": "Para detalles completos sobre cómo recopilamos, usamos, almacenamos y protegemos sus datos, consulte nuestra",
+      "privacyLink": "Política de Privacidad"
+    },
+    "disclaimers": {
+      "title": "Descargos de responsabilidad",
+      "p1": "PR-TOP NO ES UN DISPOSITIVO MÉDICO, HERRAMIENTA DE DIAGNÓSTICO NI SERVICIO DE EMERGENCIA.",
+      "p2": "El Servicio es una herramienta de gestión de práctica para terapeutas licenciados. No proporciona consejos médicos, diagnósticos ni tratamientos. Todas las decisiones clínicas son responsabilidad exclusiva del terapeuta licenciado.",
+      "p3": "La función de alerta SOS es un sistema de notificación al terapeuta — no sustituye a los servicios de emergencia. En caso de peligro inmediato, contacte los servicios de emergencia locales.",
+      "p4": "El contenido generado por IA (transcripciones, resúmenes, resultados de búsqueda) se proporciona por conveniencia y puede contener errores. Los terapeutas deben verificar los resultados de IA."
+    },
+    "liability": {
+      "title": "Limitación de responsabilidad",
+      "p1": "EN LA MÁXIMA MEDIDA PERMITIDA POR LA LEY, PR-TOP NO SERÁ RESPONSABLE DE DAÑOS INDIRECTOS, INCIDENTALES, ESPECIALES, CONSECUENTES O PUNITIVOS.",
+      "p2": "Nuestra responsabilidad total agregada no excederá la cantidad pagada a PR-TOP en los doce (12) meses anteriores al evento."
+    },
+    "indemnification": {
+      "title": "Indemnización",
+      "p1": "Usted acepta indemnizar y mantener indemne a PR-TOP de cualquier reclamación, daños, pérdidas y gastos (incluidos honorarios razonables de abogados) relacionados con: (a) su uso del Servicio; (b) violación de estos Términos; (c) violación de leyes aplicables; o (d) contenido enviado a través del Servicio."
+    },
+    "termination": {
+      "title": "Terminación",
+      "p1": "Puede terminar su cuenta en cualquier momento contactando soporte o usando la función de eliminación de cuenta.",
+      "p2": "Nos reservamos el derecho de suspender o terminar su cuenta por violación de estos Términos, actividad fraudulenta o requerimiento legal.",
+      "p3": "Tras la terminación, puede solicitar la exportación de sus datos en un formato portable, sujeto a nuestra política de retención."
+    },
+    "governingLaw": {
+      "title": "Ley aplicable",
+      "p1": "Estos Términos se rigen por las leyes de la jurisdicción donde PR-TOP está constituido. Cualquier disputa se resolverá mediante arbitraje vinculante o en los tribunales de la jurisdicción aplicable."
+    },
+    "changes": {
+      "title": "Cambios en estos Términos",
+      "p1": "Nos reservamos el derecho de modificar estos Términos en cualquier momento. La fecha de \"Última actualización\" indica cuándo se revisaron por última vez.",
+      "p2": "Para cambios materiales, proporcionaremos aviso con al menos 30 días de antelación. El uso continuado del Servicio después de la fecha efectiva constituye aceptación de los Términos modificados."
+    },
+    "contact": {
+      "title": "Información de contacto",
+      "desc": "Si tiene preguntas sobre estos Términos de Servicio, contáctenos en:"
+    }
   }
 }
