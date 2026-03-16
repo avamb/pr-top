@@ -1,3 +1,37 @@
+## Session: 2026-03-16 - Feature #261
+
+### Completed: Bot onboarding — BotFather description + role-specific welcome messages (#261) - PASSING
+
+**What was changed:**
+- i18n: Added `botAbout` (120 chars max) and `botDescription` (512 chars max) keys for BotFather API in EN/RU/ES/UK
+- i18n: Added `chooseRoleIntro` key — new welcome message before role selection with platform description
+- i18n: Rewrote `welcomeTherapist` — detailed feature list (context, diaries, exercises, SOS, search, dashboard) + invite code
+- i18n: Rewrote `welcomeClient` — feature description + /connect instruction
+- i18n: Added `deepLinkClientWelcome` — welcome for deep link clients WITHOUT "enter code" duplication
+- Bot index.js: Added `setBotDescriptions()` function called on startup — sets BotFather About and Description via Telegram API for all 4 languages
+- Bot index.js: Updated /start handler to use `chooseRoleIntro` instead of old `chooseRole`
+- Bot index.js: Deep link flow now sends `deepLinkClientWelcome` before consent prompt
+- Bot index.js: `detectLang()` now supports Ukrainian (`uk`) language detection
+- Updated docs/PRD.md with onboarding flow documentation
+
+**Verification:**
+- All i18n keys present in EN, RU, ES, UK ✅
+- BotFather About texts within 120 char limit (106-111 chars) ✅
+- BotFather Description texts within 512 char limit (370-432 chars) ✅
+- `setBotDescriptions()` uses correct Telegram API form parameters ✅
+- New user sees chooseRoleIntro with platform description ✅
+- Therapist after registration sees detailed onboarding with invite code ✅
+- Client after registration sees features + /connect instruction ✅
+- Deep link client does NOT see "enter code" duplication — goes straight to consent ✅
+- Returning user gets brief welcomeBack ✅
+- No mock data patterns in source code ✅
+- Zero new console errors ✅
+- Web app (landing, login, dashboard) still works ✅
+
+### Current Status
+- Features passing: 260/261 (99.6%)
+- Feature #261: PASSING
+
 ## Session: 2026-03-16 - Feature #259
 
 ### Completed: Invite link with embedded code — one-click client connection (#259) - PASSING
