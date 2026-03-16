@@ -1,3 +1,36 @@
+## Session: 2026-03-16 - Feature #263
+
+### Completed: Persistent keyboard menu for bot — role-based quick action buttons (#263) - PASSING
+
+**What was built:**
+- Created `src/bot/src/keyboards.js` — module with `getClientKeyboard(lang)`, `getTherapistKeyboard(lang)`, `getKeyboardForRole(role, lang)`, and `BUTTON_ACTION_MAP`
+- Client keyboard: 6 buttons in 3×2 grid (📝 Diary, 📋 Exercises, 📖 History, 🆘 SOS, 👤 Profile, ❓ Help)
+- Therapist keyboard: 2 buttons in 1 row (🌐 Open dashboard, ❓ Help)
+- Added i18n keys for all button labels in 4 languages (en, ru, es, uk): btnDiary, btnExercises, btnHistory, btnSOS, btnProfile, btnHelp, btnOpenDashboard, diaryHint, dashboardLink
+- Keyboard parameters: `resize_keyboard: true, is_persistent: true`
+- Button text mapping in `bot.on('message')` handler — intercepts keyboard button presses before diary entry processing
+- Extracted handler functions: handleHelp, handleProfile, handleSos, handleHistory, handleExercises — shared between slash commands and keyboard buttons
+- Keyboards sent after: role_client registration, role_therapist registration, welcomeBack for existing users, successful consent/connect
+- `bot.setMyCommands()` called on startup with client commands (exercises, history, sos, profile, help, disconnect)
+- 🌐 Open dashboard button sends inline URL button with link to FRONTEND_URL/dashboard
+- /disconnect remains ONLY as slash command with inline confirmation (NOT on keyboard)
+- Button texts all under 20 characters
+
+**Verification:**
+- All 3 modified files pass syntax check ✅
+- keyboards module loads and exports correctly ✅
+- Client keyboard has 3 rows × 2 buttons for all 4 languages ✅
+- Therapist keyboard has 1 row × 2 buttons for all 4 languages ✅
+- Button action map has 25 entries mapping to 7 unique actions ✅
+- All button texts under 20 chars ✅
+- Web application still works (landing page, login, admin dashboard) ✅
+- Only pre-existing console errors (Umami 400s, React Router warnings) ✅
+- No mock data patterns in bot source code ✅
+
+### Current Status
+- Features passing: 263/263 (100.0%)
+- Feature #263: PASSING
+
 ## Session: 2026-03-16 - Feature #262
 
 ### Completed: SuperAdmin manual plan override for therapists (#262) - PASSING ✅ (262/262 ALL FEATURES COMPLETE!)
