@@ -1,3 +1,35 @@
+## Session: 2026-03-18 - Feature #269
+
+### Completed: Request 'other info' during therapist registration via Telegram (#269) - PASSING
+
+**What was changed:**
+- Added `pendingOtherInfoInputs` tracker and `sendOtherInfoPrompt` helper in bot index.js
+- After email step (save/skip/fail), bot now prompts therapist for additional info (specialization, experience, license, etc.)
+- Skip button available to skip the step
+- Free-text response saved to `other_info` field via PUT /api/bot/profile/:telegram_id
+- 1000 character limit with validation
+- Added `other_info` support to bot profile API endpoint (bot.js)
+- i18n translations for shareOtherInfoPrompt, shareOtherInfoSkip, shareOtherInfoSaved, shareOtherInfoSkipped in EN, RU, ES, UK
+
+**Registration flow now:**
+1. Role selection → therapist
+2. Welcome message with invite code
+3. Phone sharing prompt (share contact or skip)
+4. Email input prompt (enter email or skip)
+5. **NEW: Other info prompt (enter specialization/experience or skip)**
+6. Therapist keyboard shown
+
+**Verification:**
+- Bot profile API accepts and saves other_info ✅
+- Data persists across server restart ✅
+- All 4 language translations present and correct ✅
+- No mock data patterns in source code ✅
+- Feature #269: PASSING
+
+### Current Status
+- Features passing: 269/271
+- Feature #269: PASSING
+
 ## Session: 2026-03-18 - Features #266, #271
 
 ### Completed: Display full therapist profile in admin panel (#266) - PASSING
