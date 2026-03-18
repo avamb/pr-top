@@ -31,6 +31,12 @@ const activeExercises = {};
 // Track active profile edit sessions (telegramId -> 'name' | 'phone')
 const activeProfileEdits = {};
 
+// Track pending phone sharing requests after therapist registration (telegramId -> lang)
+const pendingPhoneShares = {};
+
+// Track pending email input after phone step (telegramId -> lang)
+const pendingEmailInputs = {};
+
 // Get user language from cache or API
 async function getUserLang(telegramId) {
   if (userLangCache[telegramId]) return userLangCache[telegramId];
@@ -609,10 +615,22 @@ if (!token || token === 'your-telegram-bot-token') {
           });
         } else if (role === 'therapist') {
           const welcomeTherapist = t(lang, 'welcomeTherapist');
-          bot.sendMessage(chatId,
+          await bot.sendMessage(chatId,
             welcomeTherapist(result.user.invite_code),
-            { parse_mode: 'Markdown', reply_markup: getTherapistKeyboard(lang) }
+            { parse_mode: 'Markdown' }
           );
+          // Prompt therapist to share phone number via contact button
+          pendingPhoneShares[telegramId] = lang;
+          bot.sendMessage(chatId, t(lang, 'sharePhonePrompt'), {
+            reply_markup: {
+              keyboard: [
+                [{ text: t(lang, 'sharePhoneButton'), request_contact: true }],
+                [{ text: t(lang, 'sharePhoneSkip') }]
+              ],
+              resize_keyboard: true,
+              one_time_keyboard: true
+            }
+          });
         } else {
           bot.sendMessage(chatId, t(lang, 'welcomeClient'), {
             reply_markup: getClientKeyboard(lang)
@@ -624,6 +642,49 @@ if (!token || token === 'your-telegram-bot-token') {
       }
 
       bot.answerCallbackQuery(callbackQuery.id);
+    }
+  });
+
+  // Helper: send email prompt during registration
+  function sendEmailPrompt(chatId, telegramId, lang) {
+    pendingEmailInputs[telegramId] = lang;
+    bot.sendMessage(chatId, t(lang, 'shareEmailPrompt'), {
+      reply_markup: {
+        keyboard: [
+          [{ text: t(lang, 'shareEmailSkip') }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
+      }
+    });
+  }
+
+  // Handle contact messages - phone sharing during therapist registration
+  bot.on('contact', async (msg) => {
+    const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+    const lang = pendingPhoneShares[telegramId] || await getUserLang(telegramId);
+
+    if (!pendingPhoneShares[telegramId]) {
+      // Not expecting a contact share, ignore
+      return;
+    }
+
+    try {
+      const phoneNumber = msg.contact.phone_number;
+      // Save phone number via profile update API
+      await api.put(`/api/bot/profile/${telegramId}`, { phone: phoneNumber });
+      delete pendingPhoneShares[telegramId];
+
+      await bot.sendMessage(chatId, t(lang, 'sharePhoneSaved'));
+      // Proceed to email step
+      sendEmailPrompt(chatId, telegramId, lang);
+    } catch (error) {
+      console.error('Failed to save shared phone:', error.message);
+      delete pendingPhoneShares[telegramId];
+      await bot.sendMessage(chatId, t(lang, 'profileSaveFailed'));
+      // Still proceed to email step
+      sendEmailPrompt(chatId, telegramId, lang);
     }
   });
 
@@ -737,6 +798,68 @@ if (!token || token === 'your-telegram-bot-token') {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
+
+    // Check if this is a "Skip" response for phone sharing
+    if (pendingPhoneShares[telegramId]) {
+      const skipTexts = ['en', 'ru', 'es', 'uk'].map(l => t(l, 'sharePhoneSkip'));
+      if (skipTexts.includes(msg.text)) {
+        delete pendingPhoneShares[telegramId];
+        await bot.sendMessage(chatId, t(lang, 'sharePhoneSkipped'));
+        // Proceed to email step
+        sendEmailPrompt(chatId, telegramId, lang);
+        return;
+      }
+    }
+
+    // Check if this is an email input or skip during registration
+    if (pendingEmailInputs[telegramId]) {
+      const emailSkipTexts = ['en', 'ru', 'es', 'uk'].map(l => t(l, 'shareEmailSkip'));
+      if (emailSkipTexts.includes(msg.text)) {
+        delete pendingEmailInputs[telegramId];
+        bot.sendMessage(chatId, t(lang, 'shareEmailSkipped'), {
+          reply_markup: getTherapistKeyboard(lang)
+        });
+        return;
+      }
+      // Validate email format
+      const emailText = msg.text.trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(emailText)) {
+        bot.sendMessage(chatId, t(lang, 'shareEmailInvalid'), {
+          reply_markup: {
+            keyboard: [[{ text: t(lang, 'shareEmailSkip') }]],
+            resize_keyboard: true,
+            one_time_keyboard: true
+          }
+        });
+        return;
+      }
+      // Try to save email
+      try {
+        await api.put(`/api/bot/profile/${telegramId}`, { email: emailText });
+        delete pendingEmailInputs[telegramId];
+        bot.sendMessage(chatId, t(lang, 'shareEmailSaved'), {
+          reply_markup: getTherapistKeyboard(lang)
+        });
+      } catch (error) {
+        if (error.response && error.response.status === 409) {
+          bot.sendMessage(chatId, t(lang, 'shareEmailTaken'), {
+            reply_markup: {
+              keyboard: [[{ text: t(lang, 'shareEmailSkip') }]],
+              resize_keyboard: true,
+              one_time_keyboard: true
+            }
+          });
+        } else {
+          console.error('Failed to save email:', error.message);
+          delete pendingEmailInputs[telegramId];
+          bot.sendMessage(chatId, t(lang, 'profileSaveFailed'), {
+            reply_markup: getTherapistKeyboard(lang)
+          });
+        }
+      }
+      return;
+    }
 
     // Check if message matches a persistent keyboard button
     const buttonAction = BUTTON_ACTION_MAP[msg.text];

@@ -96,6 +96,19 @@ Connect clients with one link — simple and secure.
     profilePhoneSaved: '✅ Phone updated!',
     profileSaveFailed: 'Failed to save profile. Please try again.',
     profileFailed: 'Failed to load profile. Please try again.',
+    // Phone sharing during registration
+    sharePhonePrompt: '📱 Would you like to share your phone number?\n\nThis helps clients verify your identity.',
+    sharePhoneButton: '📱 Share phone number',
+    sharePhoneSkip: '⏭ Skip',
+    sharePhoneSaved: '✅ Phone number saved! Thank you.',
+    sharePhoneSkipped: '⏭ Phone sharing skipped. You can add it later in /profile.',
+    // Email during registration
+    shareEmailPrompt: '📧 Please enter your email address.\n\nThis will be used for login to the web dashboard and notifications.',
+    shareEmailSkip: '⏭ Skip',
+    shareEmailSaved: '✅ Email saved! You can use it to log in at pr-top.com.',
+    shareEmailSkipped: '⏭ Email skipped. You can add it later in /profile.',
+    shareEmailInvalid: '❌ Invalid email format. Please enter a valid email (e.g. name@example.com):',
+    shareEmailTaken: '❌ This email is already registered. Please enter a different email:',
     // Persistent keyboard buttons
     btnDiary: '📝 Diary',
     btnExercises: '📋 Exercises',
@@ -205,6 +218,19 @@ Connect clients with one link — simple and secure.
     profilePhoneSaved: '✅ Телефон обновлён!',
     profileSaveFailed: 'Не удалось сохранить профиль. Попробуйте ещё раз.',
     profileFailed: 'Не удалось загрузить профиль. Попробуйте ещё раз.',
+    // Phone sharing during registration
+    sharePhonePrompt: '📱 Хотите поделиться номером телефона?\n\nЭто поможет клиентам подтвердить вашу личность.',
+    sharePhoneButton: '📱 Поделиться номером',
+    sharePhoneSkip: '⏭ Пропустить',
+    sharePhoneSaved: '✅ Номер телефона сохранён! Спасибо.',
+    sharePhoneSkipped: '⏭ Отправка номера пропущена. Вы можете добавить его позже в /profile.',
+    // Email during registration
+    shareEmailPrompt: '📧 Введите ваш email.\n\nОн будет использоваться для входа в веб-панель и уведомлений.',
+    shareEmailSkip: '⏭ Пропустить',
+    shareEmailSaved: '✅ Email сохранён! Вы можете использовать его для входа на pr-top.com.',
+    shareEmailSkipped: '⏭ Email пропущен. Вы можете добавить его позже в /profile.',
+    shareEmailInvalid: '❌ Неверный формат email. Введите корректный email (например, name@example.com):',
+    shareEmailTaken: '❌ Этот email уже зарегистрирован. Введите другой email:',
     // Persistent keyboard buttons
     btnDiary: '📝 Дневник',
     btnExercises: '📋 Упражнения',
@@ -314,6 +340,19 @@ Conecta clientes con un enlace — simple y seguro.
     profilePhoneSaved: '✅ ¡Teléfono actualizado!',
     profileSaveFailed: 'No se pudo guardar el perfil. Inténtalo de nuevo.',
     profileFailed: 'No se pudo cargar el perfil. Inténtalo de nuevo.',
+    // Phone sharing during registration
+    sharePhonePrompt: '📱 ¿Te gustaría compartir tu número de teléfono?\n\nEsto ayuda a los clientes a verificar tu identidad.',
+    sharePhoneButton: '📱 Compartir teléfono',
+    sharePhoneSkip: '⏭ Omitir',
+    sharePhoneSaved: '✅ ¡Número de teléfono guardado! Gracias.',
+    sharePhoneSkipped: '⏭ Se omitió el envío del número. Puedes agregarlo después en /profile.',
+    // Email during registration
+    shareEmailPrompt: '📧 Ingresa tu correo electrónico.\n\nSe usará para iniciar sesión en el panel web y para notificaciones.',
+    shareEmailSkip: '⏭ Omitir',
+    shareEmailSaved: '✅ ¡Email guardado! Puedes usarlo para iniciar sesión en pr-top.com.',
+    shareEmailSkipped: '⏭ Email omitido. Puedes agregarlo después en /profile.',
+    shareEmailInvalid: '❌ Formato de email inválido. Ingresa un email válido (ej. name@example.com):',
+    shareEmailTaken: '❌ Este email ya está registrado. Ingresa un email diferente:',
     // Persistent keyboard buttons
     btnDiary: '📝 Diario',
     btnExercises: '📋 Ejercicios',
@@ -423,6 +462,19 @@ Conecta clientes con un enlace — simple y seguro.
     profilePhoneSaved: '✅ Телефон оновлено!',
     profileSaveFailed: 'Не вдалося зберегти профіль. Спробуйте ще раз.',
     profileFailed: 'Не вдалося завантажити профіль. Спробуйте ще раз.',
+    // Phone sharing during registration
+    sharePhonePrompt: '📱 Бажаєте поділитися номером телефону?\n\nЦе допоможе клієнтам підтвердити вашу особу.',
+    sharePhoneButton: '📱 Поділитися номером',
+    sharePhoneSkip: '⏭ Пропустити',
+    sharePhoneSaved: '✅ Номер телефону збережено! Дякуємо.',
+    sharePhoneSkipped: '⏭ Відправку номера пропущено. Ви можете додати його пізніше в /profile.',
+    // Email during registration
+    shareEmailPrompt: '📧 Введіть вашу електронну пошту.\n\nВона буде використовуватися для входу у веб-панель та сповіщень.',
+    shareEmailSkip: '⏭ Пропустити',
+    shareEmailSaved: '✅ Email збережено! Ви можете використовувати його для входу на pr-top.com.',
+    shareEmailSkipped: '⏭ Email пропущено. Ви можете додати його пізніше в /profile.',
+    shareEmailInvalid: '❌ Невірний формат email. Введіть коректний email (наприклад, name@example.com):',
+    shareEmailTaken: '❌ Цей email вже зареєстрований. Введіть інший email:',
     // Persistent keyboard buttons
     btnDiary: '📝 Щоденник',
     btnExercises: '📋 Вправи',

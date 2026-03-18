@@ -130,7 +130,7 @@ router.get('/user/:telegram_id', botAuth, (req, res) => {
     const db = getDatabase();
 
     const result = db.exec(
-      'SELECT id, telegram_id, role, invite_code, language, consent_therapist_access, therapist_id, created_at, first_name, last_name, phone, telegram_username FROM users WHERE telegram_id = ?',
+      'SELECT id, telegram_id, role, invite_code, language, consent_therapist_access, therapist_id, created_at, first_name, last_name, phone, telegram_username, email FROM users WHERE telegram_id = ?',
       [String(telegram_id)]
     );
 
@@ -153,7 +153,8 @@ router.get('/user/:telegram_id', botAuth, (req, res) => {
         first_name: user[8] || '',
         last_name: user[9] || '',
         phone: user[10] || '',
-        telegram_username: user[11] || ''
+        telegram_username: user[11] || '',
+        email: user[12] || ''
       }
     });
   } catch (error) {
@@ -166,7 +167,7 @@ router.get('/user/:telegram_id', botAuth, (req, res) => {
 router.put('/profile/:telegram_id', botAuth, (req, res) => {
   try {
     const { telegram_id } = req.params;
-    const { first_name, last_name, phone } = req.body;
+    const { first_name, last_name, phone, email } = req.body;
     const db = getDatabase();
 
     // Verify user exists
@@ -190,6 +191,29 @@ router.put('/profile/:telegram_id', botAuth, (req, res) => {
       updates.push('phone = ?');
       params.push(phone.trim());
     }
+    if (email !== undefined) {
+      const trimmedEmail = email.trim().toLowerCase();
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmedEmail)) {
+        return res.status(400).json({ error: 'Invalid email format' });
+      }
+      // Check uniqueness
+      try {
+        const emailExists = db.exec(
+          'SELECT id FROM users WHERE email = ? AND telegram_id != ?',
+          [trimmedEmail, String(telegram_id)]
+        );
+        if (emailExists.length > 0 && emailExists[0].values.length > 0) {
+          return res.status(409).json({ error: 'Email already in use' });
+        }
+      } catch (checkErr) {
+        logger.error('Email uniqueness check error: ' + checkErr.message);
+        return res.status(409).json({ error: 'Email already in use' });
+      }
+      updates.push('email = ?');
+      params.push(trimmedEmail);
+    }
 
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No fields to update' });
@@ -205,6 +229,9 @@ router.put('/profile/:telegram_id', botAuth, (req, res) => {
     res.json({ message: 'Profile updated' });
   } catch (error) {
     logger.error('Bot profile update error: ' + error.message);
+    if (error.message && error.message.includes('UNIQUE')) {
+      return res.status(409).json({ error: 'Email already in use' });
+    }
     res.status(500).json({ error: 'Failed to update profile' });
   }
 });
