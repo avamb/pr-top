@@ -1,3 +1,30 @@
+## Session: 2026-03-18 - Features #264, #265, #270
+
+### Completed: Add 'other_info' field to users table (#264) - PASSING
+### Completed: Include all therapist profile fields in admin endpoint (#265) - PASSING
+### Completed: Support other_info in profile settings endpoints (#270) - PASSING
+
+**What was built:**
+- Added ALTER TABLE migration for other_info TEXT column in users table (connection.js)
+- Updated GET /api/admin/therapists SQL query to include first_name, last_name, telegram_username, phone, other_info
+- Updated GET/PUT /api/settings/profile to read/write other_info field
+- Added validation: max 1000 characters for other_info
+- Added "Additional Information" textarea to Settings.jsx with character counter
+- Added i18n strings in EN, RU, ES, UK
+
+**Verification:**
+- Settings page shows Additional Information field ✅
+- Save profile with other_info persists data ✅
+- Data persists across server restart ✅
+- Character counter works (39/1000 shown for test data) ✅
+- Admin therapists API returns new fields ✅
+- No mock data patterns in source code ✅
+- Zero relevant console errors (only pre-existing React Router warnings and Umami dev error) ✅
+
+### Current Status
+- Features passing: 266/271
+- Features #264, #265, #270: ALL PASSING
+
 ## Session: 2026-03-16 - Feature #263
 
 ### Completed: Persistent keyboard menu for bot — role-based quick action buttons (#263) - PASSING
