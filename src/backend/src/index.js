@@ -254,6 +254,26 @@ if (process.env.NODE_ENV !== 'production') {
       res.json({ success: true, therapist_id, plan });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
+
+  // DEV: Set user role (for testing admin features)
+  app.post('/api/dev/set-role', (req, res) => {
+    try {
+      const { user_id, email, role } = req.body;
+      if (!role) return res.status(400).json({ error: 'role required' });
+      const validRoles = ['therapist', 'client', 'superadmin'];
+      if (!validRoles.includes(role)) return res.status(400).json({ error: 'Invalid role. Must be: ' + validRoles.join(', ') });
+      if (!user_id && !email) return res.status(400).json({ error: 'user_id or email required' });
+      const { getDatabase, saveDatabase: save } = require('./db/connection');
+      const db = getDatabase();
+      if (user_id) {
+        db.run("UPDATE users SET role = ? WHERE id = ?", [role, user_id]);
+      } else {
+        db.run("UPDATE users SET role = ? WHERE email = ?", [role, email]);
+      }
+      save();
+      res.json({ success: true, email, user_id, role });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
 }
 
 // 404 handler

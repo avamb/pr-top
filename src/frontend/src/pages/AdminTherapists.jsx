@@ -14,6 +14,7 @@ export default function AdminTherapists() {
   const [planModal, setPlanModal] = useState(null); // therapist object or null
   const [planForm, setPlanForm] = useState({ plan: 'basic', reason: '', expires_at: '' });
   const [planLoading, setPlanLoading] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -207,8 +208,9 @@ export default function AdminTherapists() {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.id')}</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.email')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.firstName')}</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.lastName')}</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.plan')}</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.telegramId')}</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.status')}</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.registered')}</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">{t('admin.actions')}</th>
@@ -216,63 +218,109 @@ export default function AdminTherapists() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {therapists.map(therapist => (
-                <tr key={therapist.id} className={therapist.is_blocked ? 'bg-red-50/50' : ''}>
-                  <td className="px-6 py-4 text-sm text-text">{therapist.id}</td>
-                  <td className="px-6 py-4 text-sm text-text font-medium">{therapist.email || '\u2014'}</td>
-                  <td className="px-6 py-4">
-                    <button
-                      onClick={() => openPlanModal(therapist)}
-                      className="hover:opacity-80 cursor-pointer"
-                      title={t('admin.managePlan')}
-                    >
-                      {getPlanBadge(therapist)}
-                    </button>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-secondary">{therapist.telegram_id || '\u2014'}</td>
-                  <td className="px-6 py-4">
-                    {therapist.is_blocked ? (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                        {t('admin.blocked')}
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                        {t('admin.active')}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-secondary">
-                    {therapist.created_at ? formatUserDateOnly(therapist.created_at) : '\u2014'}
-                  </td>
-                  <td className="px-6 py-4 flex gap-2">
-                    {therapist.is_blocked ? (
+                <React.Fragment key={therapist.id}>
+                  <tr className={`${therapist.is_blocked ? 'bg-red-50/50' : ''} ${expandedId === therapist.id ? 'border-b-0' : ''}`}>
+                    <td className="px-6 py-4 text-sm text-text">{therapist.id}</td>
+                    <td className="px-6 py-4 text-sm text-text font-medium">{therapist.email || '\u2014'}</td>
+                    <td className="px-6 py-4 text-sm text-text">{therapist.first_name || <span className="text-stone-400 italic">{t('admin.notProvided')}</span>}</td>
+                    <td className="px-6 py-4 text-sm text-text">{therapist.last_name || <span className="text-stone-400 italic">{t('admin.notProvided')}</span>}</td>
+                    <td className="px-6 py-4">
                       <button
-                        onClick={() => handleUnblock(therapist.id)}
-                        disabled={actionLoading === therapist.id}
-                        className="text-sm px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors"
+                        onClick={() => openPlanModal(therapist)}
+                        className="hover:opacity-80 cursor-pointer"
+                        title={t('admin.managePlan')}
                       >
-                        {actionLoading === therapist.id ? t('admin.unblocking') : t('admin.unblock')}
+                        {getPlanBadge(therapist)}
                       </button>
-                    ) : (
+                    </td>
+                    <td className="px-6 py-4">
+                      {therapist.is_blocked ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                          {t('admin.blocked')}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                          {t('admin.active')}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-secondary">
+                      {therapist.created_at ? formatUserDateOnly(therapist.created_at) : '\u2014'}
+                    </td>
+                    <td className="px-6 py-4 flex gap-2">
                       <button
-                        onClick={() => handleBlock(therapist.id)}
-                        disabled={actionLoading === therapist.id}
-                        className="text-sm px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 transition-colors"
+                        onClick={() => setExpandedId(expandedId === therapist.id ? null : therapist.id)}
+                        className="text-sm px-3 py-1 bg-stone-100 text-stone-700 rounded-md hover:bg-stone-200 transition-colors"
+                        title={expandedId === therapist.id ? t('admin.hideProfile') : t('admin.viewProfile')}
                       >
-                        {actionLoading === therapist.id ? t('admin.blocking') : t('admin.block')}
+                        {expandedId === therapist.id ? t('admin.hideProfile') : t('admin.viewProfile')}
                       </button>
-                    )}
-                    <button
-                      onClick={() => openPlanModal(therapist)}
-                      className="text-sm px-3 py-1 bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors"
-                    >
-                      {t('admin.managePlan')}
-                    </button>
-                  </td>
-                </tr>
+                      {therapist.is_blocked ? (
+                        <button
+                          onClick={() => handleUnblock(therapist.id)}
+                          disabled={actionLoading === therapist.id}
+                          className="text-sm px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors"
+                        >
+                          {actionLoading === therapist.id ? t('admin.unblocking') : t('admin.unblock')}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleBlock(therapist.id)}
+                          disabled={actionLoading === therapist.id}
+                          className="text-sm px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 transition-colors"
+                        >
+                          {actionLoading === therapist.id ? t('admin.blocking') : t('admin.block')}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => openPlanModal(therapist)}
+                        className="text-sm px-3 py-1 bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors"
+                      >
+                        {t('admin.managePlan')}
+                      </button>
+                    </td>
+                  </tr>
+                  {expandedId === therapist.id && (
+                    <tr className={therapist.is_blocked ? 'bg-red-50/30' : 'bg-stone-50'}>
+                      <td colSpan="8" className="px-6 py-4">
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 text-sm">
+                          <div>
+                            <span className="text-stone-500 font-medium">{t('admin.telegramId')}</span>
+                            <p className="text-text mt-0.5">{therapist.telegram_id || <span className="text-stone-400 italic">{t('admin.notProvided')}</span>}</p>
+                          </div>
+                          <div>
+                            <span className="text-stone-500 font-medium">{t('admin.telegramUsername')}</span>
+                            <p className="text-text mt-0.5">{therapist.telegram_username ? `@${therapist.telegram_username}` : <span className="text-stone-400 italic">{t('admin.notProvided')}</span>}</p>
+                          </div>
+                          <div>
+                            <span className="text-stone-500 font-medium">{t('admin.phone')}</span>
+                            <p className="text-text mt-0.5">{therapist.phone || <span className="text-stone-400 italic">{t('admin.notProvided')}</span>}</p>
+                          </div>
+                          <div>
+                            <span className="text-stone-500 font-medium">{t('admin.email')}</span>
+                            <p className="text-text mt-0.5">{therapist.email || <span className="text-stone-400 italic">{t('admin.notProvided')}</span>}</p>
+                          </div>
+                          <div>
+                            <span className="text-stone-500 font-medium">{t('admin.firstName')}</span>
+                            <p className="text-text mt-0.5">{therapist.first_name || <span className="text-stone-400 italic">{t('admin.notProvided')}</span>}</p>
+                          </div>
+                          <div>
+                            <span className="text-stone-500 font-medium">{t('admin.lastName')}</span>
+                            <p className="text-text mt-0.5">{therapist.last_name || <span className="text-stone-400 italic">{t('admin.notProvided')}</span>}</p>
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-stone-500 font-medium">{t('admin.otherInfo')}</span>
+                            <p className="text-text mt-0.5">{therapist.other_info || <span className="text-stone-400 italic">{t('admin.notProvided')}</span>}</p>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
               {therapists.length === 0 && (
                 <tr>
-                  <td colSpan="7" className="px-6 py-8 text-center text-secondary">
+                  <td colSpan="8" className="px-6 py-8 text-center text-secondary">
                     {t('admin.noTherapists')}
                   </td>
                 </tr>
