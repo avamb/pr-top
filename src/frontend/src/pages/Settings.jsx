@@ -76,6 +76,7 @@ export default function Settings() {
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
   const [telegramUsername, setTelegramUsername] = useState('');
+  const [otherInfo, setOtherInfo] = useState('');
 
   const abortControllerRef = React.useRef(null);
 
@@ -121,6 +122,7 @@ export default function Settings() {
         setLastName(data.profile.last_name || '');
         setPhone(data.profile.phone || '');
         setTelegramUsername(data.profile.telegram_username || '');
+        setOtherInfo(data.profile.other_info || '');
         // Sync i18n language with profile
         const lang = data.profile.language || 'en';
         if (i18n.language !== lang) {
@@ -214,7 +216,7 @@ export default function Settings() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ first_name: firstName, last_name: lastName, phone, telegram_username: telegramUsername })
+        body: JSON.stringify({ first_name: firstName, last_name: lastName, phone, telegram_username: telegramUsername, other_info: otherInfo })
       });
 
       if (res.status === 401) {
@@ -233,6 +235,7 @@ export default function Settings() {
       setLastName(data.profile.last_name || '');
       setPhone(data.profile.phone || '');
       setTelegramUsername(data.profile.telegram_username || '');
+      setOtherInfo(data.profile.other_info || '');
       setProfileSuccess(t('settings.profileSaved'));
       setTimeout(() => setProfileSuccess(null), 3000);
     } catch (err) {
@@ -385,6 +388,22 @@ export default function Settings() {
                       />
                     </div>
                   </div>
+                </div>
+
+                <div className="mb-6">
+                  <label htmlFor="otherInfo" className="block text-sm font-medium text-stone-700 mb-2">
+                    {t('settings.otherInfo')}
+                  </label>
+                  <textarea
+                    id="otherInfo"
+                    value={otherInfo}
+                    onChange={(e) => setOtherInfo(e.target.value)}
+                    placeholder={t('settings.otherInfoPlaceholder')}
+                    maxLength={1000}
+                    rows={3}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-colors resize-y"
+                  />
+                  <p className="text-xs text-stone-400 mt-1">{otherInfo.length}/1000</p>
                 </div>
 
                 <div>

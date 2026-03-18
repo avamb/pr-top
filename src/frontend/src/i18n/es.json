@@ -228,6 +228,8 @@
     "lastNamePlaceholder": "Ingresa tu apellido",
     "phonePlaceholder": "+34 612 345 678",
     "telegramUsernamePlaceholder": "usuario (sin @)",
+    "otherInfo": "Información adicional",
+    "otherInfoPlaceholder": "Especialización, número de licencia, notas sobre ti...",
     "saveProfile": "Guardar perfil",
     "profileSaved": "¡Perfil guardado!"
   },

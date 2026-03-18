@@ -228,6 +228,8 @@
     "lastNamePlaceholder": "Enter your last name",
     "phonePlaceholder": "+1 (555) 123-4567",
     "telegramUsernamePlaceholder": "username (without @)",
+    "otherInfo": "Additional Information",
+    "otherInfoPlaceholder": "Specialization, license number, notes about yourself...",
     "saveProfile": "Save Profile",
     "profileSaved": "Profile saved successfully!"
   },

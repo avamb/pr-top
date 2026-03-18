@@ -228,6 +228,8 @@
     "lastNamePlaceholder": "Введите фамилию",
     "phonePlaceholder": "+7 (999) 123-45-67",
     "telegramUsernamePlaceholder": "username (без @)",
+    "otherInfo": "Дополнительная информация",
+    "otherInfoPlaceholder": "Специализация, номер лицензии, заметки о себе...",
     "saveProfile": "Сохранить профиль",
     "profileSaved": "Профиль сохранён!"
   },

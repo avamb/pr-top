@@ -23,7 +23,7 @@ router.get('/profile', authenticate, (req, res) => {
   try {
     const db = getDatabase();
     const result = db.exec(
-      'SELECT id, email, role, language, timezone, created_at, escalation_preferences, first_name, last_name, phone, telegram_username FROM users WHERE id = ?',
+      'SELECT id, email, role, language, timezone, created_at, escalation_preferences, first_name, last_name, phone, telegram_username, other_info FROM users WHERE id = ?',
       [req.user.id]
     );
 
@@ -53,7 +53,8 @@ router.get('/profile', authenticate, (req, res) => {
         first_name: user[7] || '',
         last_name: user[8] || '',
         phone: user[9] || '',
-        telegram_username: user[10] || ''
+        telegram_username: user[10] || '',
+        other_info: user[11] || ''
       }
     });
   } catch (error) {
@@ -65,7 +66,7 @@ router.get('/profile', authenticate, (req, res) => {
 // PUT /api/settings/profile - Update user profile settings
 router.put('/profile', authenticate, (req, res) => {
   try {
-    const { language, timezone, first_name, last_name, phone, telegram_username } = req.body;
+    const { language, timezone, first_name, last_name, phone, telegram_username, other_info } = req.body;
     const db = getDatabase();
 
     // Validate language
@@ -124,6 +125,13 @@ router.put('/profile', authenticate, (req, res) => {
       updates.push('telegram_username = ?');
       params.push(telegram_username.replace(/^@/, '').trim());
     }
+    if (other_info !== undefined) {
+      if (typeof other_info === 'string' && other_info.length > 1000) {
+        return res.status(400).json({ error: 'Other info too long (max 1000 characters)' });
+      }
+      updates.push('other_info = ?');
+      params.push(typeof other_info === 'string' ? other_info.trim() : '');
+    }
 
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No valid fields to update' });
@@ -138,7 +146,7 @@ router.put('/profile', authenticate, (req, res) => {
 
     // Return updated profile
     const result = db.exec(
-      'SELECT id, email, role, language, timezone, created_at, escalation_preferences, first_name, last_name, phone, telegram_username FROM users WHERE id = ?',
+      'SELECT id, email, role, language, timezone, created_at, escalation_preferences, first_name, last_name, phone, telegram_username, other_info FROM users WHERE id = ?',
       [req.user.id]
     );
 
@@ -165,7 +173,8 @@ router.put('/profile', authenticate, (req, res) => {
         first_name: user[7] || '',
         last_name: user[8] || '',
         phone: user[9] || '',
-        telegram_username: user[10] || ''
+        telegram_username: user[10] || '',
+        other_info: user[11] || ''
       }
     });
   } catch (error) {

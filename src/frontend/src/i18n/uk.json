@@ -228,6 +228,8 @@
     "lastNamePlaceholder": "Введіть прізвище",
     "phonePlaceholder": "+380 (99) 123-45-67",
     "telegramUsernamePlaceholder": "username (без @)",
+    "otherInfo": "Додаткова інформація",
+    "otherInfoPlaceholder": "Спеціалізація, номер ліцензії, нотатки про себе...",
     "saveProfile": "Зберегти профіль",
     "profileSaved": "Профіль збережено!"
   },

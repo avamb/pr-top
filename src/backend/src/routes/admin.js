@@ -19,7 +19,8 @@ router.get('/therapists', (req, res) => {
     const result = db.exec(`
       SELECT u.id, u.email, u.telegram_id, u.role, u.invite_code, u.language,
              u.created_at, u.updated_at, u.blocked_at,
-             s.plan, s.is_manual_override, s.override_reason, s.override_expires_at
+             s.plan, s.is_manual_override, s.override_reason, s.override_expires_at,
+             u.first_name, u.last_name, u.telegram_username, u.phone, u.other_info
       FROM users u
       LEFT JOIN subscriptions s ON s.therapist_id = u.id
       WHERE u.role = 'therapist'
@@ -40,7 +41,12 @@ router.get('/therapists', (req, res) => {
       plan: row[9] || 'trial',
       is_manual_override: !!row[10],
       override_reason: row[11],
-      override_expires_at: row[12]
+      override_expires_at: row[12],
+      first_name: row[13] || '',
+      last_name: row[14] || '',
+      telegram_username: row[15] || '',
+      phone: row[16] || '',
+      other_info: row[17] || ''
     }));
 
     res.json({ therapists });

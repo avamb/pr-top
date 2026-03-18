@@ -19,10 +19,24 @@ function getDbPath() {
 
 function saveDatabase() {
   if (db && dbPath) {
-    const data = db.export();
-    const buffer = Buffer.from(data);
-    fs.writeFileSync(dbPath, buffer);
-    logger.debug('Database saved to disk');
+    try {
+      // Debug: check user count before export
+      let userCount = '?';
+      try {
+        const countResult = db.exec('SELECT COUNT(*) FROM users');
+        if (countResult.length > 0) userCount = countResult[0].values[0][0];
+      } catch (e) { /* ignore */ }
+      const data = db.export();
+      const buffer = Buffer.from(data);
+      // Write directly and fsync to ensure data is flushed to disk
+      const fd = fs.openSync(dbPath, 'w');
+      fs.writeSync(fd, buffer, 0, buffer.length);
+      fs.fsyncSync(fd);
+      fs.closeSync(fd);
+      logger.debug('Database saved to disk (' + buffer.length + ' bytes, ' + userCount + ' users)');
+    } catch (err) {
+      logger.error('Failed to save database: ' + err.message);
+    }
   }
 }
 
@@ -426,6 +440,13 @@ function applySchema(db) {
   try {
     db.run('ALTER TABLE subscriptions ADD COLUMN override_set_by INTEGER');
     logger.info('Added override_set_by column to subscriptions');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  try {
+    db.run('ALTER TABLE users ADD COLUMN other_info TEXT');
+    logger.info('Added other_info column to users');
   } catch (e) {
     // Column already exists, ignore
   }
