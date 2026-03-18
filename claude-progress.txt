@@ -1,3 +1,43 @@
+## Session: 2026-03-18 - Features #266, #271
+
+### Completed: Display full therapist profile in admin panel (#266) - PASSING
+
+**What was changed:**
+- Updated AdminTherapists.jsx: added First Name and Last Name columns to main table
+- Added expandable profile detail row with View/Hide Profile toggle button
+- Detail row shows grid layout with: Telegram ID, Telegram Username, Phone, Email, First Name, Last Name, Other Info
+- Empty fields gracefully display "Not provided" in italic
+- Added dev/set-role endpoint for testing admin features
+- i18n labels added for EN, RU, ES, UK (firstName, lastName, telegramUsername, phone, otherInfo, profileDetails, notProvided, viewProfile, hideProfile)
+
+**Verification:**
+- Table columns display correctly with First Name and Last Name ✅
+- View Profile button expands detail row with all 7 fields ✅
+- Hide Profile button collapses the detail row ✅
+- Empty fields show "Not provided" ✅
+- Russian i18n: Имя, Фамилия, Ник в Telegram, Телефон, Почта, Прочее, Профиль, Скрыть профиль ✅
+- Zero JS console errors (only pre-existing Umami 400) ✅
+- No mock data patterns in source ✅
+
+### Completed: Add 'other info' field to therapist Settings page (#271) - PASSING (ALREADY IMPLEMENTED)
+
+**What was verified (already built in previous session):**
+- Settings.jsx already has otherInfo textarea with label, placeholder, maxLength=1000, character counter
+- Wired to GET/PUT /api/settings/profile endpoints
+- i18n labels exist in all 4 languages (EN: "Additional Information", RU: "Дополнительная информация", ES: "Información adicional", UK: "Додаткова інформація")
+
+**Verification:**
+- Other Info textarea visible on Settings page ✅
+- Filled "TEST_271_OtherInfo: Clinical psychologist, License #12345" ✅
+- Save button shows "Профиль сохранён!" success message ✅
+- Data persists after page refresh ✅
+- Character counter works (shows X/1000) ✅
+- Zero JS console errors ✅
+
+### Current Status
+- Features passing: 269/271
+- Features #266, #271: BOTH PASSING
+
 ## Session: 2026-03-18 - Features #267, #268
 
 ### Completed: Request phone contact during therapist registration via Telegram (#267) - PASSING
