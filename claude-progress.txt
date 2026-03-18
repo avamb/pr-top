@@ -1,3 +1,48 @@
+## Session: 2026-03-18 - Features #267, #268
+
+### Completed: Request phone contact during therapist registration via Telegram (#267) - PASSING
+
+**What was built:**
+- After therapist role selection, sends phone sharing prompt with Telegram contact-sharing button (request_contact: true)
+- Handles `contact` message type to extract phone number
+- Saves phone via PUT /api/bot/profile/:telegram_id
+- Skip button allows bypassing phone sharing
+- pendingPhoneShares tracker to manage registration flow state
+- i18n translations for sharePhonePrompt, sharePhoneButton, sharePhoneSkip, sharePhoneSaved, sharePhoneSkipped in EN, RU, ES, UK
+
+**Verification:**
+- All 4 language translations render correctly ✅
+- Phone saves via API and persists in database ✅
+- Phone persists after server restart ✅
+- Bot code syntax valid ✅
+- No mock data patterns ✅
+
+### Completed: Request email during therapist registration via Telegram (#268) - PASSING
+
+**What was built:**
+- After phone step (save or skip), sends email prompt with Skip keyboard button
+- Validates email format via regex before saving
+- Checks email uniqueness in database (returns error if taken)
+- Saves email via PUT /api/bot/profile/:telegram_id (added email support to endpoint)
+- Backend validates email format (400) and uniqueness (409)
+- Catches UNIQUE constraint violations in outer try-catch
+- Updated GET /api/bot/user/:telegram_id to include email field
+- pendingEmailInputs tracker for email flow state
+- i18n translations for shareEmailPrompt, shareEmailSkip, shareEmailSaved, shareEmailSkipped, shareEmailInvalid, shareEmailTaken in EN, RU, ES, UK
+
+**Verification:**
+- Email saves via API with format validation ✅
+- Invalid email format returns 400 ✅
+- Duplicate email returns 409 ✅
+- Email persists in database and survives server restart ✅
+- Bot user endpoint returns email field ✅
+- All 4 language translations work ✅
+- Dashboard still works with 0 JS errors ✅
+- No mock data patterns ✅
+
+### Current Status
+- Features #267, #268: BOTH PASSING
+
 ## Session: 2026-03-18 - Features #264, #265, #270
 
 ### Completed: Add 'other_info' field to users table (#264) - PASSING
