@@ -167,7 +167,7 @@ router.get('/user/:telegram_id', botAuth, (req, res) => {
 router.put('/profile/:telegram_id', botAuth, (req, res) => {
   try {
     const { telegram_id } = req.params;
-    const { first_name, last_name, phone, email } = req.body;
+    const { first_name, last_name, phone, email, other_info } = req.body;
     const db = getDatabase();
 
     // Verify user exists
@@ -213,6 +213,13 @@ router.put('/profile/:telegram_id', botAuth, (req, res) => {
       }
       updates.push('email = ?');
       params.push(trimmedEmail);
+    }
+    if (other_info !== undefined) {
+      if (typeof other_info === 'string' && other_info.length > 1000) {
+        return res.status(400).json({ error: 'Other info too long (max 1000 characters)' });
+      }
+      updates.push('other_info = ?');
+      params.push(typeof other_info === 'string' ? other_info.trim() : '');
     }
 
     if (updates.length === 0) {

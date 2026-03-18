@@ -37,6 +37,9 @@ const pendingPhoneShares = {};
 // Track pending email input after phone step (telegramId -> lang)
 const pendingEmailInputs = {};
 
+// Track pending other_info input after email step (telegramId -> lang)
+const pendingOtherInfoInputs = {};
+
 // Get user language from cache or API
 async function getUserLang(telegramId) {
   if (userLangCache[telegramId]) return userLangCache[telegramId];
@@ -659,6 +662,20 @@ if (!token || token === 'your-telegram-bot-token') {
     });
   }
 
+  // Helper: send other info prompt during registration (after email step)
+  function sendOtherInfoPrompt(chatId, telegramId, lang) {
+    pendingOtherInfoInputs[telegramId] = lang;
+    bot.sendMessage(chatId, t(lang, 'shareOtherInfoPrompt'), {
+      reply_markup: {
+        keyboard: [
+          [{ text: t(lang, 'shareOtherInfoSkip') }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
+      }
+    });
+  }
+
   // Handle contact messages - phone sharing during therapist registration
   bot.on('contact', async (msg) => {
     const chatId = msg.chat.id;
@@ -816,9 +833,9 @@ if (!token || token === 'your-telegram-bot-token') {
       const emailSkipTexts = ['en', 'ru', 'es', 'uk'].map(l => t(l, 'shareEmailSkip'));
       if (emailSkipTexts.includes(msg.text)) {
         delete pendingEmailInputs[telegramId];
-        bot.sendMessage(chatId, t(lang, 'shareEmailSkipped'), {
-          reply_markup: getTherapistKeyboard(lang)
-        });
+        await bot.sendMessage(chatId, t(lang, 'shareEmailSkipped'));
+        // Proceed to other info step
+        sendOtherInfoPrompt(chatId, telegramId, lang);
         return;
       }
       // Validate email format
@@ -838,9 +855,9 @@ if (!token || token === 'your-telegram-bot-token') {
       try {
         await api.put(`/api/bot/profile/${telegramId}`, { email: emailText });
         delete pendingEmailInputs[telegramId];
-        bot.sendMessage(chatId, t(lang, 'shareEmailSaved'), {
-          reply_markup: getTherapistKeyboard(lang)
-        });
+        await bot.sendMessage(chatId, t(lang, 'shareEmailSaved'));
+        // Proceed to other info step
+        sendOtherInfoPrompt(chatId, telegramId, lang);
       } catch (error) {
         if (error.response && error.response.status === 409) {
           bot.sendMessage(chatId, t(lang, 'shareEmailTaken'), {
@@ -853,10 +870,48 @@ if (!token || token === 'your-telegram-bot-token') {
         } else {
           console.error('Failed to save email:', error.message);
           delete pendingEmailInputs[telegramId];
-          bot.sendMessage(chatId, t(lang, 'profileSaveFailed'), {
-            reply_markup: getTherapistKeyboard(lang)
-          });
+          await bot.sendMessage(chatId, t(lang, 'profileSaveFailed'));
+          // Still proceed to other info step
+          sendOtherInfoPrompt(chatId, telegramId, lang);
         }
+      }
+      return;
+    }
+
+    // Check if this is an other_info input or skip during registration
+    if (pendingOtherInfoInputs[telegramId]) {
+      const otherInfoSkipTexts = ['en', 'ru', 'es', 'uk'].map(l => t(l, 'shareOtherInfoSkip'));
+      if (otherInfoSkipTexts.includes(msg.text)) {
+        delete pendingOtherInfoInputs[telegramId];
+        bot.sendMessage(chatId, t(lang, 'shareOtherInfoSkipped'), {
+          reply_markup: getTherapistKeyboard(lang)
+        });
+        return;
+      }
+      // Save other_info text
+      try {
+        const otherInfoText = msg.text.trim();
+        if (otherInfoText.length > 1000) {
+          bot.sendMessage(chatId, '❌ Text too long (max 1000 characters). Please try again:', {
+            reply_markup: {
+              keyboard: [[{ text: t(lang, 'shareOtherInfoSkip') }]],
+              resize_keyboard: true,
+              one_time_keyboard: true
+            }
+          });
+          return;
+        }
+        await api.put(`/api/bot/profile/${telegramId}`, { other_info: otherInfoText });
+        delete pendingOtherInfoInputs[telegramId];
+        bot.sendMessage(chatId, t(lang, 'shareOtherInfoSaved'), {
+          reply_markup: getTherapistKeyboard(lang)
+        });
+      } catch (error) {
+        console.error('Failed to save other_info:', error.message);
+        delete pendingOtherInfoInputs[telegramId];
+        bot.sendMessage(chatId, t(lang, 'profileSaveFailed'), {
+          reply_markup: getTherapistKeyboard(lang)
+        });
       }
       return;
     }

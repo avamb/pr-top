@@ -109,6 +109,11 @@ Connect clients with one link — simple and secure.
     shareEmailSkipped: '⏭ Email skipped. You can add it later in /profile.',
     shareEmailInvalid: '❌ Invalid email format. Please enter a valid email (e.g. name@example.com):',
     shareEmailTaken: '❌ This email is already registered. Please enter a different email:',
+    // Other info during registration
+    shareOtherInfoPrompt: '📝 Enter additional information about yourself (specialization, experience, license number, etc.).\n\nThis helps clients learn more about you.',
+    shareOtherInfoSkip: '⏭ Skip',
+    shareOtherInfoSaved: '✅ Information saved! You can update it later in /profile.',
+    shareOtherInfoSkipped: '⏭ Skipped. You can add this info later in /profile.',
     // Persistent keyboard buttons
     btnDiary: '📝 Diary',
     btnExercises: '📋 Exercises',
@@ -231,6 +236,11 @@ Connect clients with one link — simple and secure.
     shareEmailSkipped: '⏭ Email пропущен. Вы можете добавить его позже в /profile.',
     shareEmailInvalid: '❌ Неверный формат email. Введите корректный email (например, name@example.com):',
     shareEmailTaken: '❌ Этот email уже зарегистрирован. Введите другой email:',
+    // Other info during registration
+    shareOtherInfoPrompt: '📝 Введите дополнительную информацию о себе (специализация, опыт, номер лицензии и т.д.).\n\nЭто поможет клиентам узнать о вас больше.',
+    shareOtherInfoSkip: '⏭ Пропустить',
+    shareOtherInfoSaved: '✅ Информация сохранена! Вы можете обновить её позже в /profile.',
+    shareOtherInfoSkipped: '⏭ Пропущено. Вы можете добавить информацию позже в /profile.',
     // Persistent keyboard buttons
     btnDiary: '📝 Дневник',
     btnExercises: '📋 Упражнения',
@@ -353,6 +363,11 @@ Conecta clientes con un enlace — simple y seguro.
     shareEmailSkipped: '⏭ Email omitido. Puedes agregarlo después en /profile.',
     shareEmailInvalid: '❌ Formato de email inválido. Ingresa un email válido (ej. name@example.com):',
     shareEmailTaken: '❌ Este email ya está registrado. Ingresa un email diferente:',
+    // Other info during registration
+    shareOtherInfoPrompt: '📝 Ingresa información adicional sobre ti (especialización, experiencia, número de licencia, etc.).\n\nEsto ayuda a los clientes a conocerte mejor.',
+    shareOtherInfoSkip: '⏭ Omitir',
+    shareOtherInfoSaved: '✅ ¡Información guardada! Puedes actualizarla después en /profile.',
+    shareOtherInfoSkipped: '⏭ Omitido. Puedes agregar esta información después en /profile.',
     // Persistent keyboard buttons
     btnDiary: '📝 Diario',
     btnExercises: '📋 Ejercicios',
@@ -475,6 +490,11 @@ Conecta clientes con un enlace — simple y seguro.
     shareEmailSkipped: '⏭ Email пропущено. Ви можете додати його пізніше в /profile.',
     shareEmailInvalid: '❌ Невірний формат email. Введіть коректний email (наприклад, name@example.com):',
     shareEmailTaken: '❌ Цей email вже зареєстрований. Введіть інший email:',
+    // Other info during registration
+    shareOtherInfoPrompt: '📝 Введіть додаткову інформацію про себе (спеціалізація, досвід, номер ліцензії тощо).\n\nЦе допоможе клієнтам дізнатися про вас більше.',
+    shareOtherInfoSkip: '⏭ Пропустити',
+    shareOtherInfoSaved: '✅ Інформацію збережено! Ви можете оновити її пізніше в /profile.',
+    shareOtherInfoSkipped: '⏭ Пропущено. Ви можете додати цю інформацію пізніше в /profile.',
     // Persistent keyboard buttons
     btnDiary: '📝 Щоденник',
     btnExercises: '📋 Вправи',
