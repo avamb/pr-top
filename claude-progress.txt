@@ -1,3 +1,32 @@
+## Session: 2026-04-03 - Feature #273
+
+### Completed: Fix case-sensitive email matching in auth flows (#273) - PASSING
+
+**What was changed:**
+- `src/backend/src/routes/auth.js`:
+  - POST /api/auth/register: added `email.trim().toLowerCase()` normalization before all DB operations (duplicate check, INSERT, SELECT)
+  - POST /api/auth/login: added `email.trim().toLowerCase()` normalization before SELECT query
+  - POST /api/auth/forgot-password: added `email.trim().toLowerCase()` normalization before rate-limit map and DB query
+- `src/backend/src/db/connection.js`:
+  - Added `COLLATE NOCASE` to email column in CREATE TABLE users statement (safety net for new DBs)
+  - Added migration to lowercase all existing emails: `UPDATE users SET email = LOWER(email) WHERE email != LOWER(email)`
+
+**Verification:**
+- Register with mixed-case (e.g., CaSe273_xxx@Example.COM) stores as lowercase ✅
+- Login with all-lowercase succeeds for mixed-case registration ✅
+- Login with UPPERCASE succeeds for mixed-case registration ✅
+- Login with whitespace-padded email succeeds (trim) ✅
+- Duplicate registration with different casing is rejected (409) ✅
+- Forgot-password with different casing succeeds (200) ✅
+- Data persists across server restart ✅
+- No mock data patterns in source code ✅
+- Zero JS console errors (only pre-existing Umami/React Router warnings) ✅
+- Browser UI tested: register, logout, login with different case, forgot-password ✅
+
+### Current Status
+- Features passing: 273/273 (100.0%)
+- Feature #273: PASSING
+
 ## Session: 2026-04-03 - Feature #272
 
 ### Completed: Email Infrastructure (Brevo SMTP + FRONTEND_URL fix) (#272) - PASSING
