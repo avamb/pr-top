@@ -10,7 +10,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - FRONTEND_URL=http://frontend
+      - FRONTEND_URL=https://app.pr-top.com
       # AI provider configuration
       - AI_PROVIDER=${AI_PROVIDER:-openai}
       - AI_MODEL=${AI_MODEL:-gpt-4o-mini}
@@ -27,6 +27,12 @@ services:
       - TRANSCRIPTION_API_KEY=${TRANSCRIPTION_API_KEY:-}
       - TRANSCRIPTION_API_URL=${TRANSCRIPTION_API_URL:-}
       - TRANSCRIPTION_LANGUAGE=${TRANSCRIPTION_LANGUAGE:-}
+      # SMTP / Email configuration (Brevo or any SMTP provider)
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-PR-TOP <noreply@pr-top.com>}
     volumes:
       - backend-data:/app/data
       - backend-uploads:/app/data/sessions
