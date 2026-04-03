@@ -1,3 +1,33 @@
+## Session: 2026-04-03 - Feature #272
+
+### Completed: Email Infrastructure (Brevo SMTP + FRONTEND_URL fix) (#272) - PASSING
+
+**What was changed:**
+- docker-compose.yml: Fixed FRONTEND_URL from `http://frontend` (internal Docker hostname) to `https://app.pr-top.com` (public domain)
+- docker-compose.yml: Added SMTP env vars (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM) to backend service
+- emailService.js: Updated default SMTP_FROM from `noreply@prtop.app` to `noreply@pr-top.com`
+- .env.example: Updated SMTP_FROM default, added Brevo SMTP setup guide with DNS record instructions (SPF, DKIM, DMARC)
+- .env.example: Fixed superadmin email domain from `psylink.app` to `pr-top.com`
+
+**Verification:**
+- Password reset flow tested end-to-end: request reset → email sent → link works → password changed → login successful ✅
+- Welcome email sent with correct @pr-top.com domain ✅
+- Reset link URL format correct (localhost in dev, https://app.pr-top.com in production) ✅
+- ResetPassword page renders correctly with token parameter ✅
+- .env in .gitignore — SMTP credentials won't leak ✅
+- No prtop.app references remaining in codebase ✅
+- No mock data patterns in src/ ✅
+- Zero app-level console errors ✅
+
+**External steps (require manual setup by deployer):**
+- Steps 2-8: Register on brevo.com, create SMTP key, configure DNS (SPF/DKIM/DMARC), verify domain
+- Step 11: Rebuild Docker containers after setting .env variables
+- Step 17: Verify email delivery in Brevo Dashboard logs
+
+### Current Status
+- Features passing: 272/272 (100.0%)
+- Feature #272: PASSING
+
 ## Session: 2026-03-18 - Feature #269
 
 ### Completed: Request 'other info' during therapist registration via Telegram (#269) - PASSING
