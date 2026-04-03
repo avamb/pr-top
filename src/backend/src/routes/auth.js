@@ -50,9 +50,12 @@ router.post('/register', async (req, res) => {
       });
     }
 
+    // Normalize email to lowercase for case-insensitive matching
+    const normalizedEmail = email.trim().toLowerCase();
+
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!emailRegex.test(normalizedEmail)) {
       return res.status(400).json({ error: 'Please enter a valid email address' });
     }
 
@@ -68,8 +71,8 @@ router.post('/register', async (req, res) => {
 
     const db = getDatabase();
 
-    // Check if user already exists
-    const existing = db.exec('SELECT id FROM users WHERE email = ?', [email]);
+    // Check if user already exists (case-insensitive via normalized email)
+    const existing = db.exec('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
     if (existing.length > 0 && existing[0].values.length > 0) {
       return res.status(409).json({ error: 'User with this email already exists' });
     }
@@ -88,7 +91,7 @@ router.post('/register', async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 12);
     const inviteCode = uuidv4().slice(0, 8);
 
-    logger.info(`Registering new user: ${email} with role: ${userRole}`);
+    logger.info(`Registering new user: ${normalizedEmail} with role: ${userRole}`);
 
     // Validate and set language/timezone defaults
     const supportedLanguages = ['en', 'ru', 'es'];
@@ -98,14 +101,14 @@ router.post('/register', async (req, res) => {
     // Insert user into database with UTM tracking and locale defaults
     db.run(
       'INSERT INTO users (email, password_hash, role, invite_code, language, timezone, utm_source, utm_medium, utm_campaign, utm_content, utm_term) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [email, passwordHash, userRole, inviteCode, userLanguage, userTimezone, utm_source || null, utm_medium || null, utm_campaign || null, utm_content || null, utm_term || null]
+      [normalizedEmail, passwordHash, userRole, inviteCode, userLanguage, userTimezone, utm_source || null, utm_medium || null, utm_campaign || null, utm_content || null, utm_term || null]
     );
 
     // Save to disk after write
     saveDatabase();
 
     // Get the inserted user
-    const result = db.exec('SELECT id, email, role, created_at FROM users WHERE email = ?', [email]);
+    const result = db.exec('SELECT id, email, role, created_at FROM users WHERE email = ?', [normalizedEmail]);
     const user = result[0].values[0];
     const userId = user[0];
 
@@ -193,13 +196,16 @@ router.post('/login', async (req, res) => {
       });
     }
 
+    // Normalize email to lowercase for case-insensitive matching
+    const normalizedEmail = email.trim().toLowerCase();
+
     const db = getDatabase();
 
-    logger.info(`Login attempt for: ${email}`);
+    logger.info(`Login attempt for: ${normalizedEmail}`);
 
     const result = db.exec(
       'SELECT id, email, password_hash, role, blocked_at, timezone FROM users WHERE email = ?',
-      [email]
+      [normalizedEmail]
     );
 
     if (result.length === 0 || result[0].values.length === 0) {
@@ -324,20 +330,23 @@ router.post('/forgot-password', async (req, res) => {
       return res.status(400).json({ error: 'Email is required' });
     }
 
+    // Normalize email to lowercase for case-insensitive matching
+    const normalizedEmail = email.trim().toLowerCase();
+
     // Always return success to prevent user enumeration
     const successMessage = 'If an account with that email exists, a password reset link has been sent.';
 
     // Rate limiting per email
     const now = Date.now();
-    const rateEntry = forgotPasswordRates.get(email.toLowerCase());
+    const rateEntry = forgotPasswordRates.get(normalizedEmail);
     if (rateEntry && (now - rateEntry.windowStart) < FORGOT_PW_RATE_WINDOW) {
       if (rateEntry.count >= FORGOT_PW_RATE_MAX) {
-        logger.warn(`Forgot password rate limited for email: ${email}`);
+        logger.warn(`Forgot password rate limited for email: ${normalizedEmail}`);
         return res.json({ message: successMessage }); // Don't reveal rate limit
       }
       rateEntry.count++;
     } else {
-      forgotPasswordRates.set(email.toLowerCase(), { count: 1, windowStart: now });
+      forgotPasswordRates.set(normalizedEmail, { count: 1, windowStart: now });
     }
 
     const db = getDatabase();
@@ -345,11 +354,11 @@ router.post('/forgot-password', async (req, res) => {
     // Find user by email (only therapists and superadmins can reset)
     const userResult = db.exec(
       'SELECT id, email, role, language, blocked_at FROM users WHERE email = ? AND role IN (\'therapist\', \'superadmin\')',
-      [email]
+      [normalizedEmail]
     );
 
     if (userResult.length === 0 || userResult[0].values.length === 0) {
-      logger.info(`Forgot password: no therapist/superadmin found for email ${email}`);
+      logger.info(`Forgot password: no therapist/superadmin found for email ${normalizedEmail}`);
       return res.json({ message: successMessage });
     }
 

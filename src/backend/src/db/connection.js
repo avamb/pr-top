@@ -91,7 +91,7 @@ function applySchema(db) {
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       telegram_id TEXT UNIQUE,
-      email TEXT UNIQUE,
+      email TEXT UNIQUE COLLATE NOCASE,
       password_hash TEXT,
       role TEXT NOT NULL CHECK(role IN ('therapist', 'client', 'superadmin')),
       therapist_id INTEGER REFERENCES users(id),
@@ -449,6 +449,17 @@ function applySchema(db) {
     logger.info('Added other_info column to users');
   } catch (e) {
     // Column already exists, ignore
+  }
+
+  // Normalize existing emails to lowercase (migration for case-insensitive matching)
+  try {
+    const mixedCaseResult = db.exec("SELECT COUNT(*) FROM users WHERE email != LOWER(email)");
+    if (mixedCaseResult.length > 0 && mixedCaseResult[0].values[0][0] > 0) {
+      db.run("UPDATE users SET email = LOWER(email) WHERE email != LOWER(email)");
+      logger.info('Normalized existing emails to lowercase');
+    }
+  } catch (e) {
+    logger.warn('Email normalization migration skipped: ' + e.message);
   }
 
   // Create indexes for performance
