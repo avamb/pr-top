@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { formatUserDate, formatUserDateOnly } from '../utils/formatDate';
 import BulkImport from '../components/BulkImport';
+import useWebSocket from '../hooks/useWebSocket';
 
 const API_URL = '/api';
 
@@ -56,7 +57,19 @@ function ActivityIndicator({ lastActivity }) {
   );
 }
 
-function ClientRow({ client, onClick }) {
+function SosBadge({ count, t }) {
+  if (!count || count <= 0) return null;
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700 animate-pulse"
+      title={t('clientList.sosBadgeTooltip', { count })}
+    >
+      🚨 {count}
+    </span>
+  );
+}
+
+function ClientRow({ client, onClick, t }) {
   const consentColor = client.consent_therapist_access
     ? 'bg-green-100 text-green-700'
     : 'bg-gray-100 text-gray-600';
@@ -64,8 +77,13 @@ function ClientRow({ client, onClick }) {
   const displayName = client.email || client.telegram_id || `Client #${client.id}`;
 
   return (
-    <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer" onClick={onClick}>
-      <td className="px-4 py-3 text-sm font-medium text-primary hover:underline">{displayName}</td>
+    <tr className={`border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer ${client.active_sos_count > 0 ? 'bg-red-50' : ''}`} onClick={onClick}>
+      <td className="px-4 py-3 text-sm font-medium text-primary hover:underline">
+        <div className="flex items-center gap-2">
+          {displayName}
+          <SosBadge count={client.active_sos_count} t={t} />
+        </div>
+      </td>
       <td className="px-4 py-3 text-sm text-secondary">{client.telegram_id || '—'}</td>
       <td className="px-4 py-3 text-sm text-secondary">{client.language?.toUpperCase() || 'EN'}</td>
       <td className="px-4 py-3">
@@ -98,6 +116,8 @@ export default function ClientList() {
   const [showImport, setShowImport] = useState(false);
   const fetchRef = useRef(0);
   const abortControllerRef = useRef(null);
+
+  const { on: onWsEvent } = useWebSocket();
 
   const fetchClients = useCallback(async (searchTerm, pageNum) => {
     const token = localStorage.getItem('token');
@@ -185,6 +205,14 @@ export default function ClientList() {
       }
     };
   }, [search, page, fetchClients, navigate]);
+
+  // Re-fetch client list when SOS event received via WebSocket
+  useEffect(() => {
+    const unsubscribe = onWsEvent('sos_alert', () => {
+      fetchClients(search, page);
+    });
+    return unsubscribe;
+  }, [onWsEvent, fetchClients, search, page]);
 
   const handleSearchChange = (e) => {
     setSearchInput(e.target.value);
@@ -282,7 +310,7 @@ export default function ClientList() {
                   ))
                 ) : clients.length > 0 ? (
                   clients.map(client => (
-                    <ClientRow key={client.id} client={client} onClick={() => navigate(`/clients/${client.id}`)} />
+                    <ClientRow key={client.id} client={client} onClick={() => navigate(`/clients/${client.id}`)} t={t} />
                   ))
                 ) : (
                   <tr>

@@ -107,7 +107,7 @@ router.get('/', (req, res) => {
     const countResult = db.exec(`SELECT COUNT(*) FROM users u WHERE ${whereClause}`, params);
     const total = countResult.length > 0 ? countResult[0].values[0][0] : 0;
 
-    // Get paginated results with last activity indicator
+    // Get paginated results with last activity indicator and active SOS count
     const offset = (page - 1) * perPage;
     const result = db.exec(
       `SELECT u.id, u.telegram_id, u.email, u.consent_therapist_access, u.language, u.created_at, u.updated_at,
@@ -118,10 +118,11 @@ router.get('/', (req, res) => {
                 UNION ALL
                 SELECT created_at FROM sessions WHERE client_id = u.id
               )) AS last_activity,
-              u.first_name, u.last_name, u.phone, u.telegram_username
+              u.first_name, u.last_name, u.phone, u.telegram_username,
+              (SELECT COUNT(*) FROM sos_events WHERE client_id = u.id AND status != 'resolved') AS active_sos_count
        FROM users u
        WHERE ${whereClause}
-       ORDER BY last_activity DESC NULLS LAST, u.created_at DESC
+       ORDER BY active_sos_count DESC, last_activity DESC NULLS LAST, u.created_at DESC
        LIMIT ? OFFSET ?`,
       [...params, perPage, offset]
     );
@@ -138,7 +139,8 @@ router.get('/', (req, res) => {
       first_name: row[8] || '',
       last_name: row[9] || '',
       phone: row[10] || '',
-      telegram_username: row[11] || ''
+      telegram_username: row[11] || '',
+      active_sos_count: row[12] || 0
     }));
 
     // Also include limit info
@@ -250,7 +252,7 @@ router.get('/:id/diary', (req, res) => {
     if (searchQuery) {
       // Fetch all matching entries (without pagination) for search filtering
       const allResult = db.exec(
-        `SELECT id, entry_type, content_encrypted, transcript_encrypted, encryption_key_id, payload_version, created_at, updated_at, embedding_ref
+        `SELECT id, entry_type, content_encrypted, transcript_encrypted, encryption_key_id, payload_version, created_at, updated_at, embedding_ref, audio_file_ref
          FROM diary_entries WHERE ${whereClause}
          ORDER BY created_at DESC`,
         params
@@ -261,7 +263,7 @@ router.get('/:id/diary', (req, res) => {
         let transcript = null;
         try { if (row[2]) content = decrypt(row[2]); } catch (e) { content = '[decryption error]'; }
         try { if (row[3]) transcript = decrypt(row[3]); } catch (e) { transcript = '[decryption error]'; }
-        return { id: row[0], entry_type: row[1], content, transcript, created_at: row[6], updated_at: row[7], embedding_ref: row[8] || null };
+        return { id: row[0], entry_type: row[1], content, transcript, created_at: row[6], updated_at: row[7], embedding_ref: row[8] || null, has_audio_file: !!row[9] };
       });
 
       // Filter by search query (searches decrypted content and transcript)
@@ -288,7 +290,7 @@ router.get('/:id/diary', (req, res) => {
 
     // Get paginated entries
     const result = db.exec(
-      `SELECT id, entry_type, content_encrypted, transcript_encrypted, encryption_key_id, payload_version, created_at, updated_at, embedding_ref
+      `SELECT id, entry_type, content_encrypted, transcript_encrypted, encryption_key_id, payload_version, created_at, updated_at, embedding_ref, audio_file_ref
        FROM diary_entries WHERE ${whereClause}
        ORDER BY created_at DESC
        LIMIT ? OFFSET ?`,
@@ -326,7 +328,8 @@ router.get('/:id/diary', (req, res) => {
         transcript: transcript,
         created_at: row[6],
         updated_at: row[7],
-        embedding_ref: row[8] || null
+        embedding_ref: row[8] || null,
+        has_audio_file: !!row[9]
       };
     });
 

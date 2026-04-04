@@ -257,7 +257,8 @@
     "showing": "Показано {{from}}–{{to}} з {{total}}",
     "pageOf": "Стор. {{page}} з {{pages}}",
     "previous": "Назад",
-    "next": "Далі"
+    "next": "Далі",
+    "sosBadgeTooltip": "{{count}} активних SOS-сигналів"
   },
   "analytics": {
     "title": "Аналітика",

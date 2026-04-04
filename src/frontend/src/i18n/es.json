@@ -257,7 +257,8 @@
     "showing": "Mostrando {{from}}–{{to}} de {{total}}",
     "pageOf": "Página {{page}} de {{pages}}",
     "previous": "Anterior",
-    "next": "Siguiente"
+    "next": "Siguiente",
+    "sosBadgeTooltip": "{{count}} alerta(s) SOS activa(s)"
   },
   "analytics": {
     "title": "Analítica",
