@@ -1,3 +1,37 @@
+## Session: 2026-04-04 - Features #274, #275, #276
+
+### Completed: Fix UTC date parsing in frontend formatDate utility (#274) - PASSING
+
+**What was changed:**
+- In src/frontend/src/utils/formatDate.js, added normalization for string date inputs
+- SQLite datetime('now') returns timestamps like '2026-04-04 15:00:00' without 'Z' suffix
+- JavaScript new Date() parses such strings as LOCAL time, causing UTC offset shift
+- Fix detects strings matching YYYY-MM-DD HH:MM pattern without timezone indicator
+- Normalizes by replacing space with 'T' and appending 'Z' for correct UTC parsing
+- Strings already containing 'Z' or '+/-' timezone offset are not modified
+
+### Completed: Fix direct Date usage in ClientDetail.jsx (#275) - PASSING
+
+**What was changed:**
+- In src/frontend/src/pages/ClientDetail.jsx line 1102, replaced `new Date(result.created_at).toLocaleDateString()` with `formatUserDateOnly(result.created_at)`
+- This ensures search results in ClientDetail use the therapist's configured timezone
+- formatUserDateOnly was already imported on line 7
+
+### Completed: Expand timezone list in therapist Settings page (#276) - PASSING
+
+**What was changed:**
+- Replaced hardcoded 13-timezone TIMEZONES array with dynamic Intl.supportedValuesOf('timeZone') call
+- Added comprehensive FALLBACK_TIMEZONES list (60+ zones) for browsers without Intl support
+- Added groupTimezones() function to organize timezones by region (Africa, America, Asia, Europe, Pacific, etc.)
+- Updated dropdown to use <optgroup> elements for region-based grouping
+- City names displayed without region prefix (e.g., "Moscow" under Europe group)
+- UTC shown at top outside any group
+- Verified save works end-to-end with timezone selection
+
+### Current Status
+- Features passing: 276/282 (estimated)
+- Features #274, #275, #276: ALL PASSING
+
 ## Session: 2026-04-03 - Feature #273
 
 ### Completed: Fix case-sensitive email matching in auth flows (#273) - PASSING
