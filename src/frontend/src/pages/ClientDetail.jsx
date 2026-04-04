@@ -6,8 +6,158 @@ import useNavigationBlocker from '../hooks/useNavigationBlocker';
 import useWebSocket from '../hooks/useWebSocket';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { formatUserDate, formatUserDateOnly, getUserTimezone } from '../utils/formatDate';
+import AudioPlayer from '../components/AudioPlayer';
 
 const API = '/api';
+
+// Diary entry card with audio player, collapsible transcript, and retry transcription
+function DiaryEntryCard({ entry, typeIcon, typeBadgeColor, formatUserDate, deleteDiaryEntry, clientId, t }) {
+  const [transcriptExpanded, setTranscriptExpanded] = useState(false);
+  const [retranscribing, setRetranscribing] = useState(false);
+  const [retranscribeError, setRetranscribeError] = useState('');
+  const [localTranscript, setLocalTranscript] = useState(entry.transcript);
+  const isVoiceOrVideo = entry.entry_type === 'voice' || entry.entry_type === 'video';
+
+  const [transcriptionStatus, setTranscriptionStatus] = useState(() => {
+    // Use backend transcription_status if available, otherwise derive from data
+    if (entry.transcription_status === 'completed' || entry.transcript) return 'transcribed';
+    if (entry.transcription_status === 'failed') return 'failed';
+    if (entry.transcription_status === 'processing') return 'processing';
+    if (entry.transcription_status === 'pending') return 'pending';
+    if (entry.has_audio_file) return 'pending';
+    if (isVoiceOrVideo) return 'pending';
+    return 'no_audio';
+  });
+  const hasAudio = entry.has_audio_file;
+  const transcriptText = localTranscript || entry.transcript;
+  const isLongTranscript = transcriptText && transcriptText.length > 300;
+
+  const handleRetranscribe = async () => {
+    setRetranscribing(true);
+    setRetranscribeError('');
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API}/diary/${entry.id}/retranscribe`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Transcription failed');
+      if (data.transcript) {
+        setLocalTranscript(data.transcript);
+        setTranscriptionStatus('transcribed');
+      }
+    } catch (e) {
+      setRetranscribeError(e.message);
+      setTranscriptionStatus('failed');
+    } finally {
+      setRetranscribing(false);
+    }
+  };
+
+  const statusBadge = () => {
+    if (!isVoiceOrVideo) return null;
+    switch (transcriptionStatus) {
+      case 'transcribed':
+        return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700">✅ {t('diary.transcribed', 'Transcribed')}</span>;
+      case 'failed':
+        return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-700">❌ {t('diary.transcriptionFailed', 'Failed')}</span>;
+      case 'processing':
+        return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700">⏳ {t('diary.processingTranscription', 'Processing...')}</span>;
+      default:
+        return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700">⏳ {t('diary.pendingTranscription', 'Pending transcription')}</span>;
+    }
+  };
+
+  return (
+    <div className="border border-stone-200 rounded-lg p-4">
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <span className="text-lg">{typeIcon(entry.entry_type)}</span>
+        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${typeBadgeColor(entry.entry_type)}`}>
+          {entry.entry_type}
+        </span>
+        {statusBadge()}
+        <span className="text-xs text-stone-400 ml-auto">
+          {formatUserDate(entry.created_at)}
+        </span>
+        <button
+          onClick={() => deleteDiaryEntry(entry.id)}
+          className="ml-2 text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 border border-red-200"
+          title="Delete diary entry"
+        >🗑️ Delete</button>
+      </div>
+
+      {/* Text content */}
+      {entry.content && (
+        <p className="text-stone-700 whitespace-pre-wrap">{entry.content}</p>
+      )}
+
+      {/* Audio/Video Player */}
+      {isVoiceOrVideo && hasAudio && (
+        <div className="mt-3">
+          <AudioPlayer
+            sessionId={entry.id}
+            audioRef={entry.entry_type === 'video' ? 'file.mp4' : 'file.ogg'}
+            streamUrl={`${API}/diary/${entry.id}/stream`}
+          />
+        </div>
+      )}
+
+      {/* Transcript section */}
+      {isVoiceOrVideo && (
+        <div className="mt-3">
+          {transcriptText ? (
+            <div className="p-3 bg-stone-50 rounded-lg text-sm text-stone-600 border border-stone-100">
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-medium text-stone-700">📝 {t('diary.transcript', 'Transcript')}</span>
+                {isLongTranscript && (
+                  <button
+                    onClick={() => setTranscriptExpanded(!transcriptExpanded)}
+                    className="text-xs text-teal-600 hover:text-teal-700 font-medium"
+                  >
+                    {transcriptExpanded ? t('diary.collapse', 'Collapse') : t('diary.expand', 'Expand')}
+                  </button>
+                )}
+              </div>
+              <p className={`whitespace-pre-wrap ${isLongTranscript && !transcriptExpanded ? 'line-clamp-4' : ''}`}>
+                {transcriptText}
+              </p>
+            </div>
+          ) : (
+            <div className="p-3 bg-stone-50 rounded-lg text-sm text-stone-400 border border-stone-100 flex items-center justify-between">
+              <span>📝 {t('diary.noTranscript', 'No transcript available')}</span>
+              {(hasAudio || entry.content) && (
+                <button
+                  onClick={handleRetranscribe}
+                  disabled={retranscribing}
+                  className="text-xs px-3 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg border border-teal-200 font-medium disabled:opacity-50 transition-colors"
+                >
+                  {retranscribing ? '⏳ ...' : `🔄 ${t('diary.retryTranscription', 'Retry transcription')}`}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Retry button for existing failed transcripts */}
+          {transcriptText && transcriptionStatus === 'failed' && (hasAudio || entry.content) && (
+            <button
+              onClick={handleRetranscribe}
+              disabled={retranscribing}
+              className="mt-2 text-xs px-3 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg border border-teal-200 font-medium disabled:opacity-50 transition-colors"
+            >
+              {retranscribing ? '⏳ ...' : `🔄 ${t('diary.retryTranscription', 'Retry transcription')}`}
+            </button>
+          )}
+
+          {/* Retry error message */}
+          {retranscribeError && (
+            <p className="mt-1 text-xs text-red-600">{retranscribeError}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ClientDetail() {
   const { id } = useParams();
@@ -2060,38 +2210,16 @@ function ClientDetail() {
           ) : (
             <div className="space-y-4">
               {diary.map(entry => (
-                <div key={entry.id} className="border border-stone-200 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-lg">{typeIcon(entry.entry_type)}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${typeBadgeColor(entry.entry_type)}`}>
-                      {entry.entry_type}
-                    </span>
-                    {/* Transcription status badge for voice/video entries */}
-                    {(entry.entry_type === 'voice' || entry.entry_type === 'video') && (
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        entry.transcript
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-amber-100 text-amber-700'
-                      }`}>
-                        {entry.transcript ? '✅ Transcribed' : '⏳ Pending transcription'}
-                      </span>
-                    )}
-                    <span className="text-xs text-stone-400 ml-auto">
-                      {formatUserDate(entry.created_at)}
-                    </span>
-                    <button
-                      onClick={() => deleteDiaryEntry(entry.id)}
-                      className="ml-2 text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 border border-red-200"
-                      title="Delete diary entry"
-                    >🗑️ Delete</button>
-                  </div>
-                  <p className="text-stone-700 whitespace-pre-wrap">{entry.content}</p>
-                  {entry.transcript && (
-                    <div className="mt-2 p-2 bg-stone-50 rounded text-sm text-stone-600">
-                      <span className="font-medium">📝 Transcript:</span> {entry.transcript}
-                    </div>
-                  )}
-                </div>
+                <DiaryEntryCard
+                  key={entry.id}
+                  entry={entry}
+                  typeIcon={typeIcon}
+                  typeBadgeColor={typeBadgeColor}
+                  formatUserDate={formatUserDate}
+                  deleteDiaryEntry={deleteDiaryEntry}
+                  clientId={id}
+                  t={t}
+                />
               ))}
               {/* Diary Pagination */}
               <div className="mt-4 text-center">
