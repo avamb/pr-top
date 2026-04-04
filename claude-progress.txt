@@ -1,3 +1,32 @@
+## Session: 2026-04-04 - Features #286, #287, #288
+
+### Completed: Real STT integration for diary voice entries (#286) - PASSING
+
+**What was built:**
+- Rewrote diaryTranscription.js with real OpenAI Whisper API integration
+- Added callDiaryTranscriptionAPI(), transcribeWithRetry() with exponential backoff
+- Added transcription_status column to diary_entries (pending/processing/completed/failed)
+- Updated bot.js diary INSERT to set transcription_status for voice/video entries
+- Updated clients.js API to return transcription_status field
+- Updated diary.js retranscribe to work in dev mode without audio_file_ref
+- Dev mode generates [DEV MODE] prefixed transcripts from content text
+
+### Completed: Enhanced diary audio player with transcription status (#287) - PASSING
+
+**What was built:**
+- Updated DiaryEntryCard to use backend transcription_status field
+- Added 'processing' status badge (blue) alongside existing pending/failed states
+- Updated retry button visibility logic for content-only retranscription
+
+### Completed: Therapist voice message forwarding setting (#288) - PASSING
+
+**What was built:**
+- Voice Message Forwarding section in Settings page with toggle switch
+- i18n keys for EN, RU, ES, UK (voiceForwarding.*)
+- Toggle persists via escalation_preferences API (forward_voice_to_telegram field)
+- Quiet hours disclaimer text
+- Bot already had forwardVoiceToTherapist() with rate limiting and quiet hours
+
 ## Session: 2026-04-04 - Features #278, #282, #281
 
 ### Completed: Show detected timezone to client after registration (#278) - PASSING
