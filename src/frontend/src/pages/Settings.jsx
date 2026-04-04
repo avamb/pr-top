@@ -78,7 +78,8 @@ const DEFAULT_ESCALATION = {
   quiet_hours_enabled: false,
   quiet_hours_start: '22:00',
   quiet_hours_end: '08:00',
-  escalation_delay_minutes: 0
+  escalation_delay_minutes: 0,
+  forward_voice_to_telegram: false
 };
 
 function ToggleSwitch({ checked, onChange, label, id }) {
@@ -580,6 +581,18 @@ export default function Settings() {
                       checked={escalation.sos_sound_alert}
                       onChange={(v) => updateEscalation('sos_sound_alert', v)}
                     />
+                  </div>
+
+                  <div className="border-t border-gray-200 pt-6 mb-6">
+                    <h4 className="text-sm font-semibold text-stone-600 uppercase tracking-wide mb-2">{t('settings.voiceForwardingTitle')}</h4>
+                    <p className="text-xs text-stone-500 mb-3">{t('settings.voiceForwardingDesc')}</p>
+                    <ToggleSwitch
+                      id="forward_voice_to_telegram"
+                      label={t('settings.forwardVoiceToTelegram')}
+                      checked={escalation.forward_voice_to_telegram}
+                      onChange={(v) => updateEscalation('forward_voice_to_telegram', v)}
+                    />
+                    <p className="text-xs text-stone-400 mt-1 italic">{t('settings.voiceForwardingDisclaimer')}</p>
                   </div>
 
                   <div className="border-t border-gray-200 pt-6 mb-6">

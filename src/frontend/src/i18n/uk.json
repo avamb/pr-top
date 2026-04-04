@@ -535,6 +535,16 @@
     "error": "Помилка відтворення",
     "loadError": "Не вдалося завантажити медіафайл"
   },
+  "diary": {
+    "transcribed": "Розшифровано",
+    "pendingTranscription": "Очікує розшифровки",
+    "transcriptionFailed": "Помилка",
+    "transcript": "Розшифровка",
+    "noTranscript": "Розшифровка недоступна",
+    "retryTranscription": "Повторити розшифровку",
+    "expand": "Розгорнути",
+    "collapse": "Згорнути"
+  },
   "admin": {
     "loadingAdmin": "Завантаження панелі адміністратора...",
     "dashboardTitle": "Панель адміністратора",

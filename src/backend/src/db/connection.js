@@ -10,6 +10,7 @@ const bcrypt = require('bcryptjs');
 
 let db = null;
 let dbPath = null;
+let dbDirty = false;
 
 function getDbPath() {
   const dbUrl = process.env.DATABASE_URL || 'sqlite:./data/prtop.db';
@@ -17,15 +18,30 @@ function getDbPath() {
   return path.resolve(__dirname, '../../', relativePath);
 }
 
+// Mark database as having unsaved changes. Call this after any write operation
+// to ensure the next saveDatabase() will VACUUM before export.
+function markDirty() {
+  dbDirty = true;
+}
+
 function saveDatabase() {
   if (db && dbPath) {
     try {
-      // Debug: check user count before export
-      let userCount = '?';
-      try {
-        const countResult = db.exec('SELECT COUNT(*) FROM users');
-        if (countResult.length > 0) userCount = countResult[0].values[0][0];
-      } catch (e) { /* ignore */ }
+      // In sql.js, db.run() modifies SQLite's in-memory page structures, but
+      // db.export() may return the stale original binary representation unless
+      // the database is compacted first. VACUUM forces SQLite to rebuild the
+      // database file from scratch, ensuring db.export() returns all current data.
+      // We track a dirty flag so VACUUM only runs when there are actual changes,
+      // keeping the periodic 5-second saves efficient when idle.
+      if (dbDirty) {
+        try {
+          db.run('VACUUM');
+        } catch (e) {
+          // VACUUM may fail if in a transaction; fall back to a checkpoint attempt
+          try { db.run('PRAGMA wal_checkpoint(FULL)'); } catch (e2) { /* ignore */ }
+        }
+        dbDirty = false;
+      }
       const data = db.export();
       const buffer = Buffer.from(data);
       // Write directly and fsync to ensure data is flushed to disk
@@ -33,25 +49,19 @@ function saveDatabase() {
       fs.writeSync(fd, buffer, 0, buffer.length);
       fs.fsyncSync(fd);
       fs.closeSync(fd);
-      // Verify write by re-reading the file and checking user count
-      try {
-        const verifyBuf = fs.readFileSync(dbPath);
-        const initSqlJs = require('sql.js');
-        initSqlJs().then(SQL => {
-          const verifyDb = new SQL.Database(verifyBuf);
-          const verifyResult = verifyDb.exec('SELECT COUNT(*) FROM users');
-          const verifyCount = verifyResult.length > 0 ? verifyResult[0].values[0][0] : '?';
-          if (String(verifyCount) !== String(userCount)) {
-            logger.error('PERSISTENCE BUG: in-memory has ' + userCount + ' users but file has ' + verifyCount + ' users! File size: ' + verifyBuf.length + ', Export size: ' + buffer.length);
-          }
-          verifyDb.close();
-        }).catch(() => {});
-      } catch (verifyErr) { /* ignore verify errors */ }
-      logger.debug('Database saved to disk (' + buffer.length + ' bytes, ' + userCount + ' users)');
+      logger.debug('Database saved to disk (' + buffer.length + ' bytes)');
     } catch (err) {
       logger.error('Failed to save database: ' + err.message);
     }
   }
+}
+
+// Wrapper that marks the database as dirty before saving.
+// Call this after any write operation (INSERT, UPDATE, DELETE) to ensure
+// the next save includes all changes via VACUUM.
+function saveDatabaseAfterWrite() {
+  dbDirty = true;
+  saveDatabase();
 }
 
 async function initDatabase() {
@@ -575,4 +585,4 @@ function getDatabase() {
   return db;
 }
 
-module.exports = { initDatabase, getDatabase, saveDatabase };
+module.exports = { initDatabase, getDatabase, saveDatabase, saveDatabaseAfterWrite };

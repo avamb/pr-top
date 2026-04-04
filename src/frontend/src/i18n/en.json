@@ -535,6 +535,16 @@
     "error": "Playback Error",
     "loadError": "Failed to load media file"
   },
+  "diary": {
+    "transcribed": "Transcribed",
+    "pendingTranscription": "Pending transcription",
+    "transcriptionFailed": "Failed",
+    "transcript": "Transcript",
+    "noTranscript": "No transcript available",
+    "retryTranscription": "Retry transcription",
+    "expand": "Expand",
+    "collapse": "Collapse"
+  },
   "admin": {
     "loadingAdmin": "Loading admin panel...",
     "dashboardTitle": "Admin Dashboard",

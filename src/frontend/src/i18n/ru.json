@@ -535,6 +535,16 @@
     "error": "Ошибка воспроизведения",
     "loadError": "Не удалось загрузить медиафайл"
   },
+  "diary": {
+    "transcribed": "Расшифровано",
+    "pendingTranscription": "Ожидает расшифровки",
+    "transcriptionFailed": "Ошибка",
+    "transcript": "Расшифровка",
+    "noTranscript": "Расшифровка недоступна",
+    "retryTranscription": "Повторить расшифровку",
+    "expand": "Развернуть",
+    "collapse": "Свернуть"
+  },
   "admin": {
     "loadingAdmin": "Загрузка панели администратора...",
     "dashboardTitle": "Панель администратора",

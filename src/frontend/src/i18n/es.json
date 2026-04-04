@@ -535,6 +535,16 @@
     "error": "Error de reproducción",
     "loadError": "No se pudo cargar el archivo de media"
   },
+  "diary": {
+    "transcribed": "Transcrito",
+    "pendingTranscription": "Transcripción pendiente",
+    "transcriptionFailed": "Error",
+    "transcript": "Transcripción",
+    "noTranscript": "Transcripción no disponible",
+    "retryTranscription": "Reintentar transcripción",
+    "expand": "Expandir",
+    "collapse": "Contraer"
+  },
   "admin": {
     "loadingAdmin": "Cargando panel de administración...",
     "dashboardTitle": "Panel de administración",

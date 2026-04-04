@@ -10,7 +10,7 @@ function formatTime(seconds) {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-function AudioPlayer({ sessionId, audioRef }) {
+function AudioPlayer({ sessionId, audioRef, streamUrl: customStreamUrl }) {
   const { t } = useTranslation();
   const mediaRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -23,7 +23,7 @@ function AudioPlayer({ sessionId, audioRef }) {
   const [isVideo, setIsVideo] = useState(false);
 
   const token = localStorage.getItem('token');
-  const streamUrl = `/api/sessions/${sessionId}/stream`;
+  const streamUrl = customStreamUrl || `/api/sessions/${sessionId}/stream`;
 
   // Detect media type from audio_ref extension
   // Detect media type from audio_ref extension

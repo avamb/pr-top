@@ -10,7 +10,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - FRONTEND_URL=https://app.pr-top.com
+      - FRONTEND_URL=https://pr-top.com
       # AI provider configuration
       - AI_PROVIDER=${AI_PROVIDER:-openai}
       - AI_MODEL=${AI_MODEL:-gpt-4o-mini}
