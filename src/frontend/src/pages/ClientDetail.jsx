@@ -1099,7 +1099,7 @@ function ClientDetail() {
                                 <span className="text-xs font-medium text-stone-600 uppercase">
                                   {result.type === 'diary' ? (result.entry_type || 'diary') : result.type}
                                 </span>
-                                <span className="text-xs text-stone-400">{new Date(result.created_at).toLocaleDateString()}</span>
+                                <span className="text-xs text-stone-400">{formatUserDateOnly(result.created_at)}</span>
                                 <div className="ml-auto flex items-center gap-1.5">
                                   <span className={`text-xs font-medium ${scoreLabelColor}`}>{scoreLabel}</span>
                                   <div className="w-16 h-1.5 bg-stone-100 rounded-full overflow-hidden" title={`${Math.round(score * 100)}%`}>

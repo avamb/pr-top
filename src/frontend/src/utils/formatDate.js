@@ -14,7 +14,25 @@ export function formatDate(dateInput, options = {}) {
 
   var date;
   try {
-    date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+    if (dateInput instanceof Date) {
+      date = dateInput;
+    } else if (typeof dateInput === 'string') {
+      // SQLite datetime('now') returns UTC timestamps like '2026-04-04 15:00:00'
+      // without a 'Z' suffix or timezone offset. JavaScript new Date() parses
+      // such strings as LOCAL time, causing a shift equal to the user's UTC offset.
+      // Normalize by replacing the space with 'T' and appending 'Z' so that
+      // new Date() treats it as UTC.
+      var normalized = dateInput;
+      if (!/[Z+\-]\d{0,4}:?\d{0,2}$/.test(dateInput.trim()) && /^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}/.test(dateInput.trim())) {
+        normalized = dateInput.trim().replace(' ', 'T');
+        if (!normalized.endsWith('Z')) {
+          normalized += 'Z';
+        }
+      }
+      date = new Date(normalized);
+    } else {
+      date = new Date(dateInput);
+    }
     if (isNaN(date.getTime())) return String(dateInput);
   } catch (e) {
     return String(dateInput);
