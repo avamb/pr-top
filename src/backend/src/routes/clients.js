@@ -1513,6 +1513,68 @@ router.put('/:id/sos/:sosId/acknowledge', (req, res) => {
   }
 });
 
+// PUT /api/clients/:id/sos/:sosId/resolve - Therapist resolves SOS event
+router.put('/:id/sos/:sosId/resolve', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+    const sosId = req.params.sosId;
+
+    // Verify client belongs to this therapist AND has granted consent
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'sos_resolve');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+
+    // Verify SOS event exists and belongs to this therapist/client
+    const sosResult = db.exec(
+      'SELECT id, status FROM sos_events WHERE id = ? AND client_id = ? AND therapist_id = ?',
+      [sosId, clientId, therapistId]
+    );
+
+    if (sosResult.length === 0 || sosResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'SOS event not found' });
+    }
+
+    const currentStatus = sosResult[0].values[0][1];
+    if (currentStatus === 'resolved') {
+      return res.json({
+        message: 'SOS event already resolved',
+        sos_event: { id: parseInt(sosId), status: 'resolved' }
+      });
+    }
+
+    // Update SOS event status to resolved
+    db.run(
+      "UPDATE sos_events SET status = 'resolved' WHERE id = ?",
+      [sosId]
+    );
+
+    // Record in audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      [therapistId, 'sos_resolved', 'sos_event', sosId, JSON.stringify({ client_id: parseInt(clientId), therapist_id: therapistId, previous_status: currentStatus })]
+    );
+    saveDatabase();
+
+    logger.info(`Therapist ${therapistId} resolved SOS event #${sosId} for client ${clientId}`);
+
+    res.json({
+      message: 'SOS event resolved',
+      sos_event: {
+        id: parseInt(sosId),
+        client_id: parseInt(clientId),
+        therapist_id: therapistId,
+        status: 'resolved'
+      }
+    });
+  } catch (error) {
+    logger.error('Resolve SOS error: ' + error.message);
+    res.status(500).json({ error: 'Failed to resolve SOS event' });
+  }
+});
+
 // POST /api/clients/:id/import - Import data (notes/diary) from JSON file
 // Accepts JSON with { type: "notes"|"diary", entries: [...] }
 const multer = require('multer');

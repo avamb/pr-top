@@ -451,6 +451,14 @@ function applySchema(db) {
     // Column already exists, ignore
   }
 
+  // Add audio_file_ref column to diary_entries for local encrypted voice/video files (migration)
+  try {
+    db.run('ALTER TABLE diary_entries ADD COLUMN audio_file_ref TEXT');
+    logger.info('Added audio_file_ref column to diary_entries');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
   // Normalize existing emails to lowercase (migration for case-insensitive matching)
   try {
     const mixedCaseResult = db.exec("SELECT COUNT(*) FROM users WHERE email != LOWER(email)");

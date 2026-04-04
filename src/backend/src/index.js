@@ -89,7 +89,7 @@ app.use('/api/auth/register', authLimiter);
 app.use('/api/webhooks', webhookRoutes);
 
 // Body parsing (after webhooks which need raw body)
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' })); // Increased for base64-encoded voice/video files from Telegram (up to ~20MB raw)
 app.use(express.urlencoded({ extended: true }));
 
 // Cookie parser for secure session cookies
@@ -168,6 +168,7 @@ app.use('/api/settings', requireActiveSubscription, require('./routes/settings')
 app.use('/api/search', requireActiveSubscription, require('./routes/search'));
 app.use('/api/query', requireActiveSubscription, require('./routes/query'));
 app.use('/api/export', requireActiveSubscription, require('./routes/export'));
+app.use('/api/diary', requireActiveSubscription, require('./routes/diary'));
 
 // Dev-only seed endpoint for testing with large datasets
 if (process.env.NODE_ENV !== 'production') {

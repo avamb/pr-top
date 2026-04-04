@@ -19,7 +19,9 @@ const api = axios.create({
     'Content-Type': 'application/json',
     'x-bot-api-key': BOT_API_KEY
   },
-  timeout: 10000
+  timeout: 30000, // Increased for voice/video file uploads
+  maxContentLength: 50 * 1024 * 1024, // 50MB for base64-encoded files
+  maxBodyLength: 50 * 1024 * 1024
 });
 
 // Cache for user language preferences
@@ -344,10 +346,12 @@ if (!token || token === 'your-telegram-bot-token') {
           // Not registered — auto-register as client
         }
 
+        let isNewRegistration = false;
+        let detectedTz = 'UTC';
         if (!existingUser) {
           try {
-            const tz = detectTimezone(msg);
-            console.log(`[Timezone] Auto-detected timezone for deep-link client telegram_id=${telegramId}: ${tz} (language_code=${msg.from?.language_code || 'unknown'})`);
+            detectedTz = detectTimezone(msg);
+            console.log(`[Timezone] Auto-detected timezone for deep-link client telegram_id=${telegramId}: ${detectedTz} (language_code=${msg.from?.language_code || 'unknown'})`);
             await api.post('/api/bot/register', {
               telegram_id: String(telegramId),
               role: 'client',
@@ -355,9 +359,10 @@ if (!token || token === 'your-telegram-bot-token') {
               first_name: msg.from.first_name || '',
               last_name: msg.from.last_name || '',
               username: msg.from.username || '',
-              timezone: tz
+              timezone: detectedTz
             });
             userLangCache[telegramId] = detectLang(msg);
+            isNewRegistration = true;
           } catch (regErr) {
             // Registration may fail if already exists — continue anyway
           }
@@ -376,7 +381,7 @@ if (!token || token === 'your-telegram-bot-token') {
         await bot.sendMessage(chatId, t(lang, 'deepLinkClientWelcome'));
 
         // Show consent prompt (same as /connect flow)
-        bot.sendMessage(chatId,
+        await bot.sendMessage(chatId,
           foundTherapist(therapist.display_name),
           {
             parse_mode: 'Markdown',
@@ -390,6 +395,11 @@ if (!token || token === 'your-telegram-bot-token') {
             }
           }
         );
+
+        // Show timezone confirmation for newly registered clients
+        if (isNewRegistration) {
+          sendTimezoneConfirmation(chatId, lang, detectedTz);
+        }
       } catch (error) {
         const errorMsg = error.response?.data?.error || t(lang, 'deepLinkInvalidCode');
         bot.sendMessage(chatId, `❌ ${errorMsg}\n\n${t(lang, 'deepLinkFallbackHint')}`);
@@ -565,6 +575,19 @@ if (!token || token === 'your-telegram-bot-token') {
     }
   }
 
+  // Send timezone confirmation after client registration (shown once)
+  function sendTimezoneConfirmation(chatId, lang, tz) {
+    const tzMsg = t(lang, 'timezoneDetectedAfterReg');
+    bot.sendMessage(chatId, tzMsg(tz), {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: t(lang, 'tzChangeButton'), callback_data: 'tz_change_after_reg' }]
+        ]
+      }
+    });
+  }
+
   // Timezone region definitions
   const TIMEZONE_REGIONS = {
     europe: [
@@ -645,6 +668,14 @@ if (!token || token === 'your-telegram-bot-token') {
     const chatId = callbackQuery.message.chat.id;
     const telegramId = callbackQuery.from.id;
     const data = callbackQuery.data;
+
+    // Handle "Change timezone" button shown after registration
+    if (data === 'tz_change_after_reg') {
+      const lang = await getUserLang(telegramId);
+      await handleTimezone(chatId, telegramId, lang);
+      bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
 
     // Handle timezone region selection callbacks
     if (data.startsWith('tz_region_')) {
@@ -874,10 +905,12 @@ if (!token || token === 'your-telegram-bot-token') {
               one_time_keyboard: true
             }
           });
-        } else {
-          bot.sendMessage(chatId, t(lang, 'welcomeClient'), {
+        } else if (role === 'client') {
+          await bot.sendMessage(chatId, t(lang, 'welcomeClient'), {
             reply_markup: getClientKeyboard(lang)
           });
+          // Show timezone confirmation for newly registered clients
+          sendTimezoneConfirmation(chatId, lang, tz);
         }
       } catch (error) {
         console.error('Registration error:', error.message);
@@ -945,6 +978,31 @@ if (!token || token === 'your-telegram-bot-token') {
     }
   });
 
+  /**
+   * Download a file from Telegram servers by file_id.
+   * Returns { buffer, filePath } or null on failure.
+   */
+  async function downloadTelegramFile(fileId) {
+    try {
+      // Get file path from Telegram Bot API
+      const fileInfo = await bot.getFile(fileId);
+      if (!fileInfo || !fileInfo.file_path) {
+        console.error('Could not get file path for file_id:', fileId);
+        return null;
+      }
+      // Download the file bytes
+      const fileUrl = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
+      const response = await axios.get(fileUrl, { responseType: 'arraybuffer', timeout: 30000 });
+      return {
+        buffer: Buffer.from(response.data),
+        filePath: fileInfo.file_path
+      };
+    } catch (err) {
+      console.error('Failed to download Telegram file:', err.message);
+      return null;
+    }
+  }
+
   // Handle voice messages - save as diary entries (clients only)
   bot.on('voice', async (msg) => {
     const chatId = msg.chat.id;
@@ -963,12 +1021,27 @@ if (!token || token === 'your-telegram-bot-token') {
       const fileId = msg.voice.file_id;
       const duration = msg.voice.duration;
 
+      // Download actual voice file from Telegram servers
+      let fileData = null;
+      let fileExt = '.ogg'; // Telegram voice messages are always .ogg (opus)
+      try {
+        const downloaded = await downloadTelegramFile(fileId);
+        if (downloaded) {
+          fileData = downloaded.buffer.toString('base64');
+          console.log(`Downloaded voice file: ${downloaded.buffer.length} bytes`);
+        }
+      } catch (dlErr) {
+        console.error('Voice file download failed, saving file_ref only:', dlErr.message);
+      }
+
       // Submit voice diary entry via backend API (auto-transcription is triggered server-side)
       const result = await api.post('/api/bot/diary', {
         telegram_id: String(telegramId),
         entry_type: 'voice',
         content: `[Voice message, duration: ${duration}s]`,
-        file_ref: fileId
+        file_ref: fileId,
+        file_data: fileData,
+        file_ext: fileExt
       });
 
       // Notify user that transcription is in progress
@@ -997,12 +1070,32 @@ if (!token || token === 'your-telegram-bot-token') {
       const fileId = msg.video.file_id;
       const duration = msg.video.duration;
 
+      // Download actual video file from Telegram servers
+      let fileData = null;
+      let fileExt = '.mp4'; // Telegram video messages are typically .mp4
+      try {
+        const downloaded = await downloadTelegramFile(fileId);
+        if (downloaded) {
+          fileData = downloaded.buffer.toString('base64');
+          // Determine extension from file path
+          if (downloaded.filePath) {
+            const ext = downloaded.filePath.split('.').pop();
+            if (ext && ext.length <= 5) fileExt = '.' + ext;
+          }
+          console.log(`Downloaded video file: ${downloaded.buffer.length} bytes`);
+        }
+      } catch (dlErr) {
+        console.error('Video file download failed, saving file_ref only:', dlErr.message);
+      }
+
       // Submit video diary entry via backend API (auto-transcription is triggered server-side)
       const result = await api.post('/api/bot/diary', {
         telegram_id: String(telegramId),
         entry_type: 'video',
         content: `[Video message, duration: ${duration}s]`,
-        file_ref: fileId
+        file_ref: fileId,
+        file_data: fileData,
+        file_ext: fileExt
       });
 
       // Notify user that transcription is in progress
@@ -1031,12 +1124,27 @@ if (!token || token === 'your-telegram-bot-token') {
       const fileId = msg.video_note.file_id;
       const duration = msg.video_note.duration;
 
+      // Download actual video note file from Telegram servers
+      let fileData = null;
+      let fileExt = '.mp4'; // Telegram video notes are .mp4
+      try {
+        const downloaded = await downloadTelegramFile(fileId);
+        if (downloaded) {
+          fileData = downloaded.buffer.toString('base64');
+          console.log(`Downloaded video note: ${downloaded.buffer.length} bytes`);
+        }
+      } catch (dlErr) {
+        console.error('Video note download failed, saving file_ref only:', dlErr.message);
+      }
+
       // Submit video diary entry via backend API (auto-transcription is triggered server-side)
       const result = await api.post('/api/bot/diary', {
         telegram_id: String(telegramId),
         entry_type: 'video',
         content: `[Video note, duration: ${duration}s]`,
-        file_ref: fileId
+        file_ref: fileId,
+        file_data: fileData,
+        file_ext: fileExt
       });
 
       // Notify user that transcription is in progress

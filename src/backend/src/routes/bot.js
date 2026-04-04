@@ -2,6 +2,9 @@
 // API endpoints used by the Telegram bot to manage users
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
 const { getDatabase, saveDatabase } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { encrypt, decrypt } = require('../services/encryption');
@@ -10,6 +13,25 @@ const { checkClientLimit } = require('../utils/planLimits');
 const telegramNotify = require('../utils/telegramNotify');
 const emailService = require('../services/emailService');
 const wsService = require('../services/websocketService');
+
+// Directory for encrypted diary voice/video files
+const DIARY_FILES_DIR = path.resolve(__dirname, '../../data/diary_files');
+if (!fs.existsSync(DIARY_FILES_DIR)) {
+  fs.mkdirSync(DIARY_FILES_DIR, { recursive: true });
+}
+
+/**
+ * Encrypt a file on disk (mirrors sessions.js pattern).
+ * Reads file bytes, encodes to base64, encrypts, writes .enc file, deletes original.
+ */
+function encryptDiaryFileOnDisk(filePath) {
+  const fileData = fs.readFileSync(filePath);
+  const { encrypted, keyVersion, keyId } = encrypt(fileData.toString('base64'));
+  fs.writeFileSync(filePath + '.enc', encrypted);
+  // Remove the original unencrypted file
+  fs.unlinkSync(filePath);
+  return { encryptedPath: filePath + '.enc', keyVersion, keyId };
+}
 
 const router = express.Router();
 
@@ -481,7 +503,7 @@ router.post('/revoke-consent', botAuth, (req, res) => {
 // POST /api/bot/diary - Client submits a diary entry
 router.post('/diary', botAuth, (req, res) => {
   try {
-    const { telegram_id, content, entry_type, file_ref } = req.body;
+    const { telegram_id, content, entry_type, file_ref, file_data, file_ext } = req.body;
 
     if (!telegram_id) {
       return res.status(400).json({ error: 'telegram_id is required' });
@@ -546,11 +568,40 @@ router.post('/diary', botAuth, (req, res) => {
       }
     }
 
-    // Insert diary entry with file_ref
+    // If file_data (base64 audio/video bytes) provided, encrypt and store on disk
+    let audioFileRef = null;
+    if (file_data) {
+      try {
+        const ext = file_ext || '.ogg';
+        const opaqueId = crypto.randomUUID();
+        const filename = `${opaqueId}${ext}`;
+        const tempPath = path.join(DIARY_FILES_DIR, filename);
+
+        // Write raw binary to temp file
+        const buffer = Buffer.from(file_data, 'base64');
+        fs.writeFileSync(tempPath, buffer);
+
+        // Encrypt file on disk (deletes temp, creates .enc)
+        const encResult2 = encryptDiaryFileOnDisk(tempPath);
+        audioFileRef = `${filename}.enc`;
+
+        if (!keyId) {
+          keyId = encResult2.keyId;
+          keyVersion = encResult2.keyVersion;
+        }
+
+        logger.info(`Encrypted diary audio file: ${audioFileRef} (${buffer.length} bytes)`);
+      } catch (fileErr) {
+        logger.error(`Failed to encrypt diary audio file: ${fileErr.message}`);
+        // Non-fatal: diary entry is saved without the audio file
+      }
+    }
+
+    // Insert diary entry with file_ref and audio_file_ref
     db.run(
-      `INSERT INTO diary_entries (client_id, entry_type, content_encrypted, file_ref, encryption_key_id, payload_version, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-      [clientId, type, contentEncrypted, encryptedFileRef, keyId, keyVersion]
+      `INSERT INTO diary_entries (client_id, entry_type, content_encrypted, file_ref, audio_file_ref, encryption_key_id, payload_version, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+      [clientId, type, contentEncrypted, encryptedFileRef, audioFileRef, keyId, keyVersion]
     );
     saveDatabase();
 
@@ -615,6 +666,7 @@ router.post('/diary', botAuth, (req, res) => {
         client_id: clientId,
         entry_type: type,
         has_file: !!file_ref,
+        has_audio_file: !!audioFileRef,
         embedding_ref: embRef,
         created_at: new Date().toISOString()
       }
