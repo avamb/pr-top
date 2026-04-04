@@ -575,6 +575,61 @@ if (!token || token === 'your-telegram-bot-token') {
     }
   }
 
+  // /settings command - therapist settings (voice forwarding, etc.)
+  bot.onText(/\/settings/, async (msg) => {
+    const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+    const lang = await getUserLang(telegramId);
+    await handleBotSettings(chatId, telegramId, lang);
+  });
+
+  async function handleBotSettings(chatId, telegramId, lang, editMessageId) {
+    try {
+      const user = await checkExistingUser(telegramId);
+      if (!user || (user.role !== 'therapist' && user.role !== 'superadmin')) {
+        bot.sendMessage(chatId, t(lang, 'settingsTherapistOnly'));
+        return;
+      }
+
+      const prefs = user.escalation_preferences || {};
+      const forwardEnabled = !!prefs.forward_voice_to_telegram;
+
+      const statusEmoji = forwardEnabled ? '✅' : '❌';
+      const settingsText = `⚙️ *${t(lang, 'settingsTitle')}*\n\n` +
+        `🎤 ${t(lang, 'settingsForwardVoice')}: ${statusEmoji}\n\n` +
+        `${t(lang, 'settingsForwardVoiceDesc')}`;
+
+      const keyboard = {
+        inline_keyboard: [
+          [{
+            text: forwardEnabled ?
+              `🔴 ${t(lang, 'settingsDisableForward')}` :
+              `🟢 ${t(lang, 'settingsEnableForward')}`,
+            callback_data: forwardEnabled ? 'settings_fwd_off' : 'settings_fwd_on'
+          }]
+        ]
+      };
+
+      if (editMessageId) {
+        // Edit existing message
+        bot.editMessageText(settingsText, {
+          chat_id: chatId,
+          message_id: editMessageId,
+          parse_mode: 'Markdown',
+          reply_markup: keyboard
+        }).catch(() => {});
+      } else {
+        bot.sendMessage(chatId, settingsText, {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard
+        });
+      }
+    } catch (error) {
+      console.error('Settings command error:', error.message);
+      bot.sendMessage(chatId, '❌ Failed to load settings');
+    }
+  }
+
   // Send timezone confirmation after client registration (shown once)
   function sendTimezoneConfirmation(chatId, lang, tz) {
     const tzMsg = t(lang, 'timezoneDetectedAfterReg');
@@ -668,6 +723,27 @@ if (!token || token === 'your-telegram-bot-token') {
     const chatId = callbackQuery.message.chat.id;
     const telegramId = callbackQuery.from.id;
     const data = callbackQuery.data;
+
+    // Handle settings toggle callbacks
+    if (data === 'settings_fwd_on' || data === 'settings_fwd_off') {
+      const lang = await getUserLang(telegramId);
+      const newValue = data === 'settings_fwd_on';
+      try {
+        await api.put(`/api/bot/settings/${telegramId}`, {
+          key: 'forward_voice_to_telegram',
+          value: newValue
+        });
+        // Refresh the settings message
+        await handleBotSettings(chatId, telegramId, lang, callbackQuery.message.message_id);
+        bot.answerCallbackQuery(callbackQuery.id, {
+          text: newValue ? t(lang, 'settingsForwardEnabled') : t(lang, 'settingsForwardDisabled')
+        });
+      } catch (err) {
+        console.error('Failed to update forward setting:', err.message);
+        bot.answerCallbackQuery(callbackQuery.id, { text: '❌ Failed to update' });
+      }
+      return;
+    }
 
     // Handle "Change timezone" button shown after registration
     if (data === 'tz_change_after_reg') {
@@ -978,6 +1054,84 @@ if (!token || token === 'your-telegram-bot-token') {
     }
   });
 
+  // Rate limiting for voice forwarding (max 10 messages per minute per therapist)
+  const voiceForwardRateLimit = new Map(); // therapistTgId -> [timestamps]
+  const FORWARD_RATE_LIMIT = 10;
+  const FORWARD_RATE_WINDOW_MS = 60000;
+
+  /**
+   * Check if a therapist is within quiet hours.
+   */
+  function isQuietHours(quietHoursConfig) {
+    if (!quietHoursConfig || !quietHoursConfig.enabled) return false;
+    const now = new Date();
+    const currentMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+    const [startH, startM] = (quietHoursConfig.start || '22:00').split(':').map(Number);
+    const [endH, endM] = (quietHoursConfig.end || '08:00').split(':').map(Number);
+    const startMinutes = startH * 60 + startM;
+    const endMinutes = endH * 60 + endM;
+
+    if (startMinutes <= endMinutes) {
+      // Same day range (e.g., 08:00 to 18:00)
+      return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+    } else {
+      // Overnight range (e.g., 22:00 to 08:00)
+      return currentMinutes >= startMinutes || currentMinutes < endMinutes;
+    }
+  }
+
+  /**
+   * Check rate limit for voice forwarding.
+   */
+  function checkForwardRateLimit(therapistTgId) {
+    const now = Date.now();
+    let timestamps = voiceForwardRateLimit.get(therapistTgId) || [];
+    timestamps = timestamps.filter(t => now - t < FORWARD_RATE_WINDOW_MS);
+    if (timestamps.length >= FORWARD_RATE_LIMIT) {
+      voiceForwardRateLimit.set(therapistTgId, timestamps);
+      return false; // Rate limited
+    }
+    timestamps.push(now);
+    voiceForwardRateLimit.set(therapistTgId, timestamps);
+    return true; // Allowed
+  }
+
+  /**
+   * Forward voice/video message to therapist's Telegram chat.
+   */
+  async function forwardVoiceToTherapist(forwardInfo, fileId, entryType, chatIdOriginal) {
+    try {
+      if (!forwardInfo || !forwardInfo.therapist_telegram_id) return;
+
+      // Check quiet hours
+      if (isQuietHours(forwardInfo.quiet_hours)) {
+        console.log('Skipping voice forward - therapist in quiet hours');
+        return;
+      }
+
+      // Check rate limit
+      if (!checkForwardRateLimit(forwardInfo.therapist_telegram_id)) {
+        console.log('Skipping voice forward - rate limited');
+        return;
+      }
+
+      const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'UTC' });
+      const caption = `📨 ${forwardInfo.client_name} | ${entryType === 'video' ? 'Video' : 'Voice'} diary | ${timestamp} UTC`;
+
+      if (entryType === 'voice') {
+        await bot.sendVoice(forwardInfo.therapist_telegram_id, fileId, { caption });
+      } else {
+        // Video or video_note
+        await bot.sendVideo(forwardInfo.therapist_telegram_id, fileId, { caption });
+      }
+
+      console.log(`Forwarded ${entryType} message to therapist ${forwardInfo.therapist_telegram_id}`);
+    } catch (err) {
+      console.error('Failed to forward voice to therapist:', err.message);
+      // Non-fatal: don't affect client's diary saving
+    }
+  }
+
   /**
    * Download a file from Telegram servers by file_id.
    * Returns { buffer, filePath } or null on failure.
@@ -1046,6 +1200,11 @@ if (!token || token === 'your-telegram-bot-token') {
 
       // Notify user that transcription is in progress
       bot.sendMessage(chatId, t(lang, 'voiceSavedTranscribing'));
+
+      // Forward voice to therapist if enabled
+      if (result.data && result.data.forward_voice) {
+        forwardVoiceToTherapist(result.data.forward_voice, fileId, 'voice', chatId);
+      }
     } catch (error) {
       const errorMsg = error.response?.data?.error || t(lang, 'failedVoiceDiary');
       bot.sendMessage(chatId, `❌ ${errorMsg}`);
@@ -1100,6 +1259,11 @@ if (!token || token === 'your-telegram-bot-token') {
 
       // Notify user that transcription is in progress
       bot.sendMessage(chatId, t(lang, 'videoSavedTranscribing'));
+
+      // Forward video to therapist if enabled
+      if (result.data && result.data.forward_voice) {
+        forwardVoiceToTherapist(result.data.forward_voice, fileId, 'video', chatId);
+      }
     } catch (error) {
       const errorMsg = error.response?.data?.error || t(lang, 'failedVideoDiary');
       bot.sendMessage(chatId, `❌ ${errorMsg}`);
@@ -1149,6 +1313,11 @@ if (!token || token === 'your-telegram-bot-token') {
 
       // Notify user that transcription is in progress
       bot.sendMessage(chatId, t(lang, 'videoSavedTranscribing'));
+
+      // Forward video note to therapist if enabled
+      if (result.data && result.data.forward_voice) {
+        forwardVoiceToTherapist(result.data.forward_voice, fileId, 'video', chatId);
+      }
     } catch (error) {
       const errorMsg = error.response?.data?.error || t(lang, 'failedVideoDiary');
       bot.sendMessage(chatId, `❌ ${errorMsg}`);

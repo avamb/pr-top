@@ -48,7 +48,7 @@ Connect clients with one link — simple and secure.
     // /help command
     helpUnregistered: '👋 Welcome to *PR-TOP*!\n\nUse /start to register and get started.',
     helpClient: '📋 *Available Commands:*\n\n/start - Register or check your status\n/help - Show this help message\n/profile - View and edit your profile\n/connect `CODE` - Connect with your therapist\n/exercises - View your assigned exercises\n/sos - Emergency alert to your therapist\n/history - View your recent diary entries\n/timezone - View or change your timezone\n/disconnect - Disconnect from your therapist\n\n💡 *Diary:* Simply send a text, voice, or video message to save a diary entry.',
-    helpTherapist: '📋 *Available Commands:*\n\n/start - Check your registration status\n/help - Show this help message\n\n💡 *Tip:* Use the web dashboard at pr-top.com to manage your clients, view diaries, and more.',
+    helpTherapist: '📋 *Available Commands:*\n\n/start - Check your registration status\n/help - Show this help message\n/timezone - View or change your timezone\n/profile - View your profile\n\n💡 *Tip:* Use the web dashboard at pr-top.com to manage your clients, view diaries, and more.',
     // /sos command
     sosConfirmed: '🆘 *SOS alert sent!*\n\nYour therapist has been notified. If you are in immediate danger, please contact emergency services.\n\n🇺🇸 USA: 988 (Suicide & Crisis Lifeline)\n🌍 International: https://findahelpline.com',
     sosFailed: 'Failed to send SOS alert. Please try again or contact emergency services directly.',
@@ -73,6 +73,17 @@ Connect clients with one link — simple and secure.
     tzRegionAfrica: 'Africa',
     tzRegionPacific: 'Pacific / Oceania',
     tzBack: 'Back to regions',
+    timezoneDetectedAfterReg: (tz) => `🕐 *Your timezone is set to:* ${tz}\n\nIf this is incorrect (e.g. you use a VPN), tap the button below to change it.`,
+    tzChangeButton: '🔄 Change timezone',
+    // /settings command
+    settingsTherapistOnly: '⚙️ Settings are available only for therapists.',
+    settingsTitle: 'Bot Settings',
+    settingsForwardVoice: 'Forward client voice messages',
+    settingsForwardVoiceDesc: 'When enabled, client voice and video diary messages will be forwarded to your Telegram chat with a caption showing client name and timestamp.',
+    settingsEnableForward: 'Enable forwarding',
+    settingsDisableForward: 'Disable forwarding',
+    settingsForwardEnabled: '✅ Voice forwarding enabled',
+    settingsForwardDisabled: '❌ Voice forwarding disabled',
     // /exercises command
     exercisesHeader: '📋 *Your Exercises:*\n',
     exercisesEmpty: '📋 You have no exercises assigned yet.\n\nYour therapist can send you exercises from the dashboard.',
@@ -185,7 +196,7 @@ Connect clients with one link — simple and secure.
     // /help
     helpUnregistered: '👋 Добро пожаловать в *PR-TOP*!\n\nИспользуйте /start для регистрации.',
     helpClient: '📋 *Доступные команды:*\n\n/start - Регистрация или проверка статуса\n/help - Показать эту справку\n/profile - Просмотр и редактирование профиля\n/connect `КОД` - Подключиться к терапевту\n/exercises - Просмотр назначенных упражнений\n/sos - Экстренный сигнал терапевту\n/history - Просмотр последних записей дневника\n/timezone - Просмотр или изменение часового пояса\n/disconnect - Отключиться от терапевта\n\n💡 *Дневник:* Просто отправьте текстовое, голосовое или видеосообщение для записи в дневник.',
-    helpTherapist: '📋 *Доступные команды:*\n\n/start - Проверка статуса регистрации\n/help - Показать эту справку\n\n💡 *Совет:* Используйте веб-панель на pr-top.com для управления клиентами, просмотра дневников и многого другого.',
+    helpTherapist: '📋 *Доступные команды:*\n\n/start - Проверка статуса регистрации\n/help - Показать эту справку\n/timezone - Просмотр или изменение часового пояса\n/profile - Просмотр профиля\n\n💡 *Совет:* Используйте веб-панель на pr-top.com для управления клиентами, просмотра дневников и многого другого.',
     // /sos
     sosConfirmed: '🆘 *SOS-сигнал отправлен!*\n\nВаш терапевт уведомлён. Если вы в непосредственной опасности, обратитесь в службу экстренной помощи.\n\n🇷🇺 Россия: 8-800-2000-122 (телефон доверия)\n🌍 Международный: https://findahelpline.com',
     sosFailed: 'Не удалось отправить SOS-сигнал. Попробуйте снова или обратитесь в экстренные службы.',
@@ -210,6 +221,17 @@ Connect clients with one link — simple and secure.
     tzRegionAfrica: 'Африка',
     tzRegionPacific: 'Тихоокеанский регион',
     tzBack: 'Назад к регионам',
+    timezoneDetectedAfterReg: (tz) => `🕐 *Ваш часовой пояс установлен:* ${tz}\n\nЕсли это неверно (например, вы используете VPN), нажмите кнопку ниже, чтобы изменить.`,
+    tzChangeButton: '🔄 Изменить часовой пояс',
+    // /settings
+    settingsTherapistOnly: '⚙️ Настройки доступны только для терапевтов.',
+    settingsTitle: 'Настройки бота',
+    settingsForwardVoice: 'Пересылка голосовых сообщений клиентов',
+    settingsForwardVoiceDesc: 'Когда включено, голосовые и видео дневниковые записи клиентов будут пересылаться в ваш Telegram с именем клиента и временем.',
+    settingsEnableForward: 'Включить пересылку',
+    settingsDisableForward: 'Отключить пересылку',
+    settingsForwardEnabled: '✅ Пересылка голосовых включена',
+    settingsForwardDisabled: '❌ Пересылка голосовых отключена',
     // /exercises
     exercisesHeader: '📋 *Ваши упражнения:*\n',
     exercisesEmpty: '📋 У вас пока нет назначенных упражнений.\n\nВаш терапевт может отправить вам упражнения из панели управления.',
@@ -322,7 +344,7 @@ Conecta clientes con un enlace — simple y seguro.
     // /help
     helpUnregistered: '👋 ¡Bienvenido a *PR-TOP*!\n\nUsa /start para registrarte y comenzar.',
     helpClient: '📋 *Comandos disponibles:*\n\n/start - Registrarse o verificar tu estado\n/help - Mostrar esta ayuda\n/profile - Ver y editar tu perfil\n/connect `CÓDIGO` - Conectarte con tu terapeuta\n/exercises - Ver tus ejercicios asignados\n/sos - Alerta de emergencia a tu terapeuta\n/history - Ver tus entradas recientes del diario\n/timezone - Ver o cambiar tu zona horaria\n/disconnect - Desconectarte de tu terapeuta\n\n💡 *Diario:* Simplemente envía un mensaje de texto, voz o video para guardar una entrada de diario.',
-    helpTherapist: '📋 *Comandos disponibles:*\n\n/start - Verificar tu estado de registro\n/help - Mostrar esta ayuda\n\n💡 *Consejo:* Usa el panel web en pr-top.com para gestionar tus clientes, ver diarios y más.',
+    helpTherapist: '📋 *Comandos disponibles:*\n\n/start - Verificar tu estado de registro\n/help - Mostrar esta ayuda\n/timezone - Ver o cambiar tu zona horaria\n/profile - Ver tu perfil\n\n💡 *Consejo:* Usa el panel web en pr-top.com para gestionar tus clientes, ver diarios y más.',
     // /sos
     sosConfirmed: '🆘 *¡Alerta SOS enviada!*\n\nTu terapeuta ha sido notificado. Si estás en peligro inmediato, contacta a los servicios de emergencia.\n\n🇪🇸 España: 024 (Línea de Atención a la Conducta Suicida)\n🌍 Internacional: https://findahelpline.com',
     sosFailed: 'No se pudo enviar la alerta SOS. Inténtalo de nuevo o contacta directamente a los servicios de emergencia.',
@@ -347,6 +369,17 @@ Conecta clientes con un enlace — simple y seguro.
     tzRegionAfrica: 'África',
     tzRegionPacific: 'Pacífico / Oceanía',
     tzBack: 'Volver a regiones',
+    timezoneDetectedAfterReg: (tz) => `🕐 *Tu zona horaria está configurada como:* ${tz}\n\nSi esto es incorrecto (por ejemplo, si usas VPN), toca el botón de abajo para cambiarla.`,
+    tzChangeButton: '🔄 Cambiar zona horaria',
+    // /settings
+    settingsTherapistOnly: '⚙️ La configuración solo está disponible para terapeutas.',
+    settingsTitle: 'Configuración del bot',
+    settingsForwardVoice: 'Reenviar mensajes de voz de clientes',
+    settingsForwardVoiceDesc: 'Cuando está activado, los mensajes de voz y video del diario de clientes se reenviarán a tu chat de Telegram con el nombre del cliente y la hora.',
+    settingsEnableForward: 'Activar reenvío',
+    settingsDisableForward: 'Desactivar reenvío',
+    settingsForwardEnabled: '✅ Reenvío de voz activado',
+    settingsForwardDisabled: '❌ Reenvío de voz desactivado',
     // /exercises
     exercisesHeader: '📋 *Tus ejercicios:*\n',
     exercisesEmpty: '📋 Aún no tienes ejercicios asignados.\n\nTu terapeuta puede enviarte ejercicios desde el panel.',
@@ -459,7 +492,7 @@ Conecta clientes con un enlace — simple y seguro.
     // /help
     helpUnregistered: '👋 Ласкаво просимо до *PR-TOP*!\n\nВикористовуйте /start для реєстрації.',
     helpClient: '📋 *Доступні команди:*\n\n/start - Реєстрація або перевірка статусу\n/help - Показати цю довідку\n/profile - Переглянути та редагувати профіль\n/connect `КОД` - Під\'єднатися до терапевта\n/exercises - Переглянути призначені вправи\n/sos - Екстрений сигнал терапевту\n/history - Переглянути останні записи щоденника\n/timezone - Переглянути або змінити часовий пояс\n/disconnect - Від\'єднатися від терапевта\n\n💡 *Щоденник:* Просто надішліть текстове, голосове або відеоповідомлення для запису в щоденник.',
-    helpTherapist: '📋 *Доступні команди:*\n\n/start - Перевірка статусу реєстрації\n/help - Показати цю довідку\n\n💡 *Порада:* Використовуйте веб-панель на pr-top.com для керування клієнтами, перегляду щоденників та іншого.',
+    helpTherapist: '📋 *Доступні команди:*\n\n/start - Перевірка статусу реєстрації\n/help - Показати цю довідку\n/timezone - Переглянути або змінити часовий пояс\n/profile - Переглянути профіль\n\n💡 *Порада:* Використовуйте веб-панель на pr-top.com для керування клієнтами, перегляду щоденників та іншого.',
     // /sos
     sosConfirmed: '🆘 *SOS-сигнал надіслано!*\n\nВашого терапевта сповіщено. Якщо ви в безпосередній небезпеці, зверніться до служби екстреної допомоги.\n\n🇺🇦 Україна: 7333 (гаряча лінія з питань психічного здоров\'я)\n🌍 Міжнародний: https://findahelpline.com',
     sosFailed: 'Не вдалося надіслати SOS-сигнал. Спробуйте знову або зверніться до екстрених служб.',
@@ -484,6 +517,17 @@ Conecta clientes con un enlace — simple y seguro.
     tzRegionAfrica: 'Африка',
     tzRegionPacific: 'Тихоокеанський регіон',
     tzBack: 'Назад до регіонів',
+    timezoneDetectedAfterReg: (tz) => `🕐 *Ваш часовий пояс встановлено:* ${tz}\n\nЯкщо це невірно (наприклад, ви використовуєте VPN), натисніть кнопку нижче, щоб змінити.`,
+    tzChangeButton: '🔄 Змінити часовий пояс',
+    // /settings
+    settingsTherapistOnly: '⚙️ Налаштування доступні лише для терапевтів.',
+    settingsTitle: 'Налаштування бота',
+    settingsForwardVoice: 'Пересилання голосових повідомлень клієнтів',
+    settingsForwardVoiceDesc: "Коли увімкнено, голосові та відео щоденникові записи клієнтів будуть пересилатися у ваш Telegram з ім'ям клієнта та часом.",
+    settingsEnableForward: 'Увімкнути пересилання',
+    settingsDisableForward: 'Вимкнути пересилання',
+    settingsForwardEnabled: '✅ Пересилання голосових увімкнено',
+    settingsForwardDisabled: '❌ Пересилання голосових вимкнено',
     // /exercises
     exercisesHeader: '📋 *Ваші вправи:*\n',
     exercisesEmpty: '📋 У вас поки немає призначених вправ.\n\nВаш терапевт може надіслати вам вправи з панелі керування.',

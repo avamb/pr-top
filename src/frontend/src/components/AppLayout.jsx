@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import TimezoneDetectionBanner from './TimezoneDetectionBanner';
 import { UnsavedChangesProvider } from '../contexts/UnsavedChangesContext';
 
 const API_URL = '/api';
@@ -65,6 +66,7 @@ export default function AppLayout({ user, children }) {
 
         {/* Main content area - offset by sidebar on lg+, top padding on mobile/tablet for hamburger bar */}
         <div className="lg:ml-60 pt-14 lg:pt-0">
+          <TimezoneDetectionBanner user={user} />
           {typeof children === 'function' ? children({ user }) : children}
         </div>
       </div>
