@@ -62,6 +62,64 @@ function detectLang(msg) {
   return 'en';
 }
 
+// Auto-detect timezone from Telegram language_code (best-effort heuristic)
+// Since Telegram API doesn't provide timezone directly, we map language codes to likely timezones
+const LANGUAGE_TIMEZONE_MAP = {
+  'ru': 'Europe/Moscow',
+  'uk': 'Europe/Kyiv',
+  'es': 'Europe/Madrid',
+  'en': 'UTC',
+  'de': 'Europe/Berlin',
+  'fr': 'Europe/Paris',
+  'it': 'Europe/Rome',
+  'pt': 'America/Sao_Paulo',
+  'pt-br': 'America/Sao_Paulo',
+  'ja': 'Asia/Tokyo',
+  'ko': 'Asia/Seoul',
+  'zh': 'Asia/Shanghai',
+  'zh-hans': 'Asia/Shanghai',
+  'zh-hant': 'Asia/Taipei',
+  'ar': 'Asia/Riyadh',
+  'hi': 'Asia/Kolkata',
+  'tr': 'Europe/Istanbul',
+  'pl': 'Europe/Warsaw',
+  'nl': 'Europe/Amsterdam',
+  'sv': 'Europe/Stockholm',
+  'da': 'Europe/Copenhagen',
+  'fi': 'Europe/Helsinki',
+  'no': 'Europe/Oslo',
+  'nb': 'Europe/Oslo',
+  'cs': 'Europe/Prague',
+  'sk': 'Europe/Bratislava',
+  'ro': 'Europe/Bucharest',
+  'hu': 'Europe/Budapest',
+  'bg': 'Europe/Sofia',
+  'hr': 'Europe/Zagreb',
+  'sr': 'Europe/Belgrade',
+  'he': 'Asia/Jerusalem',
+  'th': 'Asia/Bangkok',
+  'vi': 'Asia/Ho_Chi_Minh',
+  'id': 'Asia/Jakarta',
+  'ms': 'Asia/Kuala_Lumpur',
+  'ka': 'Asia/Tbilisi',
+  'az': 'Asia/Baku',
+  'uz': 'Asia/Tashkent',
+  'kk': 'Asia/Almaty',
+  'be': 'Europe/Minsk',
+  'et': 'Europe/Tallinn',
+  'lv': 'Europe/Riga',
+  'lt': 'Europe/Vilnius',
+};
+
+function detectTimezone(msg) {
+  const code = (msg.from?.language_code || 'en').toLowerCase();
+  // Try exact match first, then prefix match
+  if (LANGUAGE_TIMEZONE_MAP[code]) return LANGUAGE_TIMEZONE_MAP[code];
+  const prefix = code.split('-')[0];
+  if (LANGUAGE_TIMEZONE_MAP[prefix]) return LANGUAGE_TIMEZONE_MAP[prefix];
+  return 'UTC';
+}
+
 if (!token || token === 'your-telegram-bot-token') {
   console.error('ERROR: TELEGRAM_BOT_TOKEN is not set. Please configure it in .env');
   console.log('Bot is in MOCK mode - API endpoints still work for testing.');
@@ -101,6 +159,7 @@ if (!token || token === 'your-telegram-bot-token') {
         { command: 'history', description: 'Diary history' },
         { command: 'sos', description: 'Emergency contact' },
         { command: 'profile', description: 'My profile' },
+        { command: 'timezone', description: 'View or change timezone' },
         { command: 'help', description: 'Help' },
         { command: 'disconnect', description: 'Disconnect from therapist' }
       ], { scope: { type: 'all_private_chats' } });
@@ -178,10 +237,24 @@ if (!token || token === 'your-telegram-bot-token') {
         return;
       }
 
+      // Fetch user timezone for date formatting
+      let userTimezone = 'UTC';
+      try {
+        const userInfo = await checkExistingUser(telegramId);
+        if (userInfo && userInfo.timezone) {
+          userTimezone = userInfo.timezone;
+        }
+      } catch { /* fallback to UTC */ }
+
+      const locale = lang === 'ru' ? 'ru-RU' : lang === 'es' ? 'es-ES' : lang === 'uk' ? 'uk-UA' : 'en-US';
+
       let text = t(lang, 'historyHeader') + '\n\n';
       entries.forEach((entry, i) => {
-        const date = new Date(entry.created_at).toLocaleDateString(lang === 'ru' ? 'ru-RU' : lang === 'es' ? 'es-ES' : 'en-US', {
-          day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+        // Treat created_at as UTC: append 'Z' if not already present
+        const createdAt = entry.created_at && !entry.created_at.endsWith('Z') ? entry.created_at + 'Z' : entry.created_at;
+        const date = new Date(createdAt).toLocaleDateString(locale, {
+          day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+          timeZone: userTimezone
         });
         const typeIcon = entry.entry_type === 'voice' ? '🎤' : entry.entry_type === 'video' ? '🎥' : '📝';
         let preview;
@@ -273,13 +346,16 @@ if (!token || token === 'your-telegram-bot-token') {
 
         if (!existingUser) {
           try {
+            const tz = detectTimezone(msg);
+            console.log(`[Timezone] Auto-detected timezone for deep-link client telegram_id=${telegramId}: ${tz} (language_code=${msg.from?.language_code || 'unknown'})`);
             await api.post('/api/bot/register', {
               telegram_id: String(telegramId),
               role: 'client',
               language: detectLang(msg),
               first_name: msg.from.first_name || '',
               last_name: msg.from.last_name || '',
-              username: msg.from.username || ''
+              username: msg.from.username || '',
+              timezone: tz
             });
             userLangCache[telegramId] = detectLang(msg);
           } catch (regErr) {
@@ -446,6 +522,104 @@ if (!token || token === 'your-telegram-bot-token') {
     await handleExercises(chatId, telegramId, lang);
   });
 
+  // /timezone command - view and change timezone
+  bot.onText(/\/timezone/, async (msg) => {
+    const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+    const lang = await getUserLang(telegramId);
+    await handleTimezone(chatId, telegramId, lang);
+  });
+
+  async function handleTimezone(chatId, telegramId, lang) {
+    try {
+      const user = await checkExistingUser(telegramId);
+      if (!user) {
+        bot.sendMessage(chatId, t(lang, 'helpUnregistered'), { parse_mode: 'Markdown' });
+        return;
+      }
+      const currentTz = user.timezone || 'UTC';
+      const now = new Date();
+      let localTime;
+      try {
+        localTime = now.toLocaleString('en-GB', { timeZone: currentTz, hour: '2-digit', minute: '2-digit', hour12: false });
+      } catch {
+        localTime = now.toUTCString().slice(17, 22);
+      }
+      const timezoneMsg = t(lang, 'timezoneCurrentAndChoose');
+      bot.sendMessage(chatId, timezoneMsg(currentTz, localTime), {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🌍 ' + t(lang, 'tzRegionEurope'), callback_data: 'tz_region_europe' }],
+            [{ text: '🌏 ' + t(lang, 'tzRegionAsia'), callback_data: 'tz_region_asia' }],
+            [{ text: '🌎 ' + t(lang, 'tzRegionAmerica'), callback_data: 'tz_region_america' }],
+            [{ text: '🌍 ' + t(lang, 'tzRegionAfrica'), callback_data: 'tz_region_africa' }],
+            [{ text: '🌏 ' + t(lang, 'tzRegionPacific'), callback_data: 'tz_region_pacific' }],
+            [{ text: '🕐 UTC', callback_data: 'tz_set_UTC' }]
+          ]
+        }
+      });
+    } catch (error) {
+      console.error('Timezone command error:', error.message);
+      bot.sendMessage(chatId, '❌ ' + t(lang, 'timezoneFailed'));
+    }
+  }
+
+  // Timezone region definitions
+  const TIMEZONE_REGIONS = {
+    europe: [
+      { tz: 'Europe/London', label: '🇬🇧 London (GMT)' },
+      { tz: 'Europe/Paris', label: '🇫🇷 Paris (CET)' },
+      { tz: 'Europe/Berlin', label: '🇩🇪 Berlin (CET)' },
+      { tz: 'Europe/Madrid', label: '🇪🇸 Madrid (CET)' },
+      { tz: 'Europe/Rome', label: '🇮🇹 Rome (CET)' },
+      { tz: 'Europe/Warsaw', label: '🇵🇱 Warsaw (CET)' },
+      { tz: 'Europe/Kyiv', label: '🇺🇦 Kyiv (EET)' },
+      { tz: 'Europe/Bucharest', label: '🇷🇴 Bucharest (EET)' },
+      { tz: 'Europe/Istanbul', label: '🇹🇷 Istanbul (TRT)' },
+      { tz: 'Europe/Moscow', label: '🇷🇺 Moscow (MSK)' },
+      { tz: 'Europe/Minsk', label: '🇧🇾 Minsk (MSK)' },
+    ],
+    asia: [
+      { tz: 'Asia/Jerusalem', label: '🇮🇱 Jerusalem (IST)' },
+      { tz: 'Asia/Dubai', label: '🇦🇪 Dubai (GST)' },
+      { tz: 'Asia/Tbilisi', label: '🇬🇪 Tbilisi (GET)' },
+      { tz: 'Asia/Almaty', label: '🇰🇿 Almaty (ALMT)' },
+      { tz: 'Asia/Tashkent', label: '🇺🇿 Tashkent (UZT)' },
+      { tz: 'Asia/Kolkata', label: '🇮🇳 Kolkata (IST)' },
+      { tz: 'Asia/Bangkok', label: '🇹🇭 Bangkok (ICT)' },
+      { tz: 'Asia/Shanghai', label: '🇨🇳 Shanghai (CST)' },
+      { tz: 'Asia/Tokyo', label: '🇯🇵 Tokyo (JST)' },
+      { tz: 'Asia/Seoul', label: '🇰🇷 Seoul (KST)' },
+    ],
+    america: [
+      { tz: 'America/New_York', label: '🇺🇸 New York (EST)' },
+      { tz: 'America/Chicago', label: '🇺🇸 Chicago (CST)' },
+      { tz: 'America/Denver', label: '🇺🇸 Denver (MST)' },
+      { tz: 'America/Los_Angeles', label: '🇺🇸 Los Angeles (PST)' },
+      { tz: 'America/Toronto', label: '🇨🇦 Toronto (EST)' },
+      { tz: 'America/Mexico_City', label: '🇲🇽 Mexico City (CST)' },
+      { tz: 'America/Sao_Paulo', label: '🇧🇷 São Paulo (BRT)' },
+      { tz: 'America/Buenos_Aires', label: '🇦🇷 Buenos Aires (ART)' },
+      { tz: 'America/Bogota', label: '🇨🇴 Bogotá (COT)' },
+      { tz: 'America/Lima', label: '🇵🇪 Lima (PET)' },
+    ],
+    africa: [
+      { tz: 'Africa/Cairo', label: '🇪🇬 Cairo (EET)' },
+      { tz: 'Africa/Lagos', label: '🇳🇬 Lagos (WAT)' },
+      { tz: 'Africa/Nairobi', label: '🇰🇪 Nairobi (EAT)' },
+      { tz: 'Africa/Johannesburg', label: '🇿🇦 Johannesburg (SAST)' },
+      { tz: 'Africa/Casablanca', label: '🇲🇦 Casablanca (WET)' },
+    ],
+    pacific: [
+      { tz: 'Pacific/Auckland', label: '🇳🇿 Auckland (NZST)' },
+      { tz: 'Australia/Sydney', label: '🇦🇺 Sydney (AEST)' },
+      { tz: 'Australia/Melbourne', label: '🇦🇺 Melbourne (AEST)' },
+      { tz: 'Pacific/Honolulu', label: '🇺🇸 Honolulu (HST)' },
+      { tz: 'Pacific/Fiji', label: '🇫🇯 Fiji (FJT)' },
+    ],
+  };
+
   // /disconnect command - client revokes therapist access
   bot.onText(/\/disconnect/, async (msg) => {
     const chatId = msg.chat.id;
@@ -471,6 +645,70 @@ if (!token || token === 'your-telegram-bot-token') {
     const chatId = callbackQuery.message.chat.id;
     const telegramId = callbackQuery.from.id;
     const data = callbackQuery.data;
+
+    // Handle timezone region selection callbacks
+    if (data.startsWith('tz_region_')) {
+      const region = data.replace('tz_region_', '');
+      const lang = await getUserLang(telegramId);
+      const timezones = TIMEZONE_REGIONS[region];
+      if (timezones) {
+        const buttons = timezones.map(tz => [{ text: tz.label, callback_data: `tz_set_${tz.tz}` }]);
+        buttons.push([{ text: '⬅️ ' + t(lang, 'tzBack'), callback_data: 'tz_back' }]);
+        bot.editMessageReplyMarkup({ inline_keyboard: buttons }, {
+          chat_id: chatId,
+          message_id: callbackQuery.message.message_id
+        }).catch(() => {});
+      }
+      bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
+
+    // Handle timezone back button
+    if (data === 'tz_back') {
+      const lang = await getUserLang(telegramId);
+      const buttons = [
+        [{ text: '🌍 ' + t(lang, 'tzRegionEurope'), callback_data: 'tz_region_europe' }],
+        [{ text: '🌏 ' + t(lang, 'tzRegionAsia'), callback_data: 'tz_region_asia' }],
+        [{ text: '🌎 ' + t(lang, 'tzRegionAmerica'), callback_data: 'tz_region_america' }],
+        [{ text: '🌍 ' + t(lang, 'tzRegionAfrica'), callback_data: 'tz_region_africa' }],
+        [{ text: '🌏 ' + t(lang, 'tzRegionPacific'), callback_data: 'tz_region_pacific' }],
+        [{ text: '🕐 UTC', callback_data: 'tz_set_UTC' }]
+      ];
+      bot.editMessageReplyMarkup({ inline_keyboard: buttons }, {
+        chat_id: chatId,
+        message_id: callbackQuery.message.message_id
+      }).catch(() => {});
+      bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
+
+    // Handle timezone selection callbacks
+    if (data.startsWith('tz_set_')) {
+      const selectedTz = data.replace('tz_set_', '');
+      const lang = await getUserLang(telegramId);
+      try {
+        await api.put(`/api/bot/profile/${telegramId}`, { timezone: selectedTz });
+        const now = new Date();
+        let localTime;
+        try {
+          localTime = now.toLocaleString('en-GB', { timeZone: selectedTz, hour: '2-digit', minute: '2-digit', hour12: false });
+        } catch {
+          localTime = now.toUTCString().slice(17, 22);
+        }
+        const confirmMsg = t(lang, 'timezoneUpdated');
+        bot.editMessageText(confirmMsg(selectedTz, localTime), {
+          chat_id: chatId,
+          message_id: callbackQuery.message.message_id,
+          parse_mode: 'Markdown'
+        }).catch(() => {});
+        console.log(`[Timezone] User telegram_id=${telegramId} changed timezone to ${selectedTz}`);
+      } catch (error) {
+        console.error('Timezone update error:', error.message);
+        bot.sendMessage(chatId, '❌ ' + t(lang, 'timezoneFailed'));
+      }
+      bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
 
     // Handle disconnect callbacks
     if (data === 'disconnect_yes' || data === 'disconnect_no') {
@@ -606,9 +844,11 @@ if (!token || token === 'your-telegram-bot-token') {
       const role = data === 'role_therapist' ? 'therapist' : 'client';
       // Detect language from Telegram user for new registrations
       const lang = detectLang(callbackQuery);
+      const tz = detectTimezone(callbackQuery);
+      console.log(`[Timezone] Auto-detected timezone for telegram_id=${telegramId}: ${tz} (language_code=${callbackQuery.from?.language_code || 'unknown'})`);
 
       try {
-        const result = await registerUser(telegramId, role, lang, callbackQuery.from);
+        const result = await registerUser(telegramId, role, lang, callbackQuery.from, tz);
         userLangCache[telegramId] = lang;
 
         if (result.already_existed) {
@@ -1026,7 +1266,7 @@ if (!token || token === 'your-telegram-bot-token') {
 
 // Helper functions for API communication
 
-async function registerUser(telegramId, role, language, fromUser) {
+async function registerUser(telegramId, role, language, fromUser, timezone) {
   try {
     const response = await api.post('/api/bot/register', {
       telegram_id: String(telegramId),
@@ -1034,7 +1274,8 @@ async function registerUser(telegramId, role, language, fromUser) {
       language: language || 'en',
       first_name: fromUser?.first_name || '',
       last_name: fromUser?.last_name || '',
-      username: fromUser?.username || ''
+      username: fromUser?.username || '',
+      timezone: timezone || 'UTC'
     });
     return response.data;
   } catch (error) {

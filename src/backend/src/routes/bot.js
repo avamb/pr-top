@@ -32,7 +32,7 @@ function botAuth(req, res, next) {
 // POST /api/bot/register - Register or update a Telegram user with role
 router.post('/register', botAuth, (req, res) => {
   try {
-    const { telegram_id, role, language, first_name, last_name, username } = req.body;
+    const { telegram_id, role, language, first_name, last_name, username, timezone } = req.body;
 
     if (!telegram_id) {
       return res.status(400).json({ error: 'telegram_id is required' });
@@ -46,23 +46,28 @@ router.post('/register', botAuth, (req, res) => {
     const db = getDatabase();
 
     // Check if user already exists by telegram_id
-    const existing = db.exec('SELECT id, role, telegram_id FROM users WHERE telegram_id = ?', [String(telegram_id)]);
+    const existing = db.exec('SELECT id, role, telegram_id, timezone FROM users WHERE telegram_id = ?', [String(telegram_id)]);
 
     if (existing.length > 0 && existing[0].values.length > 0) {
       const existingUser = existing[0].values[0];
       // Update Telegram profile info on re-registration attempts
-      if (first_name || last_name || username) {
-        const updateParts = [];
-        const updateParams = [];
-        if (first_name) { updateParts.push('first_name = ?'); updateParams.push(first_name); }
-        if (last_name) { updateParts.push('last_name = ?'); updateParams.push(last_name); }
-        if (username) { updateParts.push('telegram_username = ?'); updateParams.push(username.replace(/^@/, '')); }
-        if (updateParts.length > 0) {
-          updateParts.push("updated_at = datetime('now')");
-          updateParams.push(existingUser[0]);
-          db.run(`UPDATE users SET ${updateParts.join(', ')} WHERE id = ?`, updateParams);
-          saveDatabase();
-        }
+      const updateParts = [];
+      const updateParams = [];
+      if (first_name) { updateParts.push('first_name = ?'); updateParams.push(first_name); }
+      if (last_name) { updateParts.push('last_name = ?'); updateParams.push(last_name); }
+      if (username) { updateParts.push('telegram_username = ?'); updateParams.push(username.replace(/^@/, '')); }
+      // Set timezone only if not already set (null or 'UTC') and a non-UTC timezone was detected
+      const currentTz = existingUser[3];
+      if (timezone && timezone !== 'UTC' && (!currentTz || currentTz === 'UTC')) {
+        updateParts.push('timezone = ?');
+        updateParams.push(timezone);
+        logger.info(`[Timezone] Updated timezone for existing user telegram_id=${telegram_id}: ${timezone}`);
+      }
+      if (updateParts.length > 0) {
+        updateParts.push("updated_at = datetime('now')");
+        updateParams.push(existingUser[0]);
+        db.run(`UPDATE users SET ${updateParts.join(', ')} WHERE id = ?`, updateParams);
+        saveDatabase();
       }
       logger.info(`Telegram user already exists: telegram_id=${telegram_id}, role=${existingUser[1]}`);
       return res.json({
@@ -83,10 +88,12 @@ router.post('/register', botAuth, (req, res) => {
     const cleanUsername = username ? username.replace(/^@/, '') : null;
 
     // Insert new user with profile fields from Telegram
+    const detectedTimezone = timezone || 'UTC';
     db.run(
-      'INSERT INTO users (telegram_id, role, invite_code, language, first_name, last_name, telegram_username) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [String(telegram_id), role, inviteCode, language || 'en', first_name || null, last_name || null, cleanUsername]
+      'INSERT INTO users (telegram_id, role, invite_code, language, first_name, last_name, telegram_username, timezone) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [String(telegram_id), role, inviteCode, language || 'en', first_name || null, last_name || null, cleanUsername, detectedTimezone]
     );
+    logger.info(`[Timezone] New user registered with timezone=${detectedTimezone} (telegram_id=${telegram_id})`);
 
     saveDatabase();
 
@@ -130,7 +137,7 @@ router.get('/user/:telegram_id', botAuth, (req, res) => {
     const db = getDatabase();
 
     const result = db.exec(
-      'SELECT id, telegram_id, role, invite_code, language, consent_therapist_access, therapist_id, created_at, first_name, last_name, phone, telegram_username, email FROM users WHERE telegram_id = ?',
+      'SELECT id, telegram_id, role, invite_code, language, consent_therapist_access, therapist_id, created_at, first_name, last_name, phone, telegram_username, email, timezone FROM users WHERE telegram_id = ?',
       [String(telegram_id)]
     );
 
@@ -154,7 +161,8 @@ router.get('/user/:telegram_id', botAuth, (req, res) => {
         last_name: user[9] || '',
         phone: user[10] || '',
         telegram_username: user[11] || '',
-        email: user[12] || ''
+        email: user[12] || '',
+        timezone: user[13] || 'UTC'
       }
     });
   } catch (error) {
@@ -167,7 +175,7 @@ router.get('/user/:telegram_id', botAuth, (req, res) => {
 router.put('/profile/:telegram_id', botAuth, (req, res) => {
   try {
     const { telegram_id } = req.params;
-    const { first_name, last_name, phone, email, other_info } = req.body;
+    const { first_name, last_name, phone, email, other_info, timezone } = req.body;
     const db = getDatabase();
 
     // Verify user exists
@@ -220,6 +228,14 @@ router.put('/profile/:telegram_id', botAuth, (req, res) => {
       }
       updates.push('other_info = ?');
       params.push(typeof other_info === 'string' ? other_info.trim() : '');
+    }
+    if (timezone !== undefined) {
+      if (typeof timezone !== 'string' || timezone.length > 100) {
+        return res.status(400).json({ error: 'Invalid timezone format' });
+      }
+      updates.push('timezone = ?');
+      params.push(timezone.trim());
+      logger.info(`[Timezone] Bot profile update: telegram_id=${telegram_id}, timezone=${timezone}`);
     }
 
     if (updates.length === 0) {
