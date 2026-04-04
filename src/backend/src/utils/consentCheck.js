@@ -1,6 +1,6 @@
 // Reusable consent verification helper
 // Checks that a therapist-client link exists and consent_therapist_access is granted.
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('./logger');
 
 /**
@@ -33,7 +33,7 @@ function verifyClientConsent(therapistId, clientId, auditAction) {
         "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
         [therapistId, 'access_denied', auditAction, clientId, JSON.stringify({ reason: 'not_linked_therapist' })]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
     }
     return { allowed: false, error: 'You are not authorized to access this client\'s data', status: 403 };
   }
@@ -45,7 +45,7 @@ function verifyClientConsent(therapistId, clientId, auditAction) {
         "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
         [therapistId, 'access_denied', auditAction, clientId, JSON.stringify({ reason: 'consent_not_granted' })]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
     }
     return { allowed: false, error: 'Client has not granted consent for data access', status: 403 };
   }

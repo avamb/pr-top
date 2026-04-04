@@ -4,7 +4,7 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const { authenticate, requireRole } = require('../middleware/auth');
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { decrypt } = require('../services/encryption');
 const { logger } = require('../utils/logger');
 const { verifyClientConsent } = require('../utils/consentCheck');
@@ -84,7 +84,7 @@ router.get('/:id/stream', authenticate, requireRole('therapist', 'superadmin'), 
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'stream_diary_audio', 'diary_entry', ?, ?, datetime('now'))",
       [req.user.id, entryId, JSON.stringify({ client_id: clientId, entry_type: entryType })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     // Handle range requests for seeking
     const rangeHeader = req.headers.range;
@@ -174,7 +174,7 @@ router.post('/:id/retranscribe', authenticate, requireRole('therapist', 'superad
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'retranscribe_diary', 'diary_entry', ?, ?, datetime('now'))",
       [req.user.id, entryId, JSON.stringify({ client_id: clientId, entry_type: entryType, success: txResult.success })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     if (txResult.success) {
       // Return the new transcript (decrypted)

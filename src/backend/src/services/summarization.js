@@ -6,7 +6,7 @@
 // IMPORTANT: Summaries must avoid diagnosis language per product principles.
 // AI summaries are therapist-supportive tools, not clinical judgments.
 
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { encrypt, decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
 const { logUsage, calculateCost, checkSpendingLimit } = require('./aiUsageLogger');
@@ -367,7 +367,7 @@ async function processSessionSummary(sessionId) {
       "UPDATE sessions SET status = 'summarizing', updated_at = datetime('now') WHERE id = ?",
       [sessionId]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     // Decrypt the transcript
     const transcript = decrypt(transcriptEncrypted);
@@ -419,7 +419,7 @@ async function processSessionSummary(sessionId) {
       [therapistId, sessionId]
     );
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Summary generated for session ${sessionId}`);
 
@@ -442,7 +442,7 @@ async function processSessionSummary(sessionId) {
       "UPDATE sessions SET status = 'failed', updated_at = datetime('now') WHERE id = ?",
       [sessionId]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     return { success: false, sessionId, error: error.message };
   }

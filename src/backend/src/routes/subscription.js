@@ -2,7 +2,7 @@
 // Handles customer creation, subscription management, and Stripe webhooks
 
 const express = require('express');
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { createCustomer, getCustomer, createCheckoutSession, isConfigured, isDevMode, getStripeClient, PLAN_PRICES } = require('../services/stripe');
 const { getClientLimit, getClientCount, checkClientLimit } = require('../utils/planLimits');
@@ -117,7 +117,7 @@ router.post('/create-customer', requireAuth, async (req, res) => {
       );
     }
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Stripe customer created for user ${userId}: ${customer.id}`);
 
@@ -187,7 +187,7 @@ router.get('/current', requireAuth, (req, res) => {
           "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (NULL, 'override_expired', 'user', ?, ?, datetime('now'))",
           [userId, JSON.stringify({ previous_plan: sub[3], expired_at: overrideExpiresAt })]
         );
-        saveDatabase();
+        saveDatabaseAfterWrite();
 
         logger.info(`Manual plan override expired for therapist ${userId}. Reverted to trial.`);
 
@@ -352,7 +352,7 @@ router.post('/change-plan', requireAuth, (req, res) => {
         `UPDATE subscriptions SET pending_plan = ?, updated_at = datetime('now') WHERE id = ?`,
         [newPlan, subId]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
 
       logger.info(`User ${userId} scheduled downgrade from ${currentPlan} to ${newPlan}, effective at ${periodEnd}`);
 
@@ -382,7 +382,7 @@ router.post('/change-plan', requireAuth, (req, res) => {
         `UPDATE subscriptions SET plan = ?, pending_plan = NULL, current_period_start = ?, current_period_end = ?, updated_at = datetime('now') WHERE id = ?`,
         [newPlan, now.toISOString(), periodEnd.toISOString(), subId]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
 
       logger.info(`User ${userId} upgraded from ${currentPlan} to ${newPlan} (immediate)`);
 
@@ -483,7 +483,7 @@ router.post('/checkout', requireAuth, async (req, res) => {
         'UPDATE subscriptions SET stripe_customer_id = ?, updated_at = datetime(\'now\') WHERE therapist_id = ?',
         [customerId, userId]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
     }
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -517,7 +517,7 @@ router.post('/checkout', requireAuth, async (req, res) => {
           [subId, 'pi_dev_' + Date.now(), amount]
         );
       }
-      saveDatabase();
+      saveDatabaseAfterWrite();
       logger.info(`Dev mode: auto-completed upgrade to ${plan} for user ${userId}`);
     }
 
@@ -582,7 +582,7 @@ router.post('/cancel', requireAuth, (req, res) => {
       `UPDATE subscriptions SET status = 'canceled', canceled_at = ?, pending_plan = NULL, updated_at = datetime('now') WHERE id = ?`,
       [now.toISOString(), subId]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Subscription canceled for user ${userId}. Access continues until ${accessUntil}`);
 

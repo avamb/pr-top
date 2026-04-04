@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { authenticate, requireRole } = require('../middleware/auth');
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { encrypt, decrypt } = require('../services/encryption');
 const { processSessionTranscription } = require('../services/transcription');
 const { processSessionSummary } = require('../services/summarization');
@@ -136,7 +136,7 @@ router.post('/', authenticate, requireRole('therapist', 'superadmin'), upload.si
       [therapistId, sessionId]
     );
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Session audio uploaded: session_id=${sessionId}, therapist=${therapistId}, client=${clientId}`);
 
@@ -239,7 +239,7 @@ router.get('/:id', authenticate, requireRole('therapist', 'superadmin'), async (
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'read_session', 'session', ?, ?, datetime('now'))",
       [req.user.id, sessionId, JSON.stringify({ client_id: row[2], has_transcript: !!row[4], has_summary: !!row[5] })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     res.json(session);
   } catch (error) {
@@ -463,14 +463,14 @@ router.delete('/:id', authenticate, requireRole('therapist', 'superadmin'), asyn
 
     // Delete the session record
     db.run('DELETE FROM sessions WHERE id = ?', [sessionId]);
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     // Audit log
     db.run(
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'delete_session', 'session', ?, ?, datetime('now'))",
       [req.user.id, sessionId, JSON.stringify({ client_id: row[2] })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Therapist ${req.user.id} deleted session ${sessionId}`);
     res.json({ success: true, message: 'Session deleted successfully' });
@@ -556,7 +556,7 @@ router.get('/:id/stream', authenticate, requireRole('therapist', 'superadmin'), 
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'stream_session_audio', 'session', ?, ?, datetime('now'))",
       [req.user.id, sessionId, JSON.stringify({ client_id: clientId })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     // Handle range requests for seeking
     const rangeHeader = req.headers.range;

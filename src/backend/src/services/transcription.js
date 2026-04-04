@@ -5,7 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { encrypt, decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
 const wsService = require('./websocketService');
@@ -221,7 +221,7 @@ async function processSessionTranscription(sessionId) {
       "UPDATE sessions SET status = 'transcribing', updated_at = datetime('now') WHERE id = ?",
       [sessionId]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     // Get session details
     const result = db.exec(
@@ -268,7 +268,7 @@ async function processSessionTranscription(sessionId) {
       [therapistId, sessionId]
     );
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Transcription complete for session ${sessionId}`);
 
@@ -316,7 +316,7 @@ async function processSessionTranscription(sessionId) {
       "UPDATE sessions SET status = 'transcription_failed', updated_at = datetime('now') WHERE id = ?",
       [sessionId]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     return { success: false, sessionId, error: error.message };
   }

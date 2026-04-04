@@ -5,7 +5,7 @@
 // remains readable with its original key version.
 
 const crypto = require('crypto');
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 
 const ALGORITHM = 'aes-256-gcm';
@@ -36,7 +36,7 @@ function getActiveKeyVersion() {
   if (result.length === 0 || result[0].values.length === 0) {
     // No active key found, create version 1
     db.run("INSERT OR IGNORE INTO encryption_keys (key_version, status) VALUES (1, 'active')");
-    saveDatabase();
+    saveDatabaseAfterWrite();
     return 1;
   }
 
@@ -160,7 +160,7 @@ function rotateKey() {
     [newVersion]
   );
 
-  saveDatabase();
+  saveDatabaseAfterWrite();
 
   const newKeyId = getKeyId(newVersion);
 

@@ -3,7 +3,7 @@
 
 const express = require('express');
 const archiver = require('archiver');
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { verifyClientConsent } = require('../utils/consentCheck');
@@ -99,7 +99,7 @@ router.get('/client/:id', (req, res) => {
         "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
         [therapistId, 'export_client_basic', 'client', clientId, JSON.stringify({ format: 'json', plan, data_types: ['diary'] })]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
 
       const filename = `client_${clientId}_diary_export.json`;
       res.setHeader('Content-Type', 'application/json');
@@ -130,7 +130,7 @@ router.get('/client/:id', (req, res) => {
         "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
         [therapistId, 'export_client_full', 'client', clientId, JSON.stringify({ format: 'json', plan, data_types: ['profile', 'context', 'diary', 'sessions', 'notes', 'exercises', 'sos'] })]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
 
       const filename = `client_${clientId}_full_export.json`;
       res.setHeader('Content-Type', 'application/json');
@@ -150,7 +150,7 @@ router.get('/client/:id', (req, res) => {
         "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
         [therapistId, 'export_client_full', 'client', clientId, JSON.stringify({ format: 'csv', plan, data_types: ['profile', 'context', 'diary', 'sessions', 'notes', 'exercises', 'sos'] })]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
 
       const filename = `client_${clientId}_export.zip`;
       res.setHeader('Content-Type', 'application/zip');
@@ -248,7 +248,7 @@ router.get('/client/:id/notes', (req, res) => {
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
       [therapistId, 'export_notes', 'client', clientId, JSON.stringify({ count: notes.length })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     const filename = `client_${clientId}_notes_export.json`;
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -292,7 +292,7 @@ router.get('/analytics', (req, res) => {
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
       [therapistId, 'export_analytics', 'analytics', 0, JSON.stringify({ days, format })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     // PDF format
     if (format === 'pdf') {

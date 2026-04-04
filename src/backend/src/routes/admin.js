@@ -1,6 +1,6 @@
 // Admin Routes - Superadmin platform management
 const express = require('express');
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger, getSystemLogs } = require('../utils/logger');
 const { authenticate, requireRole } = require('../middleware/auth');
 const backupService = require('../services/backupService');
@@ -103,7 +103,7 @@ router.put('/therapists/:id/plan', (req, res) => {
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'manual_plan_override', 'user', ?, ?, datetime('now'))",
       [req.user.id, parseInt(id), JSON.stringify({ plan, reason: reason || null, expires_at: expires_at || null, previous_plan: previousPlan })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Superadmin ${req.user.id} set manual plan override for therapist ${id}: ${plan} (reason: ${reason || 'none'})`);
 
@@ -156,7 +156,7 @@ router.delete('/therapists/:id/plan-override', (req, res) => {
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'remove_plan_override', 'user', ?, ?, datetime('now'))",
       [req.user.id, parseInt(id), JSON.stringify({ previous_plan: previousPlan })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Superadmin ${req.user.id} removed plan override for therapist ${id}. Reverted from ${previousPlan} to trial.`);
 
@@ -199,7 +199,7 @@ router.put('/therapists/:id/block', (req, res) => {
       "UPDATE users SET blocked_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
       [id]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Superadmin ${req.user.id} blocked therapist ${id}`);
 
@@ -240,7 +240,7 @@ router.put('/therapists/:id/unblock', (req, res) => {
       "UPDATE users SET blocked_at = NULL, updated_at = datetime('now') WHERE id = ?",
       [id]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Superadmin ${req.user.id} unblocked therapist ${id}`);
 
@@ -498,14 +498,14 @@ router.put('/settings', (req, res) => {
     }
 
     if (updated.length > 0) {
-      saveDatabase();
+      saveDatabaseAfterWrite();
 
       // Audit log
       db.run(
         "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'update_platform_settings', 'platform_settings', NULL, ?, datetime('now'))",
         [req.user.id, JSON.stringify({ updated: updated.map(u => u.key) })]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
     }
 
     logger.info(`Superadmin ${req.user.id} updated platform settings: ${updated.map(u => `${u.key}=${u.value}`).join(', ')}`);
@@ -758,7 +758,7 @@ router.post('/backup', (req, res) => {
         "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'manual_backup', 'system', 0, ?, datetime('now'))",
         [req.user.id, JSON.stringify({ filename: result.filename, size: result.size })]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
 
       res.json({
         message: 'Backup created successfully',
@@ -821,7 +821,7 @@ router.post('/restore', (req, res) => {
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'database_restore', 'system', 0, ?, datetime('now'))",
       [req.user.id, JSON.stringify({ filename, initiated_by: req.user.email })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     const result = backupService.restore(filename);
 
@@ -990,7 +990,7 @@ router.put('/ai/limits', (req, res) => {
         "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'update_ai_limits', 'platform_settings', NULL, ?, datetime('now'))",
         [req.user.id, JSON.stringify({ updated, limit_usd, warning_percent })]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
     }
 
     logger.info(`Superadmin ${req.user.id} updated AI spending limits: ${updated.join(', ')}`);
@@ -1092,7 +1092,7 @@ router.put('/ai/models', (req, res) => {
         "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'update_ai_models', 'platform_settings', NULL, ?, datetime('now'))",
         [req.user.id, JSON.stringify({ updated })]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
     }
 
     logger.info(`Superadmin ${req.user.id} updated AI model settings: ${updated.join(', ')}`);

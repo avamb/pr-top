@@ -7,7 +7,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
-const { initDatabase, saveDatabase } = require('./db/connection');
+const { initDatabase, saveDatabase, saveDatabaseAfterWrite } = require('./db/connection');
 const { logger } = require('./utils/logger');
 const { initStripe, getStripeStatus, isConfigured: isStripeConfigured } = require('./services/stripe');
 const scheduler = require('./services/scheduler');
@@ -109,10 +109,10 @@ app.patch('/api/profile/language', authenticate, (req, res) => {
     if (!language || !SUPPORTED_LANGUAGES.includes(language)) {
       return res.status(400).json({ error: translate('profile.invalidLanguage', req.locale) });
     }
-    const { getDatabase, saveDatabase } = require('./db/connection');
+    const { getDatabase, saveDatabaseAfterWrite } = require('./db/connection');
     const db = getDatabase();
     db.run("UPDATE users SET language = ?, updated_at = datetime('now') WHERE id = ?", [language, req.user.id]);
-    saveDatabase();
+    saveDatabaseAfterWrite();
     const { logger } = require('./utils/logger');
     logger.info(`Language updated for user id=${req.user.id}: ${language}`);
     res.json({ message: translate('profile.languageUpdated', language), language });
@@ -177,7 +177,7 @@ if (process.env.NODE_ENV !== 'production') {
     try {
       const { therapist_id, count } = req.body;
       if (!therapist_id || !count) return res.status(400).json({ error: 'therapist_id and count required' });
-      const { getDatabase, saveDatabase: save } = require('./db/connection');
+      const { getDatabase, saveDatabaseAfterWrite: save } = require('./db/connection');
       const db = getDatabase();
       const hash = await bcrypt.hash('TestPass123', 4);
       const ts = Date.now();
@@ -197,7 +197,7 @@ if (process.env.NODE_ENV !== 'production') {
     try {
       const { user_id, telegram_id } = req.body;
       if (!user_id || !telegram_id) return res.status(400).json({ error: 'user_id and telegram_id required' });
-      const { getDatabase, saveDatabase: save } = require('./db/connection');
+      const { getDatabase, saveDatabaseAfterWrite: save } = require('./db/connection');
       const db = getDatabase();
       db.run("UPDATE users SET telegram_id = ? WHERE id = ?", [String(telegram_id), user_id]);
       save();
@@ -209,7 +209,7 @@ if (process.env.NODE_ENV !== 'production') {
     try {
       const { entry_id, created_at } = req.body;
       if (!entry_id || !created_at) return res.status(400).json({ error: 'entry_id and created_at required' });
-      const { getDatabase, saveDatabase: save } = require('./db/connection');
+      const { getDatabase, saveDatabaseAfterWrite: save } = require('./db/connection');
       const db = getDatabase();
       db.run("UPDATE diary_entries SET created_at = ?, updated_at = ? WHERE id = ?", [created_at, created_at, entry_id]);
       save();
@@ -221,7 +221,7 @@ if (process.env.NODE_ENV !== 'production') {
     try {
       const { client_id, consent } = req.body;
       if (!client_id || consent === undefined) return res.status(400).json({ error: 'client_id and consent required' });
-      const { getDatabase, saveDatabase: save } = require('./db/connection');
+      const { getDatabase, saveDatabaseAfterWrite: save } = require('./db/connection');
       const db = getDatabase();
       db.run("UPDATE users SET consent_therapist_access = ?, updated_at = datetime('now') WHERE id = ? AND role = 'client'", [consent ? 1 : 0, client_id]);
       save();
@@ -233,7 +233,7 @@ if (process.env.NODE_ENV !== 'production') {
     try {
       const { therapist_id } = req.body;
       if (!therapist_id) return res.status(400).json({ error: 'therapist_id required' });
-      const { getDatabase, saveDatabase: save } = require('./db/connection');
+      const { getDatabase, saveDatabaseAfterWrite: save } = require('./db/connection');
       const db = getDatabase();
       db.run("UPDATE subscriptions SET trial_ends_at = datetime('now', '-1 day') WHERE therapist_id = ? AND plan = 'trial'", [therapist_id]);
       save();
@@ -248,7 +248,7 @@ if (process.env.NODE_ENV !== 'production') {
       if (!therapist_id || !plan) return res.status(400).json({ error: 'therapist_id and plan required' });
       const validPlans = ['trial', 'basic', 'pro', 'premium'];
       if (!validPlans.includes(plan)) return res.status(400).json({ error: 'Invalid plan. Must be: ' + validPlans.join(', ') });
-      const { getDatabase, saveDatabase: save } = require('./db/connection');
+      const { getDatabase, saveDatabaseAfterWrite: save } = require('./db/connection');
       const db = getDatabase();
       db.run("UPDATE subscriptions SET plan = ?, status = 'active' WHERE therapist_id = ?", [plan, therapist_id]);
       save();
@@ -264,7 +264,7 @@ if (process.env.NODE_ENV !== 'production') {
       const validRoles = ['therapist', 'client', 'superadmin'];
       if (!validRoles.includes(role)) return res.status(400).json({ error: 'Invalid role. Must be: ' + validRoles.join(', ') });
       if (!user_id && !email) return res.status(400).json({ error: 'user_id or email required' });
-      const { getDatabase, saveDatabase: save } = require('./db/connection');
+      const { getDatabase, saveDatabaseAfterWrite: save } = require('./db/connection');
       const db = getDatabase();
       if (user_id) {
         db.run("UPDATE users SET role = ? WHERE id = ?", [role, user_id]);

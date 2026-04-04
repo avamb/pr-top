@@ -2,7 +2,7 @@
 // Handles Stripe webhook events for payment processing
 
 const express = require('express');
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { isConfigured, getStripeClient } = require('../services/stripe');
 const emailService = require('../services/emailService');
@@ -79,7 +79,7 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
         logger.info(`Unhandled webhook event type: ${event.type}`);
     }
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
     res.json({ received: true, type: event.type });
   } catch (error) {
     logger.error(`Webhook handler error for ${event.type}: ${error.message}`);

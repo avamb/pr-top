@@ -123,8 +123,8 @@ function requireActiveSubscription(req, res, next) {
           "UPDATE subscriptions SET status = 'expired', updated_at = datetime('now') WHERE therapist_id = ? AND plan = 'trial' AND status = 'active'",
           [userId]
         );
-        const { saveDatabase } = require('../db/connection');
-        saveDatabase();
+        const { saveDatabaseAfterWrite } = require('../db/connection');
+        saveDatabaseAfterWrite();
 
         return res.status(402).json({
           error: 'subscription_expired',

@@ -3,7 +3,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const emailService = require('../services/emailService');
 
@@ -105,7 +105,7 @@ router.post('/register', async (req, res) => {
     );
 
     // Save to disk after write
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     // Get the inserted user
     const result = db.exec('SELECT id, email, role, created_at FROM users WHERE email = ?', [normalizedEmail]);
@@ -135,7 +135,7 @@ router.post('/register', async (req, res) => {
       logger.info(`Trial subscription created for therapist id=${userId}, expires ${trialEnd.toISOString()}`);
     }
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     // Generate JWT
     const token = jwt.sign(
@@ -388,7 +388,7 @@ router.post('/forgot-password', async (req, res) => {
       'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)',
       [userId, resetToken, expiresAt]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     // Send reset email (non-blocking)
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -414,7 +414,7 @@ router.post('/forgot-password', async (req, res) => {
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, created_at) VALUES (?, 'password_reset_requested', 'user', ?, datetime('now'))",
       [userId, userId]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     res.json({ message: successMessage });
   } catch (error) {
@@ -482,14 +482,14 @@ router.post('/reset-password', async (req, res) => {
     // Invalidate all other reset tokens for this user
     db.run('UPDATE password_reset_tokens SET used = 1 WHERE user_id = ? AND used = 0', [userId]);
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     // Audit log
     db.run(
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, created_at) VALUES (?, 'password_reset_completed', 'user', ?, datetime('now'))",
       [userId, userId]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Password reset completed for user ${userId}`);
 

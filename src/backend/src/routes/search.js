@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate, requireRole } = require('../middleware/auth');
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { semanticSearch, getEmbedding, getStats } = require('../services/vectorStore');
 const { logger } = require('../utils/logger');
 const { verifyClientConsent } = require('../utils/consentCheck');
@@ -63,7 +63,7 @@ router.post('/', (req, res) => {
          VALUES (?, 'semantic_search', 'search', ?, datetime('now'))`,
         [therapistId, client_id || 0]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
     } catch (auditErr) {
       logger.warn('Failed to audit log semantic search: ' + auditErr.message);
     }

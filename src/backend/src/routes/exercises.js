@@ -1,7 +1,7 @@
 // Exercise Library Routes
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 
 const router = express.Router();
@@ -151,7 +151,7 @@ function seedDefaultExercises(db) {
       ex.instructions_ru, ex.instructions_en, ex.instructions_es, ex.instructions_uk || null
     ]);
   }
-  saveDatabase();
+  saveDatabaseAfterWrite();
   logger.info(`Seeded ${exercises.length} default exercises`);
 }
 
@@ -340,7 +340,7 @@ router.post('/', requireAuth, (req, res) => {
       [req.user.id, 'exercise_created', 'exercise', exerciseId, JSON.stringify({ category, title_en: title_en || title_ru || title_es })]
     );
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Exercise created: id=${exerciseId} by therapist=${req.user.id}`);
 
@@ -432,7 +432,7 @@ router.put('/:id', requireAuth, (req, res) => {
       [req.user.id, 'exercise_updated', 'exercise', exerciseId, JSON.stringify({ updated_fields: Object.keys(fields).filter(k => fields[k] !== undefined) })]
     );
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Exercise updated: id=${exerciseId} by therapist=${req.user.id}`);
 
@@ -495,7 +495,7 @@ router.delete('/:id', requireAuth, (req, res) => {
       [req.user.id, 'exercise_deleted', 'exercise', exerciseId, JSON.stringify({ title_en: title_en || title_ru })]
     );
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Exercise deleted: id=${exerciseId} by therapist=${req.user.id}`);
 

@@ -1,7 +1,7 @@
 // Invite Code Routes - Therapist invite code management
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { authenticate, requireRole } = require('../middleware/auth');
 
@@ -32,7 +32,7 @@ router.get('/', (req, res) => {
     if (!inviteCode) {
       const newCode = uuidv4().slice(0, 8).toUpperCase();
       db.run('UPDATE users SET invite_code = ? WHERE id = ?', [newCode, therapistId]);
-      saveDatabase();
+      saveDatabaseAfterWrite();
       logger.info(`Generated initial invite code for therapist id=${therapistId}`);
       return res.json({ invite_code: newCode });
     }
@@ -70,7 +70,7 @@ router.get('/link', (req, res) => {
     if (!inviteCode) {
       inviteCode = uuidv4().slice(0, 8).toUpperCase();
       db.run('UPDATE users SET invite_code = ? WHERE id = ?', [inviteCode, therapistId]);
-      saveDatabase();
+      saveDatabaseAfterWrite();
       logger.info(`Generated initial invite code for therapist id=${therapistId}`);
     }
 
@@ -97,7 +97,7 @@ router.post('/regenerate', (req, res) => {
     const newCode = uuidv4().slice(0, 8).toUpperCase();
 
     db.run('UPDATE users SET invite_code = ? WHERE id = ?', [newCode, therapistId]);
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Regenerated invite code for therapist id=${therapistId}: ${newCode}`);
 

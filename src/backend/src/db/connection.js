@@ -90,8 +90,9 @@ async function initDatabase() {
   // Enable foreign keys
   db.run('PRAGMA foreign_keys = ON');
 
-  // Run schema migrations
+  // Run schema migrations (these modify the DB, so mark dirty)
   applySchema(db);
+  dbDirty = true;
 
   // Save after schema setup
   saveDatabase();

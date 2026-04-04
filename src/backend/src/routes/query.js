@@ -2,7 +2,7 @@
 // Gated to Pro/Premium subscription tiers
 
 const express = require('express');
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { executeNLQuery } = require('../services/nlQuery');
@@ -106,7 +106,7 @@ router.post('/', requireNLQueryAccess, (req, res) => {
          VALUES (?, 'nl_query', 'client', ?, datetime('now'))`,
         [therapistId, client_id]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
     } catch (auditErr) {
       logger.warn('Failed to audit log NL query: ' + auditErr.message);
     }
