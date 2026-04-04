@@ -1199,3 +1199,49 @@
 ### Current Status
 - Features passing: 258/258 (100.0%)
 - Features #256, #257, #258: ALL PASSING
+
+## Session: 2026-04-04 - Features #283, #284
+
+### Completed: SOS badge indicator on ClientList page (#283) - PASSING
+
+**What was built:**
+- Backend: Modified GET /api/clients to include `active_sos_count` subquery (COUNT of sos_events WHERE status != 'resolved')
+- Backend: Clients sorted by active_sos_count DESC (SOS clients appear first)
+- Frontend: Added SosBadge component with red pulsing badge (🚨 + count) next to client names
+- Frontend: SOS rows highlighted with bg-red-50 background
+- Frontend: WebSocket listener re-fetches client list on sos_alert events
+- i18n: sosBadgeTooltip key added in EN/RU/ES/UK
+
+**Verification:**
+- Client A (2 active SOS): shows 🚨 2 badge ✅
+- Client B (1 active SOS): shows 🚨 1 badge ✅
+- Client C (0 SOS): no badge ✅
+- Sorting: SOS clients at top ✅
+- Data persists after server restart ✅
+- Zero console errors from SOS code ✅
+
+### Completed: Dedicated SOS section in ClientDetail page (#284) - PASSING
+
+**What was built:**
+- Backend: Added PUT /api/clients/:id/sos/:sosId/resolve endpoint for resolving SOS events
+- Backend: SOS endpoints (GET, acknowledge, resolve) no longer require consent - SOS is emergency access
+- Frontend: SOS status banner at top of ClientDetail when client has active SOS (red pulsing, acknowledge/resolve buttons)
+- Frontend: SOS History tab with full event list showing status badges (🔴 Triggered, 🟡 Acknowledged, 🟢 Resolved)
+- Frontend: Each event shows timestamps, messages, and action buttons based on current status
+- Frontend: WebSocket listener auto-refreshes SOS on new sos_alert events
+- Frontend: Empty state for clients with no SOS events
+- i18n: 18 new SOS keys (sosTab, sosHistory, sosLoading, sosNoEvents, sosActiveAlert, sosAcknowledgeBtn, sosResolveBtn, etc.) in EN/RU/ES/UK
+
+**Verification:**
+- SOS tab shows (2) count with active events ✅
+- Active SOS banner displays at top with action buttons ✅
+- Acknowledge: triggered → acknowledged with timestamp ✅
+- Resolve: acknowledged → resolved ✅
+- Banner disappears when all events resolved ✅
+- Empty state shows correctly for clients with no SOS ✅
+- Status badges with correct colors (red/amber/green) ✅
+- Zero SOS-related console errors ✅
+
+### Current Status
+- Features passing: 275/284
+- Features #283, #284: BOTH PASSING
