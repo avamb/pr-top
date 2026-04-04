@@ -218,6 +218,10 @@
     "delayLabel": "Задержка перед эскалацией (минуты)",
     "delayImmediate": "Немедленно (без задержки)",
     "delayMinutes": "{{count}} минут",
+    "voiceForwardingTitle": "Пересылка голосовых сообщений",
+    "voiceForwardingDesc": "Получайте голосовые и видео дневниковые записи клиентов прямо в Telegram.",
+    "forwardVoiceToTelegram": "Пересылать голосовые сообщения клиентов в Telegram",
+    "voiceForwardingDisclaimer": "Пересланные сообщения отправляются только между ботом и вашим аккаунтом Telegram. Учитываются настройки тихих часов.",
     "saveEscalation": "Сохранить настройки уведомлений",
     "personalInfo": "Личные данные",
     "firstName": "Имя",
@@ -231,7 +235,10 @@
     "otherInfo": "Дополнительная информация",
     "otherInfoPlaceholder": "Специализация, номер лицензии, заметки о себе...",
     "saveProfile": "Сохранить профиль",
-    "profileSaved": "Профиль сохранён!"
+    "profileSaved": "Профиль сохранён!",
+    "timezoneBannerMessage": "Ваш часовой пояс определён как {{timezone}}. Это верно?",
+    "timezoneBannerConfirm": "Да, верно",
+    "timezoneBannerChange": "Изменить часовой пояс"
   },
   "clientList": {
     "title": "Клиенты",
@@ -394,7 +401,23 @@
     "exportSuccess": "Экспорт успешно загружен",
     "exportFailed": "Ошибка экспорта",
     "exportUpgradeRequired": "Полный экспорт доступен на тарифах Pro и Premium",
-    "exportUpgradeHint": "Повысьте тариф для экспорта всех типов данных, включая сессии, заметки, упражнения и формат CSV."
+    "exportUpgradeHint": "Повысьте тариф для экспорта всех типов данных, включая сессии, заметки, упражнения и формат CSV.",
+    "sosTab": "SOS",
+    "sosHistory": "История SOS",
+    "sosLoading": "Загрузка SOS-событий...",
+    "sosNoEvents": "Нет SOS-событий",
+    "sosNoEventsHint": "Этот клиент не отправлял сигналов SOS.",
+    "sosActiveAlert": "Активный сигнал SOS",
+    "sosActiveCount": "{{count}} активных сигналов, требующих внимания",
+    "sosAcknowledgeBtn": "Подтвердить",
+    "sosResolveBtn": "Разрешить",
+    "sosAcknowledged": "SOS-событие подтверждено",
+    "sosResolved": "SOS-событие разрешено",
+    "sosStatusTriggered": "Сработал",
+    "sosStatusAcknowledged": "Подтверждён",
+    "sosStatusResolved": "Разрешён",
+    "sosCreatedAt": "Время срабатывания",
+    "sosAcknowledgedAt": "Время подтверждения"
   },
   "exerciseLibrary": {
     "title": "Библиотека упражнений",

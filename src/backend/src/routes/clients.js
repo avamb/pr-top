@@ -1405,16 +1405,21 @@ router.post('/link', requireRole('superadmin'), (req, res) => {
 });
 
 // GET /api/clients/:id/sos - Get SOS events for a client
+// Note: SOS events are emergency alerts - therapist can view them without consent
+// (client explicitly triggered the SOS, implying they want therapist attention)
 router.get('/:id/sos', (req, res) => {
   try {
     const db = getDatabase();
     const therapistId = req.user.id;
     const clientId = req.params.id;
 
-    // Verify client belongs to this therapist AND has granted consent
-    const consentCheck = verifyClientConsent(therapistId, clientId, 'sos');
-    if (!consentCheck.allowed) {
-      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    // Verify client belongs to this therapist (but NOT consent - SOS is emergency)
+    const clientCheck = db.exec(
+      "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [clientId, therapistId]
+    );
+    if (clientCheck.length === 0 || clientCheck[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found' });
     }
 
     const result = db.exec(
@@ -1459,10 +1464,13 @@ router.put('/:id/sos/:sosId/acknowledge', (req, res) => {
     const clientId = req.params.id;
     const sosId = req.params.sosId;
 
-    // Verify client belongs to this therapist AND has granted consent
-    const consentCheck = verifyClientConsent(therapistId, clientId, 'sos_acknowledge');
-    if (!consentCheck.allowed) {
-      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    // Verify client belongs to this therapist (no consent needed for SOS actions)
+    const clientCheck = db.exec(
+      "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [clientId, therapistId]
+    );
+    if (clientCheck.length === 0 || clientCheck[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found' });
     }
 
     // Verify SOS event exists and belongs to this therapist/client
@@ -1521,10 +1529,13 @@ router.put('/:id/sos/:sosId/resolve', (req, res) => {
     const clientId = req.params.id;
     const sosId = req.params.sosId;
 
-    // Verify client belongs to this therapist AND has granted consent
-    const consentCheck = verifyClientConsent(therapistId, clientId, 'sos_resolve');
-    if (!consentCheck.allowed) {
-      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    // Verify client belongs to this therapist (no consent needed for SOS actions)
+    const clientCheck = db.exec(
+      "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [clientId, therapistId]
+    );
+    if (clientCheck.length === 0 || clientCheck[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found' });
     }
 
     // Verify SOS event exists and belongs to this therapist/client

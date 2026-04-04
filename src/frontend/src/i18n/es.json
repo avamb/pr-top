@@ -218,6 +218,10 @@
     "delayLabel": "Retraso antes de escalar (minutos)",
     "delayImmediate": "Inmediato (sin retraso)",
     "delayMinutes": "{{count}} minutos",
+    "voiceForwardingTitle": "Reenvío de mensajes de voz",
+    "voiceForwardingDesc": "Reciba mensajes de voz y video del diario de clientes directamente en su Telegram.",
+    "forwardVoiceToTelegram": "Reenviar mensajes de voz de clientes a Telegram",
+    "voiceForwardingDisclaimer": "Los mensajes reenviados se envían solo entre el bot y su cuenta de Telegram. Se respetan los horarios de silencio.",
     "saveEscalation": "Guardar preferencias de escalación",
     "personalInfo": "Información personal",
     "firstName": "Nombre",
@@ -231,7 +235,10 @@
     "otherInfo": "Información adicional",
     "otherInfoPlaceholder": "Especialización, número de licencia, notas sobre ti...",
     "saveProfile": "Guardar perfil",
-    "profileSaved": "¡Perfil guardado!"
+    "profileSaved": "¡Perfil guardado!",
+    "timezoneBannerMessage": "Tu zona horaria parece ser {{timezone}}. ¿Es correcto?",
+    "timezoneBannerConfirm": "Sí, correcto",
+    "timezoneBannerChange": "Cambiar zona horaria"
   },
   "clientList": {
     "title": "Clientes",
@@ -394,7 +401,23 @@
     "exportSuccess": "Exportación descargada correctamente",
     "exportFailed": "Error en la exportación",
     "exportUpgradeRequired": "La exportación completa requiere un plan Pro o Premium",
-    "exportUpgradeHint": "Mejora tu plan para exportar todos los tipos de datos, incluyendo sesiones, notas, ejercicios y formato CSV."
+    "exportUpgradeHint": "Mejora tu plan para exportar todos los tipos de datos, incluyendo sesiones, notas, ejercicios y formato CSV.",
+    "sosTab": "SOS",
+    "sosHistory": "Historial SOS",
+    "sosLoading": "Cargando eventos SOS...",
+    "sosNoEvents": "Sin eventos SOS",
+    "sosNoEventsHint": "Este cliente no ha activado ninguna alerta SOS.",
+    "sosActiveAlert": "Alerta SOS activa",
+    "sosActiveCount": "{{count}} alerta(s) activa(s) que requieren atención",
+    "sosAcknowledgeBtn": "Reconocer",
+    "sosResolveBtn": "Resolver",
+    "sosAcknowledged": "Evento SOS reconocido",
+    "sosResolved": "Evento SOS resuelto",
+    "sosStatusTriggered": "Activado",
+    "sosStatusAcknowledged": "Reconocido",
+    "sosStatusResolved": "Resuelto",
+    "sosCreatedAt": "Activado a las",
+    "sosAcknowledgedAt": "Reconocido a las"
   },
   "exerciseLibrary": {
     "title": "Biblioteca de ejercicios",

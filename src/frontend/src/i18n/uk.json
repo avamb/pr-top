@@ -218,6 +218,10 @@
     "delayLabel": "Затримка перед ескалацією (хвилини)",
     "delayImmediate": "Негайно (без затримки)",
     "delayMinutes": "{{count}} хвилин",
+    "voiceForwardingTitle": "Пересилання голосових повідомлень",
+    "voiceForwardingDesc": "Отримуйте голосові та відео щоденникові записи клієнтів прямо у Telegram.",
+    "forwardVoiceToTelegram": "Пересилати голосові повідомлення клієнтів у Telegram",
+    "voiceForwardingDisclaimer": "Переслані повідомлення надсилаються лише між ботом та вашим акаунтом Telegram. Враховуються налаштування тихих годин.",
     "saveEscalation": "Зберегти налаштування сповіщень",
     "personalInfo": "Особисті дані",
     "firstName": "Ім'я",
@@ -231,7 +235,10 @@
     "otherInfo": "Додаткова інформація",
     "otherInfoPlaceholder": "Спеціалізація, номер ліцензії, нотатки про себе...",
     "saveProfile": "Зберегти профіль",
-    "profileSaved": "Профіль збережено!"
+    "profileSaved": "Профіль збережено!",
+    "timezoneBannerMessage": "Ваш часовий пояс визначено як {{timezone}}. Це правильно?",
+    "timezoneBannerConfirm": "Так, правильно",
+    "timezoneBannerChange": "Змінити часовий пояс"
   },
   "clientList": {
     "title": "Клієнти",
@@ -394,7 +401,23 @@
     "exportSuccess": "Експорт успішно завантажено",
     "exportFailed": "Помилка експорту",
     "exportUpgradeRequired": "Повний експорт доступний на тарифах Pro та Premium",
-    "exportUpgradeHint": "Підвищіть тариф для експорту всіх типів даних, включаючи сесії, нотатки, вправи та формат CSV."
+    "exportUpgradeHint": "Підвищіть тариф для експорту всіх типів даних, включаючи сесії, нотатки, вправи та формат CSV.",
+    "sosTab": "SOS",
+    "sosHistory": "Історія SOS",
+    "sosLoading": "Завантаження SOS-подій...",
+    "sosNoEvents": "Немає SOS-подій",
+    "sosNoEventsHint": "Цей клієнт не надсилав сигналів SOS.",
+    "sosActiveAlert": "Активний сигнал SOS",
+    "sosActiveCount": "{{count}} активних сигналів, що потребують уваги",
+    "sosAcknowledgeBtn": "Підтвердити",
+    "sosResolveBtn": "Вирішити",
+    "sosAcknowledged": "SOS-подію підтверджено",
+    "sosResolved": "SOS-подію вирішено",
+    "sosStatusTriggered": "Спрацював",
+    "sosStatusAcknowledged": "Підтверджено",
+    "sosStatusResolved": "Вирішено",
+    "sosCreatedAt": "Час спрацювання",
+    "sosAcknowledgedAt": "Час підтвердження"
   },
   "exerciseLibrary": {
     "title": "Бібліотека вправ",

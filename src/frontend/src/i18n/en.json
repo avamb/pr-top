@@ -218,6 +218,10 @@
     "delayLabel": "Delay before escalating (minutes)",
     "delayImmediate": "Immediate (no delay)",
     "delayMinutes": "{{count}} minutes",
+    "voiceForwardingTitle": "Voice Message Forwarding",
+    "voiceForwardingDesc": "Receive client voice and video diary messages directly in your Telegram chat.",
+    "forwardVoiceToTelegram": "Forward client voice messages to Telegram",
+    "voiceForwardingDisclaimer": "Forwarded messages are sent only between the bot and your Telegram account. Quiet hours settings apply.",
     "saveEscalation": "Save Escalation Preferences",
     "personalInfo": "Personal Information",
     "firstName": "First Name",
@@ -231,7 +235,10 @@
     "otherInfo": "Additional Information",
     "otherInfoPlaceholder": "Specialization, license number, notes about yourself...",
     "saveProfile": "Save Profile",
-    "profileSaved": "Profile saved successfully!"
+    "profileSaved": "Profile saved successfully!",
+    "timezoneBannerMessage": "Your timezone appears to be {{timezone}}. Is this correct?",
+    "timezoneBannerConfirm": "Yes, correct",
+    "timezoneBannerChange": "Change timezone"
   },
   "clientList": {
     "title": "Clients",
@@ -394,7 +401,23 @@
     "exportSuccess": "Export downloaded successfully",
     "exportFailed": "Export failed",
     "exportUpgradeRequired": "Full export requires Pro or Premium plan",
-    "exportUpgradeHint": "Upgrade to export all data types including sessions, notes, exercises, and CSV format."
+    "exportUpgradeHint": "Upgrade to export all data types including sessions, notes, exercises, and CSV format.",
+    "sosTab": "SOS",
+    "sosHistory": "SOS History",
+    "sosLoading": "Loading SOS events...",
+    "sosNoEvents": "No SOS events",
+    "sosNoEventsHint": "This client has not triggered any SOS alerts.",
+    "sosActiveAlert": "Active SOS Alert",
+    "sosActiveCount": "{{count}} active alert(s) requiring attention",
+    "sosAcknowledgeBtn": "Acknowledge",
+    "sosResolveBtn": "Resolve",
+    "sosAcknowledged": "SOS event acknowledged",
+    "sosResolved": "SOS event resolved",
+    "sosStatusTriggered": "Triggered",
+    "sosStatusAcknowledged": "Acknowledged",
+    "sosStatusResolved": "Resolved",
+    "sosCreatedAt": "Triggered at",
+    "sosAcknowledgedAt": "Acknowledged at"
   },
   "exerciseLibrary": {
     "title": "Exercise Library",

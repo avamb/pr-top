@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Breadcrumb from '../components/Breadcrumb';
 import useNavigationBlocker from '../hooks/useNavigationBlocker';
+import useWebSocket from '../hooks/useWebSocket';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { formatUserDate, formatUserDateOnly, getUserTimezone } from '../utils/formatDate';
 
@@ -85,6 +86,13 @@ function ClientDetail() {
   const [exportFormat, setExportFormat] = useState('json');
   const [exportLoading, setExportLoading] = useState(false);
   const [exportMsg, setExportMsg] = useState('');
+  // SOS state
+  const [sosEvents, setSosEvents] = useState([]);
+  const [sosTotal, setSosTotal] = useState(0);
+  const [sosLoading, setSosLoading] = useState(false);
+  const [sosActionLoading, setSosActionLoading] = useState(null);
+  const [sosMsg, setSosMsg] = useState('');
+  const { on: onWsEvent } = useWebSocket();
   const token = localStorage.getItem('token');
 
   // Warn user before leaving page with unsaved form data
@@ -157,6 +165,26 @@ function ClientDetail() {
   const isValidId = /^\d+$/.test(id) && Number(id) > 0;
   const clientAbortRef = useRef(null);
 
+  // SOS fetch function (defined early so useEffect can reference it)
+  const fetchSos = useCallback(async (signal) => {
+    setSosLoading(true);
+    try {
+      const res = await fetch(`${API}/clients/${id}/sos`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSosEvents(data.sos_events || []);
+        setSosTotal(data.total || 0);
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') console.error('SOS fetch error:', e);
+    } finally {
+      setSosLoading(false);
+    }
+  }, [id, token]);
+
   useEffect(() => {
     if (!token) {
       navigate('/login');
@@ -184,6 +212,7 @@ function ClientDetail() {
         fetchTimeline(false, controller.signal);
         fetchSessions(controller.signal);
         fetchExercises(controller.signal);
+        fetchSos(controller.signal);
       }
     });
 
@@ -191,6 +220,16 @@ function ClientDetail() {
       controller.abort();
     };
   }, [id, typeFilter, dateFrom, dateTo, timelineStartDate, timelineEndDate, timelineTypeFilter]);
+
+  // WebSocket: auto-refresh SOS when new sos_alert arrives for this client
+  useEffect(() => {
+    const unsubscribe = onWsEvent('sos_alert', (data) => {
+      if (!data.client_id || String(data.client_id) === String(id)) {
+        fetchSos();
+      }
+    });
+    return unsubscribe;
+  }, [onWsEvent, id, fetchSos]);
 
   async function fetchClient(signal) {
     try {
@@ -807,6 +846,45 @@ function ClientDetail() {
     }
   }
 
+  // SOS action handlers
+  async function handleSosAcknowledge(sosId) {
+    setSosActionLoading(sosId);
+    setSosMsg('');
+    try {
+      const res = await fetch(`${API}/clients/${id}/sos/${sosId}/acknowledge`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to acknowledge');
+      setSosMsg(t('clientDetail.sosAcknowledged'));
+      fetchSos();
+    } catch (e) {
+      setSosMsg('Error: ' + e.message);
+    } finally {
+      setSosActionLoading(null);
+    }
+  }
+
+  async function handleSosResolve(sosId) {
+    setSosActionLoading(sosId);
+    setSosMsg('');
+    try {
+      const res = await fetch(`${API}/clients/${id}/sos/${sosId}/resolve`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to resolve');
+      setSosMsg(t('clientDetail.sosResolved'));
+      fetchSos();
+    } catch (e) {
+      setSosMsg('Error: ' + e.message);
+    } finally {
+      setSosActionLoading(null);
+    }
+  }
+
   const timelineTypeIcon = (item) => {
     switch(item.type) {
       case 'diary': return item.entry_type === 'voice' ? '🎤' : item.entry_type === 'video' ? '🎥' : '📝';
@@ -934,7 +1012,55 @@ function ClientDetail() {
             onClick={() => setActiveTab('context')}
             className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'context' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >🧠 {t('clientDetail.contextTab')}</button>
+          <button
+            onClick={() => setActiveTab('sos')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'sos' ? 'bg-red-600 text-white' : sosEvents.some(e => e.status !== 'resolved') ? 'bg-red-50 text-red-700 border border-red-300 animate-pulse' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+          >🚨 {t('clientDetail.sosTab')} ({sosTotal})</button>
         </div>
+
+        {/* SOS Status Banner */}
+        {(() => {
+          const activeSos = sosEvents.filter(e => e.status === 'triggered' || e.status === 'acknowledged');
+          if (activeSos.length === 0) return null;
+          return (
+            <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4 mb-4 animate-pulse">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🚨</span>
+                  <div>
+                    <h3 className="text-red-800 font-bold text-lg">{t('clientDetail.sosActiveAlert')}</h3>
+                    <p className="text-red-600 text-sm">
+                      {t('clientDetail.sosActiveCount', { count: activeSos.length })}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {activeSos.filter(e => e.status === 'triggered').map(e => (
+                    <button
+                      key={`ack-${e.id}`}
+                      onClick={() => handleSosAcknowledge(e.id)}
+                      disabled={sosActionLoading === e.id}
+                      className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 disabled:opacity-50"
+                    >
+                      {sosActionLoading === e.id ? '...' : t('clientDetail.sosAcknowledgeBtn')}
+                    </button>
+                  ))}
+                  {activeSos.filter(e => e.status === 'acknowledged').map(e => (
+                    <button
+                      key={`res-${e.id}`}
+                      onClick={() => handleSosResolve(e.id)}
+                      disabled={sosActionLoading === e.id}
+                      className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+                    >
+                      {sosActionLoading === e.id ? '...' : t('clientDetail.sosResolveBtn')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {sosMsg && <p className="mt-2 text-sm text-red-700">{sosMsg}</p>}
+            </div>
+          );
+        })()}
 
         {/* NL Query Panel */}
         <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-4 mb-4">
@@ -1985,6 +2111,85 @@ function ClientDetail() {
             </div>
           )}
         </div>}
+
+        {/* SOS History Tab */}
+        {activeTab === 'sos' && (
+          <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6">
+            <h3 className="text-lg font-bold text-stone-800 mb-4">🚨 {t('clientDetail.sosHistory')} ({sosTotal})</h3>
+            {sosMsg && <p className="mb-3 text-sm text-green-700 bg-green-50 rounded px-3 py-2">{sosMsg}</p>}
+            {sosLoading ? (
+              <div className="text-center py-8 text-stone-500">{t('clientDetail.sosLoading')}</div>
+            ) : sosEvents.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="text-4xl mb-3">✅</div>
+                <h4 className="text-lg font-medium text-stone-600">{t('clientDetail.sosNoEvents')}</h4>
+                <p className="text-sm text-stone-400 mt-1">{t('clientDetail.sosNoEventsHint')}</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {sosEvents.map(event => {
+                  const statusConfig = {
+                    triggered: { label: t('clientDetail.sosStatusTriggered'), color: 'bg-red-100 text-red-700', icon: '🔴' },
+                    acknowledged: { label: t('clientDetail.sosStatusAcknowledged'), color: 'bg-amber-100 text-amber-700', icon: '🟡' },
+                    resolved: { label: t('clientDetail.sosStatusResolved'), color: 'bg-green-100 text-green-700', icon: '🟢' }
+                  };
+                  const config = statusConfig[event.status] || statusConfig.triggered;
+
+                  return (
+                    <div key={event.id} className={`border rounded-lg p-4 ${event.status === 'triggered' ? 'border-red-300 bg-red-50' : event.status === 'acknowledged' ? 'border-amber-300 bg-amber-50' : 'border-stone-200'}`}>
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-3">
+                          <span className="text-xl">{config.icon}</span>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${config.color}`}>
+                                {config.label}
+                              </span>
+                              <span className="text-xs text-stone-400">#{event.id}</span>
+                            </div>
+                            <p className="text-sm text-stone-600 mt-1">
+                              {t('clientDetail.sosCreatedAt')}: {formatUserDate(event.created_at)}
+                            </p>
+                            {event.acknowledged_at && (
+                              <p className="text-xs text-stone-400">
+                                {t('clientDetail.sosAcknowledgedAt')}: {formatUserDate(event.acknowledged_at)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          {event.status === 'triggered' && (
+                            <button
+                              onClick={() => handleSosAcknowledge(event.id)}
+                              disabled={sosActionLoading === event.id}
+                              className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 disabled:opacity-50"
+                            >
+                              {sosActionLoading === event.id ? '...' : t('clientDetail.sosAcknowledgeBtn')}
+                            </button>
+                          )}
+                          {(event.status === 'triggered' || event.status === 'acknowledged') && (
+                            <button
+                              onClick={() => handleSosResolve(event.id)}
+                              disabled={sosActionLoading === event.id}
+                              className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+                            >
+                              {sosActionLoading === event.id ? '...' : t('clientDetail.sosResolveBtn')}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {event.message && (
+                        <div className="mt-3 p-3 bg-white rounded border border-stone-200">
+                          <p className="text-sm text-stone-700">{event.message}</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );
