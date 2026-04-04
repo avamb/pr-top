@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import TimezoneDetectionBanner from './TimezoneDetectionBanner';
@@ -16,14 +16,18 @@ export default function AppLayout({ user, children }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const subscriptionCheckedRef = useRef(false);
 
-  // Check subscription status for therapists (not on subscription page itself)
+  // Check subscription status once per mount (not on every navigation)
   useEffect(() => {
     if (!user || user.role !== 'therapist') return;
     if (location.pathname.startsWith('/subscription')) return;
+    if (subscriptionCheckedRef.current) return;
 
     const token = localStorage.getItem('token');
     if (!token) return;
+
+    subscriptionCheckedRef.current = true;
 
     fetch(`${API_URL}/dashboard/stats`, {
       headers: { 'Authorization': `Bearer ${token}` }

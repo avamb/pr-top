@@ -6,6 +6,7 @@ let globalListeners = new Map();
 let globalReconnectTimer = null;
 let globalReconnectAttempts = 0;
 let globalConnected = false;
+let globalConnecting = false;
 let connectSubscribers = new Set();
 
 function notifySubscribers() {
@@ -16,10 +17,13 @@ function globalConnect() {
   const token = localStorage.getItem('token');
   if (!token) return;
 
-  // Close existing connection if any
+  // Prevent concurrent connection attempts
+  if (globalConnecting) return;
   if (globalWs && (globalWs.readyState === 0 || globalWs.readyState === 1)) {
     return; // Already connecting or connected
   }
+
+  globalConnecting = true;
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.host; // includes port (goes through Vite proxy in dev)
@@ -31,6 +35,7 @@ function globalConnect() {
 
     ws.onopen = () => {
       globalConnected = true;
+      globalConnecting = false;
       globalReconnectAttempts = 0;
       notifySubscribers();
     };
@@ -59,6 +64,7 @@ function globalConnect() {
 
     ws.onclose = (event) => {
       globalConnected = false;
+      globalConnecting = false;
       globalWs = null;
       notifySubscribers();
 
@@ -75,7 +81,7 @@ function globalConnect() {
       // Will trigger onclose
     };
   } catch (err) {
-    // WebSocket constructor can throw
+    globalConnecting = false;
   }
 }
 

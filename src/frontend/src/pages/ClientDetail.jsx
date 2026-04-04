@@ -335,6 +335,7 @@ function ClientDetail() {
     }
   }, [id, token]);
 
+  // Load client and all sub-resources when client ID changes
   useEffect(() => {
     if (!token) {
       navigate('/login');
@@ -369,7 +370,19 @@ function ClientDetail() {
     return () => {
       controller.abort();
     };
-  }, [id, typeFilter, dateFrom, dateTo, timelineStartDate, timelineEndDate, timelineTypeFilter]);
+  }, [id]);
+
+  // Re-fetch only diary when diary filters change
+  useEffect(() => {
+    if (!token || !isValidId) return;
+    fetchDiary();
+  }, [typeFilter, dateFrom, dateTo]);
+
+  // Re-fetch only timeline when timeline filters change
+  useEffect(() => {
+    if (!token || !isValidId) return;
+    fetchTimeline();
+  }, [timelineStartDate, timelineEndDate, timelineTypeFilter]);
 
   // WebSocket: auto-refresh SOS when new sos_alert arrives for this client
   useEffect(() => {
