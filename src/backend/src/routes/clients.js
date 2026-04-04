@@ -252,7 +252,7 @@ router.get('/:id/diary', (req, res) => {
     if (searchQuery) {
       // Fetch all matching entries (without pagination) for search filtering
       const allResult = db.exec(
-        `SELECT id, entry_type, content_encrypted, transcript_encrypted, encryption_key_id, payload_version, created_at, updated_at, embedding_ref, audio_file_ref
+        `SELECT id, entry_type, content_encrypted, transcript_encrypted, encryption_key_id, payload_version, created_at, updated_at, embedding_ref, audio_file_ref, transcription_status
          FROM diary_entries WHERE ${whereClause}
          ORDER BY created_at DESC`,
         params
@@ -263,7 +263,7 @@ router.get('/:id/diary', (req, res) => {
         let transcript = null;
         try { if (row[2]) content = decrypt(row[2]); } catch (e) { content = '[decryption error]'; }
         try { if (row[3]) transcript = decrypt(row[3]); } catch (e) { transcript = '[decryption error]'; }
-        return { id: row[0], entry_type: row[1], content, transcript, created_at: row[6], updated_at: row[7], embedding_ref: row[8] || null, has_audio_file: !!row[9] };
+        return { id: row[0], entry_type: row[1], content, transcript, created_at: row[6], updated_at: row[7], embedding_ref: row[8] || null, has_audio_file: !!row[9], transcription_status: row[10] || null };
       });
 
       // Filter by search query (searches decrypted content and transcript)
@@ -290,7 +290,7 @@ router.get('/:id/diary', (req, res) => {
 
     // Get paginated entries
     const result = db.exec(
-      `SELECT id, entry_type, content_encrypted, transcript_encrypted, encryption_key_id, payload_version, created_at, updated_at, embedding_ref, audio_file_ref
+      `SELECT id, entry_type, content_encrypted, transcript_encrypted, encryption_key_id, payload_version, created_at, updated_at, embedding_ref, audio_file_ref, transcription_status
        FROM diary_entries WHERE ${whereClause}
        ORDER BY created_at DESC
        LIMIT ? OFFSET ?`,
@@ -329,7 +329,8 @@ router.get('/:id/diary', (req, res) => {
         created_at: row[6],
         updated_at: row[7],
         embedding_ref: row[8] || null,
-        has_audio_file: !!row[9]
+        has_audio_file: !!row[9],
+        transcription_status: row[10] || null
       };
     });
 

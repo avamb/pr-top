@@ -122,4 +122,78 @@ router.get('/:id/stream', authenticate, requireRole('therapist', 'superadmin'), 
   }
 });
 
+// POST /api/diary/:id/retranscribe - Retry transcription for a diary entry (therapist/superadmin)
+router.post('/:id/retranscribe', authenticate, requireRole('therapist', 'superadmin'), async (req, res) => {
+  try {
+    const db = getDatabase();
+    const entryId = req.params.id;
+
+    const result = db.exec(
+      'SELECT client_id, entry_type, audio_file_ref FROM diary_entries WHERE id = ?',
+      [entryId]
+    );
+
+    if (result.length === 0 || result[0].values.length === 0) {
+      return res.status(404).json({ error: 'Diary entry not found' });
+    }
+
+    const row = result[0].values[0];
+    const clientId = row[0];
+    const entryType = row[1];
+    const audioFileRef = row[2];
+
+    // Verify therapist owns this client (unless superadmin)
+    if (req.user.role !== 'superadmin') {
+      const consentCheck = verifyClientConsent(req.user.id, clientId, 'diary_retranscribe');
+      if (!consentCheck.allowed) {
+        return res.status(consentCheck.status).json({ error: consentCheck.error });
+      }
+    }
+
+    if (entryType !== 'voice' && entryType !== 'video') {
+      return res.status(400).json({ error: 'Only voice and video entries can be transcribed' });
+    }
+
+    // Check if transcription is possible: need audio file or content (for dev mode fallback)
+    const { isConfigured, processDiaryTranscription } = require('../services/diaryTranscription');
+    if (!audioFileRef && isConfigured()) {
+      return res.status(400).json({ error: 'No audio file available for transcription' });
+    }
+    if (!audioFileRef) {
+      // In dev mode, check if there's at least content to work with
+      const contentCheck = db.exec('SELECT content_encrypted FROM diary_entries WHERE id = ?', [entryId]);
+      const hasContent = contentCheck.length > 0 && contentCheck[0].values.length > 0 && contentCheck[0].values[0][0];
+      if (!hasContent) {
+        return res.status(400).json({ error: 'No audio file or content available for transcription' });
+      }
+    }
+    const txResult = await processDiaryTranscription(parseInt(entryId), true); // force=true to re-transcribe
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'retranscribe_diary', 'diary_entry', ?, ?, datetime('now'))",
+      [req.user.id, entryId, JSON.stringify({ client_id: clientId, entry_type: entryType, success: txResult.success })]
+    );
+    saveDatabase();
+
+    if (txResult.success) {
+      // Return the new transcript (decrypted)
+      const updated = db.exec(
+        'SELECT transcript_encrypted FROM diary_entries WHERE id = ?',
+        [entryId]
+      );
+      let transcript = null;
+      if (updated.length > 0 && updated[0].values.length > 0 && updated[0].values[0][0]) {
+        try { transcript = decrypt(updated[0].values[0][0]); } catch (e) { transcript = '[decryption error]'; }
+      }
+      res.json({ success: true, transcript });
+    } else {
+      res.status(400).json({ error: txResult.error || 'Transcription failed' });
+    }
+  } catch (error) {
+    logger.error('Retranscribe diary error: ' + error.message);
+    res.status(500).json({ error: 'Transcription failed: ' + error.message });
+  }
+});
+
 module.exports = router;

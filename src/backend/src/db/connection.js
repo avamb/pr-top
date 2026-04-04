@@ -33,6 +33,20 @@ function saveDatabase() {
       fs.writeSync(fd, buffer, 0, buffer.length);
       fs.fsyncSync(fd);
       fs.closeSync(fd);
+      // Verify write by re-reading the file and checking user count
+      try {
+        const verifyBuf = fs.readFileSync(dbPath);
+        const initSqlJs = require('sql.js');
+        initSqlJs().then(SQL => {
+          const verifyDb = new SQL.Database(verifyBuf);
+          const verifyResult = verifyDb.exec('SELECT COUNT(*) FROM users');
+          const verifyCount = verifyResult.length > 0 ? verifyResult[0].values[0][0] : '?';
+          if (String(verifyCount) !== String(userCount)) {
+            logger.error('PERSISTENCE BUG: in-memory has ' + userCount + ' users but file has ' + verifyCount + ' users! File size: ' + verifyBuf.length + ', Export size: ' + buffer.length);
+          }
+          verifyDb.close();
+        }).catch(() => {});
+      } catch (verifyErr) { /* ignore verify errors */ }
       logger.debug('Database saved to disk (' + buffer.length + ' bytes, ' + userCount + ' users)');
     } catch (err) {
       logger.error('Failed to save database: ' + err.message);
@@ -455,6 +469,19 @@ function applySchema(db) {
   try {
     db.run('ALTER TABLE diary_entries ADD COLUMN audio_file_ref TEXT');
     logger.info('Added audio_file_ref column to diary_entries');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  // Add transcription_status column to diary_entries for tracking STT processing state (migration)
+  // Default is NULL (text entries don't need transcription); voice/video entries get 'pending' explicitly on INSERT
+  try {
+    db.run("ALTER TABLE diary_entries ADD COLUMN transcription_status TEXT DEFAULT NULL CHECK(transcription_status IS NULL OR transcription_status IN ('pending', 'processing', 'completed', 'failed'))");
+    logger.info('Added transcription_status column to diary_entries');
+    // Set transcription_status for existing entries based on whether transcript exists
+    db.run("UPDATE diary_entries SET transcription_status = 'completed' WHERE transcript_encrypted IS NOT NULL AND entry_type IN ('voice', 'video')");
+    db.run("UPDATE diary_entries SET transcription_status = 'pending' WHERE transcript_encrypted IS NULL AND entry_type IN ('voice', 'video')");
+    // Text entries stay NULL (no transcription needed)
   } catch (e) {
     // Column already exists, ignore
   }

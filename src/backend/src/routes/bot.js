@@ -169,6 +169,19 @@ router.get('/user/:telegram_id', botAuth, (req, res) => {
 
     const user = result[0].values[0];
 
+    // Get escalation_preferences for therapists
+    let escalationPrefs = null;
+    if (user[2] === 'therapist' || user[2] === 'superadmin') {
+      const prefsResult = db.exec('SELECT escalation_preferences FROM users WHERE id = ?', [user[0]]);
+      if (prefsResult.length > 0 && prefsResult[0].values.length > 0 && prefsResult[0].values[0][0]) {
+        try {
+          escalationPrefs = JSON.parse(prefsResult[0].values[0][0]);
+        } catch (e) { escalationPrefs = {}; }
+      } else {
+        escalationPrefs = {};
+      }
+    }
+
     res.json({
       user: {
         id: user[0],
@@ -184,7 +197,8 @@ router.get('/user/:telegram_id', botAuth, (req, res) => {
         phone: user[10] || '',
         telegram_username: user[11] || '',
         email: user[12] || '',
-        timezone: user[13] || 'UTC'
+        timezone: user[13] || 'UTC',
+        escalation_preferences: escalationPrefs
       }
     });
   } catch (error) {
@@ -597,11 +611,12 @@ router.post('/diary', botAuth, (req, res) => {
       }
     }
 
-    // Insert diary entry with file_ref and audio_file_ref
+    // Insert diary entry with file_ref, audio_file_ref, and transcription_status
+    const transcriptionStatus = (type === 'voice' || type === 'video') ? 'pending' : null;
     db.run(
-      `INSERT INTO diary_entries (client_id, entry_type, content_encrypted, file_ref, audio_file_ref, encryption_key_id, payload_version, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-      [clientId, type, contentEncrypted, encryptedFileRef, audioFileRef, keyId, keyVersion]
+      `INSERT INTO diary_entries (client_id, entry_type, content_encrypted, file_ref, audio_file_ref, encryption_key_id, payload_version, transcription_status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+      [clientId, type, contentEncrypted, encryptedFileRef, audioFileRef, keyId, keyVersion, transcriptionStatus]
     );
     saveDatabase();
 
@@ -646,14 +661,36 @@ router.post('/diary', botAuth, (req, res) => {
     var embRef = (embRefResult.length > 0 && embRefResult[0].values.length > 0) ? embRefResult[0].values[0][0] : null;
 
     // Push real-time WebSocket notification to therapist
+    let therapistForwardVoice = false;
+    let therapistTelegramId = null;
+    let therapistQuietHours = null;
+    let clientDisplayName = 'Client #' + clientId;
     try {
       const therapistIdForWs = client[2]; // therapist_id from client record
       if (therapistIdForWs) {
-        const clientEmailResult = db.exec("SELECT email FROM users WHERE id = ?", [clientId]);
-        const clientName = (clientEmailResult.length > 0 && clientEmailResult[0].values.length > 0)
-          ? (clientEmailResult[0].values[0][0] || 'Client #' + clientId)
-          : 'Client #' + clientId;
-        wsService.emitNewDiaryEntry(therapistIdForWs, { clientId, clientName, entryId, entryType: type });
+        const therapistResult = db.exec(
+          "SELECT telegram_id, escalation_preferences, first_name, email FROM users WHERE id = ?",
+          [therapistIdForWs]
+        );
+        if (therapistResult.length > 0 && therapistResult[0].values.length > 0) {
+          const therapistRow = therapistResult[0].values[0];
+          therapistTelegramId = therapistRow[0];
+          try {
+            const prefs = JSON.parse(therapistRow[1] || '{}');
+            therapistForwardVoice = !!prefs.forward_voice_to_telegram;
+            therapistQuietHours = {
+              enabled: !!prefs.quiet_hours_enabled,
+              start: prefs.quiet_hours_start || '22:00',
+              end: prefs.quiet_hours_end || '08:00'
+            };
+          } catch (e) { /* ignore parse errors */ }
+        }
+
+        const clientEmailResult = db.exec("SELECT email, first_name FROM users WHERE id = ?", [clientId]);
+        if (clientEmailResult.length > 0 && clientEmailResult[0].values.length > 0) {
+          clientDisplayName = clientEmailResult[0].values[0][1] || clientEmailResult[0].values[0][0] || 'Client #' + clientId;
+        }
+        wsService.emitNewDiaryEntry(therapistIdForWs, { clientId, clientName: clientDisplayName, entryId, entryType: type });
       }
     } catch (wsErr) {
       logger.warn(`[WS] Failed to emit diary entry notification: ${wsErr.message}`);
@@ -669,7 +706,12 @@ router.post('/diary', botAuth, (req, res) => {
         has_audio_file: !!audioFileRef,
         embedding_ref: embRef,
         created_at: new Date().toISOString()
-      }
+      },
+      forward_voice: therapistForwardVoice && (type === 'voice' || type === 'video') ? {
+        therapist_telegram_id: therapistTelegramId,
+        client_name: clientDisplayName,
+        quiet_hours: therapistQuietHours
+      } : null
     });
   } catch (error) {
     logger.error('Bot diary error: ' + error.message);
@@ -1299,6 +1341,73 @@ router.post('/voice-query', botAuth, (req, res) => {
   } catch (error) {
     logger.error('Voice query error: ' + error.message);
     res.status(500).json({ error: 'Failed to process voice query' });
+  }
+});
+
+// PUT /api/bot/settings/:telegram_id - Update therapist escalation settings from bot
+router.put('/settings/:telegram_id', botAuth, (req, res) => {
+  try {
+    const { telegram_id } = req.params;
+    const { key, value } = req.body;
+
+    if (!key) {
+      return res.status(400).json({ error: 'key is required' });
+    }
+
+    const db = getDatabase();
+    const result = db.exec(
+      'SELECT id, role, escalation_preferences FROM users WHERE telegram_id = ?',
+      [String(telegram_id)]
+    );
+
+    if (result.length === 0 || result[0].values.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = result[0].values[0];
+    const userId = user[0];
+    const role = user[1];
+
+    if (role !== 'therapist' && role !== 'superadmin') {
+      return res.status(403).json({ error: 'Only therapists can update settings' });
+    }
+
+    // Parse and update escalation preferences
+    let prefs = {};
+    try {
+      prefs = JSON.parse(user[2] || '{}');
+    } catch (e) { prefs = {}; }
+
+    // Whitelist allowed keys
+    const allowedKeys = [
+      'sos_telegram', 'sos_email', 'sos_web_push', 'sos_sound_alert',
+      'quiet_hours_enabled', 'quiet_hours_start', 'quiet_hours_end',
+      'escalation_delay_minutes', 'forward_voice_to_telegram'
+    ];
+
+    if (!allowedKeys.includes(key)) {
+      return res.status(400).json({ error: 'Invalid setting key' });
+    }
+
+    prefs[key] = value;
+
+    db.run(
+      "UPDATE users SET escalation_preferences = ?, updated_at = datetime('now') WHERE id = ?",
+      [JSON.stringify(prefs), userId]
+    );
+    saveDatabase();
+
+    logger.info(`Bot updated setting ${key}=${value} for user ${userId}`);
+
+    res.json({
+      success: true,
+      key: key,
+      value: value,
+      preferences: prefs
+    });
+  } catch (error) {
+    logger.error('Bot settings update error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update settings' });
   }
 });
 
