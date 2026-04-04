@@ -1,3 +1,54 @@
+## Session: 2026-04-04 - Features #277, #279, #280
+
+### Completed: Auto-detect timezone for client on first bot interaction (#277) - PASSING
+
+**What was built:**
+- Added LANGUAGE_TIMEZONE_MAP in src/bot/src/index.js mapping 40+ Telegram language_codes to IANA timezones
+- Added detectTimezone(msg) function that maps language_code to timezone with prefix fallback
+- Updated registerUser() to pass timezone parameter
+- Updated deep-link auto-registration to include timezone
+- Backend /api/bot/register now accepts timezone field, saves it on INSERT
+- For existing users, timezone is set only if currently null or UTC (won't overwrite manual choice)
+- Added timezone to GET /api/bot/user/:telegram_id response
+- Added logging for timezone detection
+
+### Completed: Add /timezone command to Telegram bot for clients (#279) - PASSING
+
+**What was built:**
+- Added /timezone slash command handler showing current timezone and time
+- Added region-based inline keyboard (Europe, Asia, Americas, Africa, Pacific/Oceania, UTC)
+- Each region expands to specific city/timezone options with flag emojis
+- Back button returns to region selection
+- On selection, updates timezone via PUT /api/bot/profile/:telegram_id
+- Confirmation shows new timezone and current local time
+- Added timezone to bot command menu
+- Added /timezone to help text in all 4 languages
+- Added i18n translations: timezoneCurrentAndChoose, timezoneUpdated, timezoneFailed, tzRegionEurope/Asia/America/Africa/Pacific, tzBack - in EN, RU, ES, UK
+- Backend /api/bot/profile/:telegram_id now accepts timezone field
+
+### Completed: Apply client timezone when displaying dates in bot /history (#280) - PASSING
+
+**What was built:**
+- Modified handleHistory() to fetch user timezone before formatting dates
+- Added 'Z' suffix to created_at strings to ensure UTC parsing
+- Added timeZone option to toLocaleDateString() calls using user's timezone
+- Added Ukrainian locale (uk-UA) support alongside existing ru-RU, es-ES, en-US
+- Verified Tokyo (UTC+9) and Moscow (UTC+3) offsets display correctly
+
+**Verification:**
+- Registration with timezone saves to DB ✅
+- Re-registration does NOT overwrite existing timezone ✅
+- Default timezone is UTC when not provided ✅
+- Bot profile API updates timezone ✅
+- Timezone persists across server restart ✅
+- Date formatting with timeZone option works correctly ✅
+- No mock data patterns in source code ✅
+- No new console errors ✅
+
+### Current Status
+- Features passing: 276/282 (estimated)
+- Features #277, #279, #280: ALL PASSING
+
 ## Session: 2026-04-04 - Features #274, #275, #276
 
 ### Completed: Fix UTC date parsing in frontend formatDate utility (#274) - PASSING
