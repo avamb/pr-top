@@ -1,3 +1,50 @@
+## Session: 2026-04-04 - Features #278, #282, #281
+
+### Completed: Show detected timezone to client after registration (#278) - PASSING
+
+**What was built:**
+- Added `timezoneDetectedAfterReg` and `tzChangeButton` i18n keys in EN, RU, ES, UK
+- Added `sendTimezoneConfirmation()` helper in bot index.js
+- After deep link client registration, sends timezone confirmation with inline "Change timezone" button
+- After role_client registration, sends timezone confirmation message
+- Added `tz_change_after_reg` callback handler that opens the full timezone region selector
+- Message shown once only (for new registrations, not existing users)
+
+### Completed: Auto-detect timezone on therapist first web login (#282) - PASSING
+
+**What was built:**
+- Created `TimezoneDetectionBanner.jsx` component
+- Auto-detects browser timezone via `Intl.DateTimeFormat().resolvedOptions().timeZone`
+- Shows non-intrusive blue banner at top of dashboard: "Your timezone appears to be X. Is this correct?"
+- "Yes, correct" button saves timezone via PUT /api/settings/profile and updates localStorage
+- "Change timezone" button navigates to /settings page
+- Per-user localStorage key (`timezone_confirmed_{userId}`) prevents showing again
+- Only shown for therapists/superadmins with UTC timezone
+- Integrated into AppLayout.jsx above main content
+- Full i18n in EN, RU, ES, UK
+
+### Completed: /timezone command for therapists in Telegram bot (#281) - PASSING
+
+**What was built:**
+- The /timezone command handler was already role-agnostic (works for all users)
+- Added /timezone and /profile to therapist help text in all 4 languages (EN, RU, ES, UK)
+- Timezone changes in bot sync with web dashboard via same users.timezone column
+
+**Verification:**
+- Bot code syntax valid (node -c passes) ✅
+- All i18n translations work for all 4 languages ✅
+- TimezoneDetectionBanner appears on dashboard for therapist with UTC timezone ✅
+- "Yes, correct" dismisses banner and saves timezone ✅
+- "Change timezone" navigates to Settings page ✅
+- Banner doesn't reappear after page reload ✅
+- Per-user localStorage key prevents cross-user interference ✅
+- Zero JS console errors (only pre-existing React Router/Umami warnings) ✅
+- No mock data patterns in source code ✅
+
+### Current Status
+- Features passing: 282/288 (97.9%)
+- Features #278, #282, #281: ALL PASSING
+
 ## Session: 2026-04-04 - Features #277, #279, #280
 
 ### Completed: Auto-detect timezone for client on first bot interaction (#277) - PASSING
