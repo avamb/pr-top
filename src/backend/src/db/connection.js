@@ -36,8 +36,10 @@ function saveDatabase() {
       // (dbDirty is true). Without VACUUM, db.export() returns stale data,
       // so a non-dirty save would overwrite valid data with an older snapshot.
       if (!dbDirty) {
+        logger.debug('saveDatabase: skipping (no dirty changes)');
         return; // No changes to save — skip to avoid overwriting with stale export
       }
+      logger.debug('saveDatabase: dirty flag set, performing VACUUM + save');
       try {
         db.run('VACUUM');
       } catch (e) {
