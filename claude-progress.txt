@@ -1407,3 +1407,60 @@
 - Features passing: 290/290 (100.0%)
 - Feature #290: PASSING
 - ALL FEATURES COMPLETE
+
+## Session: 2026-04-05 - Features #292, #295, #294
+
+### Completed: Admin setting for assistant AI provider (#292) - PASSING
+
+**What was built:**
+- Backend: Extended GET/PUT /api/admin/ai/models to include ai_assistant_provider and ai_assistant_model
+- Backend: Added getActiveAssistantProvider() to aiProviders/index.js (falls back to summarization settings)
+- Frontend: Added Assistant Chat Model section to AdminAIModels.jsx with provider cards, model dropdown, test connection
+- i18n: Added assistant/assistantDesc keys in EN/RU/ES/UK
+- Default: assistant settings fall back to summarization provider when not explicitly set
+
+**Verification:**
+- GET /api/admin/ai/models returns assistant_providers and current.assistant ✅
+- PUT /api/admin/ai/models accepts assistant: { provider, model } ✅
+- Settings persist across server restart ✅
+- UI shows three sections: Summarization, Transcription, Assistant Chat ✅
+- Save button updates all three categories ✅
+- Zero feature-related console errors ✅
+
+### Completed: Admin AI Models page — assistant provider selector (#295) - PASSING
+
+Already fully implemented as part of #292. UI has:
+- Provider cards (OpenAI, Anthropic, Google, OpenRouter) with Active/Configured badges ✅
+- Model dropdown with price hints and recommended badges ✅
+- Test Connection button for each provider ✅
+- Saves via PUT /api/admin/ai/models on form submit ✅
+- Loads saved values from GET on mount ✅
+- i18n keys in all 4 languages ✅
+
+### Completed: Assistant knowledge base system prompt (#294) - PASSING
+
+**What was built:**
+- Created src/backend/src/services/assistantPrompt.js
+- Comprehensive system prompt covering all platform features:
+  - Navigation map (all sidebar items, client detail tabs, admin pages)
+  - Workflow guides (adding clients, recording sessions, assigning exercises, viewing diary, handling SOS, search, analytics, subscription, settings, consent)
+  - Subscription tiers table (Trial/Basic/Pro/Premium)
+  - Telegram bot commands reference
+  - Troubleshooting FAQ section
+- Language auto-detection instruction with locale fallback
+- "Never suggest code changes" instruction
+- Page context parameter with 9 context-specific hints (client detail, client list, session detail, dashboard, exercises, analytics, settings, subscription, admin)
+- Plan-specific hints for trial/basic users
+- Exports buildAssistantSystemPrompt({ pageContext, locale, plan }) function
+
+**Verification:**
+- Module loads and exports correctly ✅
+- Prompt covers all required topics (navigation, workflows, bot, troubleshooting) ✅
+- Page context hints work for all 9 page types ✅
+- Locale parameter works (en, ru, es, uk) ✅
+- Plan parameter adds appropriate notes ✅
+- All 11 coverage checks pass ✅
+
+### Current Status
+- Features passing: 292/300 (97.3%)
+- Features #292, #295, #294: ALL PASSING
