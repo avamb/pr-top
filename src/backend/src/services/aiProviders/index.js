@@ -224,6 +224,49 @@ async function chat(messages, options, db) {
   return result;
 }
 
+/**
+ * Unified streaming chat function - uses the active provider.
+ * Returns an async generator that yields text chunks.
+ * Falls back to non-streaming chat wrapped in a single-chunk generator if provider doesn't support streaming.
+ * @param {Array} messages - Array of {role, content} messages
+ * @param {object} options - { model, temperature, max_tokens, provider, purpose }
+ * @param {object} db - Database instance (optional, for reading settings)
+ * @returns {AsyncGenerator<{text: string, done: boolean, fullText?: string, model?: string}>}
+ */
+async function* chatStream(messages, options, db) {
+  options = options || {};
+
+  var providerName, provider, model;
+
+  if (options.provider) {
+    providerName = options.provider;
+    provider = providers[providerName];
+    model = options.model;
+    if (!provider) throw new Error('Unknown AI provider: ' + providerName);
+  } else {
+    var active = getActiveProvider(db);
+    provider = active.provider;
+    providerName = active.providerName;
+    model = options.model || active.model;
+  }
+
+  if (!provider.isConfigured()) {
+    throw new Error('AI provider ' + providerName + ' is not configured (missing API key)');
+  }
+
+  // If provider supports streaming, use it
+  if (typeof provider.chatStream === 'function') {
+    var stream = provider.chatStream(messages, { model: model, temperature: options.temperature, max_tokens: options.max_tokens });
+    for await (var chunk of stream) {
+      yield chunk;
+    }
+  } else {
+    // Fallback: non-streaming chat wrapped as a single chunk
+    var result = await provider.chat(messages, { model: model, temperature: options.temperature, max_tokens: options.max_tokens });
+    yield { text: result.text, done: true, fullText: result.text, model: result.model };
+  }
+}
+
 module.exports = {
   getProvider: getProvider,
   getActiveProvider: getActiveProvider,
@@ -233,5 +276,6 @@ module.exports = {
   getConfiguredProviders: getConfiguredProviders,
   getAllModels: getAllModels,
   chat: chat,
+  chatStream: chatStream,
   providers: providers
 };

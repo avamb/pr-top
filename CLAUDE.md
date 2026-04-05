@@ -31,116 +31,64 @@ If the user asks you to modify code, explain that you're a project assistant and
   <project_name>PR-TOP</project_name>
 
   <overview>
-    PR-TOP is a therapist-controlled between-session assistant platform built on top of the existing MindSetHappyBot/3hours Telegram bot codebase. It helps practicing psychologists preserve client context, reduce double documentation, work deeper between sessions, and maintain therapist control over all sensitive client flows. The platform consists of a Telegram bot (for therapist and client interaction) and a unified web application (landing page, therapist dashboard, and superadmin panel) on a single domain with role-based access.
+    PR-TOP is a therapist-controlled between-session assistant platform built on the MindSetHappyBot/3hours Telegram bot codebase. It helps psychologists preserve client context, reduce double documentation, work deeper between sessions, and maintain therapist control over all sensitive client data flows. Three components: React SPA (landing + dashboard + admin), Node.js REST API with encrypted SQLite, and Telegram bot for client interaction.
   </overview>
 
+  <full_specification>
+    The complete PRD is located at: docs/PRD.md
+    Always read docs/PRD.md for detailed requirements, architecture, API routes, and feature specifications.
+  </full_specification>
+
   <technology_stack>
-    <frontend>
-      <framework>React</framework>
-      <styling>Tailwind CSS</styling>
-      <routing>React Router with role-based route guards</routing>
-      <state_management>React Context / Zustand</state_management>
-      <languages>RU, EN, ES, UK (i18n with react-i18next)</languages>
-    </frontend>
-    <backend>
-      <runtime>Node.js</runtime>
-      <telegram>Telegram Bot API (existing MindSetHappyBot foundation)</telegram>
-      <database>SQLite (development) / PostgreSQL (production)</database>
-      <vector_db>Vector DB for semantic search and embeddings (existing capability)</vector_db>
-      <encryption>Application-layer encryption for all Class A sensitive data</encryption>
-      <file_storage>Encrypted file storage for audio/video, opaque IDs, signed-access only</file_storage>
-      <transcription>Speech-to-text service for audio and video transcription</transcription>
-      <ai>AI summarization pipeline, natural language query processing</ai>
-    </backend>
-    <payments>
-      <provider>Stripe</provider>
-      <model>Subscription (Trial / Basic / Pro / Premium)</model>
-      <webhooks>Stripe webhook handling for payment events</webhooks>
-    </payments>
-    <analytics>
-      <provider>Umami (self-hosted, privacy-first, GDPR-compliant)</provider>
-      <tracking>Landing page visitors, conversions, traffic sources</tracking>
-    </analytics>
-    <communication>
-      <api>REST API</api>
-      <realtime>Telegram Bot API for real-time messaging</realtime>
-    </communication>
+    <frontend>React, Tailwind CSS, React Router, Zustand, react-i18next (EN/RU/ES/UK)</frontend>
+    <backend>Node.js, Express, better-sqlite3, Stripe SDK, node-cron, ws (WebSocket)</backend>
+    <bot>node-telegram-bot-api (long-polling)</bot>
+    <ai>OpenAI, Anthropic, Google Gemini, OpenRouter (configurable multi-provider)</ai>
+    <transcription>OpenAI Whisper (configurable)</transcription>
+    <search>Vector embeddings for semantic search</search>
+    <analytics>Umami (self-hosted, GDPR-compliant)</analytics>
+    <payments>Stripe (Trial/Basic/Pro/Premium subscriptions)</payments>
+    <email>Nodemailer (SMTP or console fallback)</email>
   </technology_stack>
 
-  <prerequisites>
-    <environment_setup>
-      Node.js 18+, npm/yarn, Telegram Bot Token, Stripe API keys, AI/transcription API keys, vector DB instance. Existing MindSetHappyBot codebase as foundation.
-    </environment_setup>
-  </prerequisites>
+  <user_roles>
+    <role name="therapist">Primary users. Register via web, manage clients via dashboard + bot. Access: /dashboard/*, /api/clients/*, /api/sessions/*, /api/notes/*</role>
+    <role name="client">Telegram bot only. Diary (text/voice/video), exercises, SOS, consent management. Connect via invite code or deep link.</role>
+    <role name="superadmin">Platform admin. Manage therapists, view stats, configure AI, audit logs, backups. Access: /admin/*, /api/admin/*</role>
+  </user_roles>
 
-  <feature_count>226</feature_count>
+  <feature_modules>
+    - Authentication: JWT + HttpOnly cookies, CSRF, password reset, invite codes, deep links
+    - Client Management: List, detail, timeline, context, consent enforcement, bulk import
+    - Sessions: Audio/video upload (100MB), transcription (Whisper), AI summarization, streaming playback
+    - Exercises: Pre-seeded multilingual library + custom exercises, assignment via bot
+    - Diary & Notes: Text/voice/video diary via bot, private therapist notes, all encrypted
+    - SOS & Escalation: One-tap crisis trigger, lifecycle tracking, multi-channel notifications
+    - Search: Vector semantic search, NL queries (Pro/Premium), query expansion
+    - Analytics: Dashboard stats, activity feed, charts, PDF/JSON/CSV export, tier-gated
+    - Subscriptions: Stripe integration, 4 tiers with plan limits and feature gating
+    - Real-time: WebSocket push notifications, PWA support
+    - i18n: Full EN/RU/ES/UK coverage across all layers
+    - Email: Welcome, reset, SOS alerts, receipts, expiry warnings, rate limiting
+  </feature_modules>
 
-  <data_sensitivity_classes>
-    <class_a description="Highly sensitive - must be encrypted at application layer before DB persistence">
-      - Client diary content (text, voice transcripts, video transcripts)
-      - Conversation messages
-      - Voice/video transcripts
-      - Therapist notes
-      - Session summaries
-      - Anamnesis / client context
-      - AI instructions / contraindications
-      - Alarm/SOS excerpts
-      - Exercise responses from client
-    </class_a>
-    <class_b description="Sensitive metadata - access-controlled but may remain plaintext">
-      - Timestamps
-      - Therapist/client linkage IDs
-      - Statuses and role types
-      - Language tags
-      - Counters
-      - Scheduling metadata
-      - Payment metadata (Stripe handles PCI)
-      - UTM attribution data
-    </class_b>
-  </data_sensitivity_classes>
+  <security>
+    - Class A data (diary, notes, transcripts, summaries): AES encrypted at application layer
+    - Class B data (timestamps, IDs, metadata): access-controlled plaintext
+    - JWT auth, CSRF protection, bcrypt passwords, rate limiting, audit logging
+    - Consent enforcement on all client data routes
+    - Encrypted file storage with opaque IDs and signed-access streaming
+  </security>
 
-  <security_and_access_control>
-    <user_roles>
-      <role name="therapist">
-        <permissions>
-          - View own linked clients only
-          - View client diary entries (decrypted on authorized read)
-          - Create/edit private therapist notes
-          - Upload session audio and view transcript/summary
-          - View unified client timeline
-          - Send exercises to clients
-          - Receive SOS notifications from clients
-          - Configure escalation preferences
-          - Add/edit client context (anamnesis, goals, AI instructions)
-          - Use natural language queries (text/voice) for client info (Pro/Premium)
-          - Access web dashboard with analytics
-          - Generate/refresh invite codes
-        </permissions>
-        <protected_routes>
-          - /dashboard/* (authenticated therapists only)
-          - /api/clients/* (own clients only)
-          - /api/sessions/* (own sessions only)
-          - /api/notes/* (own notes only)
-        </protected_routes>
-      </role>
-      <role name="client">
-        <permissions>
-          - Write diary entries (text, voice, video)
-          - Complete exercises sent by therapist
-          - Trigger SOS button
-          - Connect to therapist via invite code
-          - Grant/revoke consent for therapist access
-          - View own diary history
-        </permissions>
-        <protected_routes>
-          - Telegram bot interface only (no web panel access)
-        </protected_routes>
-      </role>
-      <role name="superadmin">
-        <permissions>
-          - All therapist permissions (can view therapist perspectives)
-          - View all therapists and their status
-... (truncated)
+  <infrastructure>
+    - Docker Compose: 6 services (nginx, frontend, backend, bot, umami, umami-db)
+    - Nginx reverse proxy: / -> frontend, /api/ -> backend, /analytics/ -> umami
+    - Deployment: Dokploy on Hetzner, SSL via Let's Encrypt
+    - Automated encrypted daily backups with configurable retention
+    - Health checks: GET /api/health
+  </infrastructure>
+</project_specification>
+
 
 ## Available Tools
 

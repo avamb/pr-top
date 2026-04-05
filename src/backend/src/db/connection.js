@@ -523,6 +523,13 @@ function applySchema(db) {
     updated_at TEXT DEFAULT (datetime('now'))
   )`);
 
+  // Add deleted_at column for soft-delete support
+  try {
+    db.run('ALTER TABLE assistant_chats ADD COLUMN deleted_at TEXT DEFAULT NULL');
+  } catch (e) {
+    // Column already exists
+  }
+
   // Create assistant_cached_answers table for self-learning cache
   db.run(`CREATE TABLE IF NOT EXISTS assistant_cached_answers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

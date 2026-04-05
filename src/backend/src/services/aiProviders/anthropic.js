@@ -112,6 +112,99 @@ async function chat(messages, options) {
   };
 }
 
+/**
+ * Send a streaming messages request to Anthropic.
+ * @param {Array} messages - Array of {role, content} messages
+ * @param {object} options - { model, temperature, max_tokens }
+ * @returns {AsyncGenerator<{text: string, done: boolean, fullText?: string, model?: string}>}
+ */
+async function* chatStream(messages, options) {
+  options = options || {};
+  var model = options.model || 'claude-3-haiku-20241022';
+  if (MODEL_ALIASES[model]) model = MODEL_ALIASES[model];
+  var temperature = options.temperature != null ? options.temperature : 0.3;
+  var maxTokens = options.max_tokens || 2000;
+
+  var systemMessage = '';
+  var userMessages = [];
+  for (var i = 0; i < messages.length; i++) {
+    if (messages[i].role === 'system') {
+      systemMessage += (systemMessage ? '\n\n' : '') + messages[i].content;
+    } else {
+      userMessages.push({ role: messages[i].role, content: messages[i].content });
+    }
+  }
+  if (userMessages.length === 0) {
+    userMessages.push({ role: 'user', content: systemMessage });
+    systemMessage = '';
+  }
+
+  logger.info('[Anthropic] Calling streaming messages API: model=' + model);
+
+  var body = {
+    model: model,
+    messages: userMessages,
+    temperature: temperature,
+    max_tokens: maxTokens,
+    stream: true
+  };
+  if (systemMessage) body.system = systemMessage;
+
+  var response = await fetch(API_URL + '/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': API_KEY,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(120000)
+  });
+
+  if (!response.ok) {
+    var errorDetail = '';
+    try { var errorBody = await response.text(); errorDetail = ' - ' + errorBody.slice(0, 500); } catch (_) {}
+    throw new Error('Anthropic API returned ' + response.status + errorDetail);
+  }
+
+  var reader = response.body.getReader();
+  var decoder = new TextDecoder();
+  var buffer = '';
+  var fullText = '';
+
+  try {
+    while (true) {
+      var readResult = await reader.read();
+      if (readResult.done) break;
+
+      buffer += decoder.decode(readResult.value, { stream: true });
+      var lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (var j = 0; j < lines.length; j++) {
+        var line = lines[j].trim();
+        if (!line || !line.startsWith('data: ')) continue;
+        try {
+          var parsed = JSON.parse(line.slice(6));
+          if (parsed.type === 'content_block_delta' && parsed.delta && parsed.delta.text) {
+            fullText += parsed.delta.text;
+            yield { text: parsed.delta.text, done: false };
+          } else if (parsed.type === 'message_stop') {
+            yield { text: '', done: true, fullText: fullText, model: model };
+            return;
+          }
+        } catch (e) {
+          // Skip unparseable chunks
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  yield { text: '', done: true, fullText: fullText, model: model };
+}
+
 function listModels() {
   return SUPPORTED_MODELS;
 }
@@ -120,5 +213,6 @@ module.exports = {
   name: 'anthropic',
   isConfigured: isConfigured,
   chat: chat,
+  chatStream: chatStream,
   listModels: listModels
 };
