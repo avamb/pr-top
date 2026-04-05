@@ -513,6 +513,16 @@ function applySchema(db) {
     logger.warn('Email normalization migration skipped: ' + e.message);
   }
 
+  // Create assistant_chats table for therapist-assistant chat history
+  db.run(`CREATE TABLE IF NOT EXISTS assistant_chats (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    therapist_id INTEGER NOT NULL REFERENCES users(id),
+    messages TEXT NOT NULL DEFAULT '[]',
+    page_context TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`);
+
   // Create indexes for performance
   db.run('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
   db.run('CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)');
@@ -528,6 +538,7 @@ function applySchema(db) {
   db.run('CREATE INDEX IF NOT EXISTS idx_subscriptions_therapist ON subscriptions(therapist_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_exercise_deliveries_client ON exercise_deliveries(client_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_sos_events_client ON sos_events(client_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_assistant_chats_therapist_updated ON assistant_chats(therapist_id, updated_at DESC)');
 
   // Insert default platform settings
   const defaultSettings = [
