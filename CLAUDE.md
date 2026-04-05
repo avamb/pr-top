@@ -27,7 +27,120 @@ If the user asks you to modify code, explain that you're a project assistant and
 
 ## Project Specification
 
-(No app specification found)
+<project_specification>
+  <project_name>PR-TOP</project_name>
+
+  <overview>
+    PR-TOP is a therapist-controlled between-session assistant platform built on top of the existing MindSetHappyBot/3hours Telegram bot codebase. It helps practicing psychologists preserve client context, reduce double documentation, work deeper between sessions, and maintain therapist control over all sensitive client flows. The platform consists of a Telegram bot (for therapist and client interaction) and a unified web application (landing page, therapist dashboard, and superadmin panel) on a single domain with role-based access.
+  </overview>
+
+  <technology_stack>
+    <frontend>
+      <framework>React</framework>
+      <styling>Tailwind CSS</styling>
+      <routing>React Router with role-based route guards</routing>
+      <state_management>React Context / Zustand</state_management>
+      <languages>RU, EN, ES, UK (i18n with react-i18next)</languages>
+    </frontend>
+    <backend>
+      <runtime>Node.js</runtime>
+      <telegram>Telegram Bot API (existing MindSetHappyBot foundation)</telegram>
+      <database>SQLite (development) / PostgreSQL (production)</database>
+      <vector_db>Vector DB for semantic search and embeddings (existing capability)</vector_db>
+      <encryption>Application-layer encryption for all Class A sensitive data</encryption>
+      <file_storage>Encrypted file storage for audio/video, opaque IDs, signed-access only</file_storage>
+      <transcription>Speech-to-text service for audio and video transcription</transcription>
+      <ai>AI summarization pipeline, natural language query processing</ai>
+    </backend>
+    <payments>
+      <provider>Stripe</provider>
+      <model>Subscription (Trial / Basic / Pro / Premium)</model>
+      <webhooks>Stripe webhook handling for payment events</webhooks>
+    </payments>
+    <analytics>
+      <provider>Umami (self-hosted, privacy-first, GDPR-compliant)</provider>
+      <tracking>Landing page visitors, conversions, traffic sources</tracking>
+    </analytics>
+    <communication>
+      <api>REST API</api>
+      <realtime>Telegram Bot API for real-time messaging</realtime>
+    </communication>
+  </technology_stack>
+
+  <prerequisites>
+    <environment_setup>
+      Node.js 18+, npm/yarn, Telegram Bot Token, Stripe API keys, AI/transcription API keys, vector DB instance. Existing MindSetHappyBot codebase as foundation.
+    </environment_setup>
+  </prerequisites>
+
+  <feature_count>226</feature_count>
+
+  <data_sensitivity_classes>
+    <class_a description="Highly sensitive - must be encrypted at application layer before DB persistence">
+      - Client diary content (text, voice transcripts, video transcripts)
+      - Conversation messages
+      - Voice/video transcripts
+      - Therapist notes
+      - Session summaries
+      - Anamnesis / client context
+      - AI instructions / contraindications
+      - Alarm/SOS excerpts
+      - Exercise responses from client
+    </class_a>
+    <class_b description="Sensitive metadata - access-controlled but may remain plaintext">
+      - Timestamps
+      - Therapist/client linkage IDs
+      - Statuses and role types
+      - Language tags
+      - Counters
+      - Scheduling metadata
+      - Payment metadata (Stripe handles PCI)
+      - UTM attribution data
+    </class_b>
+  </data_sensitivity_classes>
+
+  <security_and_access_control>
+    <user_roles>
+      <role name="therapist">
+        <permissions>
+          - View own linked clients only
+          - View client diary entries (decrypted on authorized read)
+          - Create/edit private therapist notes
+          - Upload session audio and view transcript/summary
+          - View unified client timeline
+          - Send exercises to clients
+          - Receive SOS notifications from clients
+          - Configure escalation preferences
+          - Add/edit client context (anamnesis, goals, AI instructions)
+          - Use natural language queries (text/voice) for client info (Pro/Premium)
+          - Access web dashboard with analytics
+          - Generate/refresh invite codes
+        </permissions>
+        <protected_routes>
+          - /dashboard/* (authenticated therapists only)
+          - /api/clients/* (own clients only)
+          - /api/sessions/* (own sessions only)
+          - /api/notes/* (own notes only)
+        </protected_routes>
+      </role>
+      <role name="client">
+        <permissions>
+          - Write diary entries (text, voice, video)
+          - Complete exercises sent by therapist
+          - Trigger SOS button
+          - Connect to therapist via invite code
+          - Grant/revoke consent for therapist access
+          - View own diary history
+        </permissions>
+        <protected_routes>
+          - Telegram bot interface only (no web panel access)
+        </protected_routes>
+      </role>
+      <role name="superadmin">
+        <permissions>
+          - All therapist permissions (can view therapist perspectives)
+          - View all therapists and their status
+... (truncated)
 
 ## Available Tools
 
