@@ -1208,4 +1208,113 @@ router.get('/ai/test', async (req, res) => {
   }
 });
 
+// ==================== Assistant AI Settings (Dedicated Endpoints) ====================
+
+// GET /api/admin/settings/assistant-ai - Get assistant AI provider/model config
+router.get('/settings/assistant-ai', (req, res) => {
+  try {
+    const db = getDatabase();
+    const allModels = aiProviders.getAllModels();
+
+    const getSettingValue = (key, fallback) => {
+      const r = db.exec("SELECT value FROM platform_settings WHERE key = ?", [key]);
+      return (r.length > 0 && r[0].values.length > 0) ? r[0].values[0][0] : fallback;
+    };
+
+    // Fallback to summarization settings if assistant not explicitly set
+    const sumProv = getSettingValue('ai_summarization_provider', 'openai');
+    const sumMod = getSettingValue('ai_summarization_model', 'gpt-4o-mini');
+
+    const assistantProvider = getSettingValue('ai_assistant_provider', sumProv);
+    const assistantModel = getSettingValue('ai_assistant_model', sumMod);
+
+    // Check if the selected provider has a valid API key
+    const selectedProviderObj = aiProviders.getProvider(assistantProvider);
+    const providerConfigured = selectedProviderObj ? selectedProviderObj.isConfigured() : false;
+
+    res.json({
+      assistant: {
+        provider: assistantProvider,
+        model: assistantModel,
+        provider_configured: providerConfigured
+      },
+      available_providers: allModels.map(p => ({
+        provider: p.provider,
+        configured: p.configured,
+        models: p.models
+      }))
+    });
+  } catch (error) {
+    logger.error('Admin get assistant AI settings error: ' + error.message);
+    res.status(500).json({ error: 'Failed to get assistant AI settings' });
+  }
+});
+
+// PUT /api/admin/settings/assistant-ai - Update assistant AI provider/model config
+router.put('/settings/assistant-ai', (req, res) => {
+  try {
+    const { provider, model } = req.body;
+    const db = getDatabase();
+
+    if (!provider || !model) {
+      return res.status(400).json({ error: 'Both provider and model are required' });
+    }
+
+    // Validate provider exists
+    const providerObj = aiProviders.getProvider(provider);
+    if (!providerObj) {
+      return res.status(400).json({ error: 'Unknown AI provider: ' + provider });
+    }
+
+    // Validate provider has a valid API key configured
+    if (!providerObj.isConfigured()) {
+      return res.status(400).json({
+        error: 'Provider ' + provider + ' does not have a valid API key configured. Please configure the API key first.'
+      });
+    }
+
+    // Validate model is available for this provider
+    const availableModels = providerObj.listModels();
+    if (!availableModels.includes(model)) {
+      return res.status(400).json({
+        error: 'Model ' + model + ' is not available for provider ' + provider + '. Available: ' + availableModels.join(', ')
+      });
+    }
+
+    // Save assistant provider
+    db.run(
+      "INSERT INTO platform_settings (key, value, updated_by, updated_at) VALUES ('ai_assistant_provider', ?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')",
+      [provider, req.user.id, provider, req.user.id]
+    );
+
+    // Save assistant model
+    db.run(
+      "INSERT INTO platform_settings (key, value, updated_by, updated_at) VALUES ('ai_assistant_model', ?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')",
+      [model, req.user.id, model, req.user.id]
+    );
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'update_assistant_ai', 'platform_settings', NULL, ?, datetime('now'))",
+      [req.user.id, JSON.stringify({ provider, model })]
+    );
+
+    saveDatabaseAfterWrite();
+
+    logger.info(`Superadmin ${req.user.id} updated assistant AI settings: provider=${provider}, model=${model}`);
+
+    res.json({
+      message: 'Assistant AI settings updated successfully',
+      assistant: {
+        provider,
+        model,
+        provider_configured: true
+      }
+    });
+  } catch (error) {
+    logger.error('Admin update assistant AI settings error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update assistant AI settings' });
+  }
+});
+
 module.exports = router;
