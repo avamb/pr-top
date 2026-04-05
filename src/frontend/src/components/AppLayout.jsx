@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import TimezoneDetectionBanner from './TimezoneDetectionBanner';
 import AssistantChatButton from './AssistantChatButton';
+import AssistantChatPanel from './AssistantChatPanel';
 import { UnsavedChangesProvider } from '../contexts/UnsavedChangesContext';
 import { AssistantPanelProvider } from '../contexts/AssistantPanelContext';
 
@@ -79,6 +80,9 @@ export default function AppLayout({ user, children }) {
 
         {/* Floating assistant chat button - visible on all authenticated pages */}
         <AssistantChatButton />
+
+        {/* Assistant chat side panel */}
+        <AssistantChatPanel />
       </div>
     </UnsavedChangesProvider>
     </AssistantPanelProvider>
