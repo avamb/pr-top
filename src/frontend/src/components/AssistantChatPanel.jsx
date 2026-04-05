@@ -268,14 +268,14 @@ export default function AssistantChatPanel() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
               </svg>
             </div>
-            <h2 className="font-semibold text-gray-800">{t('dashboard.assistant', 'Assistant')}</h2>
+            <h2 className="font-semibold text-gray-800">{t('assistant.title', 'Assistant')}</h2>
           </div>
           <div className="flex items-center space-x-1">
             {/* New chat button */}
             <button
               onClick={handleNewChat}
               className="p-2 rounded-lg text-gray-500 hover:bg-gray-200 transition-colors"
-              title={t('dashboard.newChat', 'New chat')}
+              title={t('assistant.newChat', 'New chat')}
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
@@ -303,8 +303,8 @@ export default function AssistantChatPanel() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
                 </svg>
               </div>
-              <p className="text-sm font-medium text-gray-600">{t('dashboard.assistantWelcome', 'How can I help you?')}</p>
-              <p className="text-xs text-gray-400">{t('dashboard.assistantHint', 'Ask me about using PR-TOP — navigation, features, workflows, and more.')}</p>
+              <p className="text-sm font-medium text-gray-600">{t('assistant.welcome', 'How can I help you?')}</p>
+              <p className="text-xs text-gray-400">{t('assistant.hint', 'Ask me about using PR-TOP — navigation, features, workflows, and more.')}</p>
             </div>
           )}
 
@@ -351,7 +351,7 @@ export default function AssistantChatPanel() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={t('dashboard.assistantPlaceholder', 'Type your question...')}
+              placeholder={t('assistant.placeholder', 'Type your question...')}
               disabled={isLoading}
               rows={1}
               className="flex-1 resize-none border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 max-h-32"

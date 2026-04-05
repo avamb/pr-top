@@ -46,7 +46,7 @@ export default function AssistantChatButton() {
       {/* Tooltip */}
       {showTooltip && (
         <div className="absolute bottom-full right-0 mb-2 px-3 py-1.5 bg-gray-800 text-white text-sm rounded-lg shadow-lg whitespace-nowrap pointer-events-none">
-          {t('dashboard.needHelp')}
+          {t('assistant.tooltip')}
           <div className="absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800" />
         </div>
       )}
@@ -62,7 +62,7 @@ export default function AssistantChatButton() {
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
         className="relative w-14 h-14 rounded-full bg-primary text-white shadow-lg hover:bg-primary-600 hover:shadow-xl transition-all duration-200 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-        aria-label={t('dashboard.needHelp')}
+        aria-label={t('assistant.tooltip')}
       >
         {/* Chat bubble icon */}
         <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

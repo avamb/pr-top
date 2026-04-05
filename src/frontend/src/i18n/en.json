@@ -186,12 +186,6 @@
     "minutesAgo": "{{count}}m ago",
     "hoursAgo": "{{count}}h ago",
     "daysAgo": "{{count}}d ago",
-    "needHelp": "Need help?",
-    "assistant": "Assistant",
-    "newChat": "New chat",
-    "assistantWelcome": "How can I help you?",
-    "assistantHint": "Ask me about using PR-TOP — navigation, features, workflows, and more.",
-    "assistantPlaceholder": "Type your question...",
     "askClient": "Ask About a Client",
     "askClientHint": "Use natural language to search through client records, diary entries, and session notes.",
     "selectClient": "Select a Client to Query"
@@ -1181,5 +1175,18 @@
       "title": "Contact Information",
       "desc": "If you have any questions about these Terms of Service, please contact us at:"
     }
+  },
+  "assistant": {
+    "title": "Assistant",
+    "placeholder": "Type your question...",
+    "send": "Send",
+    "newChat": "New chat",
+    "history": "Chat history",
+    "typing": "Assistant is typing...",
+    "welcome": "How can I help you?",
+    "hint": "Ask me about using PR-TOP — navigation, features, workflows, and more.",
+    "tooltip": "Need help?",
+    "deleteConfirm": "Are you sure you want to delete this chat?",
+    "empty": "No messages yet. Start a conversation!"
   }
 }
