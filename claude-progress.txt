@@ -1585,3 +1585,60 @@ Already fully implemented as part of #292. UI has:
 ### Current Status
 - Features passing: 292/300 (97.3%)
 - Features #292, #295, #294: ALL PASSING
+
+## Session: 2026-04-05 - Features #304, #305, #306
+
+### Completed: Chat Backend API with Prompt Injection Protection (#304) - PASSING
+
+**What was built:**
+- Created src/backend/src/services/assistantSanitizer.js with:
+  - sanitizeInput(): strips role markers ([SYSTEM], ```system```, <|im_start|>, etc.)
+  - detectInjection(): detects 20+ injection patterns (ignore instructions, role play, jailbreak, etc.)
+  - getInjectionRejection(): localized rejection messages in EN/RU/ES/UK
+  - detectLanguage(): detects user language from text (EN/RU/ES/UK) using character analysis
+- Enhanced POST /api/assistant/chat endpoint:
+  - Input sanitization before processing
+  - Prompt injection detection with polite rejection
+  - RAG integration: searches assistant_knowledge for relevant context chunks
+  - Language detection from user's message text
+  - Uses getActiveAssistantProvider() for assistant-specific AI model
+  - Rate limiting: 30 messages per minute per therapist (429 response)
+  - Updated response format: { response, language, cached, chat_id, messages }
+- Updated AssistantChatPanel.jsx:
+  - Added CSRF token support via useCsrfToken hook
+  - Sends language parameter in request body
+  - Uses data.response (with data.reply fallback)
+
+### Completed: Chat History Storage & Analytics (#305) - PASSING
+
+**What was built:**
+- Database: assistant_conversations table (id, therapist_id, started_at, last_message_at, page_context, language, message_count)
+- Database: assistant_messages table (id, conversation_id, role, content, is_cached, tokens_used, tags, created_at)
+- Message tagging: auto-categorizes user messages as question/feature_request/difficulty/feedback
+- Chat endpoint saves to analytics tables alongside legacy assistant_chats table
+- Admin API endpoints:
+  - GET /api/admin/assistant/analytics (aggregated stats, tag breakdown, daily usage, by therapist, top questions, feature requests, difficulties)
+  - GET /api/admin/assistant/conversations (paginated, filterable by language/therapist)
+  - GET /api/admin/assistant/conversations/:id/messages
+  - GET /api/admin/assistant/export (CSV and JSON formats)
+- Created AdminAssistantAnalytics.jsx with 3 tabs:
+  - Overview: stat cards, message categories, daily usage bar chart, usage by therapist, by language
+  - Conversations: paginated table with View button to drill into individual conversations
+  - Insights: top questions, feature requests, common difficulties, top page contexts
+- CSV/JSON export buttons
+- Sidebar nav link: "Chat Analytics" with chat icon
+- i18n: adminAssistantAnalytics key in EN/RU/ES/UK
+
+### Completed: Frontend: Floating Chat Button & Side Panel (#306) - PASSING
+
+**What was verified (components already existed, enhanced with localStorage persistence):**
+- AssistantChatButton.jsx: fixed bottom-right (z-50), chat icon, unread indicator, pulse animation, tooltip
+- AssistantChatPanel.jsx: slide-in from right (400px), header with title/new chat/close, scrollable messages, textarea + send button, Enter-to-send, typing indicator, markdown rendering, mobile backdrop overlay
+- AssistantPanelContext.jsx: Enhanced with localStorage persistence for open/closed state
+- Components integrated in AppLayout.jsx via AssistantPanelProvider wrapper
+- Full i18n in EN/RU/ES/UK for all UI strings
+- Mobile responsive: full-screen panel on small screens (w-full sm:w-[400px])
+
+### Current Status
+- Features passing: 303/307 (98.7%)
+- Features #304, #305, #306: ALL PASSING
