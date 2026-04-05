@@ -1,3 +1,59 @@
+## Session: 2026-04-05 - Features #293, #298, #300
+
+### Completed: Assistant chat API endpoints (#293) - PASSING
+
+**What was built/enhanced:**
+- Added SSE streaming to POST /api/assistant/chat (stream:true body param or Accept header)
+- Added chatStream to OpenAI and Anthropic providers with proper SSE parsing
+- Added DELETE /api/assistant/history/:id with soft-delete (deleted_at column migration)
+- Added GET /api/assistant/history/:id for individual conversation retrieval
+- History endpoint now excludes soft-deleted chats, includes pagination (total/limit/offset)
+- All endpoints require therapist auth, rate limited at 30 msg/min
+
+**Verification:**
+- 29 API tests passing (CSRF, auth, chat, SSE, history, delete, 404s, rate limits) ✅
+- SSE streaming returns text/event-stream with chunk and done events ✅
+- Soft-deleted chats excluded from GET /history and GET /history/:id (404) ✅
+- Data persists across server restart ✅
+- Unauthenticated access returns 401 ✅
+- Zero feature-related console errors ✅
+
+### Completed: Assistant chat state management - Zustand (#298) - PASSING
+
+**What was built:**
+- Created src/frontend/src/stores/assistantStore.js with Zustand
+- State: isOpen, messages[], conversationId, isLoading, isStreaming, streamingText, error, conversationHistory[]
+- Actions: togglePanel, sendMessage (SSE streaming support), loadHistory, selectConversation, newConversation, deleteConversation
+- SSE streaming: reads response body stream, parses chunk/done/error events, progressively updates streamingText
+- Persists conversationId and panel open/closed state to localStorage
+- Refactored AssistantChatPanel to use Zustand store with StreamingMessage component (cursor indicator)
+- Refactored AssistantChatButton to use Zustand store
+- Removed AssistantPanelProvider wrapper from AppLayout (Zustand needs no provider)
+
+**Verification:**
+- Dashboard: chat FAB visible, panel opens, message sent and response received ✅
+- Zustand store manages all state (no React Context needed) ✅
+- SSE streaming path with cursor animation ✅
+- localStorage persistence for panel state and conversationId ✅
+- No mock data patterns in source code ✅
+- Zero feature-related console errors ✅
+
+### Completed: Integrate assistant chat into AppLayout (#300) - PASSING
+
+**Already integrated by previous features. Verified:**
+- AssistantChatButton (z-50) and AssistantChatPanel (z-50) rendered in AppLayout.jsx ✅
+- Zustand store drives state, no provider wrapper needed ✅
+- Desktop: panel overlays on right (400px), main content doesn't shift ✅
+- Mobile: full-screen overlay with z-40 backdrop ✅
+- FAB at bottom-6 right-6 doesn't overlap NotificationToast at top-4 right-4 ✅
+- Panel doesn't break sidebar (z-40) toggle ✅
+- Works on: Dashboard, Clients, Exercises, Analytics pages ✅
+- Zero feature-related console errors ✅
+
+### Current Status
+- Features passing: 306/307 (99.7%)
+- Features #293, #298, #300: ALL PASSING
+
 ## Session: 2026-04-05 - Feature #299
 
 ### Completed: Assistant chat i18n translations (#299) - PASSING
