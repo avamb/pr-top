@@ -1,3 +1,26 @@
+## Session: 2026-04-05 - Feature #291
+
+### Completed: Assistant chat history table (#291) - PASSING
+
+**What was built:**
+- Added CREATE TABLE IF NOT EXISTS assistant_chats to applySchema() in connection.js
+- Fields: id (PK AUTOINCREMENT), therapist_id (NOT NULL, FK to users), messages (TEXT NOT NULL DEFAULT '[]'), page_context (TEXT), created_at, updated_at
+- Added composite index idx_assistant_chats_therapist_updated on (therapist_id, updated_at DESC)
+- Migration runs idempotently on every server start
+
+**Verification:**
+- Table exists after server start with correct schema ✅
+- All 6 columns present with correct types, constraints, defaults ✅
+- Index idx_assistant_chats_therapist_updated created ✅
+- Foreign key references users(id) ✅
+- Table persists across server restart ✅
+- No mock data patterns in source code ✅
+- Server health check OK (tableCount: 18) ✅
+
+### Current Status
+- Features passing: 290/300 (96.7%)
+- Feature #291: PASSING
+
 ## Session: 2026-04-04 - Features #286, #287, #288
 
 ### Completed: Real STT integration for diary voice entries (#286) - PASSING
