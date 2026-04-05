@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 
+const PANEL_STATE_KEY = 'assistant_panel_open';
+
 const AssistantPanelContext = createContext({
   isOpen: false,
   hasUnread: false,
@@ -12,28 +14,36 @@ const AssistantPanelContext = createContext({
 /**
  * Provider that manages assistant chat panel open/close state
  * and unread indicator. Wrap your app layout with this.
+ * Persists open/closed state in localStorage.
  */
 export function AssistantPanelProvider({ children }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(() => {
+    try {
+      return localStorage.getItem(PANEL_STATE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
   const [hasUnread, setHasUnread] = useState(false);
 
   const togglePanel = useCallback(() => {
     setIsOpen(prev => {
-      if (!prev) {
-        // Opening panel clears unread
-        setHasUnread(false);
-      }
-      return !prev;
+      const next = !prev;
+      if (next) setHasUnread(false);
+      try { localStorage.setItem(PANEL_STATE_KEY, next ? '1' : '0'); } catch {}
+      return next;
     });
   }, []);
 
   const openPanel = useCallback(() => {
     setIsOpen(true);
     setHasUnread(false);
+    try { localStorage.setItem(PANEL_STATE_KEY, '1'); } catch {}
   }, []);
 
   const closePanel = useCallback(() => {
     setIsOpen(false);
+    try { localStorage.setItem(PANEL_STATE_KEY, '0'); } catch {}
   }, []);
 
   return (
