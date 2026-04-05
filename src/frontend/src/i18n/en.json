@@ -1188,6 +1188,15 @@
     "hint": "Ask me about using PR-TOP — navigation, features, workflows, and more.",
     "tooltip": "Need help?",
     "deleteConfirm": "Are you sure you want to delete this chat?",
-    "empty": "No messages yet. Start a conversation!"
+    "deleteChat": "Delete",
+    "empty": "No messages yet. Start a conversation!",
+    "noHistory": "No conversations yet",
+    "startFirst": "Start your first conversation",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "thisWeek": "This week",
+    "older": "Older",
+    "msgs": "msgs",
+    "archived": "archived"
   }
 }

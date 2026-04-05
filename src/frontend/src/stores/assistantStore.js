@@ -31,6 +31,7 @@ const useAssistantStore = create((set, get) => ({
   conversationHistory: [],
   historyTotal: 0,
   historyLoading: false,
+  showHistory: false,  // toggles between chat view and history list view
 
   // === Panel Actions ===
   togglePanel: () => {
@@ -52,6 +53,11 @@ const useAssistantStore = create((set, get) => ({
   },
 
   setHasUnread: (val) => set({ hasUnread: val }),
+
+  // === History View Actions ===
+  toggleHistory: () => set(state => ({ showHistory: !state.showHistory })),
+  showHistoryView: () => set({ showHistory: true }),
+  showChatView: () => set({ showHistory: false }),
 
   // === Chat Actions ===
 
@@ -267,7 +273,8 @@ const useAssistantStore = create((set, get) => ({
         messages: data.messages || [],
         conversationId: newConvId,
         isLoading: false,
-        error: null
+        error: null,
+        showHistory: false  // Switch back to chat view after selecting a conversation
       });
     } catch (err) {
       set({ isLoading: false, error: err.message });
@@ -285,7 +292,8 @@ const useAssistantStore = create((set, get) => ({
       conversationId: null,
       isStreaming: false,
       streamingText: '',
-      error: null
+      error: null,
+      showHistory: false  // Switch to chat view for new conversation
     });
   },
 

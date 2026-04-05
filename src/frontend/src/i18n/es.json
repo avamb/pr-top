@@ -1188,6 +1188,15 @@
     "hint": "Pregúntame sobre PR-TOP — navegación, funciones, flujos de trabajo y más.",
     "tooltip": "¿Necesitas ayuda?",
     "deleteConfirm": "¿Estás seguro de que deseas eliminar este chat?",
-    "empty": "No hay mensajes aún. ¡Inicia una conversación!"
+    "deleteChat": "Eliminar",
+    "empty": "No hay mensajes aún. ¡Inicia una conversación!",
+    "noHistory": "No hay conversaciones aún",
+    "startFirst": "Inicia tu primera conversación",
+    "today": "Hoy",
+    "yesterday": "Ayer",
+    "thisWeek": "Esta semana",
+    "older": "Anteriores",
+    "msgs": "msgs",
+    "archived": "archivado"
   }
 }

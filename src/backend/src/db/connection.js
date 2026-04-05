@@ -530,6 +530,20 @@ function applySchema(db) {
     // Column already exists
   }
 
+  // Add title column for auto-generated conversation titles
+  try {
+    db.run('ALTER TABLE assistant_chats ADD COLUMN title TEXT DEFAULT NULL');
+  } catch (e) {
+    // Column already exists
+  }
+
+  // Add archived_at column for auto-archive support
+  try {
+    db.run('ALTER TABLE assistant_chats ADD COLUMN archived_at TEXT DEFAULT NULL');
+  } catch (e) {
+    // Column already exists
+  }
+
   // Create assistant_cached_answers table for self-learning cache
   db.run(`CREATE TABLE IF NOT EXISTS assistant_cached_answers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -617,6 +631,7 @@ function applySchema(db) {
     ['ai_transcription_model', 'whisper-1'],
     ['ai_monthly_limit_usd', '0'],
     ['ai_limit_warning_percent', '80'],
+    ['assistant_chat_archive_days', '90'],
   ];
 
   for (const [key, value] of defaultSettings) {

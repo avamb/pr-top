@@ -13,6 +13,20 @@ const assistantCache = require('../services/assistantCache');
 const assistantKnowledge = require('../services/assistantKnowledge');
 const { sanitizeInput, detectInjection, getInjectionRejection, detectLanguage } = require('../services/assistantSanitizer');
 
+// === Auto-generate conversation title from first user message ===
+function generateTitle(firstMessage) {
+  if (!firstMessage || typeof firstMessage !== 'string') return 'New conversation';
+  // Trim and take first 60 chars, cut at last word boundary
+  let title = firstMessage.trim();
+  if (title.length > 60) {
+    title = title.substring(0, 60);
+    const lastSpace = title.lastIndexOf(' ');
+    if (lastSpace > 20) title = title.substring(0, lastSpace);
+    title += '…';
+  }
+  return title;
+}
+
 // === Message tagging for analytics ===
 function tagMessage(content) {
   if (!content || typeof content !== 'string') return null;
@@ -44,9 +58,11 @@ function saveChatExchange(db, therapistId, activeChatId, messages, sanitized, as
       [JSON.stringify(messages), pageContext || null, chatId, therapistId]
     );
   } else {
+    // Auto-generate title from first user message
+    const title = generateTitle(sanitized);
     db.run(
-      "INSERT INTO assistant_chats (therapist_id, messages, page_context) VALUES (?, ?, ?)",
-      [therapistId, JSON.stringify(messages), pageContext || null]
+      "INSERT INTO assistant_chats (therapist_id, messages, page_context, title) VALUES (?, ?, ?, ?)",
+      [therapistId, JSON.stringify(messages), pageContext || null, title]
     );
     const idResult = db.exec('SELECT last_insert_rowid()');
     chatId = idResult[0].values[0][0];
@@ -358,7 +374,19 @@ router.post('/chat', async (req, res) => {
           uk: 'Вибачте, зараз я не можу відповісти. AI-провайдер не налаштований або недоступний. Зверніться до адміністратора.'
         };
         const fallbackMsg = fallbacks[detectedLanguage] || 'Sorry, I cannot respond right now. The AI provider is not configured or unavailable. Please contact your administrator.';
-        res.write(`data: ${JSON.stringify({ type: 'error', text: fallbackMsg })}\n\n`);
+
+        // Save conversation even on AI error so it appears in history
+        messages.push({ role: 'assistant', content: fallbackMsg, timestamp: new Date().toISOString() });
+        const conversationId = req.body._conversation_id || null;
+        let savedChatId = null;
+        try {
+          savedChatId = saveChatExchange(db, req.user.id, activeChatId, messages, sanitized, fallbackMsg, false, page_context, detectedLanguage, conversationId);
+        } catch (saveErr) {
+          logger.warn('[Assistant] Failed to save errored conversation: ' + saveErr.message);
+        }
+
+        res.write(`data: ${JSON.stringify({ type: 'chunk', text: fallbackMsg })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'done', chat_id: savedChatId, language: detectedLanguage, cached: false, messages: messages })}\n\n`);
         res.end();
       }
       return;
@@ -423,27 +451,46 @@ router.get('/history', (req, res) => {
     const db = getDatabase();
     const limit = Math.min(parseInt(req.query.limit) || 20, 50);
     const offset = parseInt(req.query.offset) || 0;
+    const includeArchived = req.query.include_archived === 'true';
+
+    const archiveFilter = includeArchived ? '' : ' AND archived_at IS NULL';
 
     const result = db.exec(
-      'SELECT id, page_context, created_at, updated_at FROM assistant_chats WHERE therapist_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT ? OFFSET ?',
+      `SELECT id, messages, page_context, created_at, updated_at, title, archived_at FROM assistant_chats WHERE therapist_id = ? AND deleted_at IS NULL${archiveFilter} ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
       [req.user.id, limit, offset]
     );
 
     const chats = [];
     if (result.length > 0) {
       for (const row of result[0].values) {
+        let messageCount = 0;
+        let firstMessagePreview = '';
+        try {
+          const msgs = JSON.parse(row[1] || '[]');
+          messageCount = msgs.length;
+          const firstUserMsg = msgs.find(m => m.role === 'user');
+          if (firstUserMsg) {
+            firstMessagePreview = firstUserMsg.content.substring(0, 100);
+            if (firstUserMsg.content.length > 100) firstMessagePreview += '…';
+          }
+        } catch (e) {}
+
         chats.push({
           id: row[0],
-          page_context: row[1],
-          created_at: row[2],
-          updated_at: row[3]
+          page_context: row[2],
+          created_at: row[3],
+          updated_at: row[4],
+          title: row[5] || firstMessagePreview || 'New conversation',
+          message_count: messageCount,
+          first_message_preview: firstMessagePreview,
+          archived: !!row[6]
         });
       }
     }
 
     // Get total count for pagination
     const countResult = db.exec(
-      'SELECT COUNT(*) FROM assistant_chats WHERE therapist_id = ? AND deleted_at IS NULL',
+      `SELECT COUNT(*) FROM assistant_chats WHERE therapist_id = ? AND deleted_at IS NULL${archiveFilter}`,
       [req.user.id]
     );
     const total = countResult.length > 0 ? countResult[0].values[0][0] : 0;
@@ -466,7 +513,7 @@ router.get('/history/:id', (req, res) => {
     }
 
     const result = db.exec(
-      'SELECT id, messages, page_context, created_at, updated_at FROM assistant_chats WHERE id = ? AND therapist_id = ? AND deleted_at IS NULL',
+      'SELECT id, messages, page_context, created_at, updated_at, title FROM assistant_chats WHERE id = ? AND therapist_id = ? AND deleted_at IS NULL',
       [chatId, req.user.id]
     );
 
@@ -482,12 +529,20 @@ router.get('/history/:id', (req, res) => {
       messages = [];
     }
 
+    // Derive title from first user message if not set
+    let title = row[5];
+    if (!title) {
+      const firstUser = messages.find(m => m.role === 'user');
+      title = firstUser ? generateTitle(firstUser.content) : 'New conversation';
+    }
+
     res.json({
       id: row[0],
       messages: messages,
       page_context: row[2],
       created_at: row[3],
-      updated_at: row[4]
+      updated_at: row[4],
+      title: title
     });
   } catch (error) {
     logger.error('[Assistant] Get conversation error: ' + error.message);
@@ -530,5 +585,142 @@ router.delete('/history/:id', (req, res) => {
     res.status(500).json({ error: 'Failed to delete conversation' });
   }
 });
+
+// GET /api/assistant/conversations - List conversations (alias matching feature spec)
+router.get('/conversations', (req, res) => {
+  try {
+    const db = getDatabase();
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+    const offset = parseInt(req.query.offset) || 0;
+    const includeArchived = req.query.include_archived === 'true';
+    const archiveFilter = includeArchived ? '' : ' AND archived_at IS NULL';
+
+    const result = db.exec(
+      `SELECT id, messages, page_context, created_at, updated_at, title, archived_at FROM assistant_chats WHERE therapist_id = ? AND deleted_at IS NULL${archiveFilter} ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
+      [req.user.id, limit, offset]
+    );
+
+    const chats = [];
+    if (result.length > 0) {
+      for (const row of result[0].values) {
+        let messageCount = 0;
+        let firstMessagePreview = '';
+        try {
+          const msgs = JSON.parse(row[1] || '[]');
+          messageCount = msgs.length;
+          const firstUserMsg = msgs.find(m => m.role === 'user');
+          if (firstUserMsg) {
+            firstMessagePreview = firstUserMsg.content.substring(0, 100);
+            if (firstUserMsg.content.length > 100) firstMessagePreview += '\u2026';
+          }
+        } catch (e) {}
+
+        chats.push({
+          id: row[0],
+          page_context: row[2],
+          created_at: row[3],
+          updated_at: row[4],
+          title: row[5] || firstMessagePreview || 'New conversation',
+          message_count: messageCount,
+          first_message_preview: firstMessagePreview,
+          archived: !!row[6]
+        });
+      }
+    }
+
+    const countResult = db.exec(
+      `SELECT COUNT(*) FROM assistant_chats WHERE therapist_id = ? AND deleted_at IS NULL${archiveFilter}`,
+      [req.user.id]
+    );
+    const total = countResult.length > 0 ? countResult[0].values[0][0] : 0;
+
+    res.json({ chats, total, limit, offset });
+  } catch (error) {
+    logger.error('[Assistant] Conversations list error: ' + error.message);
+    res.status(500).json({ error: 'Failed to load conversations' });
+  }
+});
+
+// GET /api/assistant/conversations/:id/messages - Get messages for a specific conversation
+router.get('/conversations/:id/messages', (req, res) => {
+  try {
+    const db = getDatabase();
+    const chatId = parseInt(req.params.id);
+
+    if (!chatId || isNaN(chatId)) {
+      return res.status(400).json({ error: 'Invalid conversation ID' });
+    }
+
+    const result = db.exec(
+      'SELECT id, messages, page_context, created_at, updated_at, title FROM assistant_chats WHERE id = ? AND therapist_id = ? AND deleted_at IS NULL',
+      [chatId, req.user.id]
+    );
+
+    if (result.length === 0 || result[0].values.length === 0) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    const row = result[0].values[0];
+    let messages = [];
+    try {
+      messages = JSON.parse(row[1]);
+    } catch (e) {
+      messages = [];
+    }
+
+    // Derive title from first user message if not set
+    let title = row[5];
+    if (!title) {
+      const firstUser = messages.find(m => m.role === 'user');
+      title = firstUser ? generateTitle(firstUser.content) : 'New conversation';
+    }
+
+    res.json({
+      id: row[0],
+      messages: messages,
+      title: title,
+      page_context: row[2],
+      created_at: row[3],
+      updated_at: row[4]
+    });
+  } catch (error) {
+    logger.error('[Assistant] Get conversation messages error: ' + error.message);
+    res.status(500).json({ error: 'Failed to load conversation messages' });
+  }
+});
+
+// === Auto-archive old conversations ===
+// Runs on server start and then daily
+function archiveOldConversations() {
+  try {
+    const db = getDatabase();
+    // Get archive days from settings
+    const settingResult = db.exec(
+      "SELECT value FROM platform_settings WHERE key = 'assistant_chat_archive_days'"
+    );
+    const archiveDays = settingResult.length > 0 && settingResult[0].values.length > 0
+      ? parseInt(settingResult[0].values[0][0]) || 90
+      : 90;
+
+    if (archiveDays <= 0) {
+      logger.debug('[Assistant] Auto-archive disabled (archive_days=0)');
+      return;
+    }
+
+    const result = db.run(
+      `UPDATE assistant_chats SET archived_at = datetime('now') WHERE archived_at IS NULL AND deleted_at IS NULL AND updated_at < datetime('now', '-${archiveDays} days')`
+    );
+
+    logger.info(`[Assistant] Auto-archive check complete (threshold: ${archiveDays} days)`);
+  } catch (error) {
+    logger.warn('[Assistant] Auto-archive error: ' + error.message);
+  }
+}
+
+// Run archive on startup (delayed to let DB initialize)
+setTimeout(archiveOldConversations, 5000);
+
+// Run daily at 3am
+setInterval(archiveOldConversations, 24 * 60 * 60 * 1000);
 
 module.exports = router;
