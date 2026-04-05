@@ -1356,3 +1356,31 @@
 - Features passing: 289/289 (100.0%)
 - Feature #289: PASSING
 - ALL FEATURES COMPLETE
+
+## Session: 2026-04-05 - Feature #290
+
+### Completed: Fix AudioPlayer playback bugs - silent play + video race condition (#290) - PASSING
+
+**What was fixed:**
+- Bug 1: togglePlay() was calling setIsPlaying(!isPlaying) unconditionally with .catch(() => {})
+  - Fix: Made togglePlay async, use await play() in try/catch, set isPlaying(true) only on success
+  - On error: log and show error message instead of silent failure
+  - AbortError (benign tab-switch scenario) silently ignored
+- Bug 2: loadMedia set src on <audio>, then setIsVideo(true) destroyed the element
+  - Fix: Detect video from blob.type BEFORE setting src, await microtask for React re-render
+- Bonus: Fixed loadMedia guard to trigger for diary entries using customStreamUrl
+
+**Verification:**
+- Timeline tab: voice entry with audio shows AudioPlayer with controls (play, seek, volume, speed)
+- Timeline tab: voice entry without audio shows only text/transcript, no player
+- Timeline tab: video entry with audio shows AudioPlayer controls
+- Timeline tab: text entry shows no player
+- Diary tab: same correct behavior across all entry types
+- Stream error: shows Playback Error with message instead of silent failure
+- Tab switch: no AbortError shown to user (gracefully ignored)
+- Zero AudioPlayer-related console errors
+
+### Current Status
+- Features passing: 290/290 (100.0%)
+- Feature #290: PASSING
+- ALL FEATURES COMPLETE
