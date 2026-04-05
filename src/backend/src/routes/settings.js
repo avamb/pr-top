@@ -1,6 +1,6 @@
 // Settings Routes - Therapist profile settings and escalation preferences
 const express = require('express');
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { logger } = require('../utils/logger');
 
@@ -143,7 +143,7 @@ router.put('/profile', authenticate, (req, res) => {
 
     const sql = `UPDATE users SET ${updates.join(', ')} WHERE id = ?`;
     db.run(sql, params);
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     // Return updated profile
     const result = db.exec(
@@ -264,7 +264,7 @@ router.put('/escalation', authenticate, (req, res) => {
       "UPDATE users SET escalation_preferences = ?, updated_at = datetime('now') WHERE id = ?",
       [prefsJson, req.user.id]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Escalation preferences updated for user id=${req.user.id}: ${prefsJson}`);
 

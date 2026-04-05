@@ -31,17 +31,22 @@ function saveDatabase() {
       // db.export() may return the stale original binary representation unless
       // the database is compacted first. VACUUM forces SQLite to rebuild the
       // database file from scratch, ensuring db.export() returns all current data.
-      // We track a dirty flag so VACUUM only runs when there are actual changes,
-      // keeping the periodic 5-second saves efficient when idle.
-      if (dbDirty) {
-        try {
-          db.run('VACUUM');
-        } catch (e) {
-          // VACUUM may fail if in a transaction; fall back to a checkpoint attempt
-          try { db.run('PRAGMA wal_checkpoint(FULL)'); } catch (e2) { /* ignore */ }
-        }
-        dbDirty = false;
+      //
+      // IMPORTANT: We must ONLY write to disk when there are actual changes
+      // (dbDirty is true). Without VACUUM, db.export() returns stale data,
+      // so a non-dirty save would overwrite valid data with an older snapshot.
+      if (!dbDirty) {
+        logger.debug('saveDatabase: skipping (no dirty changes)');
+        return; // No changes to save — skip to avoid overwriting with stale export
       }
+      logger.debug('saveDatabase: dirty flag set, performing VACUUM + save');
+      try {
+        db.run('VACUUM');
+      } catch (e) {
+        // VACUUM may fail if in a transaction; fall back to a checkpoint attempt
+        try { db.run('PRAGMA wal_checkpoint(FULL)'); } catch (e2) { /* ignore */ }
+      }
+      dbDirty = false;
       const data = db.export();
       const buffer = Buffer.from(data);
       // Write directly and fsync to ensure data is flushed to disk
@@ -90,8 +95,9 @@ async function initDatabase() {
   // Enable foreign keys
   db.run('PRAGMA foreign_keys = ON');
 
-  // Run schema migrations
+  // Run schema migrations (these modify the DB, so mark dirty)
   applySchema(db);
+  dbDirty = true;
 
   // Save after schema setup
   saveDatabase();

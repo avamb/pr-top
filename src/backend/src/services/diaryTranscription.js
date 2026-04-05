@@ -5,7 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { encrypt, decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
 const { logUsage, checkSpendingLimit } = require('./aiUsageLogger');
@@ -357,7 +357,7 @@ async function processDiaryTranscription(entryId, force) {
 
     // Update status to processing
     updateTranscriptionStatus(db, entryId, 'processing');
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     // Decrypt content and file_ref if available
     var contentText = null;
@@ -438,7 +438,7 @@ async function processDiaryTranscription(entryId, force) {
       [encResult.keyId, encResult.keyVersion, entryId]
     );
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info('Transcription completed for diary entry #' + entryId);
 
@@ -449,7 +449,7 @@ async function processDiaryTranscription(entryId, force) {
     // Update status to failed
     try {
       updateTranscriptionStatus(db, entryId, 'failed');
-      saveDatabase();
+      saveDatabaseAfterWrite();
     } catch (e) {
       logger.error('Failed to update transcription_status for entry #' + entryId + ': ' + e.message);
     }

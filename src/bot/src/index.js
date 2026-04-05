@@ -1136,25 +1136,38 @@ if (!token || token === 'your-telegram-bot-token') {
    * Download a file from Telegram servers by file_id.
    * Returns { buffer, filePath } or null on failure.
    */
-  async function downloadTelegramFile(fileId) {
-    try {
-      // Get file path from Telegram Bot API
-      const fileInfo = await bot.getFile(fileId);
-      if (!fileInfo || !fileInfo.file_path) {
-        console.error('Could not get file path for file_id:', fileId);
+  async function downloadTelegramFile(fileId, maxRetries = 2) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Get file path from Telegram Bot API
+        const fileInfo = await bot.getFile(fileId);
+        if (!fileInfo || !fileInfo.file_path) {
+          console.error(`Could not get file path for file_id: ${fileId} (attempt ${attempt}/${maxRetries})`);
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 1000));
+            continue;
+          }
+          return null;
+        }
+        // Download the file bytes
+        const fileUrl = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
+        const response = await axios.get(fileUrl, { responseType: 'arraybuffer', timeout: 30000 });
+        const buffer = Buffer.from(response.data);
+        console.log(`Downloaded Telegram file: ${buffer.length} bytes (attempt ${attempt}/${maxRetries})`);
+        return {
+          buffer,
+          filePath: fileInfo.file_path
+        };
+      } catch (err) {
+        console.error(`Failed to download Telegram file (attempt ${attempt}/${maxRetries}):`, err.message);
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 1000));
+          continue;
+        }
         return null;
       }
-      // Download the file bytes
-      const fileUrl = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
-      const response = await axios.get(fileUrl, { responseType: 'arraybuffer', timeout: 30000 });
-      return {
-        buffer: Buffer.from(response.data),
-        filePath: fileInfo.file_path
-      };
-    } catch (err) {
-      console.error('Failed to download Telegram file:', err.message);
-      return null;
     }
+    return null;
   }
 
   // Handle voice messages - save as diary entries (clients only)
@@ -1183,6 +1196,8 @@ if (!token || token === 'your-telegram-bot-token') {
         if (downloaded) {
           fileData = downloaded.buffer.toString('base64');
           console.log(`Downloaded voice file: ${downloaded.buffer.length} bytes`);
+        } else {
+          console.warn('Voice file download failed for file_id:', fileId, '- entry will be saved without audio');
         }
       } catch (dlErr) {
         console.error('Voice file download failed, saving file_ref only:', dlErr.message);
@@ -1197,6 +1212,11 @@ if (!token || token === 'your-telegram-bot-token') {
         file_data: fileData,
         file_ext: fileExt
       });
+
+      // Check if audio file was stored successfully
+      if (result.data && result.data.entry && !result.data.entry.has_audio_file) {
+        console.warn(`Audio file was not stored for voice entry ${result.data.entry.id}`);
+      }
 
       // Notify user that transcription is in progress
       bot.sendMessage(chatId, t(lang, 'voiceSavedTranscribing'));
@@ -1242,6 +1262,8 @@ if (!token || token === 'your-telegram-bot-token') {
             if (ext && ext.length <= 5) fileExt = '.' + ext;
           }
           console.log(`Downloaded video file: ${downloaded.buffer.length} bytes`);
+        } else {
+          console.warn('Video file download failed for file_id:', fileId, '- entry will be saved without audio');
         }
       } catch (dlErr) {
         console.error('Video file download failed, saving file_ref only:', dlErr.message);
@@ -1256,6 +1278,11 @@ if (!token || token === 'your-telegram-bot-token') {
         file_data: fileData,
         file_ext: fileExt
       });
+
+      // Check if audio file was stored successfully
+      if (result.data && result.data.entry && !result.data.entry.has_audio_file) {
+        console.warn(`Audio file was not stored for video entry ${result.data.entry.id}`);
+      }
 
       // Notify user that transcription is in progress
       bot.sendMessage(chatId, t(lang, 'videoSavedTranscribing'));
@@ -1296,6 +1323,8 @@ if (!token || token === 'your-telegram-bot-token') {
         if (downloaded) {
           fileData = downloaded.buffer.toString('base64');
           console.log(`Downloaded video note: ${downloaded.buffer.length} bytes`);
+        } else {
+          console.warn('Video note download failed for file_id:', fileId, '- entry will be saved without audio');
         }
       } catch (dlErr) {
         console.error('Video note download failed, saving file_ref only:', dlErr.message);
@@ -1310,6 +1339,11 @@ if (!token || token === 'your-telegram-bot-token') {
         file_data: fileData,
         file_ext: fileExt
       });
+
+      // Check if audio file was stored successfully
+      if (result.data && result.data.entry && !result.data.entry.has_audio_file) {
+        console.warn(`Audio file was not stored for video note entry ${result.data.entry.id}`);
+      }
 
       // Notify user that transcription is in progress
       bot.sendMessage(chatId, t(lang, 'videoSavedTranscribing'));

@@ -1503,6 +1503,32 @@ function ClientDetail() {
                       {/* Content based on type */}
                       {item.type === 'diary' && (
                         <div>
+                          {/* Audio/Video player for voice and video diary entries */}
+                          {item.has_audio_file && (
+                            <div className="mb-3">
+                              <AudioPlayer
+                                sessionId={item.id}
+                                audioRef={item.audio_file_ref}
+                                streamUrl={`/api/diary/${item.id}/stream`}
+                              />
+                            </div>
+                          )}
+                          {/* Transcription status badge for voice/video entries */}
+                          {(item.entry_type === 'voice' || item.entry_type === 'video') && (
+                            <div className="mb-2">
+                              {item.transcription_status === 'completed' || item.transcript ? (
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">✅ Transcribed</span>
+                              ) : item.transcription_status === 'processing' ? (
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">⏳ Processing</span>
+                              ) : item.transcription_status === 'failed' ? (
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">❌ Failed</span>
+                              ) : item.transcription_status === 'pending' ? (
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">⏱ Pending</span>
+                              ) : !item.has_audio_file ? (
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-stone-100 text-stone-500">📎 No audio file</span>
+                              ) : null}
+                            </div>
+                          )}
                           <p className="text-stone-700 whitespace-pre-wrap">{item.content}</p>
                           {item.transcript && (
                             <div className="mt-2 p-2 bg-stone-50 rounded text-sm text-stone-600">

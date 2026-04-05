@@ -3,7 +3,7 @@
 // In dev mode: uses local TF-IDF vectors stored in SQLite.
 // In production: would integrate with a real vector DB (Pinecone, Weaviate, Qdrant, etc.).
 
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
 
@@ -158,7 +158,7 @@ function ensureTable() {
   db.run('CREATE INDEX IF NOT EXISTS idx_vector_embeddings_source ON vector_embeddings(source_type, source_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_vector_embeddings_client ON vector_embeddings(client_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_vector_embeddings_therapist ON vector_embeddings(therapist_id)');
-  saveDatabase();
+  saveDatabaseAfterWrite();
 }
 
 /**
@@ -202,7 +202,7 @@ function embedSessionTranscript(sessionId, transcript, clientId, therapistId) {
   // Update the session's embedding_ref (if column exists) - not all schemas have this
   // Instead we track via the vector_embeddings table
 
-  saveDatabase();
+  saveDatabaseAfterWrite();
 
   logger.info(`Embedded session transcript ${sessionId}: ${tokens.length} tokens, embedding_id=${embeddingId}`);
   return { success: true, embedding_id: embeddingId, token_count: tokens.length };
@@ -238,7 +238,7 @@ function embedSessionSummary(sessionId, summary, clientId, therapistId) {
   const result = db.exec('SELECT last_insert_rowid()');
   const embeddingId = result[0].values[0][0];
 
-  saveDatabase();
+  saveDatabaseAfterWrite();
   logger.info(`Embedded session summary ${sessionId}: ${tokens.length} tokens`);
   return { success: true, embedding_id: embeddingId, token_count: tokens.length };
 }
@@ -417,7 +417,7 @@ function embedDiaryEntry(entryId, content, clientId, therapistId) {
     [embeddingRef, entryId]
   );
 
-  saveDatabase();
+  saveDatabaseAfterWrite();
 
   logger.info(`Embedded diary entry ${entryId}: ${tokens.length} tokens, ref=${embeddingRef}`);
   return { success: true, embedding_id: embeddingId, embedding_ref: embeddingRef, token_count: tokens.length };

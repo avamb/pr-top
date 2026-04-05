@@ -1321,3 +1321,38 @@
 ### Current Status
 - Features passing: 275/284
 - Features #283, #284: BOTH PASSING
+
+## Session: 2026-04-05 - Feature #289
+
+### Completed: Fix voice file download chain and add audio player to Timeline (#289) - PASSING
+
+**What was verified (code already built by parallel agents):**
+- Bot: downloadTelegramFile() has retry logic (2 attempts with 1s delay), logs download size on success
+- Bot: voice/video/video_note handlers warn when download fails, still proceed with diary creation
+- Bot: after diary POST, checks has_audio_file response and warns if not stored
+- Backend: Timeline API SQL query selects audio_file_ref and transcription_status columns
+- Backend: Timeline response includes has_audio_file boolean, audio_file_ref, and transcription_status
+- Backend: /api/diary/:id/stream endpoint decrypts and streams audio with proper Content-Type
+- Frontend: Timeline tab renders AudioPlayer for diary items with has_audio_file=true
+- Frontend: AudioPlayer has play/pause, seek bar, volume slider, playback speed (0.5x/1x/1.5x/2x)
+- Frontend: Transcription status badges (Transcribed/Processing/Failed/Pending/No audio file)
+- Frontend: Entries without audio gracefully show only transcript text, no broken player
+
+**Verification:**
+- Created test client with 4 diary entries: text, voice+audio, voice-no-audio, video+audio
+- Timeline API returns correct has_audio_file and transcription_status for all entries ✅
+- Timeline tab: video entry shows video player with controls ✅
+- Timeline tab: voice entry with audio shows AudioPlayer (play, seek, volume, 1x speed) ✅
+- Timeline tab: voice entry WITHOUT audio shows only text+transcript, NO player ✅
+- Timeline tab: text entry shows only text, no player, no transcription badge ✅
+- Diary tab: same behavior - AudioPlayer for entries with audio, text-only for others ✅
+- /api/diary/42/stream returns 200 with audio/ogg content ✅
+- /api/diary/44/stream returns 200 with video/mp4 content ✅
+- /api/diary/43/stream (no audio) returns 404 with appropriate error ✅
+- No mock data patterns in source code ✅
+- Zero feature-related console errors (only pre-existing Umami/React Router) ✅
+
+### Current Status
+- Features passing: 289/289 (100.0%)
+- Feature #289: PASSING
+- ALL FEATURES COMPLETE

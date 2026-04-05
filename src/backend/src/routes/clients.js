@@ -1,6 +1,6 @@
 // Client Routes - Therapist client management
 const express = require('express');
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { checkClientLimit, getClientCount, getClientLimit } = require('../utils/planLimits');
@@ -279,7 +279,7 @@ router.get('/:id/diary', (req, res) => {
         "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
         [therapistId, 'read_diary', 'client', clientId, JSON.stringify({ entries_count: entries.length, page, search: searchQuery })]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
 
       return res.json({ entries, total, page, per_page: perPage, total_pages: Math.ceil(total / perPage) });
     }
@@ -339,7 +339,7 @@ router.get('/:id/diary', (req, res) => {
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
       [therapistId, 'read_diary', 'client', clientId, JSON.stringify({ entries_count: entries.length, page })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Therapist ${therapistId} accessed diary entries for client ${clientId} (${entries.length} entries)`);
 
@@ -401,14 +401,14 @@ router.delete('/:id/diary/:entryId', (req, res) => {
 
     // Delete the diary entry
     db.run('DELETE FROM diary_entries WHERE id = ? AND client_id = ?', [entryId, clientId]);
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     // Audit log
     db.run(
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
       [therapistId, 'delete_diary', 'diary_entry', entryId, JSON.stringify({ client_id: parseInt(clientId) })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Therapist ${therapistId} deleted diary entry ${entryId} for client ${clientId}`);
 
@@ -456,7 +456,7 @@ router.post('/:id/notes', (req, res) => {
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
       [therapistId, 'create_note', 'therapist_note', noteId, JSON.stringify({ client_id: clientId })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Therapist ${therapistId} created note ${noteId} for client ${clientId}`);
 
@@ -523,7 +523,7 @@ router.put('/:id/notes/:noteId', (req, res) => {
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
       [therapistId, 'update_note', 'therapist_note', noteId, JSON.stringify({ client_id: clientId })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     // Fetch the updated note to return accurate timestamps
     const updatedResult = db.exec(
@@ -633,7 +633,7 @@ router.get('/:id/notes', (req, res) => {
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
       [therapistId, 'read_notes', 'client', clientId, JSON.stringify({ notes_count: notes.length, page, search: searchQuery || undefined })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     res.json({
       notes,
@@ -718,7 +718,7 @@ router.get('/:id/context', (req, res) => {
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
       [therapistId, 'read_context', 'client_context', clientId, JSON.stringify({ context_id: row[0] })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     res.json({ context });
   } catch (error) {
@@ -892,7 +892,7 @@ router.put('/:id/context', (req, res) => {
       [therapistId, hasExisting ? 'update_context' : 'create_context', 'client_context', clientId,
        JSON.stringify({ fields: Object.keys(req.body).filter(k => req.body[k]) })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Therapist ${therapistId} ${hasExisting ? 'updated' : 'created'} context for client ${clientId}`);
 
@@ -1058,7 +1058,7 @@ router.get('/:id/timeline', (req, res) => {
     for (const item of pageItems) {
       if (item.source === 'diary') {
         const result = db.exec(
-          'SELECT id, entry_type, content_encrypted, transcript_encrypted, created_at FROM diary_entries WHERE id = ?',
+          'SELECT id, entry_type, content_encrypted, transcript_encrypted, created_at, audio_file_ref, transcription_status FROM diary_entries WHERE id = ?',
           [item.id]
         );
         if (result.length > 0 && result[0].values.length > 0) {
@@ -1067,7 +1067,8 @@ router.get('/:id/timeline', (req, res) => {
           let transcript = null;
           try { if (row[2]) content = decrypt(row[2]); } catch (e) { content = '[decryption error]'; }
           try { if (row[3]) transcript = decrypt(row[3]); } catch (e) { transcript = '[decryption error]'; }
-          timeline.push({ type: 'diary', id: row[0], entry_type: row[1], content, transcript, created_at: row[4] });
+          const audioFileRef = row[5];
+          timeline.push({ type: 'diary', id: row[0], entry_type: row[1], content, transcript, created_at: row[4], has_audio_file: !!audioFileRef, audio_file_ref: audioFileRef || null, transcription_status: row[6] || null });
         }
       } else if (item.source === 'note') {
         const result = db.exec(
@@ -1099,7 +1100,7 @@ router.get('/:id/timeline', (req, res) => {
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
       [therapistId, 'read_timeline', 'client', clientId, JSON.stringify({ items_count: timeline.length, page, total: totalCount })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Therapist ${therapistId} accessed timeline for client ${clientId} (page ${page}/${totalPages}, ${timeline.length} items)`);
 
@@ -1176,7 +1177,7 @@ router.get('/:id/sessions', (req, res) => {
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
       [therapistId, 'read_sessions', 'client', clientId, JSON.stringify({ sessions_count: sessions.length, page })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     res.json({
       sessions,
@@ -1290,7 +1291,7 @@ router.post('/:id/exercises', (req, res) => {
       [therapistId, deliveryId, JSON.stringify({ exercise_id, client_id: clientId, exercise_title: exerciseTitle })]
     );
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     // Notify client via Telegram (real outbound delivery, non-blocking)
     if (clientTelegramId) {
@@ -1390,7 +1391,7 @@ router.post('/link', requireRole('superadmin'), (req, res) => {
       [req.user.id, 'superadmin_direct_link', 'user', client_id, JSON.stringify({ client_id: parseInt(client_id), therapist_id: linkToTherapistId, admin_id: req.user.id })]
     );
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Superadmin ${req.user.id} directly linked client ${client_id} to therapist ${linkToTherapistId}`);
 
@@ -1503,7 +1504,7 @@ router.put('/:id/sos/:sosId/acknowledge', (req, res) => {
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
       [therapistId, 'sos_acknowledged', 'sos_event', sosId, JSON.stringify({ client_id: parseInt(clientId), therapist_id: therapistId })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Therapist ${therapistId} acknowledged SOS event #${sosId} for client ${clientId}`);
 
@@ -1568,7 +1569,7 @@ router.put('/:id/sos/:sosId/resolve', (req, res) => {
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
       [therapistId, 'sos_resolved', 'sos_event', sosId, JSON.stringify({ client_id: parseInt(clientId), therapist_id: therapistId, previous_status: currentStatus })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Therapist ${therapistId} resolved SOS event #${sosId} for client ${clientId}`);
 
@@ -1761,7 +1762,7 @@ router.post('/:id/import', (req, res, next) => {
       }
 
       if (imported > 0) {
-        saveDatabase();
+        saveDatabaseAfterWrite();
       }
 
       // Audit log
@@ -1774,7 +1775,7 @@ router.post('/:id/import', (req, res, next) => {
           errors: errors.length
         })]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
 
       logger.info(`Therapist ${therapistId} imported ${imported}/${fileContent.entries.length} ${importType} for client ${clientId}`);
 
@@ -1872,7 +1873,7 @@ router.get('/:id/diary/export', (req, res) => {
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
       [therapistId, 'diary_export', 'client', clientId, JSON.stringify({ entries_count: entries.length })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
@@ -2141,7 +2142,7 @@ router.post('/import-bulk', (req, res, next) => {
       });
 
       // Save to disk
-      saveDatabase();
+      saveDatabaseAfterWrite();
 
       // Audit log
       db.run(
@@ -2154,7 +2155,7 @@ router.post('/import-bulk', (req, res, next) => {
           errors: rowErrors.length
         })]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
 
       logger.info('Bulk client import by therapist ' + therapistId + ': ' + created.length + ' created, ' + skipped.length + ' skipped, ' + rowErrors.length + ' errors');
 

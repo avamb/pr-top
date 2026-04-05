@@ -37,7 +37,8 @@ backups/
 PsyLink_*.md
 START_HERE_AutoForge.md
 FIRST_MILESTONE_CHECKLIST.md
-app_spec.txt
+/app_spec.txt
+!prompts/app_spec.txt
 claude-progress.txt
 
 # Utility scripts (kill, restart, setup, check, etc.)

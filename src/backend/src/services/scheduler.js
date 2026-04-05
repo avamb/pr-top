@@ -9,7 +9,7 @@
 // 5. CSRF token cleanup (hourly)
 
 const cron = require('node-cron');
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 
 let emailService;
@@ -99,7 +99,7 @@ function runTrialExpiration() {
       count++;
     }
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
     logger.info('[SCHEDULER] Trial expiration: expired ' + count + ' trial subscriptions');
     return { expired: count };
   } catch (error) {
@@ -151,7 +151,7 @@ function runSubscriptionDowngrade() {
       count++;
     }
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
     logger.info('[SCHEDULER] Subscription downgrade: downgraded ' + count + ' past-due subscriptions');
     return { downgraded: count };
   } catch (error) {
@@ -243,7 +243,7 @@ function runExpiryWarning() {
       count++;
     }
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
     logger.info('[SCHEDULER] Expiry warning: sent ' + count + ' warnings');
     return { warned: count };
   } catch (error) {
@@ -317,7 +317,7 @@ function runDiaryReminder() {
       count++;
     }
 
-    if (count > 0) saveDatabase();
+    if (count > 0) saveDatabaseAfterWrite();
     logger.info('[SCHEDULER] Diary reminder: reminded ' + count + ' clients');
     return { reminded: count };
   } catch (error) {
@@ -369,7 +369,7 @@ function runDatabaseBackup() {
         "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (0, 'scheduled_backup', 'system', 0, ?, datetime('now'))",
         [JSON.stringify({ filename: result.filename, size: result.size })]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
     } else {
       logger.error('[SCHEDULER] Database backup failed: ' + result.error);
     }

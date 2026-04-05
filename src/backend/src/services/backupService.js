@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const crypto = require('crypto');
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 
 const BACKUP_DIR = process.env.BACKUP_DIR || path.resolve(__dirname, '../../backups');
@@ -37,7 +37,7 @@ function backup() {
     ensureBackupDir();
 
     // Save current state to disk first
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     // Export database to buffer
     const db = getDatabase();
@@ -73,7 +73,7 @@ function backup() {
         "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (0, 'database_backup', 'system', 0, ?, datetime('now'))",
         [JSON.stringify({ filename, size: stats.size, raw_size: rawBuffer.length })]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
     } catch (auditErr) {
       logger.warn(`[BACKUP] Failed to log backup audit: ${auditErr.message}`);
     }
@@ -164,7 +164,7 @@ function restore(filename) {
         "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (0, 'database_restored', 'system', 0, ?, datetime('now'))",
         [JSON.stringify({ filename, size: rawData.length })]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
     } catch (auditErr) {
       // The restored DB may not have the audit_logs table - non-fatal
     }

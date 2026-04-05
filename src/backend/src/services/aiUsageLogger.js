@@ -2,7 +2,7 @@
 // Tracks every AI API call with model, tokens, calculated cost, therapist_id, and timestamp.
 // Foundation for the cost dashboard.
 
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 
 // Model pricing per 1M tokens (input/output) in USD
@@ -88,7 +88,7 @@ function logUsage(therapistId, provider, model, operation, inputTokens, outputTo
        VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [therapistId, provider, model, operation, inputTokens, outputTokens, totalTokens, cost, sessionId, metadataJson]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`[AI Usage] ${operation} | model=${model} | tokens=${inputTokens}+${outputTokens}=${totalTokens} | cost=$${cost.toFixed(6)} | therapist=${therapistId}${sessionId ? ` | session=${sessionId}` : ''}`);
   } catch (err) {
@@ -302,7 +302,7 @@ function checkSpendingLimit() {
         db.run(
           "INSERT INTO platform_settings (key, value, updated_at) VALUES ('ai_limit_warning_sent', 'true', datetime('now')) ON CONFLICT(key) DO UPDATE SET value = 'true', updated_at = datetime('now')"
         );
-        saveDatabase();
+        saveDatabaseAfterWrite();
         logger.warn(`[AI Spending] Warning threshold reached: $${currentSpend.toFixed(4)} of $${limitUsd} limit (${percentUsed.toFixed(1)}%)`);
       }
     }
@@ -311,7 +311,7 @@ function checkSpendingLimit() {
       db.run(
         "INSERT INTO platform_settings (key, value, updated_at) VALUES ('ai_limit_reached', 'true', datetime('now')) ON CONFLICT(key) DO UPDATE SET value = 'true', updated_at = datetime('now')"
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
       logger.warn(`[AI Spending] Monthly limit REACHED: $${currentSpend.toFixed(4)} of $${limitUsd} limit`);
     }
 

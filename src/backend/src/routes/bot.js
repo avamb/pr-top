@@ -5,7 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { getDatabase, saveDatabase } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { encrypt, decrypt } = require('../services/encryption');
 const { processDiaryTranscription } = require('../services/diaryTranscription');
@@ -89,7 +89,7 @@ router.post('/register', botAuth, (req, res) => {
         updateParts.push("updated_at = datetime('now')");
         updateParams.push(existingUser[0]);
         db.run(`UPDATE users SET ${updateParts.join(', ')} WHERE id = ?`, updateParams);
-        saveDatabase();
+        saveDatabaseAfterWrite();
       }
       logger.info(`Telegram user already exists: telegram_id=${telegram_id}, role=${existingUser[1]}`);
       return res.json({
@@ -117,7 +117,7 @@ router.post('/register', botAuth, (req, res) => {
     );
     logger.info(`[Timezone] New user registered with timezone=${detectedTimezone} (telegram_id=${telegram_id})`);
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     // Fetch the created user
     const result = db.exec(
@@ -282,7 +282,7 @@ router.put('/profile/:telegram_id', botAuth, (req, res) => {
     params.push(String(telegram_id));
 
     db.run(`UPDATE users SET ${updates.join(', ')} WHERE telegram_id = ?`, params);
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Bot profile updated for telegram_id=${telegram_id}`);
     res.json({ message: 'Profile updated' });
@@ -404,7 +404,7 @@ router.post('/consent', botAuth, (req, res) => {
         "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
         [client[0], 'consent_declined', 'user', therapist_id, JSON.stringify({ client_id: client[0], therapist_id: parseInt(therapist_id), telegram_id: String(telegram_id) })]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
       logger.info(`Client ${client[0]} declined consent for therapist ${therapist_id}`);
       return res.json({ message: 'Consent declined. No connection was made.', linked: false });
     }
@@ -434,7 +434,7 @@ router.post('/consent', botAuth, (req, res) => {
       [client[0], 'consent_granted', 'user', therapist_id, JSON.stringify({ client_id: client[0], therapist_id: parseInt(therapist_id), telegram_id: String(telegram_id) })]
     );
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Client ${client[0]} consented and linked to therapist ${therapist_id}`);
 
@@ -497,7 +497,7 @@ router.post('/revoke-consent', botAuth, (req, res) => {
       [clientId, 'consent_revoked', 'user', therapistId || 0, JSON.stringify({ client_id: clientId, therapist_id: therapistId, telegram_id: String(telegram_id) })]
     );
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Client ${clientId} (telegram_id=${telegram_id}) revoked consent for therapist ${therapistId}`);
 
@@ -618,7 +618,7 @@ router.post('/diary', botAuth, (req, res) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
       [clientId, type, contentEncrypted, encryptedFileRef, audioFileRef, keyId, keyVersion, transcriptionStatus]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     // Get the created entry ID
     const lastId = db.exec("SELECT id FROM diary_entries WHERE client_id = ? ORDER BY id DESC LIMIT 1", [clientId]);
@@ -889,7 +889,7 @@ router.post('/sos', botAuth, (req, res) => {
        VALUES (?, ?, ?, ?, 'triggered', datetime('now'))`,
       [clientId, therapistId, messageEncrypted, keyId]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     // Get the created SOS event ID
     const lastId = db.exec("SELECT id, created_at FROM sos_events WHERE client_id = ? ORDER BY id DESC LIMIT 1", [clientId]);
@@ -901,7 +901,7 @@ router.post('/sos', botAuth, (req, res) => {
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
       [clientId, 'sos_triggered', 'sos_event', sosId, JSON.stringify({ client_id: clientId, therapist_id: therapistId })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`SOS ALERT: Client ${clientId} (telegram_id=${telegram_id}) triggered SOS, therapist ${therapistId}, event #${sosId}`);
 
@@ -991,7 +991,7 @@ router.post('/sos', botAuth, (req, res) => {
       [therapistId, 'sos_notification_sent', 'sos_event', sosId,
        JSON.stringify({ client_id: clientId, therapist_id: therapistId, notification_sent: notificationSent, telegram_id: String(telegram_id) })]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     res.status(201).json({
       message: 'SOS alert sent successfully',
@@ -1115,7 +1115,7 @@ router.post('/exercises/:delivery_id/acknowledge', botAuth, (req, res) => {
       [deliveryId]
     );
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     res.json({
       delivery_id: parseInt(deliveryId),
@@ -1182,7 +1182,7 @@ router.post('/exercises/:delivery_id/respond', botAuth, (req, res) => {
       [clientId, deliveryId, JSON.stringify({ client_id: clientId, therapist_id: therapistId })]
     );
 
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     // Push real-time WebSocket notification to therapist
     try {
@@ -1325,7 +1325,7 @@ router.post('/voice-query', botAuth, (req, res) => {
         "INSERT INTO audit_logs (actor_id, action, target_type, target_id, created_at) VALUES (?, 'voice_nl_query', 'client', ?, datetime('now'))",
         [therapistId, client_id]
       );
-      saveDatabase();
+      saveDatabaseAfterWrite();
     } catch (auditErr) {
       logger.warn('Failed to audit log voice query: ' + auditErr.message);
     }
@@ -1395,7 +1395,7 @@ router.put('/settings/:telegram_id', botAuth, (req, res) => {
       "UPDATE users SET escalation_preferences = ?, updated_at = datetime('now') WHERE id = ?",
       [JSON.stringify(prefs), userId]
     );
-    saveDatabase();
+    saveDatabaseAfterWrite();
 
     logger.info(`Bot updated setting ${key}=${value} for user ${userId}`);
 
