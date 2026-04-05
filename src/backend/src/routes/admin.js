@@ -1023,20 +1023,29 @@ router.get('/ai/models', (req, res) => {
       return (r.length > 0 && r[0].values.length > 0) ? r[0].values[0][0] : fallback;
     };
 
+    // Default assistant provider/model to same as summarization
+    const sumProv = getSettingValue('ai_summarization_provider', 'openai');
+    const sumMod = getSettingValue('ai_summarization_model', 'gpt-4o-mini');
+
     const current = {
       summarization: {
-        provider: getSettingValue('ai_summarization_provider', 'openai'),
-        model: getSettingValue('ai_summarization_model', 'gpt-4o-mini')
+        provider: sumProv,
+        model: sumMod
       },
       transcription: {
         provider: getSettingValue('ai_transcription_provider', 'openai'),
         model: getSettingValue('ai_transcription_model', 'whisper-1')
+      },
+      assistant: {
+        provider: getSettingValue('ai_assistant_provider', sumProv),
+        model: getSettingValue('ai_assistant_model', sumMod)
       }
     };
 
     res.json({
       summarization_providers: allModels,
       transcription_providers: transcriptionModels,
+      assistant_providers: allModels,
       current
     });
   } catch (error) {
@@ -1048,7 +1057,7 @@ router.get('/ai/models', (req, res) => {
 // PUT /api/admin/ai/models - Save selected AI models
 router.put('/ai/models', (req, res) => {
   try {
-    const { summarization, transcription } = req.body;
+    const { summarization, transcription, assistant } = req.body;
     const db = getDatabase();
     const updated = [];
 
@@ -1086,6 +1095,23 @@ router.put('/ai/models', (req, res) => {
       }
     }
 
+    if (assistant) {
+      if (assistant.provider) {
+        db.run(
+          "INSERT INTO platform_settings (key, value, updated_by, updated_at) VALUES ('ai_assistant_provider', ?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')",
+          [assistant.provider, req.user.id, assistant.provider, req.user.id]
+        );
+        updated.push('ai_assistant_provider');
+      }
+      if (assistant.model) {
+        db.run(
+          "INSERT INTO platform_settings (key, value, updated_by, updated_at) VALUES ('ai_assistant_model', ?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')",
+          [assistant.model, req.user.id, assistant.model, req.user.id]
+        );
+        updated.push('ai_assistant_model');
+      }
+    }
+
     if (updated.length > 0) {
       // Audit log
       db.run(
@@ -1103,17 +1129,24 @@ router.put('/ai/models', (req, res) => {
       return (r.length > 0 && r[0].values.length > 0) ? r[0].values[0][0] : fallback;
     };
 
+    const sumProv = getSettingValue('ai_summarization_provider', 'openai');
+    const sumMod = getSettingValue('ai_summarization_model', 'gpt-4o-mini');
+
     res.json({
       message: 'AI model settings updated successfully',
       updated,
       current: {
         summarization: {
-          provider: getSettingValue('ai_summarization_provider', 'openai'),
-          model: getSettingValue('ai_summarization_model', 'gpt-4o-mini')
+          provider: sumProv,
+          model: sumMod
         },
         transcription: {
           provider: getSettingValue('ai_transcription_provider', 'openai'),
           model: getSettingValue('ai_transcription_model', 'whisper-1')
+        },
+        assistant: {
+          provider: getSettingValue('ai_assistant_provider', sumProv),
+          model: getSettingValue('ai_assistant_model', sumMod)
         }
       }
     });

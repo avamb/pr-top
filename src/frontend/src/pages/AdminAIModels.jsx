@@ -15,12 +15,15 @@ export default function AdminAIModels() {
   // Data from API
   const [summarizationProviders, setSummarizationProviders] = useState([]);
   const [transcriptionProviders, setTranscriptionProviders] = useState([]);
+  const [assistantProviders, setAssistantProviders] = useState([]);
 
   // Form state
   const [sumProvider, setSumProvider] = useState('openai');
   const [sumModel, setSumModel] = useState('gpt-4o-mini');
   const [transProvider, setTransProvider] = useState('openai');
   const [transModel, setTransModel] = useState('whisper-1');
+  const [assistProvider, setAssistProvider] = useState('openai');
+  const [assistModel, setAssistModel] = useState('gpt-4o-mini');
 
   // Track what was originally loaded to detect changes
   const [original, setOriginal] = useState({});
@@ -39,16 +42,21 @@ export default function AdminAIModels() {
         const data = await res.json();
         setSummarizationProviders(data.summarization_providers || []);
         setTranscriptionProviders(data.transcription_providers || []);
+        setAssistantProviders(data.assistant_providers || []);
         if (data.current) {
           setSumProvider(data.current.summarization?.provider || 'openai');
           setSumModel(data.current.summarization?.model || 'gpt-4o-mini');
           setTransProvider(data.current.transcription?.provider || 'openai');
           setTransModel(data.current.transcription?.model || 'whisper-1');
+          setAssistProvider(data.current.assistant?.provider || data.current.summarization?.provider || 'openai');
+          setAssistModel(data.current.assistant?.model || data.current.summarization?.model || 'gpt-4o-mini');
           setOriginal({
             sumProvider: data.current.summarization?.provider || 'openai',
             sumModel: data.current.summarization?.model || 'gpt-4o-mini',
             transProvider: data.current.transcription?.provider || 'openai',
-            transModel: data.current.transcription?.model || 'whisper-1'
+            transModel: data.current.transcription?.model || 'whisper-1',
+            assistProvider: data.current.assistant?.provider || data.current.summarization?.provider || 'openai',
+            assistModel: data.current.assistant?.model || data.current.summarization?.model || 'gpt-4o-mini'
           });
         }
       }
@@ -74,7 +82,8 @@ export default function AdminAIModels() {
         },
         body: JSON.stringify({
           summarization: { provider: sumProvider, model: sumModel },
-          transcription: { provider: transProvider, model: transModel }
+          transcription: { provider: transProvider, model: transModel },
+          assistant: { provider: assistProvider, model: assistModel }
         })
       });
       const data = await res.json();
@@ -85,7 +94,9 @@ export default function AdminAIModels() {
             sumProvider: data.current.summarization?.provider,
             sumModel: data.current.summarization?.model,
             transProvider: data.current.transcription?.provider,
-            transModel: data.current.transcription?.model
+            transModel: data.current.transcription?.model,
+            assistProvider: data.current.assistant?.provider,
+            assistModel: data.current.assistant?.model
           });
         }
       } else {
@@ -354,6 +365,92 @@ export default function AdminAIModels() {
               </select>
               {original.transProvider === transProvider && original.transModel === transModel && (
                 <p className="text-xs text-green-600 mt-1">{t('admin.ai.currentActive')}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Assistant Chat Section */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h3 className="text-lg font-semibold text-text mb-1">{t('admin.ai.assistant')}</h3>
+            <p className="text-sm text-secondary mb-4">{t('admin.ai.assistantDesc')}</p>
+
+            {/* Provider Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              {assistantProviders.map(prov => {
+                const isSelected = assistProvider === prov.provider;
+                return (
+                  <div
+                    key={prov.provider}
+                    onClick={() => {
+                      setAssistProvider(prov.provider);
+                      setAssistModel(prov.models[0] || '');
+                    }}
+                    className={`border-2 rounded-lg p-4 cursor-pointer transition-colors ${
+                      isSelected ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-semibold text-text">{providerDisplayName(prov.provider)}</span>
+                      <div className="flex items-center gap-2">
+                        {prov.configured ? (
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                            {t('admin.ai.configured')}
+                          </span>
+                        ) : (
+                          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                            {t('admin.ai.notConfigured')}
+                          </span>
+                        )}
+                        {isSelected && (
+                          <span className="text-xs bg-primary text-white px-2 py-0.5 rounded-full font-medium">
+                            {t('admin.ai.active')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-xs text-secondary">
+                      {prov.models.length} {t('admin.ai.modelsAvailable')}
+                      {!prov.configured && ` \u2022 ${t('admin.ai.setEnvVar')}: ${providerEnvHint(prov.provider)}`}
+                    </p>
+                    {/* Test Connection Button */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleTestConnection(prov.provider); }}
+                      disabled={testing === prov.provider}
+                      className="mt-2 text-xs px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {testing === prov.provider ? t('admin.ai.testing') : t('admin.ai.testConnection')}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Model Dropdown */}
+            <div>
+              <label className="block text-sm font-medium text-text mb-1">{t('admin.ai.selectModel')}</label>
+              <select
+                value={assistModel}
+                onChange={(e) => setAssistModel(e.target.value)}
+                className="w-full max-w-sm px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm"
+              >
+                {getModelsForProvider(assistantProviders, assistProvider).map(m => {
+                  const hint = getModelPriceHint(m);
+                  const badge = recommendedModels[m];
+                  return (
+                    <option key={m} value={m}>
+                      {m}{hint ? ` (${hint})` : ''}{badge ? ` \u2B50 ${badge}` : ''}
+                    </option>
+                  );
+                })}
+              </select>
+              {original.assistProvider === assistProvider && original.assistModel === assistModel && (
+                <p className="text-xs text-green-600 mt-1">{t('admin.ai.currentActive')}</p>
+              )}
+              {recommendedModels[assistModel] && (
+                <p className="text-xs text-amber-600 mt-1">\u2B50 {t('admin.ai.recommended')}: {recommendedModels[assistModel]}</p>
+              )}
+              {getModelPriceHint(assistModel) && (
+                <p className="text-xs text-secondary mt-0.5">{t('admin.ai.pricing')}: {getModelPriceHint(assistModel)}</p>
               )}
             </div>
           </div>

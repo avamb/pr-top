@@ -714,7 +714,7 @@
     "system": "System",
     "ai": {
       "title": "AI Model Configuration",
-      "subtitle": "Select which AI models to use for summarization and transcription",
+      "subtitle": "Select which AI models to use for summarization, transcription, and assistant chat",
       "loading": "Loading AI model configuration...",
       "summarization": "Summarization Model",
       "summarizationDesc": "Select the AI provider and model used for generating session summaries",
@@ -735,7 +735,9 @@
       "saving": "Saving...",
       "saved": "AI model settings saved successfully",
       "recommended": "Recommended",
-      "pricing": "Pricing"
+      "pricing": "Pricing",
+      "assistant": "Assistant Chat Model",
+      "assistantDesc": "Select the AI provider and model used for the between-session assistant chatbot"
     }
   },
   "bulkImport": {

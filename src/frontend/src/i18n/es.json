@@ -714,7 +714,7 @@
     "system": "Sistema",
     "ai": {
       "title": "Configuración de modelos de IA",
-      "subtitle": "Seleccione qué modelos de IA usar para resumen y transcripción",
+      "subtitle": "Seleccione qué modelos de IA usar para resumen, transcripción y asistente de chat",
       "loading": "Cargando configuración de modelos de IA...",
       "summarization": "Modelo de resumen",
       "summarizationDesc": "Seleccione el proveedor y modelo de IA para generar resúmenes de sesiones",
@@ -735,7 +735,9 @@
       "saving": "Guardando...",
       "saved": "Configuración de modelos de IA guardada",
       "recommended": "Recomendado",
-      "pricing": "Precio"
+      "pricing": "Precio",
+      "assistant": "Modelo de asistente de chat",
+      "assistantDesc": "Seleccione el proveedor y modelo de IA para el chatbot asistente entre sesiones"
     }
   },
   "bulkImport": {

@@ -105,6 +105,52 @@ function getActiveProvider(db) {
 }
 
 /**
+ * Get the active assistant provider based on settings.
+ * Falls back to summarization settings, then env vars.
+ * @param {object} db - Database instance (optional)
+ * @returns {{provider: object, providerName: string, model: string}}
+ */
+function getActiveAssistantProvider(db) {
+  var providerName = process.env.AI_PROVIDER || 'openai';
+  var model = process.env.AI_MODEL || 'gpt-4o-mini';
+
+  if (db) {
+    try {
+      // First try assistant-specific settings
+      var assistProvResult = db.exec("SELECT value FROM platform_settings WHERE key = 'ai_assistant_provider'");
+      if (assistProvResult.length > 0 && assistProvResult[0].values.length > 0) {
+        providerName = assistProvResult[0].values[0][0];
+        var assistModelResult = db.exec("SELECT value FROM platform_settings WHERE key = 'ai_assistant_model'");
+        if (assistModelResult.length > 0 && assistModelResult[0].values.length > 0) {
+          model = assistModelResult[0].values[0][0];
+        }
+      } else {
+        // Fall back to summarization settings
+        var sumProvResult = db.exec("SELECT value FROM platform_settings WHERE key = 'ai_summarization_provider'");
+        if (sumProvResult.length > 0 && sumProvResult[0].values.length > 0) {
+          providerName = sumProvResult[0].values[0][0];
+        }
+        var sumModelResult = db.exec("SELECT value FROM platform_settings WHERE key = 'ai_summarization_model'");
+        if (sumModelResult.length > 0 && sumModelResult[0].values.length > 0) {
+          model = sumModelResult[0].values[0][0];
+        }
+      }
+    } catch (e) {
+      logger.warn('[AI Provider] Could not read assistant settings from DB: ' + e.message);
+    }
+  }
+
+  var provider = providers[providerName];
+  if (!provider) {
+    logger.warn('[AI Provider] Unknown assistant provider: ' + providerName + ', falling back to openai');
+    provider = providers.openai;
+    providerName = 'openai';
+  }
+
+  return { provider: provider, providerName: providerName, model: model };
+}
+
+/**
  * Check if any AI provider is configured.
  * @returns {boolean}
  */
@@ -181,6 +227,7 @@ async function chat(messages, options, db) {
 module.exports = {
   getProvider: getProvider,
   getActiveProvider: getActiveProvider,
+  getActiveAssistantProvider: getActiveAssistantProvider,
   detectProviderForModel: detectProviderForModel,
   isAnyConfigured: isAnyConfigured,
   getConfiguredProviders: getConfiguredProviders,
