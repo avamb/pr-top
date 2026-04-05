@@ -5,6 +5,7 @@ const { logger, getSystemLogs } = require('../utils/logger');
 const { authenticate, requireRole } = require('../middleware/auth');
 const backupService = require('../services/backupService');
 const aiProviders = require('../services/aiProviders');
+const assistantKnowledge = require('../services/assistantKnowledge');
 
 const router = express.Router();
 
@@ -1314,6 +1315,44 @@ router.put('/settings/assistant-ai', (req, res) => {
   } catch (error) {
     logger.error('Admin update assistant AI settings error: ' + error.message);
     res.status(500).json({ error: 'Failed to update assistant AI settings' });
+  }
+});
+
+// ==================== Assistant Knowledge Base ====================
+
+// POST /api/admin/assistant/reindex - Trigger knowledge base re-indexing
+router.post('/assistant/reindex', (req, res) => {
+  try {
+    const stats = assistantKnowledge.reindex();
+
+    // Audit log
+    const db = getDatabase();
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'reindex_knowledge_base', 'assistant_knowledge', NULL, ?, datetime('now'))",
+      [req.user.id, JSON.stringify(stats)]
+    );
+    saveDatabaseAfterWrite();
+
+    logger.info(`Superadmin ${req.user.id} triggered knowledge base re-index: ${stats.indexed} files, ${stats.chunks} chunks`);
+
+    res.json({
+      message: 'Knowledge base re-indexed successfully',
+      ...stats
+    });
+  } catch (error) {
+    logger.error('Admin reindex knowledge base error: ' + error.message);
+    res.status(500).json({ error: 'Failed to re-index knowledge base' });
+  }
+});
+
+// GET /api/admin/assistant/knowledge-stats - Get knowledge base statistics
+router.get('/assistant/knowledge-stats', (req, res) => {
+  try {
+    const stats = assistantKnowledge.getStats();
+    res.json(stats);
+  } catch (error) {
+    logger.error('Admin knowledge stats error: ' + error.message);
+    res.status(500).json({ error: 'Failed to get knowledge base stats' });
   }
 });
 

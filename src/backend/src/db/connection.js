@@ -523,6 +523,17 @@ function applySchema(db) {
     updated_at TEXT DEFAULT (datetime('now'))
   )`);
 
+  // Create assistant_knowledge table for knowledge base indexing
+  db.run(`CREATE TABLE IF NOT EXISTS assistant_knowledge (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chunk_text TEXT NOT NULL,
+    embedding TEXT NOT NULL,
+    source_file TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    chunk_index INTEGER DEFAULT 0,
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`);
+
   // Create indexes for performance
   db.run('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
   db.run('CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)');
@@ -539,6 +550,8 @@ function applySchema(db) {
   db.run('CREATE INDEX IF NOT EXISTS idx_exercise_deliveries_client ON exercise_deliveries(client_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_sos_events_client ON sos_events(client_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_assistant_chats_therapist_updated ON assistant_chats(therapist_id, updated_at DESC)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_assistant_knowledge_source ON assistant_knowledge(source_file)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_assistant_knowledge_type ON assistant_knowledge(source_type)');
 
   // Insert default platform settings
   const defaultSettings = [

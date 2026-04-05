@@ -737,7 +737,16 @@
       "recommended": "Recommended",
       "pricing": "Pricing",
       "assistant": "Assistant Chat Model",
-      "assistantDesc": "Select the AI provider and model used for the between-session assistant chatbot"
+      "assistantDesc": "Select the AI provider and model used for the between-session assistant chatbot",
+      "knowledgeBase": "Assistant Knowledge Base",
+      "knowledgeBaseDesc": "Index project documentation, UI components, routes, and i18n strings for the assistant chatbot. Re-index when code changes to keep the knowledge base up to date.",
+      "kbFiles": "Files indexed",
+      "kbChunks": "Chunks",
+      "kbLastUpdated": "Last updated",
+      "kbNever": "Never",
+      "reindexKnowledgeBase": "Reindex Knowledge Base",
+      "reindexing": "Reindexing...",
+      "reindexSuccess": "Knowledge base re-indexed"
     }
   },
   "bulkImport": {

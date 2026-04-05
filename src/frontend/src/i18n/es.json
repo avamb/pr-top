@@ -737,7 +737,16 @@
       "recommended": "Recomendado",
       "pricing": "Precio",
       "assistant": "Modelo de asistente de chat",
-      "assistantDesc": "Seleccione el proveedor y modelo de IA para el chatbot asistente entre sesiones"
+      "assistantDesc": "Seleccione el proveedor y modelo de IA para el chatbot asistente entre sesiones",
+      "knowledgeBase": "Base de conocimientos del asistente",
+      "knowledgeBaseDesc": "Indexar documentación del proyecto, componentes UI, rutas y cadenas i18n para el chatbot. Reindexar cuando cambie el código.",
+      "kbFiles": "Archivos indexados",
+      "kbChunks": "Fragmentos",
+      "kbLastUpdated": "Última actualización",
+      "kbNever": "Nunca",
+      "reindexKnowledgeBase": "Reindexar base de conocimientos",
+      "reindexing": "Reindexando...",
+      "reindexSuccess": "Base de conocimientos reindexada"
     }
   },
   "bulkImport": {

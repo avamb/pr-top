@@ -28,8 +28,14 @@ export default function AdminAIModels() {
   // Track what was originally loaded to detect changes
   const [original, setOriginal] = useState({});
 
+  // Knowledge base state
+  const [kbStats, setKbStats] = useState(null);
+  const [reindexing, setReindexing] = useState(false);
+  const [kbMessage, setKbMessage] = useState(null);
+
   useEffect(() => {
     loadModels();
+    loadKBStats();
   }, []);
 
   const loadModels = async () => {
@@ -123,6 +129,44 @@ export default function AdminAIModels() {
       setTestResult({ provider: providerName, success: false, message: 'Network error: ' + err.message });
     } finally {
       setTesting(null);
+    }
+  };
+
+  const loadKBStats = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/admin/assistant/knowledge-stats`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setKbStats(data);
+      }
+    } catch (err) {
+      // Non-critical, ignore
+    }
+  };
+
+  const handleReindex = async () => {
+    setReindexing(true);
+    setKbMessage(null);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/admin/assistant/reindex`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setKbMessage({ type: 'success', text: `${t('admin.ai.reindexSuccess')}: ${data.indexed} files, ${data.chunks} chunks (${data.elapsed_ms}ms)` });
+        loadKBStats();
+      } else {
+        setKbMessage({ type: 'error', text: data.error || 'Failed to re-index' });
+      }
+    } catch (err) {
+      setKbMessage({ type: 'error', text: 'Network error: ' + err.message });
+    } finally {
+      setReindexing(false);
     }
   };
 
@@ -463,6 +507,71 @@ export default function AdminAIModels() {
             className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 font-medium"
           >
             {saving ? t('admin.ai.saving') : t('admin.ai.save')}
+          </button>
+        </div>
+
+        {/* Knowledge Base Section */}
+        <div className="mt-10 border-t pt-8">
+          <h3 className="text-lg font-semibold text-heading mb-2">{t('admin.ai.knowledgeBase')}</h3>
+          <p className="text-sm text-secondary mb-4">{t('admin.ai.knowledgeBaseDesc')}</p>
+
+          {kbStats && (
+            <div className="bg-gray-50 rounded-lg p-4 mb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <span className="text-secondary">{t('admin.ai.kbFiles')}:</span>
+                  <span className="ml-1 font-medium">{kbStats.total_files}</span>
+                </div>
+                <div>
+                  <span className="text-secondary">{t('admin.ai.kbChunks')}:</span>
+                  <span className="ml-1 font-medium">{kbStats.total_chunks}</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-secondary">{t('admin.ai.kbLastUpdated')}:</span>
+                  <span className="ml-1 font-medium">
+                    {kbStats.last_updated ? new Date(kbStats.last_updated + 'Z').toLocaleString() : t('admin.ai.kbNever')}
+                  </span>
+                </div>
+              </div>
+              {kbStats.by_type && Object.keys(kbStats.by_type).length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {Object.entries(kbStats.by_type).map(([type, count]) => (
+                    <span key={type} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-primary/10 text-primary">
+                      {type}: {count}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {kbMessage && (
+            <div className={`mb-4 p-3 rounded-lg text-sm ${kbMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+              {kbMessage.text}
+            </div>
+          )}
+
+          <button
+            onClick={handleReindex}
+            disabled={reindexing}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 font-medium flex items-center gap-2"
+          >
+            {reindexing ? (
+              <>
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                {t('admin.ai.reindexing')}
+              </>
+            ) : (
+              <>
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {t('admin.ai.reindexKnowledgeBase')}
+              </>
+            )}
           </button>
         </div>
       </main>
