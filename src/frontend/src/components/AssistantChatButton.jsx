@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAssistantPanel } from '../contexts/AssistantPanelContext';
+import useAssistantStore from '../stores/assistantStore';
 
 const INTRO_SEEN_KEY = 'assistant_intro_seen';
 
@@ -11,7 +11,9 @@ const INTRO_SEEN_KEY = 'assistant_intro_seen';
  */
 export default function AssistantChatButton() {
   const { t } = useTranslation();
-  const { isOpen, hasUnread, togglePanel } = useAssistantPanel();
+  const isOpen = useAssistantStore(s => s.isOpen);
+  const hasUnread = useAssistantStore(s => s.hasUnread);
+  const togglePanel = useAssistantStore(s => s.togglePanel);
   const [showPulse, setShowPulse] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
 

@@ -5,7 +5,7 @@ import TimezoneDetectionBanner from './TimezoneDetectionBanner';
 import AssistantChatButton from './AssistantChatButton';
 import AssistantChatPanel from './AssistantChatPanel';
 import { UnsavedChangesProvider } from '../contexts/UnsavedChangesContext';
-import { AssistantPanelProvider } from '../contexts/AssistantPanelContext';
+// Assistant chat state is now managed via Zustand store (stores/assistantStore.js)
 
 const API_URL = '/api';
 
@@ -47,7 +47,6 @@ export default function AppLayout({ user, children }) {
   if (!user) return null;
 
   return (
-    <AssistantPanelProvider>
     <UnsavedChangesProvider>
       <div className="min-h-screen bg-background">
         <Sidebar user={user} isOpen={sidebarOpen} onToggle={setSidebarOpen} />
@@ -85,6 +84,5 @@ export default function AppLayout({ user, children }) {
         <AssistantChatPanel />
       </div>
     </UnsavedChangesProvider>
-    </AssistantPanelProvider>
   );
 }
