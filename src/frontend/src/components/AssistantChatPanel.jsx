@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { useAssistantPanel } from '../contexts/AssistantPanelContext';
+import { useCsrfToken } from '../hooks/useCsrfToken';
 
 const API_URL = '/api';
 
@@ -157,6 +158,7 @@ export default function AssistantChatPanel() {
   const { t, i18n } = useTranslation();
   const location = useLocation();
   const { isOpen, closePanel } = useAssistantPanel();
+  const csrfToken = useCsrfToken();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -198,17 +200,20 @@ export default function AssistantChatPanel() {
 
     try {
       const token = localStorage.getItem('token');
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'X-Locale': i18n.language || 'en'
+      };
+      if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
       const res = await fetch(`${API_URL}/assistant/chat`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-Locale': i18n.language || 'en'
-        },
+        headers,
         body: JSON.stringify({
           message: trimmed,
           chat_id: chatId,
-          page_context: location.pathname
+          page_context: location.pathname,
+          language: i18n.language || 'en'
         })
       });
 
@@ -220,10 +225,10 @@ export default function AssistantChatPanel() {
       const data = await res.json();
       setChatId(data.chat_id);
 
-      // Add assistant reply
+      // Add assistant reply (API returns 'response' field)
       setMessages(prev => [
         ...prev,
-        { role: 'assistant', content: data.reply, timestamp: new Date().toISOString() }
+        { role: 'assistant', content: data.response || data.reply, timestamp: new Date().toISOString() }
       ]);
     } catch (err) {
       setError(err.message);
