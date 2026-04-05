@@ -52,14 +52,19 @@ function AudioPlayer({ sessionId, audioRef, streamUrl: customStreamUrl }) {
         }
         const blob = await res.blob();
         if (cancelled) return;
+        // Determine if video BEFORE setting src to avoid race condition
+        // where setIsVideo destroys the audio element after src is assigned
+        const blobIsVideo = blob.type && blob.type.startsWith('video/');
+        if (blobIsVideo) {
+          setIsVideo(true);
+          // Wait for React to re-render the correct <video> element
+          await new Promise(r => setTimeout(r, 0));
+        }
+        if (cancelled) return;
         const url = URL.createObjectURL(blob);
         if (mediaRef.current) {
           mediaRef.current.src = url;
           mediaRef.current.load();
-        }
-        // Check if it's actually video based on MIME type
-        if (blob.type && blob.type.startsWith('video/')) {
-          setIsVideo(true);
         }
       } catch (e) {
         if (!cancelled) setError(e.message);
@@ -67,7 +72,7 @@ function AudioPlayer({ sessionId, audioRef, streamUrl: customStreamUrl }) {
         if (!cancelled) setLoading(false);
       }
     }
-    if (token && sessionId) loadMedia();
+    if (token && (sessionId || customStreamUrl)) loadMedia();
     return () => { cancelled = true; };
   }, [sessionId, token, streamUrl]);
 
@@ -93,14 +98,22 @@ function AudioPlayer({ sessionId, audioRef, streamUrl: customStreamUrl }) {
     setLoading(false);
   }, [t]);
 
-  const togglePlay = () => {
+  const togglePlay = async () => {
     if (!mediaRef.current) return;
     if (isPlaying) {
       mediaRef.current.pause();
+      setIsPlaying(false);
     } else {
-      mediaRef.current.play().catch(() => {});
+      try {
+        await mediaRef.current.play();
+        setIsPlaying(true);
+      } catch (e) {
+        // AbortError is benign (e.g., media removed from DOM during tab switch)
+        if (e.name === 'AbortError') return;
+        console.error('Playback failed:', e);
+        setError('Playback failed: ' + e.message);
+      }
     }
-    setIsPlaying(!isPlaying);
   };
 
   const handleSeek = (e) => {
