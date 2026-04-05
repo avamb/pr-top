@@ -523,6 +523,17 @@ function applySchema(db) {
     updated_at TEXT DEFAULT (datetime('now'))
   )`);
 
+  // Create assistant_cached_answers table for self-learning cache
+  db.run(`CREATE TABLE IF NOT EXISTS assistant_cached_answers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    question_embedding TEXT NOT NULL,
+    question_text TEXT NOT NULL,
+    answer_text TEXT NOT NULL,
+    usage_count INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`);
+
   // Create assistant_knowledge table for knowledge base indexing
   db.run(`CREATE TABLE IF NOT EXISTS assistant_knowledge (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -550,6 +561,7 @@ function applySchema(db) {
   db.run('CREATE INDEX IF NOT EXISTS idx_exercise_deliveries_client ON exercise_deliveries(client_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_sos_events_client ON sos_events(client_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_assistant_chats_therapist_updated ON assistant_chats(therapist_id, updated_at DESC)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_assistant_cached_answers_usage ON assistant_cached_answers(usage_count DESC)');
   db.run('CREATE INDEX IF NOT EXISTS idx_assistant_knowledge_source ON assistant_knowledge(source_file)');
   db.run('CREATE INDEX IF NOT EXISTS idx_assistant_knowledge_type ON assistant_knowledge(source_type)');
 

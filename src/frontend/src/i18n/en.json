@@ -22,6 +22,7 @@
     "adminSystemLogs": "System Logs",
     "adminAIUsage": "AI Usage",
     "adminAIModels": "AI Models",
+    "adminCachedAnswers": "Cached Answers",
     "adminUmami": "Web Analytics"
   },
   "aiUsage": {
@@ -186,6 +187,11 @@
     "hoursAgo": "{{count}}h ago",
     "daysAgo": "{{count}}d ago",
     "needHelp": "Need help?",
+    "assistant": "Assistant",
+    "newChat": "New chat",
+    "assistantWelcome": "How can I help you?",
+    "assistantHint": "Ask me about using PR-TOP — navigation, features, workflows, and more.",
+    "assistantPlaceholder": "Type your question...",
     "askClient": "Ask About a Client",
     "askClientHint": "Use natural language to search through client records, diary entries, and session notes.",
     "selectClient": "Select a Client to Query"
@@ -747,6 +753,19 @@
       "reindexKnowledgeBase": "Reindex Knowledge Base",
       "reindexing": "Reindexing...",
       "reindexSuccess": "Knowledge base re-indexed"
+    },
+    "cache": {
+      "title": "Cached Answers",
+      "description": "Manage cached assistant answers. The assistant learns from previous interactions and caches answers to save AI tokens on similar questions.",
+      "totalEntries": "Total entries",
+      "empty": "No cached answers yet",
+      "emptyHint": "Cached answers will appear here as therapists use the assistant chatbot.",
+      "question": "Question",
+      "answer": "Answer",
+      "usedTimes": "Used {{count}} time(s)",
+      "editSuccess": "Cached answer updated",
+      "deleteSuccess": "Cached answer deleted",
+      "confirmDelete": "Are you sure you want to delete this cached answer?"
     }
   },
   "bulkImport": {

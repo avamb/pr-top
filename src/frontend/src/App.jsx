@@ -24,6 +24,7 @@ import AdminAuditLogs from './pages/AdminAuditLogs';
 import AdminSystemLogs from './pages/AdminSystemLogs';
 import AdminAIUsage from './pages/AdminAIUsage';
 import AdminAIModels from './pages/AdminAIModels';
+import AdminCachedAnswers from './pages/AdminCachedAnswers';
 import TherapistGuide from './pages/TherapistGuide';
 import SecurityEncryption from './pages/SecurityEncryption';
 import SecurityGDPR from './pages/SecurityGDPR';
@@ -104,6 +105,7 @@ function App() {
         <Route path="/admin/system-logs" element={<AdminLayout><AdminSystemLogs /></AdminLayout>} />
         <Route path="/admin/ai-usage" element={<AdminLayout><AdminAIUsage /></AdminLayout>} />
         <Route path="/admin/ai-models" element={<AdminLayout><AdminAIModels /></AdminLayout>} />
+        <Route path="/admin/cached-answers" element={<AdminLayout><AdminCachedAnswers /></AdminLayout>} />
         <Route path="/admin/*" element={<AdminLayout><AdminDashboard /></AdminLayout>} />
 
         <Route path="*" element={<NotFound />} />

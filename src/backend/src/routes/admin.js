@@ -6,6 +6,7 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const backupService = require('../services/backupService');
 const aiProviders = require('../services/aiProviders');
 const assistantKnowledge = require('../services/assistantKnowledge');
+const assistantCache = require('../services/assistantCache');
 
 const router = express.Router();
 
@@ -1353,6 +1354,75 @@ router.get('/assistant/knowledge-stats', (req, res) => {
   } catch (error) {
     logger.error('Admin knowledge stats error: ' + error.message);
     res.status(500).json({ error: 'Failed to get knowledge base stats' });
+  }
+});
+
+// ==================== Assistant Cached Answers ====================
+
+// GET /api/admin/assistant/cached-answers - List cached answers (paginated)
+router.get('/assistant/cached-answers', (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const result = assistantCache.getCachedAnswers(page, limit);
+    res.json(result);
+  } catch (error) {
+    logger.error('Admin list cached answers error: ' + error.message);
+    res.status(500).json({ error: 'Failed to list cached answers' });
+  }
+});
+
+// PUT /api/admin/assistant/cached-answers/:id - Edit a cached answer
+router.put('/assistant/cached-answers/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { answer_text } = req.body;
+
+    if (!answer_text || typeof answer_text !== 'string' || answer_text.trim().length === 0) {
+      return res.status(400).json({ error: 'answer_text is required' });
+    }
+
+    const success = assistantCache.updateCachedAnswer(id, answer_text.trim());
+    if (!success) {
+      return res.status(404).json({ error: 'Cached answer not found' });
+    }
+
+    // Audit log
+    const db = getDatabase();
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'edit_cached_answer', 'assistant_cached_answers', ?, ?, datetime('now'))",
+      [req.user.id, String(id), JSON.stringify({ action: 'edit' })]
+    );
+    saveDatabaseAfterWrite();
+
+    res.json({ message: 'Cached answer updated', id });
+  } catch (error) {
+    logger.error('Admin edit cached answer error: ' + error.message);
+    res.status(500).json({ error: 'Failed to edit cached answer' });
+  }
+});
+
+// DELETE /api/admin/assistant/cached-answers/:id - Delete a cached answer
+router.delete('/assistant/cached-answers/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const success = assistantCache.deleteCachedAnswer(id);
+    if (!success) {
+      return res.status(404).json({ error: 'Cached answer not found' });
+    }
+
+    // Audit log
+    const db = getDatabase();
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'delete_cached_answer', 'assistant_cached_answers', ?, ?, datetime('now'))",
+      [req.user.id, String(id), JSON.stringify({ action: 'delete' })]
+    );
+    saveDatabaseAfterWrite();
+
+    res.json({ message: 'Cached answer deleted', id });
+  } catch (error) {
+    logger.error('Admin delete cached answer error: ' + error.message);
+    res.status(500).json({ error: 'Failed to delete cached answer' });
   }
 });
 
