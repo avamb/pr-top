@@ -2,7 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import TimezoneDetectionBanner from './TimezoneDetectionBanner';
+import AssistantChatButton from './AssistantChatButton';
 import { UnsavedChangesProvider } from '../contexts/UnsavedChangesContext';
+import { AssistantPanelProvider } from '../contexts/AssistantPanelContext';
 
 const API_URL = '/api';
 
@@ -44,6 +46,7 @@ export default function AppLayout({ user, children }) {
   if (!user) return null;
 
   return (
+    <AssistantPanelProvider>
     <UnsavedChangesProvider>
       <div className="min-h-screen bg-background">
         <Sidebar user={user} isOpen={sidebarOpen} onToggle={setSidebarOpen} />
@@ -73,7 +76,11 @@ export default function AppLayout({ user, children }) {
           <TimezoneDetectionBanner user={user} />
           {typeof children === 'function' ? children({ user }) : children}
         </div>
+
+        {/* Floating assistant chat button - visible on all authenticated pages */}
+        <AssistantChatButton />
       </div>
     </UnsavedChangesProvider>
+    </AssistantPanelProvider>
   );
 }
