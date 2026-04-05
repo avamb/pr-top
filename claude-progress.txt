@@ -1,3 +1,71 @@
+## Session: 2026-04-05 - Features #301, #302, #303
+
+### Completed: Assistant AI Provider Configuration - Superadmin (#301) - PASSING
+
+**What was built:**
+- Dedicated GET /api/admin/settings/assistant-ai endpoint returning current assistant provider/model with configuration status
+- Dedicated PUT /api/admin/settings/assistant-ai endpoint with validation (provider existence, API key, model availability)
+- Audit logging for assistant AI settings changes
+- Already existing UI in AdminAIModels.jsx works with both old and new endpoints
+
+**Verification:**
+- GET returns correct assistant settings with provider_configured flag ✅
+- PUT validates missing fields (400), unknown provider (400), unconfigured provider (400) ✅
+- Settings persist across server restart ✅
+- Unauthenticated access blocked (401) ✅
+- Zero feature-related console errors ✅
+
+### Completed: Knowledge Base Builder (Read-Only Code Indexing) (#302) - PASSING
+
+**What was built:**
+- Created src/backend/src/services/assistantKnowledge.js: full indexer with TF-IDF embeddings
+- assistant_knowledge table (id, chunk_text, embedding, source_file, source_type, chunk_index, updated_at)
+- Indexes 93 files across 7 categories: api_route, ui_component, i18n, service, documentation, bot, config
+- Generates 352 chunks with sparse vector embeddings (256-dimensional)
+- POST /api/admin/assistant/reindex endpoint with audit logging
+- GET /api/admin/assistant/knowledge-stats endpoint
+- "Reindex Knowledge Base" button in AdminAIModels page with live stats display
+- Re-indexing updates stale entries and removes deleted files
+- i18n labels in EN/RU/ES/UK
+
+**Verification:**
+- Reindex indexes 93 files, 352 chunks, 0 errors in ~150ms ✅
+- Stats show breakdown by type (service: 113, ui_component: 96, i18n: 89, etc.) ✅
+- Re-index is idempotent (same results on repeated runs) ✅
+- Data persists across server restart ✅
+- UI button works, shows success message with stats ✅
+- Zero feature-related console errors ✅
+
+### Completed: Cached Answers Store (Self-Learning) (#303) - PASSING
+
+**What was built:**
+- Created src/backend/src/services/assistantCache.js: cache lookup/store with TF-IDF similarity
+- assistant_cached_answers table (id, question_embedding, question_text, answer_text, usage_count, created_at, updated_at)
+- Cache check in assistant chat route: standalone questions checked before AI call
+- If similarity > 0.92 threshold, returns cached answer and increments usage_count
+- On successful AI response, stores Q&A pair in cache (fallback responses not cached)
+- CRUD admin endpoints: GET/PUT/DELETE /api/admin/assistant/cached-answers
+- AdminCachedAnswers.jsx page with list, inline edit, delete, pagination
+- Sidebar link "Cached Answers" with icon in admin nav
+- Route /admin/cached-answers added to App.jsx
+- i18n labels in EN/RU/ES/UK
+
+**Verification:**
+- GET returns paginated list (empty state working) ✅
+- PUT validates empty answer_text (400) ✅
+- DELETE works ✅
+- Auth enforced: 401/403 for unauthenticated ✅
+- Fallback responses are NOT cached (correct behavior) ✅
+- Sidebar shows Cached Answers link ✅
+- Empty state UI renders correctly ✅
+- Data persists across server restart (table count: 20) ✅
+- Zero feature-related console errors ✅
+- No mock data patterns in source code ✅
+
+### Current Status
+- Features passing: 297/307
+- Features #301, #302, #303: ALL PASSING
+
 ## Session: 2026-04-05 - Feature #291
 
 ### Completed: Assistant chat history table (#291) - PASSING
