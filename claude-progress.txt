@@ -1,3 +1,30 @@
+## Session: 2026-04-05 - Features #296, #297
+
+### Completed: AssistantChatButton — floating action button (#296) - PASSING
+
+**What was built:**
+- Created AssistantChatButton.jsx: FAB at bottom-right, z-50, chat bubble icon, teal background
+- Pulse animation on first visit (localStorage flag), tooltip "Need help?" on hover
+- Unread indicator dot, hides when panel is open
+- Created AssistantPanelContext.jsx for shared panel open/close state
+- Mounted in AppLayout.jsx visible on all authenticated pages
+
+### Completed: AssistantChatPanel — side panel UI (#297) - PASSING
+
+**What was built:**
+- Created AssistantChatPanel.jsx: slide-in panel (400px desktop, full-width mobile), z-50
+- Header with "Assistant" title, "New chat" and close buttons
+- Chat bubbles: user (right, teal), assistant (left, gray with avatar)
+- Inline markdown parser for assistant responses
+- Typing indicator with animated dots, auto-scroll
+- Sends page_context (pathname) and locale to API
+- Created backend POST /api/assistant/chat with conversation persistence
+- Fallback error message when AI provider not configured
+- i18n keys in EN/RU/ES/UK
+
+### Current Status
+- Features #296, #297: BOTH PASSING
+
 ## Session: 2026-04-05 - Features #301, #302, #303
 
 ### Completed: Assistant AI Provider Configuration - Superadmin (#301) - PASSING
