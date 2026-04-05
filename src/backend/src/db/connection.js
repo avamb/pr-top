@@ -565,6 +565,33 @@ function applySchema(db) {
   db.run('CREATE INDEX IF NOT EXISTS idx_assistant_knowledge_source ON assistant_knowledge(source_file)');
   db.run('CREATE INDEX IF NOT EXISTS idx_assistant_knowledge_type ON assistant_knowledge(source_type)');
 
+  // Create assistant_conversations table for analytics-grade chat tracking
+  db.run(`CREATE TABLE IF NOT EXISTS assistant_conversations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    therapist_id INTEGER NOT NULL REFERENCES users(id),
+    started_at TEXT DEFAULT (datetime('now')),
+    last_message_at TEXT DEFAULT (datetime('now')),
+    page_context TEXT,
+    language TEXT DEFAULT 'en',
+    message_count INTEGER DEFAULT 0
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_assistant_conversations_therapist ON assistant_conversations(therapist_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_assistant_conversations_started ON assistant_conversations(started_at DESC)');
+
+  // Create assistant_messages table for individual message tracking
+  db.run(`CREATE TABLE IF NOT EXISTS assistant_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id INTEGER NOT NULL REFERENCES assistant_conversations(id),
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    is_cached INTEGER DEFAULT 0,
+    tokens_used INTEGER DEFAULT 0,
+    tags TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_assistant_messages_conversation ON assistant_messages(conversation_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_assistant_messages_created ON assistant_messages(created_at DESC)');
+
   // Insert default platform settings
   const defaultSettings = [
     ['trial_duration_days', '14'],

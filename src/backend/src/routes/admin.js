@@ -1426,4 +1426,301 @@ router.delete('/assistant/cached-answers/:id', (req, res) => {
   }
 });
 
+// =====================================================
+// ASSISTANT CHAT ANALYTICS
+// =====================================================
+
+// GET /api/admin/assistant/analytics - Aggregated assistant chat statistics
+router.get('/assistant/analytics', (req, res) => {
+  try {
+    const db = getDatabase();
+
+    // Total conversations
+    const totalConvResult = db.exec('SELECT COUNT(*) FROM assistant_conversations');
+    const totalConversations = (totalConvResult.length > 0 && totalConvResult[0].values.length > 0) ? totalConvResult[0].values[0][0] : 0;
+
+    // Total messages
+    const totalMsgResult = db.exec('SELECT COUNT(*) FROM assistant_messages');
+    const totalMessages = (totalMsgResult.length > 0 && totalMsgResult[0].values.length > 0) ? totalMsgResult[0].values[0][0] : 0;
+
+    // Cached vs fresh responses
+    const cachedResult = db.exec("SELECT is_cached, COUNT(*) FROM assistant_messages WHERE role = 'assistant' GROUP BY is_cached");
+    let cachedCount = 0, freshCount = 0;
+    if (cachedResult.length > 0) {
+      for (const row of cachedResult[0].values) {
+        if (row[0] === 1) cachedCount = row[1];
+        else freshCount = row[1];
+      }
+    }
+
+    // Tag breakdown
+    const tagResult = db.exec("SELECT tags, COUNT(*) FROM assistant_messages WHERE role = 'user' AND tags IS NOT NULL GROUP BY tags ORDER BY COUNT(*) DESC");
+    const tagBreakdown = {};
+    if (tagResult.length > 0 && tagResult[0].values) {
+      for (const row of tagResult[0].values) {
+        tagBreakdown[row[0]] = row[1];
+      }
+    }
+
+    // Conversations by language
+    const langResult = db.exec("SELECT language, COUNT(*) FROM assistant_conversations GROUP BY language ORDER BY COUNT(*) DESC");
+    const byLanguage = {};
+    if (langResult.length > 0 && langResult[0].values) {
+      for (const row of langResult[0].values) {
+        byLanguage[row[0] || 'unknown'] = row[1];
+      }
+    }
+
+    // Top page contexts
+    const contextResult = db.exec("SELECT page_context, COUNT(*) FROM assistant_conversations WHERE page_context IS NOT NULL GROUP BY page_context ORDER BY COUNT(*) DESC LIMIT 10");
+    const topContexts = [];
+    if (contextResult.length > 0 && contextResult[0].values) {
+      for (const row of contextResult[0].values) {
+        topContexts.push({ context: row[0], count: row[1] });
+      }
+    }
+
+    // Most asked questions (user messages sorted by frequency)
+    const topQuestionsResult = db.exec("SELECT content, COUNT(*) as cnt FROM assistant_messages WHERE role = 'user' GROUP BY content ORDER BY cnt DESC LIMIT 20");
+    const topQuestions = [];
+    if (topQuestionsResult.length > 0 && topQuestionsResult[0].values) {
+      for (const row of topQuestionsResult[0].values) {
+        topQuestions.push({ question: row[0], count: row[1] });
+      }
+    }
+
+    // Feature requests
+    const featureReqResult = db.exec("SELECT content FROM assistant_messages WHERE role = 'user' AND tags = 'feature_request' ORDER BY created_at DESC LIMIT 20");
+    const featureRequests = [];
+    if (featureReqResult.length > 0 && featureReqResult[0].values) {
+      for (const row of featureReqResult[0].values) {
+        featureRequests.push(row[0]);
+      }
+    }
+
+    // Common difficulties
+    const difficultyResult = db.exec("SELECT content FROM assistant_messages WHERE role = 'user' AND tags = 'difficulty' ORDER BY created_at DESC LIMIT 20");
+    const difficulties = [];
+    if (difficultyResult.length > 0 && difficultyResult[0].values) {
+      for (const row of difficultyResult[0].values) {
+        difficulties.push(row[0]);
+      }
+    }
+
+    // Daily usage (last 30 days)
+    const dailyResult = db.exec("SELECT date(created_at) as day, SUM(CASE WHEN is_cached = 1 THEN 1 ELSE 0 END) as cached, SUM(CASE WHEN is_cached = 0 THEN 1 ELSE 0 END) as fresh FROM assistant_messages WHERE role = 'assistant' AND created_at >= datetime('now', '-30 days') GROUP BY day ORDER BY day");
+    const dailyUsage = [];
+    if (dailyResult.length > 0 && dailyResult[0].values) {
+      for (const row of dailyResult[0].values) {
+        dailyUsage.push({ date: row[0], cached: row[1], fresh: row[2] });
+      }
+    }
+
+    // Conversations by therapist
+    const byTherapistResult = db.exec("SELECT c.therapist_id, u.email, COUNT(*) as conv_count, SUM(c.message_count) as msg_count FROM assistant_conversations c JOIN users u ON u.id = c.therapist_id GROUP BY c.therapist_id ORDER BY conv_count DESC LIMIT 20");
+    const byTherapist = [];
+    if (byTherapistResult.length > 0 && byTherapistResult[0].values) {
+      for (const row of byTherapistResult[0].values) {
+        byTherapist.push({ therapist_id: row[0], email: row[1], conversations: row[2], messages: row[3] });
+      }
+    }
+
+    res.json({
+      total_conversations: totalConversations,
+      total_messages: totalMessages,
+      cached_responses: cachedCount,
+      fresh_responses: freshCount,
+      tag_breakdown: tagBreakdown,
+      by_language: byLanguage,
+      top_contexts: topContexts,
+      top_questions: topQuestions,
+      feature_requests: featureRequests,
+      difficulties: difficulties,
+      daily_usage: dailyUsage,
+      by_therapist: byTherapist
+    });
+  } catch (error) {
+    logger.error('Admin assistant analytics error: ' + error.message);
+    res.status(500).json({ error: 'Failed to load assistant analytics' });
+  }
+});
+
+// GET /api/admin/assistant/conversations - Paginated conversation list
+router.get('/assistant/conversations', (req, res) => {
+  try {
+    const db = getDatabase();
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const offset = (page - 1) * limit;
+    const language = req.query.language || null;
+    const therapistId = req.query.therapist_id ? parseInt(req.query.therapist_id) : null;
+
+    let whereClause = '';
+    const params = [];
+    const conditions = [];
+
+    if (language) {
+      conditions.push('c.language = ?');
+      params.push(language);
+    }
+    if (therapistId) {
+      conditions.push('c.therapist_id = ?');
+      params.push(therapistId);
+    }
+    if (conditions.length > 0) {
+      whereClause = 'WHERE ' + conditions.join(' AND ');
+    }
+
+    const countResult = db.exec('SELECT COUNT(*) FROM assistant_conversations c ' + whereClause, params);
+    const total = (countResult.length > 0 && countResult[0].values.length > 0) ? countResult[0].values[0][0] : 0;
+
+    const result = db.exec(
+      'SELECT c.id, c.therapist_id, u.email, c.started_at, c.last_message_at, c.page_context, c.language, c.message_count FROM assistant_conversations c JOIN users u ON u.id = c.therapist_id ' + whereClause + ' ORDER BY c.last_message_at DESC LIMIT ? OFFSET ?',
+      [...params, limit, offset]
+    );
+
+    const conversations = [];
+    if (result.length > 0 && result[0].values) {
+      for (const row of result[0].values) {
+        conversations.push({
+          id: row[0],
+          therapist_id: row[1],
+          email: row[2],
+          started_at: row[3],
+          last_message_at: row[4],
+          page_context: row[5],
+          language: row[6],
+          message_count: row[7]
+        });
+      }
+    }
+
+    res.json({
+      conversations,
+      total,
+      page,
+      pages: Math.ceil(total / limit)
+    });
+  } catch (error) {
+    logger.error('Admin assistant conversations error: ' + error.message);
+    res.status(500).json({ error: 'Failed to load conversations' });
+  }
+});
+
+// GET /api/admin/assistant/conversations/:id/messages - Messages for a conversation
+router.get('/assistant/conversations/:id/messages', (req, res) => {
+  try {
+    const db = getDatabase();
+    const convId = parseInt(req.params.id);
+
+    // Get conversation info
+    const convResult = db.exec(
+      'SELECT c.id, c.therapist_id, u.email, c.started_at, c.page_context, c.language FROM assistant_conversations c JOIN users u ON u.id = c.therapist_id WHERE c.id = ?',
+      [convId]
+    );
+
+    if (!convResult.length || !convResult[0].values.length) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    const conv = convResult[0].values[0];
+
+    // Get messages
+    const msgResult = db.exec(
+      'SELECT id, role, content, is_cached, tokens_used, tags, created_at FROM assistant_messages WHERE conversation_id = ? ORDER BY created_at ASC',
+      [convId]
+    );
+
+    const messages = [];
+    if (msgResult.length > 0 && msgResult[0].values) {
+      for (const row of msgResult[0].values) {
+        messages.push({
+          id: row[0],
+          role: row[1],
+          content: row[2],
+          is_cached: row[3] === 1,
+          tokens_used: row[4],
+          tags: row[5],
+          created_at: row[6]
+        });
+      }
+    }
+
+    res.json({
+      conversation: {
+        id: conv[0],
+        therapist_id: conv[1],
+        email: conv[2],
+        started_at: conv[3],
+        page_context: conv[4],
+        language: conv[5]
+      },
+      messages
+    });
+  } catch (error) {
+    logger.error('Admin assistant messages error: ' + error.message);
+    res.status(500).json({ error: 'Failed to load conversation messages' });
+  }
+});
+
+// GET /api/admin/assistant/export - Export conversation data as CSV or JSON
+router.get('/assistant/export', (req, res) => {
+  try {
+    const db = getDatabase();
+    const format = req.query.format || 'json';
+
+    // Get all conversations with messages
+    const convResult = db.exec(
+      'SELECT c.id, c.therapist_id, u.email, c.started_at, c.last_message_at, c.page_context, c.language, c.message_count FROM assistant_conversations c JOIN users u ON u.id = c.therapist_id ORDER BY c.started_at DESC'
+    );
+
+    const conversations = [];
+    if (convResult.length > 0 && convResult[0].values) {
+      for (const row of convResult[0].values) {
+        const conv = {
+          id: row[0], therapist_id: row[1], email: row[2], started_at: row[3],
+          last_message_at: row[4], page_context: row[5], language: row[6], message_count: row[7]
+        };
+
+        // Get messages for this conversation
+        const msgResult = db.exec(
+          'SELECT role, content, is_cached, tags, created_at FROM assistant_messages WHERE conversation_id = ? ORDER BY created_at ASC',
+          [row[0]]
+        );
+        conv.messages = [];
+        if (msgResult.length > 0 && msgResult[0].values) {
+          for (const m of msgResult[0].values) {
+            conv.messages.push({ role: m[0], content: m[1], is_cached: m[2] === 1, tags: m[3], created_at: m[4] });
+          }
+        }
+        conversations.push(conv);
+      }
+    }
+
+    if (format === 'csv') {
+      // Flatten to CSV rows (one row per message)
+      const csvRows = ['conversation_id,therapist_email,started_at,page_context,language,message_role,message_content,is_cached,tags,created_at'];
+      for (const conv of conversations) {
+        for (const msg of conv.messages) {
+          const escapeCsv = (s) => s ? '"' + String(s).replace(/"/g, '""') + '"' : '""';
+          csvRows.push([
+            conv.id, escapeCsv(conv.email), conv.started_at, escapeCsv(conv.page_context), conv.language,
+            msg.role, escapeCsv(msg.content), msg.is_cached ? 1 : 0, msg.tags || '', msg.created_at
+          ].join(','));
+        }
+      }
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="assistant_conversations.csv"');
+      res.send(csvRows.join('\n'));
+    } else {
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', 'attachment; filename="assistant_conversations.json"');
+      res.json({ conversations, exported_at: new Date().toISOString() });
+    }
+  } catch (error) {
+    logger.error('Admin assistant export error: ' + error.message);
+    res.status(500).json({ error: 'Failed to export conversation data' });
+  }
+});
+
 module.exports = router;

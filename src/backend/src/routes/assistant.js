@@ -13,6 +13,27 @@ const assistantCache = require('../services/assistantCache');
 const assistantKnowledge = require('../services/assistantKnowledge');
 const { sanitizeInput, detectInjection, getInjectionRejection, detectLanguage } = require('../services/assistantSanitizer');
 
+// === Message tagging for analytics ===
+function tagMessage(content) {
+  if (!content || typeof content !== 'string') return null;
+  const lower = content.toLowerCase();
+
+  // Feature request patterns
+  if (/(?:can you add|i wish|it would be nice|please add|feature request|could you implement|i need|i want)/i.test(lower)) {
+    return 'feature_request';
+  }
+  // Difficulty/problem patterns
+  if (/(?:doesn't work|not working|can't find|where is|how do i|i'm stuck|error|problem|issue|broken|bug|confused)/i.test(lower)) {
+    return 'difficulty';
+  }
+  // Feedback patterns
+  if (/(?:great|love|thank|awesome|perfect|excellent|good job|well done|amazing)/i.test(lower)) {
+    return 'feedback';
+  }
+  // Default: question
+  return 'question';
+}
+
 // All routes require authentication
 router.use(authenticate);
 
@@ -230,7 +251,7 @@ router.post('/chat', async (req, res) => {
     // Add assistant response
     messages.push({ role: 'assistant', content: assistantReply, timestamp: new Date().toISOString() });
 
-    // Save to database
+    // Save to legacy assistant_chats table
     if (activeChatId) {
       db.run(
         "UPDATE assistant_chats SET messages = ?, page_context = ?, updated_at = datetime('now') WHERE id = ? AND therapist_id = ?",
@@ -241,9 +262,54 @@ router.post('/chat', async (req, res) => {
         "INSERT INTO assistant_chats (therapist_id, messages, page_context) VALUES (?, ?, ?)",
         [req.user.id, JSON.stringify(messages), page_context || null]
       );
-      // Get the new chat ID
       const idResult = db.exec('SELECT last_insert_rowid()');
       activeChatId = idResult[0].values[0][0];
+    }
+
+    // === Save to analytics tables (assistant_conversations + assistant_messages) ===
+    try {
+      let conversationId = req.body._conversation_id || null;
+
+      // Simple tag detection for analytics
+      const userTag = tagMessage(sanitized);
+
+      if (!conversationId && messages.filter(m => m.role === 'user').length <= 1) {
+        // New conversation
+        db.run(
+          "INSERT INTO assistant_conversations (therapist_id, started_at, last_message_at, page_context, language, message_count) VALUES (?, datetime('now'), datetime('now'), ?, ?, 2)",
+          [req.user.id, page_context || null, detectedLanguage]
+        );
+        const convIdResult = db.exec('SELECT last_insert_rowid()');
+        conversationId = convIdResult[0].values[0][0];
+      } else if (conversationId) {
+        // Update existing conversation
+        db.run(
+          "UPDATE assistant_conversations SET last_message_at = datetime('now'), message_count = message_count + 2 WHERE id = ?",
+          [conversationId]
+        );
+      } else {
+        // Continuation without conversation_id - create new
+        db.run(
+          "INSERT INTO assistant_conversations (therapist_id, started_at, last_message_at, page_context, language, message_count) VALUES (?, datetime('now'), datetime('now'), ?, ?, 2)",
+          [req.user.id, page_context || null, detectedLanguage]
+        );
+        const convIdResult = db.exec('SELECT last_insert_rowid()');
+        conversationId = convIdResult[0].values[0][0];
+      }
+
+      // Save user message
+      db.run(
+        "INSERT INTO assistant_messages (conversation_id, role, content, is_cached, tokens_used, tags, created_at) VALUES (?, 'user', ?, 0, 0, ?, datetime('now'))",
+        [conversationId, sanitized, userTag]
+      );
+
+      // Save assistant message
+      db.run(
+        "INSERT INTO assistant_messages (conversation_id, role, content, is_cached, tokens_used, tags, created_at) VALUES (?, 'assistant', ?, ?, 0, NULL, datetime('now'))",
+        [conversationId, assistantReply, fromCache ? 1 : 0]
+      );
+    } catch (analyticsErr) {
+      logger.warn('[Assistant] Analytics save error: ' + analyticsErr.message);
     }
 
     saveDatabaseAfterWrite();

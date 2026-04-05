@@ -23,6 +23,7 @@
     "adminAIUsage": "Использование ИИ",
     "adminAIModels": "Модели ИИ",
     "adminCachedAnswers": "Кэш ответов",
+    "adminAssistantAnalytics": "Аналитика чата",
     "adminUmami": "Веб-аналитика"
   },
   "aiUsage": {

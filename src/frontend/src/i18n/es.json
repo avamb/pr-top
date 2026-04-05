@@ -23,6 +23,7 @@
     "adminAIUsage": "Uso de IA",
     "adminAIModels": "Modelos de IA",
     "adminCachedAnswers": "Respuestas en caché",
+    "adminAssistantAnalytics": "Analítica del chat",
     "adminUmami": "Analítica web"
   },
   "aiUsage": {

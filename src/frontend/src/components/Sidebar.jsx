@@ -99,6 +99,12 @@ const CachedAnswersIcon = () => (
   </svg>
 );
 
+const AssistantAnalyticsIcon = () => (
+  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+  </svg>
+);
+
 const UmamiAnalyticsIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
@@ -131,6 +137,7 @@ const adminNavItems = [
   { key: 'admin-ai-usage', path: '/admin/ai-usage', icon: AIUsageIcon, labelKey: 'nav.adminAIUsage', section: 'admin' },
   { key: 'admin-ai-models', path: '/admin/ai-models', icon: AIModelsIcon, labelKey: 'nav.adminAIModels', section: 'admin' },
   { key: 'admin-cached-answers', path: '/admin/cached-answers', icon: CachedAnswersIcon, labelKey: 'nav.adminCachedAnswers', section: 'admin' },
+  { key: 'admin-assistant-analytics', path: '/admin/assistant-analytics', icon: AssistantAnalyticsIcon, labelKey: 'nav.adminAssistantAnalytics', section: 'admin' },
   { key: 'admin-umami', path: '__umami_external__', icon: UmamiAnalyticsIcon, labelKey: 'nav.adminUmami', section: 'admin', external: true },
 ];
 
