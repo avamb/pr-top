@@ -1,3 +1,46 @@
+## Session: 2026-04-05 - Feature #307
+
+### Completed: Frontend: Chat History & Conversation Management (#307) - PASSING
+
+**What was built:**
+- Backend: Added `title` and `archived_at` columns to `assistant_chats` table (migration)
+- Backend: Added `assistant_chat_archive_days` platform setting (default: 90)
+- Backend: `generateTitle()` function auto-generates titles from first user message (60 char limit, word boundary)
+- Backend: Enhanced GET `/api/assistant/history` to return title, message_count, first_message_preview, archived status
+- Backend: Enhanced GET `/api/assistant/history/:id` with title derivation fallback
+- Backend: Added GET `/api/assistant/conversations` endpoint (full implementation, not just alias)
+- Backend: Added GET `/api/assistant/conversations/:id/messages` endpoint
+- Backend: Added `archiveOldConversations()` auto-archive on startup + daily interval
+- Backend: Conversations saved on AI error too (so errored chats appear in history)
+- Frontend: Added `ConversationHistoryList` component with date grouping (Today/Yesterday/This Week/Older)
+- Frontend: Each conversation shows title, date, message count, delete button (on hover), archived badge
+- Frontend: History button in panel header (clock icon) toggles between history and chat views
+- Frontend: Clicking a conversation loads its messages and switches to chat view
+- Frontend: New Chat button clears conversation and switches to chat view
+- Frontend: Zustand store: added showHistory, toggleHistory, showHistoryView, showChatView actions
+- Frontend: Input area hidden when viewing history
+- Frontend: Backfilled titles for 46 existing conversations
+- i18n: Added noHistory, startFirst, today, yesterday, thisWeek, older, msgs, archived, deleteChat keys in EN/RU/ES/UK
+
+**Verification:**
+- History button opens conversation list with grouped dates ✅
+- Conversation titles auto-generated from first message ✅
+- Each item shows title, date (Apr 5), message count (2 msgs) ✅
+- Clicking conversation loads messages (user + assistant bubbles) ✅
+- New Chat clears messages and shows empty state ✅
+- History button highlighted when in history view ✅
+- Input area hidden when viewing history, shown when in chat ✅
+- GET /api/assistant/conversations returns correct data (46 total) ✅
+- GET /api/assistant/conversations/:id/messages returns messages with title ✅
+- 90-day auto-archive configured via platform_settings ✅
+- No mock data patterns in source code ✅
+- Zero assistant-related console errors ✅
+
+### Current Status
+- Features passing: 307/307 (100.0%)
+- Feature #307: PASSING
+- ALL FEATURES COMPLETE
+
 ## Session: 2026-04-05 - Features #293, #298, #300
 
 ### Completed: Assistant chat API endpoints (#293) - PASSING
