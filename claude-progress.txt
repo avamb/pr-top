@@ -1,3 +1,23 @@
+## Session: 2026-04-06 - Feature #309
+
+### Completed: Fix numbered list rendering (all items show as 1) (#309) - PASSING
+
+**What was fixed:**
+- Bug: renderMarkdown() in AssistantChatPanel.jsx broke numbered lists into separate <ol> elements when AI output blank lines between items (each starting at 1)
+- Fix 1: Updated numbered list parser to skip blank lines and peek ahead — if next non-empty line is also a numbered item, continue grouping into same <ol>
+- Fix 2: Added `start={startNum}` attribute to <ol> elements so even separate lists show correct starting numbers
+- Fix 3: Added formatting rule #6 to assistant system prompt in assistantPrompt.js: "do NOT put blank lines between numbered list items"
+
+**Verification:**
+- 15 unit tests passing covering: consecutive lists, blank-line-separated lists, non-1 start numbers, list-then-paragraph splits, multiple blank lines ✅
+- UI renders correctly — assistant panel opens, messages display properly ✅
+- No mock data patterns in source code ✅
+- Zero feature-related console errors (only pre-existing WebSocket/Umami) ✅
+
+### Current Status
+- Features passing: 308/312
+- Feature #309: PASSING
+
 ## Session: 2026-04-05 - Feature #307
 
 ### Completed: Frontend: Chat History & Conversation Management (#307) - PASSING
