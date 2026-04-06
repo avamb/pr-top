@@ -1625,9 +1625,12 @@ router.get('/assistant/conversations/:id/messages', (req, res) => {
 
     const conv = convResult[0].values[0];
 
-    // Get messages
+    // Get messages with comment counts
     const msgResult = db.exec(
-      'SELECT id, role, content, is_cached, tokens_used, tags, created_at FROM assistant_messages WHERE conversation_id = ? ORDER BY created_at ASC',
+      `SELECT m.id, m.role, m.content, m.is_cached, m.tokens_used, m.tags, m.created_at,
+              (SELECT COUNT(*) FROM assistant_admin_comments WHERE message_id = m.id) as comment_count,
+              (SELECT rating FROM assistant_admin_comments WHERE message_id = m.id ORDER BY created_at DESC LIMIT 1) as latest_rating
+       FROM assistant_messages m WHERE m.conversation_id = ? ORDER BY m.created_at ASC`,
       [convId]
     );
 
@@ -1641,7 +1644,9 @@ router.get('/assistant/conversations/:id/messages', (req, res) => {
           is_cached: row[3] === 1,
           tokens_used: row[4],
           tags: row[5],
-          created_at: row[6]
+          created_at: row[6],
+          comment_count: row[7] || 0,
+          latest_rating: row[8] || null
         });
       }
     }
@@ -1720,6 +1725,246 @@ router.get('/assistant/export', (req, res) => {
   } catch (error) {
     logger.error('Admin assistant export error: ' + error.message);
     res.status(500).json({ error: 'Failed to export conversation data' });
+  }
+});
+
+// ==========================================
+// Admin Comments on Assistant Messages
+// ==========================================
+
+// POST /api/admin/assistant/messages/:messageId/comments - Create a comment on an assistant message
+router.post('/assistant/messages/:messageId/comments', (req, res) => {
+  try {
+    const db = getDatabase();
+    const messageId = parseInt(req.params.messageId);
+    const adminId = req.user.id;
+    const { comment_text, rating, correction_text } = req.body;
+
+    if (!rating || !['good', 'bad', 'neutral'].includes(rating)) {
+      return res.status(400).json({ error: 'Rating must be good, bad, or neutral' });
+    }
+
+    // Verify message exists
+    const msgCheck = db.exec('SELECT id, role FROM assistant_messages WHERE id = ?', [messageId]);
+    if (!msgCheck.length || !msgCheck[0].values.length) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    db.run(
+      "INSERT INTO assistant_admin_comments (message_id, admin_id, comment_text, rating, correction_text, created_at, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
+      [messageId, adminId, comment_text || null, rating, correction_text || null]
+    );
+
+    const idResult = db.exec('SELECT last_insert_rowid()');
+    const commentId = idResult[0].values[0][0];
+    saveDatabaseAfterWrite();
+
+    // If correction_text is provided and rating is 'bad', integrate into cached answers
+    if (correction_text && rating === 'bad') {
+      try {
+        // Get the original user question (previous message in same conversation)
+        const msgData = db.exec(
+          'SELECT conversation_id, content FROM assistant_messages WHERE id = ?',
+          [messageId]
+        );
+        if (msgData.length && msgData[0].values.length) {
+          const convId = msgData[0].values[0][0];
+          // Find the user message just before this assistant message
+          const userMsg = db.exec(
+            "SELECT content FROM assistant_messages WHERE conversation_id = ? AND role = 'user' AND id < ? ORDER BY id DESC LIMIT 1",
+            [convId, messageId]
+          );
+          if (userMsg.length && userMsg[0].values.length) {
+            const questionText = userMsg[0].values[0][0];
+            // Store or update cached answer with the correction
+            assistantCache.storeCachedAnswer(questionText, correction_text);
+            logger.info(`[AdminComments] Stored correction as cached answer for message #${messageId}`);
+          }
+        }
+      } catch (cacheErr) {
+        logger.warn('[AdminComments] Failed to store correction in cache: ' + cacheErr.message);
+      }
+    }
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, created_at) VALUES (?, 'admin_comment_create', 'assistant_message', ?, datetime('now'))",
+      [adminId, messageId]
+    );
+    saveDatabaseAfterWrite();
+
+    res.status(201).json({
+      id: commentId,
+      message_id: messageId,
+      admin_id: adminId,
+      comment_text: comment_text || null,
+      rating,
+      correction_text: correction_text || null
+    });
+  } catch (error) {
+    logger.error('Admin create comment error: ' + error.message);
+    res.status(500).json({ error: 'Failed to create comment' });
+  }
+});
+
+// GET /api/admin/assistant/messages/:messageId/comments - Get all comments for a message
+router.get('/assistant/messages/:messageId/comments', (req, res) => {
+  try {
+    const db = getDatabase();
+    const messageId = parseInt(req.params.messageId);
+
+    const result = db.exec(
+      `SELECT c.id, c.message_id, c.admin_id, u.email as admin_email, c.comment_text, c.rating, c.correction_text, c.created_at, c.updated_at
+       FROM assistant_admin_comments c
+       JOIN users u ON u.id = c.admin_id
+       WHERE c.message_id = ?
+       ORDER BY c.created_at DESC`,
+      [messageId]
+    );
+
+    const comments = [];
+    if (result.length > 0 && result[0].values) {
+      for (const row of result[0].values) {
+        comments.push({
+          id: row[0],
+          message_id: row[1],
+          admin_id: row[2],
+          admin_email: row[3],
+          comment_text: row[4],
+          rating: row[5],
+          correction_text: row[6],
+          created_at: row[7],
+          updated_at: row[8]
+        });
+      }
+    }
+
+    res.json({ comments });
+  } catch (error) {
+    logger.error('Admin get comments error: ' + error.message);
+    res.status(500).json({ error: 'Failed to load comments' });
+  }
+});
+
+// PUT /api/admin/assistant/comments/:commentId - Update a comment
+router.put('/assistant/comments/:commentId', (req, res) => {
+  try {
+    const db = getDatabase();
+    const commentId = parseInt(req.params.commentId);
+    const { comment_text, rating, correction_text } = req.body;
+
+    // Verify comment exists
+    const existing = db.exec('SELECT id, message_id FROM assistant_admin_comments WHERE id = ?', [commentId]);
+    if (!existing.length || !existing[0].values.length) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+
+    if (rating && !['good', 'bad', 'neutral'].includes(rating)) {
+      return res.status(400).json({ error: 'Rating must be good, bad, or neutral' });
+    }
+
+    const updates = [];
+    const params = [];
+    if (comment_text !== undefined) { updates.push('comment_text = ?'); params.push(comment_text || null); }
+    if (rating !== undefined) { updates.push('rating = ?'); params.push(rating); }
+    if (correction_text !== undefined) { updates.push('correction_text = ?'); params.push(correction_text || null); }
+    updates.push("updated_at = datetime('now')");
+    params.push(commentId);
+
+    db.run(`UPDATE assistant_admin_comments SET ${updates.join(', ')} WHERE id = ?`, params);
+    saveDatabaseAfterWrite();
+
+    res.json({ success: true, id: commentId });
+  } catch (error) {
+    logger.error('Admin update comment error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update comment' });
+  }
+});
+
+// DELETE /api/admin/assistant/comments/:commentId - Delete a comment
+router.delete('/assistant/comments/:commentId', (req, res) => {
+  try {
+    const db = getDatabase();
+    const commentId = parseInt(req.params.commentId);
+
+    // Verify comment exists
+    const existing = db.exec('SELECT id FROM assistant_admin_comments WHERE id = ?', [commentId]);
+    if (!existing.length || !existing[0].values.length) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+
+    db.run('DELETE FROM assistant_admin_comments WHERE id = ?', [commentId]);
+    saveDatabaseAfterWrite();
+
+    res.json({ success: true, id: commentId });
+  } catch (error) {
+    logger.error('Admin delete comment error: ' + error.message);
+    res.status(500).json({ error: 'Failed to delete comment' });
+  }
+});
+
+// GET /api/admin/assistant/comments/export - Export all comments for training data
+router.get('/assistant/comments/export', (req, res) => {
+  try {
+    const db = getDatabase();
+    const format = req.query.format || 'json';
+
+    const result = db.exec(
+      `SELECT c.id, c.message_id, c.admin_id, u.email as admin_email, c.comment_text, c.rating, c.correction_text, c.created_at,
+              m.role as message_role, m.content as message_content, m.tags as message_tags,
+              conv.id as conversation_id, conv.page_context, conv.language,
+              (SELECT content FROM assistant_messages WHERE conversation_id = conv.id AND role = 'user' AND id < m.id ORDER BY id DESC LIMIT 1) as user_question
+       FROM assistant_admin_comments c
+       JOIN users u ON u.id = c.admin_id
+       JOIN assistant_messages m ON m.id = c.message_id
+       JOIN assistant_conversations conv ON conv.id = m.conversation_id
+       ORDER BY c.created_at DESC`
+    );
+
+    const comments = [];
+    if (result.length > 0 && result[0].values) {
+      for (const row of result[0].values) {
+        comments.push({
+          id: row[0],
+          message_id: row[1],
+          admin_id: row[2],
+          admin_email: row[3],
+          comment_text: row[4],
+          rating: row[5],
+          correction_text: row[6],
+          created_at: row[7],
+          message_role: row[8],
+          message_content: row[9],
+          message_tags: row[10],
+          conversation_id: row[11],
+          page_context: row[12],
+          language: row[13],
+          user_question: row[14]
+        });
+      }
+    }
+
+    if (format === 'csv') {
+      const csvRows = ['id,message_id,admin_email,rating,comment_text,correction_text,message_role,message_content,user_question,page_context,language,created_at'];
+      for (const c of comments) {
+        const escapeCsv = (s) => s ? '"' + String(s).replace(/"/g, '""') + '"' : '""';
+        csvRows.push([
+          c.id, c.message_id, escapeCsv(c.admin_email), c.rating, escapeCsv(c.comment_text),
+          escapeCsv(c.correction_text), c.message_role, escapeCsv(c.message_content),
+          escapeCsv(c.user_question), escapeCsv(c.page_context), c.language, c.created_at
+        ].join(','));
+      }
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="assistant_admin_comments.csv"');
+      res.send(csvRows.join('\n'));
+    } else {
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', 'attachment; filename="assistant_admin_comments.json"');
+      res.json({ comments, exported_at: new Date().toISOString(), total: comments.length });
+    }
+  } catch (error) {
+    logger.error('Admin export comments error: ' + error.message);
+    res.status(500).json({ error: 'Failed to export comments' });
   }
 });
 

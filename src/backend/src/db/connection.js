@@ -613,6 +613,20 @@ function applySchema(db) {
   db.run('CREATE INDEX IF NOT EXISTS idx_assistant_messages_conversation ON assistant_messages(conversation_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_assistant_messages_created ON assistant_messages(created_at DESC)');
 
+  // Create assistant_admin_comments table for superadmin feedback on assistant responses
+  db.run(`CREATE TABLE IF NOT EXISTS assistant_admin_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id INTEGER NOT NULL REFERENCES assistant_messages(id),
+    admin_id INTEGER NOT NULL REFERENCES users(id),
+    comment_text TEXT,
+    rating TEXT CHECK(rating IN ('good', 'bad', 'neutral')),
+    correction_text TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_admin_comments_message ON assistant_admin_comments(message_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_admin_comments_admin ON assistant_admin_comments(admin_id)');
+
   // Insert default platform settings
   const defaultSettings = [
     ['trial_duration_days', '14'],

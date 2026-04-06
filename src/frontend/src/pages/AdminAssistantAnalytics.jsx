@@ -31,6 +31,241 @@ function TagBadge({ tag }) {
   );
 }
 
+function RatingBadge({ rating }) {
+  const colors = {
+    good: 'text-green-600',
+    bad: 'text-red-600',
+    neutral: 'text-gray-500'
+  };
+  const icons = { good: '👍', bad: '👎', neutral: '➖' };
+  return (
+    <span className={`text-sm ${colors[rating] || 'text-gray-500'}`}>
+      {icons[rating] || ''}
+    </span>
+  );
+}
+
+function CommentForm({ messageId, existingComment, onSave, onCancel, t }) {
+  const [rating, setRating] = useState(existingComment?.rating || 'neutral');
+  const [commentText, setCommentText] = useState(existingComment?.comment_text || '');
+  const [correctionText, setCorrectionText] = useState(existingComment?.correction_text || '');
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await onSave({ rating, comment_text: commentText, correction_text: correctionText });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-2 p-3 bg-gray-50 rounded-lg border border-border space-y-3">
+      <div>
+        <label className="block text-xs font-medium text-secondary mb-1">
+          {t('admin.assistantAnalytics.rating', 'Rating')}
+        </label>
+        <div className="flex gap-2">
+          {['good', 'bad', 'neutral'].map(r => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setRating(r)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                rating === r
+                  ? r === 'good' ? 'bg-green-100 border-green-300 text-green-800'
+                    : r === 'bad' ? 'bg-red-100 border-red-300 text-red-800'
+                    : 'bg-gray-200 border-gray-300 text-gray-800'
+                  : 'bg-white border-border text-secondary hover:bg-gray-50'
+              }`}
+            >
+              {r === 'good' ? '👍' : r === 'bad' ? '👎' : '➖'} {r.charAt(0).toUpperCase() + r.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-secondary mb-1">
+          {t('admin.assistantAnalytics.commentText', 'Comment (optional)')}
+        </label>
+        <textarea
+          value={commentText}
+          onChange={e => setCommentText(e.target.value)}
+          className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/50 focus:border-primary"
+          rows={2}
+          placeholder={t('admin.assistantAnalytics.commentPlaceholder', 'Add your feedback about this response...')}
+        />
+      </div>
+      {rating === 'bad' && (
+        <div>
+          <label className="block text-xs font-medium text-secondary mb-1">
+            {t('admin.assistantAnalytics.correctionText', 'Correction — what should the assistant have said?')}
+          </label>
+          <textarea
+            value={correctionText}
+            onChange={e => setCorrectionText(e.target.value)}
+            className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/50 focus:border-primary"
+            rows={3}
+            placeholder={t('admin.assistantAnalytics.correctionPlaceholder', 'Provide the correct response to cache for future similar questions...')}
+          />
+          <p className="text-xs text-secondary mt-1">
+            {t('admin.assistantAnalytics.correctionHint', 'This correction will be cached so the assistant gives a better answer next time.')}
+          </p>
+        </div>
+      )}
+      <div className="flex gap-2 justify-end">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-gray-100 transition-colors"
+        >
+          {t('admin.assistantAnalytics.cancel', 'Cancel')}
+        </button>
+        <button
+          type="submit"
+          disabled={saving}
+          className="px-3 py-1.5 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+        >
+          {saving ? '...' : existingComment ? t('admin.assistantAnalytics.updateComment', 'Update') : t('admin.assistantAnalytics.saveComment', 'Save')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function MessageComments({ messageId, t }) {
+  const [comments, setComments] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [editingComment, setEditingComment] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  const token = localStorage.getItem('token');
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+  async function loadComments() {
+    try {
+      const res = await fetch(`${API_URL}/admin/assistant/messages/${messageId}/comments`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setComments(data.comments);
+      }
+    } catch (err) {
+      console.error('Failed to load comments:', err);
+    }
+    setLoaded(true);
+  }
+
+  function handleExpand() {
+    if (!loaded) loadComments();
+    setExpanded(!expanded);
+  }
+
+  async function handleSave(formData) {
+    try {
+      if (editingComment) {
+        const res = await fetch(`${API_URL}/admin/assistant/comments/${editingComment.id}`, {
+          method: 'PUT', headers, body: JSON.stringify(formData)
+        });
+        if (!res.ok) throw new Error('Failed to update');
+      } else {
+        const res = await fetch(`${API_URL}/admin/assistant/messages/${messageId}/comments`, {
+          method: 'POST', headers, body: JSON.stringify(formData)
+        });
+        if (!res.ok) throw new Error('Failed to create');
+      }
+      setShowForm(false);
+      setEditingComment(null);
+      await loadComments();
+    } catch (err) {
+      console.error('Comment save error:', err);
+    }
+  }
+
+  async function handleDelete(commentId) {
+    if (!confirm(t('admin.assistantAnalytics.deleteConfirm', 'Delete this comment?'))) return;
+    try {
+      await fetch(`${API_URL}/admin/assistant/comments/${commentId}`, {
+        method: 'DELETE', headers
+      });
+      await loadComments();
+    } catch (err) {
+      console.error('Comment delete error:', err);
+    }
+  }
+
+  return (
+    <div className="mt-1">
+      <button
+        onClick={handleExpand}
+        className="text-xs text-secondary hover:text-primary transition-colors flex items-center gap-1"
+      >
+        💬 {t('admin.assistantAnalytics.feedback', 'Feedback')}
+        {comments.length > 0 && <span className="bg-primary/10 text-primary px-1.5 rounded-full text-xs">{comments.length}</span>}
+        <span className="text-xs">{expanded ? '▲' : '▼'}</span>
+      </button>
+
+      {expanded && (
+        <div className="mt-2 space-y-2">
+          {comments.map(comment => (
+            <div key={comment.id} className="p-2 bg-yellow-50 rounded border border-yellow-200 text-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <RatingBadge rating={comment.rating} />
+                  <span className="text-secondary">{comment.admin_email}</span>
+                  <span className="text-secondary">{comment.created_at}</span>
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => { setEditingComment(comment); setShowForm(true); }}
+                    className="text-primary hover:underline"
+                  >
+                    {t('admin.assistantAnalytics.edit', 'Edit')}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(comment.id)}
+                    className="text-red-500 hover:underline"
+                  >
+                    {t('admin.assistantAnalytics.delete', 'Delete')}
+                  </button>
+                </div>
+              </div>
+              {comment.comment_text && <p className="mt-1 text-text">{comment.comment_text}</p>}
+              {comment.correction_text && (
+                <div className="mt-1 p-1.5 bg-blue-50 rounded border border-blue-200">
+                  <span className="font-medium text-blue-700">{t('admin.assistantAnalytics.correction', 'Correction:')}</span>{' '}
+                  <span className="text-text">{comment.correction_text}</span>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {!showForm ? (
+            <button
+              onClick={() => { setShowForm(true); setEditingComment(null); }}
+              className="text-xs text-primary hover:underline"
+            >
+              + {t('admin.assistantAnalytics.addComment', 'Add feedback')}
+            </button>
+          ) : (
+            <CommentForm
+              messageId={messageId}
+              existingComment={editingComment}
+              onSave={handleSave}
+              onCancel={() => { setShowForm(false); setEditingComment(null); }}
+              t={t}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminAssistantAnalytics() {
   const { t } = useTranslation();
   const [analytics, setAnalytics] = useState(null);
@@ -104,6 +339,21 @@ export default function AdminAssistantAnalytics() {
     }
   }
 
+  async function handleExportComments(format) {
+    try {
+      const res = await fetch(`${API_URL}/admin/assistant/comments/export?format=${format}`, { headers });
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `assistant_admin_comments.${format === 'csv' ? 'csv' : 'json'}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -141,6 +391,13 @@ export default function AdminAssistantAnalytics() {
             className="px-3 py-2 text-sm border border-border rounded-lg hover:bg-gray-50 transition-colors"
           >
             📥 JSON
+          </button>
+          <button
+            onClick={() => handleExportComments('json')}
+            className="px-3 py-2 text-sm border border-border rounded-lg hover:bg-gray-50 transition-colors"
+            title={t('admin.assistantAnalytics.exportTrainingData', 'Export training data (comments)')}
+          >
+            🧠 {t('admin.assistantAnalytics.exportTraining', 'Training Data')}
           </button>
         </div>
       </div>
@@ -330,7 +587,17 @@ export default function AdminAssistantAnalytics() {
                         <span>{msg.created_at}</span>
                         {msg.is_cached && <span className="text-amber-600">⚡ cached</span>}
                         {msg.tags && <TagBadge tag={msg.tags} />}
+                        {msg.latest_rating && <RatingBadge rating={msg.latest_rating} />}
+                        {msg.comment_count > 0 && (
+                          <span className="bg-yellow-100 text-yellow-800 px-1.5 rounded-full text-xs">
+                            {msg.comment_count} {msg.comment_count === 1 ? 'comment' : 'comments'}
+                          </span>
+                        )}
                       </div>
+                      {/* Admin comment/feedback section for assistant messages */}
+                      {msg.role === 'assistant' && (
+                        <MessageComments messageId={msg.id} t={t} />
+                      )}
                     </div>
                   </div>
                 ))}
