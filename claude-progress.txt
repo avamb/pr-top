@@ -1,3 +1,51 @@
+## Session: 2026-04-06 - Features #313, #314, #317
+
+### Completed: Fix Assistant Self-Identity in System Prompt (#313) - PASSING
+
+**What was changed:**
+- Added ## SELF-IDENTITY section to assistantPrompt.js after ## IMPORTANT RULES
+- Rules: NEVER mention AI training cutoff date, NEVER refer to self as ChatGPT/GPT/Claude/Gemini
+- When asked "how do you work?" — explains answers are based on current platform docs and source code
+- Knowledge base is synchronized with live codebase on every server restart
+
+### Completed: Auto-Reindex Knowledge Base on Deploy (#314) - PASSING
+
+**What was changed:**
+- Added assistantKnowledge.reindex() call in server startup (src/backend/src/index.js)
+- Runs after database initialization, logs result (files, chunks, removed, elapsed time)
+- Non-blocking: wrapped in try/catch so startup continues even if reindex fails
+- POST /api/admin/assistant/reindex endpoint already existed for manual trigger
+- Admin UI already has "Reindex Knowledge Base" button with stats display on AI Models page
+
+**Verification:**
+- Server startup logs: "100 files, 390 chunks, 0 stale removed (165ms)" ✅
+- Manual reindex via admin UI button: success message with stats ✅
+- KB stats display: files, chunks, last updated, type breakdown ✅
+- Zero console errors ✅
+
+### Completed: Enhanced Assistant Prompt for Superadmin Context (#317) - PASSING
+
+**What was changed:**
+- Added `role` parameter to buildAssistantSystemPrompt() function
+- For superadmin: removes "Never suggest technical actions" and "Redirect to admin" rules
+- Added ## SUPERADMIN CONTEXT section (only for superadmin): allows technical discussions, architecture, logs analysis, optimization suggestions
+- Added "Available Admin Tools" table in superadmin section
+- Enhanced getPageContextHint() with specific hints for each admin sub-page: /admin/therapists, /admin/logs, /admin/system-logs, /admin/ai-usage, /admin/ai-models, /admin/chat-analytics, /admin/settings
+- Passed req.user.role to buildAssistantSystemPrompt in assistant.js route
+
+**Verification:**
+- Superadmin prompt includes SUPERADMIN CONTEXT section ✅
+- Superadmin prompt does NOT include "Never suggest technical actions" rule ✅
+- Therapist prompt includes "Never suggest technical actions" rule ✅
+- Therapist prompt does NOT include SUPERADMIN CONTEXT section ✅
+- Detailed admin page hints work for all sub-pages ✅
+- Module loads without errors ✅
+- Zero console errors ✅
+
+### Current Status
+- Features passing: 315/317
+- Features #313, #314, #317: ALL PASSING
+
 ## Session: 2026-04-06 - Features #311, #312
 
 ### Completed: Superadmin can comment on assistant responses to train the assistant (#311) - PASSING
