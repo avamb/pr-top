@@ -24,6 +24,7 @@
     "adminAIModels": "Модели ИИ",
     "adminCachedAnswers": "Кэш ответов",
     "adminAssistantAnalytics": "Аналитика чата",
+    "adminAssistantConversations": "Диалоги",
     "adminUmami": "Веб-аналитика"
   },
   "aiUsage": {

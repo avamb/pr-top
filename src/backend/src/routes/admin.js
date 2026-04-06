@@ -1559,6 +1559,10 @@ router.get('/assistant/conversations', (req, res) => {
     const params = [];
     const conditions = [];
 
+    const search = req.query.search || null;
+    const dateFrom = req.query.date_from || null;
+    const dateTo = req.query.date_to || null;
+
     if (language) {
       conditions.push('c.language = ?');
       params.push(language);
@@ -1566,6 +1570,18 @@ router.get('/assistant/conversations', (req, res) => {
     if (therapistId) {
       conditions.push('c.therapist_id = ?');
       params.push(therapistId);
+    }
+    if (dateFrom) {
+      conditions.push('c.started_at >= ?');
+      params.push(dateFrom);
+    }
+    if (dateTo) {
+      conditions.push('c.started_at <= ?');
+      params.push(dateTo + ' 23:59:59');
+    }
+    if (search) {
+      conditions.push('c.id IN (SELECT DISTINCT conversation_id FROM assistant_messages WHERE content LIKE ?)');
+      params.push('%' + search + '%');
     }
     if (conditions.length > 0) {
       whereClause = 'WHERE ' + conditions.join(' AND ');
