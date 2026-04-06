@@ -17,6 +17,7 @@ const { csrfProtection, csrfTokenEndpoint } = require('./middleware/csrf');
 const { requireActiveSubscription, authenticate } = require('./middleware/auth');
 const { i18nMiddleware } = require('./middleware/i18n');
 const { t: translate, SUPPORTED_LANGUAGES } = require('./i18n');
+const assistantKnowledge = require('./services/assistantKnowledge');
 const authRoutes = require('./routes/auth');
 const botRoutes = require('./routes/bot');
 const subscriptionRoutes = require('./routes/subscription');
@@ -307,6 +308,14 @@ async function start() {
 
     // Start scheduled task runner (after DB is ready)
     scheduler.start();
+
+    // Auto-reindex assistant knowledge base on startup
+    try {
+      const kbStats = assistantKnowledge.reindex();
+      logger.info(`Assistant knowledge base reindexed on startup: ${kbStats.indexed} files, ${kbStats.chunks} chunks, ${kbStats.removed} stale removed (${kbStats.elapsed_ms}ms)`);
+    } catch (kbError) {
+      logger.warn('Assistant knowledge base reindex failed on startup: ' + kbError.message);
+    }
 
     const server = app.listen(PORT, () => {
       logger.info(`PR-TOP API server running on port ${PORT}`);

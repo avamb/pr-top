@@ -311,7 +311,8 @@ router.post('/chat', async (req, res) => {
     const systemPrompt = buildAssistantSystemPrompt({
       pageContext: page_context || '',
       locale: detectedLanguage,
-      plan: plan
+      plan: plan,
+      role: req.user.role || 'therapist'
     }) + ragContext;
 
     // Prepare messages for AI (system + conversation history, limit to last 20 messages)
