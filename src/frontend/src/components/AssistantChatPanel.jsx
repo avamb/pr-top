@@ -54,15 +54,26 @@ function renderMarkdown(text) {
     // Numbered list item
     const numMatch = line.match(/^\s*(\d+)\.\s+(.+)/);
     if (numMatch) {
+      const startNum = parseInt(numMatch[1], 10);
       const listItems = [<li key={0}>{renderInline(numMatch[2])}</li>];
       i++;
       while (i < lines.length) {
+        // Skip single blank lines if the next non-empty line is also a numbered item
+        if (lines[i].trim() === '') {
+          let peek = i + 1;
+          while (peek < lines.length && lines[peek].trim() === '') peek++;
+          if (peek < lines.length && lines[peek].match(/^\s*(\d+)\.\s+(.+)/)) {
+            i = peek; // skip blank lines, continue grouping
+            continue;
+          }
+          break; // non-list content follows, end list
+        }
         const nextNum = lines[i].match(/^\s*(\d+)\.\s+(.+)/);
         if (!nextNum) break;
         listItems.push(<li key={listItems.length}>{renderInline(nextNum[2])}</li>);
         i++;
       }
-      elements.push(<ol key={elements.length} className="list-decimal ml-5 my-1 space-y-0.5 text-sm">{listItems}</ol>);
+      elements.push(<ol key={elements.length} start={startNum} className="list-decimal ml-5 my-1 space-y-0.5 text-sm">{listItems}</ol>);
       continue;
     }
 
