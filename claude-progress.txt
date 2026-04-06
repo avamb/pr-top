@@ -1,3 +1,35 @@
+## Session: 2026-04-06 - Feature #310
+
+### Completed: Assistant should not suggest technical actions to therapists (#310) - PASSING
+
+**What was changed:**
+- Updated src/backend/src/services/assistantPrompt.js IMPORTANT RULES section:
+  - Added rule 3: "Never suggest technical actions" - explicitly forbids asking therapists to check file formats, verify API keys, check configs, look at logs, inspect network requests, clear caches, check browser console
+  - Added rule 4: "Redirect technical issues to admin" - acknowledge empathetically, suggest UI-level actions (refresh, try again), recommend contacting platform administrator
+- Updated TROUBLESHOOTING section:
+  - Transcription stuck: removed "Check with your platform administrator that the AI API key is set up correctly" → now says "Try refreshing the page. If it stays on Processing for more than 15 minutes, contact your platform administrator"
+  - Added new Q: "My file won't upload" with user-friendly guidance + admin referral
+  - Added new Q: "Something isn't working / I see an error message" with refresh/re-login + admin referral
+  - Added new Q: "A feature seems slow or unresponsive" with refresh + admin referral
+  - Reviewed all existing answers - none suggest technical actions
+
+**Verification:**
+- All 8 programmatic prompt content checks pass ✅
+- Rule 3 (no technical actions) present ✅
+- Rule 4 (redirect to admin) present ✅
+- Old "AI API key" advice removed ✅
+- New admin referral advice present ✅
+- File upload troubleshooting added ✅
+- Generic error troubleshooting added ✅
+- NEVER check file formats rule present ✅
+- Assistant chat UI works correctly (message sends, panel renders) ✅
+- No mock data patterns in source code ✅
+- Zero feature-related console errors (only pre-existing Umami/WebSocket/React Router) ✅
+
+### Current Status
+- Features passing: 309/312 (99.0%)
+- Feature #310: PASSING
+
 ## Session: 2026-04-06 - Feature #308
 
 ### Completed: Fix AudioPlayer race condition - mediaRef vs loading (#308) - PASSING
