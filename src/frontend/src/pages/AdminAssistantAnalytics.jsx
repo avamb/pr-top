@@ -278,6 +278,19 @@ export default function AdminAssistantAnalytics() {
   const [activeTab, setActiveTab] = useState('overview');
   const [error, setError] = useState(null);
 
+  // AI Summary state
+  const [summaryDateFrom, setSummaryDateFrom] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 30);
+    return d.toISOString().split('T')[0];
+  });
+  const [summaryDateTo, setSummaryDateTo] = useState(() => new Date().toISOString().split('T')[0]);
+  const [summaryTherapistId, setSummaryTherapistId] = useState('');
+  const [summaryTags, setSummaryTags] = useState([]);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryResult, setSummaryResult] = useState(null);
+  const [summaryMeta, setSummaryMeta] = useState(null);
+  const [summaryStreamText, setSummaryStreamText] = useState('');
+
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
 
@@ -339,6 +352,114 @@ export default function AdminAssistantAnalytics() {
     }
   }
 
+  async function generateSummary() {
+    setSummaryLoading(true);
+    setSummaryResult(null);
+    setSummaryStreamText('');
+    setSummaryMeta(null);
+    setError(null);
+
+    try {
+      const res = await fetch(`${API_URL}/admin/assistant/summary`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dateFrom: summaryDateFrom,
+          dateTo: summaryDateTo,
+          therapistId: summaryTherapistId || undefined,
+          tags: summaryTags.length > 0 ? summaryTags : undefined
+        })
+      });
+
+      // Check content type - JSON means non-streaming response (no conversations, or error)
+      const contentType = res.headers.get('content-type') || '';
+
+      if (!res.ok) {
+        const errData = contentType.includes('json') ? await res.json().catch(() => ({})) : {};
+        throw new Error(errData.error || 'Failed to generate summary');
+      }
+
+      // If response is JSON (no conversations found), handle directly
+      if (contentType.includes('application/json')) {
+        const data = await res.json();
+        setSummaryResult(data.summary);
+        setSummaryMeta(data.meta);
+        setSummaryLoading(false);
+        return;
+      }
+
+      // Handle SSE streaming
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let streamedText = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') continue;
+
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.type === 'meta') {
+              setSummaryMeta(parsed);
+            } else if (parsed.type === 'chunk') {
+              streamedText += parsed.text;
+              setSummaryStreamText(streamedText);
+            } else if (parsed.type === 'done') {
+              setSummaryResult(parsed.summary);
+              setSummaryMeta(prev => ({ ...prev, ...parsed.meta }));
+            } else if (parsed.type === 'error') {
+              throw new Error(parsed.error);
+            }
+          } catch (parseErr) {
+            if (parseErr.message !== 'Unexpected end of JSON input') {
+              console.warn('SSE parse error:', parseErr);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSummaryLoading(false);
+    }
+  }
+
+  async function handleExportSummary() {
+    if (!summaryResult) return;
+    try {
+      const res = await fetch(`${API_URL}/admin/assistant/summary/export`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ summary: summaryResult, meta: summaryMeta })
+      });
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `assistant-summary-${summaryDateFrom}-to-${summaryDateTo}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  function toggleSummaryTag(tag) {
+    setSummaryTags(prev =>
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    );
+  }
+
   async function handleExportComments(format) {
     try {
       const res = await fetch(`${API_URL}/admin/assistant/comments/export?format=${format}`, { headers });
@@ -365,7 +486,8 @@ export default function AdminAssistantAnalytics() {
   const tabs = [
     { key: 'overview', label: t('admin.assistantAnalytics.overview', 'Overview') },
     { key: 'conversations', label: t('admin.assistantAnalytics.conversations', 'Conversations') },
-    { key: 'insights', label: t('admin.assistantAnalytics.insights', 'Insights') }
+    { key: 'insights', label: t('admin.assistantAnalytics.insights', 'Insights') },
+    { key: 'ai-summary', label: t('admin.assistantAnalytics.aiSummary', 'AI Summary') }
   ];
 
   return (
@@ -745,6 +867,312 @@ export default function AdminAssistantAnalytics() {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* AI Summary Tab */}
+      {activeTab === 'ai-summary' && (
+        <div className="space-y-6">
+          {/* Controls */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h3 className="text-lg font-semibold text-text mb-4">
+              🧠 {t('admin.assistantAnalytics.aiSummaryTitle', 'AI-Powered Conversation Summary')}
+            </h3>
+            <p className="text-sm text-secondary mb-4">
+              {t('admin.assistantAnalytics.aiSummaryDesc', 'Analyze all assistant conversations for the selected period. AI will extract feature requests, bugs, FAQ, trends, and recommendations.')}
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+              {/* Date From */}
+              <div>
+                <label className="block text-xs font-medium text-secondary mb-1">
+                  {t('admin.assistantAnalytics.dateFrom', 'From')}
+                </label>
+                <input
+                  type="date"
+                  value={summaryDateFrom}
+                  onChange={e => setSummaryDateFrom(e.target.value)}
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                />
+              </div>
+              {/* Date To */}
+              <div>
+                <label className="block text-xs font-medium text-secondary mb-1">
+                  {t('admin.assistantAnalytics.dateTo', 'To')}
+                </label>
+                <input
+                  type="date"
+                  value={summaryDateTo}
+                  onChange={e => setSummaryDateTo(e.target.value)}
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                />
+              </div>
+              {/* Therapist Filter */}
+              <div>
+                <label className="block text-xs font-medium text-secondary mb-1">
+                  {t('admin.assistantAnalytics.therapistFilter', 'Therapist (optional)')}
+                </label>
+                <select
+                  value={summaryTherapistId}
+                  onChange={e => setSummaryTherapistId(e.target.value)}
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                >
+                  <option value="">{t('admin.assistantAnalytics.allTherapists', 'All therapists')}</option>
+                  {analytics && analytics.by_therapist && analytics.by_therapist.map(th => (
+                    <option key={th.therapist_id} value={th.therapist_id}>{th.email}</option>
+                  ))}
+                </select>
+              </div>
+              {/* Generate Button */}
+              <div className="flex items-end">
+                <button
+                  onClick={generateSummary}
+                  disabled={summaryLoading}
+                  className="w-full px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 font-medium text-sm flex items-center justify-center gap-2"
+                >
+                  {summaryLoading ? (
+                    <>
+                      <span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
+                      {t('admin.assistantAnalytics.generating', 'Analyzing...')}
+                    </>
+                  ) : (
+                    <>🔍 {t('admin.assistantAnalytics.generateSummary', 'Generate Summary')}</>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Tag Filters */}
+            <div>
+              <label className="block text-xs font-medium text-secondary mb-2">
+                {t('admin.assistantAnalytics.filterByTags', 'Filter by message tags (optional)')}
+              </label>
+              <div className="flex gap-2 flex-wrap">
+                {['question', 'feature_request', 'difficulty', 'feedback'].map(tag => (
+                  <button
+                    key={tag}
+                    onClick={() => toggleSummaryTag(tag)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                      summaryTags.includes(tag)
+                        ? tag === 'question' ? 'bg-blue-100 border-blue-300 text-blue-800'
+                          : tag === 'feature_request' ? 'bg-purple-100 border-purple-300 text-purple-800'
+                          : tag === 'difficulty' ? 'bg-amber-100 border-amber-300 text-amber-800'
+                          : 'bg-green-100 border-green-300 text-green-800'
+                        : 'bg-white border-border text-secondary hover:bg-gray-50'
+                    }`}
+                  >
+                    {tag.replace('_', ' ')}
+                  </button>
+                ))}
+                {summaryTags.length > 0 && (
+                  <button
+                    onClick={() => setSummaryTags([])}
+                    className="px-3 py-1.5 text-xs text-secondary hover:text-text transition-colors"
+                  >
+                    {t('admin.assistantAnalytics.clearFilters', 'Clear filters')}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Meta info */}
+          {summaryMeta && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-800 flex items-center gap-4">
+              <span>📊 {t('admin.assistantAnalytics.analyzed', 'Analyzed')}: {summaryMeta.conversations_analyzed} {t('admin.assistantAnalytics.conversations', 'conversations')}, {summaryMeta.messages_analyzed} {t('admin.assistantAnalytics.messages', 'messages')}</span>
+              {summaryMeta.model && <span className="text-xs bg-blue-100 px-2 py-0.5 rounded">🤖 {summaryMeta.provider}/{summaryMeta.model}</span>}
+            </div>
+          )}
+
+          {/* Streaming indicator */}
+          {summaryLoading && summaryStreamText && (
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="animate-spin inline-block w-4 h-4 border-2 border-primary border-t-transparent rounded-full"></span>
+                <span className="text-sm font-medium text-secondary">{t('admin.assistantAnalytics.aiAnalyzing', 'AI is analyzing conversations...')}</span>
+              </div>
+              <pre className="text-xs text-secondary bg-gray-50 rounded-lg p-4 max-h-40 overflow-y-auto whitespace-pre-wrap font-mono">
+                {summaryStreamText}
+              </pre>
+            </div>
+          )}
+
+          {/* Results */}
+          {summaryResult && (
+            <div className="space-y-6">
+              {/* Export button */}
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={handleExportSummary}
+                  className="px-3 py-2 text-sm border border-border rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1"
+                >
+                  📥 {t('admin.assistantAnalytics.exportJSON', 'Export JSON')}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Feature Requests */}
+                <div className="bg-white rounded-lg shadow-md p-6">
+                  <h3 className="text-lg font-semibold text-text mb-4 flex items-center gap-2">
+                    💡 {t('admin.assistantAnalytics.featureRequests', 'Feature Requests')}
+                    {summaryResult.feature_requests?.length > 0 && (
+                      <span className="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded-full">{summaryResult.feature_requests.length}</span>
+                    )}
+                  </h3>
+                  <div className="space-y-3 max-h-80 overflow-y-auto">
+                    {(summaryResult.feature_requests || []).map((fr, i) => (
+                      <div key={i} className="p-3 bg-purple-50 rounded-lg border border-purple-100">
+                        <div className="flex items-start justify-between">
+                          <span className="font-medium text-sm text-text">{fr.title}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            fr.priority === 'high' ? 'bg-red-100 text-red-700' :
+                            fr.priority === 'medium' ? 'bg-amber-100 text-amber-700' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>{fr.priority}</span>
+                        </div>
+                        <p className="text-xs text-secondary mt-1">{fr.description}</p>
+                        {fr.frequency > 1 && <span className="text-xs text-purple-600 mt-1 inline-block">×{fr.frequency} mentions</span>}
+                      </div>
+                    ))}
+                    {(!summaryResult.feature_requests || summaryResult.feature_requests.length === 0) && (
+                      <p className="text-center text-secondary text-sm py-4">{t('admin.assistantAnalytics.noFeatureRequests', 'No feature requests detected')}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Bugs */}
+                <div className="bg-white rounded-lg shadow-md p-6">
+                  <h3 className="text-lg font-semibold text-text mb-4 flex items-center gap-2">
+                    🐛 {t('admin.assistantAnalytics.bugsFound', 'Bugs & Issues')}
+                    {summaryResult.bugs?.length > 0 && (
+                      <span className="bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full">{summaryResult.bugs.length}</span>
+                    )}
+                  </h3>
+                  <div className="space-y-3 max-h-80 overflow-y-auto">
+                    {(summaryResult.bugs || []).map((bug, i) => (
+                      <div key={i} className="p-3 bg-red-50 rounded-lg border border-red-100">
+                        <div className="flex items-start justify-between">
+                          <span className="font-medium text-sm text-text">{bug.title}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            bug.severity === 'critical' ? 'bg-red-200 text-red-800' :
+                            bug.severity === 'high' ? 'bg-red-100 text-red-700' :
+                            bug.severity === 'medium' ? 'bg-amber-100 text-amber-700' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>{bug.severity}</span>
+                        </div>
+                        <p className="text-xs text-secondary mt-1">{bug.description}</p>
+                      </div>
+                    ))}
+                    {(!summaryResult.bugs || summaryResult.bugs.length === 0) && (
+                      <p className="text-center text-secondary text-sm py-4">{t('admin.assistantAnalytics.noBugs', 'No bugs detected')}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* FAQ */}
+                <div className="bg-white rounded-lg shadow-md p-6">
+                  <h3 className="text-lg font-semibold text-text mb-4 flex items-center gap-2">
+                    ❓ {t('admin.assistantAnalytics.faqTitle', 'Frequently Asked Questions')}
+                    {summaryResult.faq?.length > 0 && (
+                      <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">{summaryResult.faq.length}</span>
+                    )}
+                  </h3>
+                  <div className="space-y-3 max-h-80 overflow-y-auto">
+                    {(summaryResult.faq || []).map((item, i) => (
+                      <div key={i} className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                        <p className="text-sm text-text">{item.question}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          {item.frequency > 1 && <span className="text-xs text-blue-600">×{item.frequency}</span>}
+                          {item.category && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{item.category}</span>}
+                        </div>
+                      </div>
+                    ))}
+                    {(!summaryResult.faq || summaryResult.faq.length === 0) && (
+                      <p className="text-center text-secondary text-sm py-4">{t('admin.assistantAnalytics.noFaq', 'No FAQ patterns detected')}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Trends */}
+                <div className="bg-white rounded-lg shadow-md p-6">
+                  <h3 className="text-lg font-semibold text-text mb-4 flex items-center gap-2">
+                    📈 {t('admin.assistantAnalytics.trendsTitle', 'Usage Trends & Patterns')}
+                    {summaryResult.trends?.length > 0 && (
+                      <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full">{summaryResult.trends.length}</span>
+                    )}
+                  </h3>
+                  <div className="space-y-3 max-h-80 overflow-y-auto">
+                    {(summaryResult.trends || []).map((trend, i) => (
+                      <div key={i} className="p-3 bg-green-50 rounded-lg border border-green-100">
+                        <div className="flex items-start justify-between">
+                          <p className="text-sm text-text">{trend.trend}</p>
+                          <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ml-2 ${
+                            trend.impact === 'high' ? 'bg-red-100 text-red-700' :
+                            trend.impact === 'medium' ? 'bg-amber-100 text-amber-700' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>{trend.impact}</span>
+                        </div>
+                      </div>
+                    ))}
+                    {(!summaryResult.trends || summaryResult.trends.length === 0) && (
+                      <p className="text-center text-secondary text-sm py-4">{t('admin.assistantAnalytics.noTrends', 'No trends detected')}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Recommendations - full width */}
+              {summaryResult.recommendations && summaryResult.recommendations.length > 0 && (
+                <div className="bg-white rounded-lg shadow-md p-6">
+                  <h3 className="text-lg font-semibold text-text mb-4">
+                    🎯 {t('admin.assistantAnalytics.recommendationsTitle', 'Recommendations')}
+                  </h3>
+                  <div className="space-y-3">
+                    {summaryResult.recommendations.map((rec, i) => (
+                      <div key={i} className="p-4 bg-gradient-to-r from-primary/5 to-transparent rounded-lg border border-primary/10">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="font-medium text-sm text-text">{rec.action}</p>
+                            <p className="text-xs text-secondary mt-1">{rec.rationale}</p>
+                          </div>
+                          <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ml-3 ${
+                            rec.effort === 'low' ? 'bg-green-100 text-green-700' :
+                            rec.effort === 'medium' ? 'bg-amber-100 text-amber-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>{rec.effort} effort</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Raw text fallback if parsing failed */}
+              {summaryResult.raw_text && (
+                <div className="bg-white rounded-lg shadow-md p-6">
+                  <h3 className="text-lg font-semibold text-text mb-4">
+                    📝 {t('admin.assistantAnalytics.rawAnalysis', 'Raw AI Analysis')}
+                  </h3>
+                  <pre className="text-sm text-text bg-gray-50 rounded-lg p-4 whitespace-pre-wrap font-mono max-h-96 overflow-y-auto">
+                    {summaryResult.raw_text}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Empty state */}
+          {!summaryLoading && !summaryResult && (
+            <div className="bg-white rounded-lg shadow-md p-12 text-center">
+              <div className="text-5xl mb-4">🧠</div>
+              <h3 className="text-lg font-semibold text-text mb-2">
+                {t('admin.assistantAnalytics.aiSummaryEmpty', 'Generate an AI Summary')}
+              </h3>
+              <p className="text-sm text-secondary max-w-md mx-auto">
+                {t('admin.assistantAnalytics.aiSummaryEmptyDesc', 'Select a date range and click "Generate Summary" to get AI-powered insights from all assistant conversations. The analysis will identify feature requests, bugs, frequently asked questions, and usage trends.')}
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>

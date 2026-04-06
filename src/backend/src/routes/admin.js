@@ -1984,4 +1984,298 @@ router.get('/assistant/comments/export', (req, res) => {
   }
 });
 
+// =====================================================
+// ASSISTANT CONVERSATION SUMMARY & INSIGHTS (AI-powered)
+// =====================================================
+
+// POST /api/admin/assistant/summary - Generate AI summary of assistant conversations
+router.post('/assistant/summary', async (req, res) => {
+  try {
+    const db = getDatabase();
+    const { dateFrom, dateTo, therapistId, tags } = req.body;
+
+    if (!dateFrom || !dateTo) {
+      return res.status(400).json({ error: 'dateFrom and dateTo are required' });
+    }
+
+    // Build query to collect messages within the date range
+    let conversationQuery = `
+      SELECT ac.id as conversation_id, ac.therapist_id, ac.page_context, ac.language, ac.message_count,
+             u.email as therapist_email
+      FROM assistant_conversations ac
+      LEFT JOIN users u ON u.id = ac.therapist_id
+      WHERE ac.started_at >= ? AND ac.started_at <= ?
+    `;
+    const params = [dateFrom, dateTo + 'T23:59:59'];
+
+    if (therapistId) {
+      conversationQuery += ' AND ac.therapist_id = ?';
+      params.push(parseInt(therapistId));
+    }
+
+    conversationQuery += ' ORDER BY ac.started_at ASC';
+
+    const convResult = db.exec(conversationQuery, params);
+    if (!convResult.length || !convResult[0].values.length) {
+      return res.status(200).json({
+        summary: {
+          feature_requests: [],
+          bugs: [],
+          faq: [],
+          trends: [],
+          recommendations: []
+        },
+        meta: { conversations_analyzed: 0, messages_analyzed: 0, period: { from: dateFrom, to: dateTo } }
+      });
+    }
+
+    const convColumns = convResult[0].columns;
+    const conversations = convResult[0].values.map(row => {
+      const obj = {};
+      convColumns.forEach((col, i) => { obj[col] = row[i]; });
+      return obj;
+    });
+
+    const conversationIds = conversations.map(c => c.conversation_id);
+
+    // Fetch messages for these conversations, optionally filtered by tags
+    let msgQuery = `
+      SELECT am.conversation_id, am.role, am.content, am.tags, am.created_at
+      FROM assistant_messages am
+      WHERE am.conversation_id IN (${conversationIds.map(() => '?').join(',')})
+    `;
+    const msgParams = [...conversationIds];
+
+    if (tags && tags.length > 0) {
+      msgQuery += ` AND (am.role = 'assistant' OR am.tags IN (${tags.map(() => '?').join(',')}))`;
+      msgParams.push(...tags);
+    }
+
+    msgQuery += ' ORDER BY am.conversation_id, am.created_at ASC';
+
+    const msgResult = db.exec(msgQuery, msgParams);
+    let allMessages = [];
+    if (msgResult.length && msgResult[0].values.length) {
+      const msgColumns = msgResult[0].columns;
+      allMessages = msgResult[0].values.map(row => {
+        const obj = {};
+        msgColumns.forEach((col, i) => { obj[col] = row[i]; });
+        return obj;
+      });
+    }
+
+    // Group messages by conversation
+    const conversationMap = {};
+    for (const conv of conversations) {
+      conversationMap[conv.conversation_id] = {
+        ...conv,
+        messages: []
+      };
+    }
+    for (const msg of allMessages) {
+      if (conversationMap[msg.conversation_id]) {
+        conversationMap[msg.conversation_id].messages.push(msg);
+      }
+    }
+
+    // Build digest for AI analysis (truncate to avoid token overflow)
+    const conversationsWithMessages = Object.values(conversationMap).filter(c => c.messages.length > 0);
+    let totalMessages = 0;
+
+    let digest = '';
+    for (const conv of conversationsWithMessages) {
+      digest += `\n--- Conversation (therapist: ${conv.therapist_email || 'unknown'}, context: ${conv.page_context || 'general'}, lang: ${conv.language || 'en'}) ---\n`;
+      for (const msg of conv.messages) {
+        const tag = msg.tags ? ` [${msg.tags}]` : '';
+        digest += `${msg.role}${tag}: ${msg.content}\n`;
+        totalMessages++;
+      }
+      // Limit digest size to ~50k chars to avoid token limits
+      if (digest.length > 50000) {
+        digest += '\n[... additional conversations truncated for analysis ...]\n';
+        break;
+      }
+    }
+
+    if (!digest.trim()) {
+      return res.status(200).json({
+        summary: {
+          feature_requests: [],
+          bugs: [],
+          faq: [],
+          trends: [],
+          recommendations: []
+        },
+        meta: { conversations_analyzed: 0, messages_analyzed: 0, period: { from: dateFrom, to: dateTo } }
+      });
+    }
+
+    // Check if AI is configured
+    const activeProvider = aiProviders.getActiveAssistantProvider(db);
+    if (!activeProvider.provider.isConfigured()) {
+      return res.status(503).json({
+        error: 'AI provider is not configured. Please configure an AI provider in Admin > AI Models.',
+        code: 'AI_NOT_CONFIGURED'
+      });
+    }
+
+    // Set up SSE streaming
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    });
+
+    // Send meta info first
+    res.write(`data: ${JSON.stringify({
+      type: 'meta',
+      conversations_analyzed: conversationsWithMessages.length,
+      messages_analyzed: totalMessages,
+      period: { from: dateFrom, to: dateTo }
+    })}\n\n`);
+
+    const analysisPrompt = `You are an expert product analyst reviewing user support conversations from a SaaS platform (PR-TOP — a therapist-controlled between-session assistant for psychologists).
+
+Analyze the following assistant chat conversations between therapists and the in-app AI assistant. Extract and categorize insights.
+
+CONVERSATIONS:
+${digest}
+
+Return a JSON object with EXACTLY this structure (no markdown, no code fences, just raw JSON):
+{
+  "feature_requests": [
+    { "title": "Short title", "description": "Details of what the user wants", "frequency": 1, "priority": "high|medium|low" }
+  ],
+  "bugs": [
+    { "title": "Short title", "description": "What went wrong", "severity": "critical|high|medium|low" }
+  ],
+  "faq": [
+    { "question": "Common question", "frequency": 1, "category": "navigation|workflow|billing|technical|other" }
+  ],
+  "trends": [
+    { "trend": "Description of observed pattern", "impact": "high|medium|low" }
+  ],
+  "recommendations": [
+    { "action": "Specific recommendation", "rationale": "Why this matters", "effort": "low|medium|high" }
+  ]
+}
+
+Guidelines:
+- Group similar requests/issues together, noting frequency
+- Prioritize by frequency and impact
+- Be specific and actionable in recommendations
+- If no items found for a category, return an empty array
+- Return ONLY the JSON object, nothing else`;
+
+    try {
+      const stream = aiProviders.chatStream(
+        [
+          { role: 'system', content: 'You are a product analytics expert. Always respond with valid JSON only.' },
+          { role: 'user', content: analysisPrompt }
+        ],
+        {
+          provider: activeProvider.providerName,
+          model: activeProvider.model,
+          temperature: 0.3,
+          max_tokens: 4000
+        },
+        db
+      );
+
+      let fullText = '';
+      for await (const chunk of stream) {
+        if (chunk.text) {
+          fullText += chunk.text;
+          res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk.text })}\n\n`);
+        }
+        if (chunk.done) {
+          // Try to parse the full response as JSON
+          let parsed = null;
+          try {
+            // Strip markdown code fences if present
+            let cleanText = fullText.trim();
+            if (cleanText.startsWith('```')) {
+              cleanText = cleanText.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+            }
+            parsed = JSON.parse(cleanText);
+          } catch (parseErr) {
+            logger.warn('[Admin Summary] Could not parse AI response as JSON: ' + parseErr.message);
+            parsed = {
+              feature_requests: [],
+              bugs: [],
+              faq: [],
+              trends: [],
+              recommendations: [],
+              raw_text: fullText
+            };
+          }
+
+          res.write(`data: ${JSON.stringify({
+            type: 'done',
+            summary: parsed,
+            meta: {
+              conversations_analyzed: conversationsWithMessages.length,
+              messages_analyzed: totalMessages,
+              period: { from: dateFrom, to: dateTo },
+              model: activeProvider.model,
+              provider: activeProvider.providerName
+            }
+          })}\n\n`);
+        }
+      }
+    } catch (aiErr) {
+      logger.error('[Admin Summary] AI error: ' + aiErr.message);
+      res.write(`data: ${JSON.stringify({ type: 'error', error: aiErr.message })}\n\n`);
+    }
+
+    res.write('data: [DONE]\n\n');
+    res.end();
+
+    // Audit log
+    try {
+      db.run(
+        "INSERT INTO audit_log (user_id, action, details, created_at) VALUES (?, 'admin_generate_summary', ?, datetime('now'))",
+        [req.user.id, JSON.stringify({ dateFrom, dateTo, therapistId: therapistId || null, tags: tags || null, conversations: conversationsWithMessages.length })]
+      );
+      saveDatabaseAfterWrite();
+    } catch (auditErr) {
+      logger.warn('[Admin Summary] Audit log failed: ' + auditErr.message);
+    }
+
+  } catch (error) {
+    logger.error('Admin generate summary error: ' + error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to generate summary' });
+    } else {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+      res.end();
+    }
+  }
+});
+
+// POST /api/admin/assistant/summary/export - Export summary as JSON
+router.post('/assistant/summary/export', async (req, res) => {
+  try {
+    const { summary, meta } = req.body;
+    if (!summary) {
+      return res.status(400).json({ error: 'Summary data is required' });
+    }
+
+    const exportData = {
+      generated_at: new Date().toISOString(),
+      platform: 'PR-TOP',
+      meta: meta || {},
+      summary
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="assistant-summary-${new Date().toISOString().split('T')[0]}.json"`);
+    res.json(exportData);
+  } catch (error) {
+    logger.error('Admin export summary error: ' + error.message);
+    res.status(500).json({ error: 'Failed to export summary' });
+  }
+});
+
 module.exports = router;
