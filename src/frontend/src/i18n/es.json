@@ -22,6 +22,9 @@
     "adminSystemLogs": "Registros del sistema",
     "adminAIUsage": "Uso de IA",
     "adminAIModels": "Modelos de IA",
+    "adminCachedAnswers": "Respuestas en caché",
+    "adminAssistantAnalytics": "Analítica del chat",
+    "adminAssistantConversations": "Conversaciones",
     "adminUmami": "Analítica web"
   },
   "aiUsage": {
@@ -185,7 +188,6 @@
     "minutesAgo": "hace {{count}} min",
     "hoursAgo": "hace {{count}} h",
     "daysAgo": "hace {{count}} d",
-    "needHelp": "¿Necesitas ayuda?",
     "askClient": "Preguntar sobre un cliente",
     "askClientHint": "Usa lenguaje natural para buscar en los registros del cliente, diarios y notas de sesiones.",
     "selectClient": "Seleccionar un cliente para consultar"
@@ -714,7 +716,7 @@
     "system": "Sistema",
     "ai": {
       "title": "Configuración de modelos de IA",
-      "subtitle": "Seleccione qué modelos de IA usar para resumen y transcripción",
+      "subtitle": "Seleccione qué modelos de IA usar para resumen, transcripción y asistente de chat",
       "loading": "Cargando configuración de modelos de IA...",
       "summarization": "Modelo de resumen",
       "summarizationDesc": "Seleccione el proveedor y modelo de IA para generar resúmenes de sesiones",
@@ -735,7 +737,31 @@
       "saving": "Guardando...",
       "saved": "Configuración de modelos de IA guardada",
       "recommended": "Recomendado",
-      "pricing": "Precio"
+      "pricing": "Precio",
+      "assistant": "Modelo de asistente de chat",
+      "assistantDesc": "Seleccione el proveedor y modelo de IA para el chatbot asistente entre sesiones",
+      "knowledgeBase": "Base de conocimientos del asistente",
+      "knowledgeBaseDesc": "Indexar documentación del proyecto, componentes UI, rutas y cadenas i18n para el chatbot. Reindexar cuando cambie el código.",
+      "kbFiles": "Archivos indexados",
+      "kbChunks": "Fragmentos",
+      "kbLastUpdated": "Última actualización",
+      "kbNever": "Nunca",
+      "reindexKnowledgeBase": "Reindexar base de conocimientos",
+      "reindexing": "Reindexando...",
+      "reindexSuccess": "Base de conocimientos reindexada"
+    },
+    "cache": {
+      "title": "Respuestas en caché",
+      "description": "Gestionar las respuestas en caché del asistente. El asistente aprende de interacciones anteriores y almacena respuestas para ahorrar tokens de IA.",
+      "totalEntries": "Total de entradas",
+      "empty": "No hay respuestas en caché",
+      "emptyHint": "Las respuestas en caché aparecerán aquí cuando los terapeutas usen el asistente.",
+      "question": "Pregunta",
+      "answer": "Respuesta",
+      "usedTimes": "Usado {{count}} vez(es)",
+      "editSuccess": "Respuesta en caché actualizada",
+      "deleteSuccess": "Respuesta en caché eliminada",
+      "confirmDelete": "¿Está seguro de que desea eliminar esta respuesta en caché?"
     }
   },
   "bulkImport": {
@@ -1151,5 +1177,27 @@
       "title": "Información de contacto",
       "desc": "Si tiene preguntas sobre estos Términos de Servicio, contáctenos en:"
     }
+  },
+  "assistant": {
+    "title": "Asistente",
+    "placeholder": "Escribe tu pregunta...",
+    "send": "Enviar",
+    "newChat": "Nuevo chat",
+    "history": "Historial de chats",
+    "typing": "El asistente está escribiendo...",
+    "welcome": "¿Cómo puedo ayudarte?",
+    "hint": "Pregúntame sobre PR-TOP — navegación, funciones, flujos de trabajo y más.",
+    "tooltip": "¿Necesitas ayuda?",
+    "deleteConfirm": "¿Estás seguro de que deseas eliminar este chat?",
+    "deleteChat": "Eliminar",
+    "empty": "No hay mensajes aún. ¡Inicia una conversación!",
+    "noHistory": "No hay conversaciones aún",
+    "startFirst": "Inicia tu primera conversación",
+    "today": "Hoy",
+    "yesterday": "Ayer",
+    "thisWeek": "Esta semana",
+    "older": "Anteriores",
+    "msgs": "msgs",
+    "archived": "archivado"
   }
 }

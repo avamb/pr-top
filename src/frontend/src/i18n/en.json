@@ -22,6 +22,9 @@
     "adminSystemLogs": "System Logs",
     "adminAIUsage": "AI Usage",
     "adminAIModels": "AI Models",
+    "adminCachedAnswers": "Cached Answers",
+    "adminAssistantAnalytics": "Chat Analytics",
+    "adminAssistantConversations": "Conversations",
     "adminUmami": "Web Analytics"
   },
   "aiUsage": {
@@ -185,7 +188,6 @@
     "minutesAgo": "{{count}}m ago",
     "hoursAgo": "{{count}}h ago",
     "daysAgo": "{{count}}d ago",
-    "needHelp": "Need help?",
     "askClient": "Ask About a Client",
     "askClientHint": "Use natural language to search through client records, diary entries, and session notes.",
     "selectClient": "Select a Client to Query"
@@ -714,7 +716,7 @@
     "system": "System",
     "ai": {
       "title": "AI Model Configuration",
-      "subtitle": "Select which AI models to use for summarization and transcription",
+      "subtitle": "Select which AI models to use for summarization, transcription, and assistant chat",
       "loading": "Loading AI model configuration...",
       "summarization": "Summarization Model",
       "summarizationDesc": "Select the AI provider and model used for generating session summaries",
@@ -735,7 +737,31 @@
       "saving": "Saving...",
       "saved": "AI model settings saved successfully",
       "recommended": "Recommended",
-      "pricing": "Pricing"
+      "pricing": "Pricing",
+      "assistant": "Assistant Chat Model",
+      "assistantDesc": "Select the AI provider and model used for the between-session assistant chatbot",
+      "knowledgeBase": "Assistant Knowledge Base",
+      "knowledgeBaseDesc": "Index project documentation, UI components, routes, and i18n strings for the assistant chatbot. Re-index when code changes to keep the knowledge base up to date.",
+      "kbFiles": "Files indexed",
+      "kbChunks": "Chunks",
+      "kbLastUpdated": "Last updated",
+      "kbNever": "Never",
+      "reindexKnowledgeBase": "Reindex Knowledge Base",
+      "reindexing": "Reindexing...",
+      "reindexSuccess": "Knowledge base re-indexed"
+    },
+    "cache": {
+      "title": "Cached Answers",
+      "description": "Manage cached assistant answers. The assistant learns from previous interactions and caches answers to save AI tokens on similar questions.",
+      "totalEntries": "Total entries",
+      "empty": "No cached answers yet",
+      "emptyHint": "Cached answers will appear here as therapists use the assistant chatbot.",
+      "question": "Question",
+      "answer": "Answer",
+      "usedTimes": "Used {{count}} time(s)",
+      "editSuccess": "Cached answer updated",
+      "deleteSuccess": "Cached answer deleted",
+      "confirmDelete": "Are you sure you want to delete this cached answer?"
     }
   },
   "bulkImport": {
@@ -1151,5 +1177,27 @@
       "title": "Contact Information",
       "desc": "If you have any questions about these Terms of Service, please contact us at:"
     }
+  },
+  "assistant": {
+    "title": "Assistant",
+    "placeholder": "Type your question...",
+    "send": "Send",
+    "newChat": "New chat",
+    "history": "Chat history",
+    "typing": "Assistant is typing...",
+    "welcome": "How can I help you?",
+    "hint": "Ask me about using PR-TOP — navigation, features, workflows, and more.",
+    "tooltip": "Need help?",
+    "deleteConfirm": "Are you sure you want to delete this chat?",
+    "deleteChat": "Delete",
+    "empty": "No messages yet. Start a conversation!",
+    "noHistory": "No conversations yet",
+    "startFirst": "Start your first conversation",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "thisWeek": "This week",
+    "older": "Older",
+    "msgs": "msgs",
+    "archived": "archived"
   }
 }

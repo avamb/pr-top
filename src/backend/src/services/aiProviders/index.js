@@ -105,6 +105,52 @@ function getActiveProvider(db) {
 }
 
 /**
+ * Get the active assistant provider based on settings.
+ * Falls back to summarization settings, then env vars.
+ * @param {object} db - Database instance (optional)
+ * @returns {{provider: object, providerName: string, model: string}}
+ */
+function getActiveAssistantProvider(db) {
+  var providerName = process.env.AI_PROVIDER || 'openai';
+  var model = process.env.AI_MODEL || 'gpt-4o-mini';
+
+  if (db) {
+    try {
+      // First try assistant-specific settings
+      var assistProvResult = db.exec("SELECT value FROM platform_settings WHERE key = 'ai_assistant_provider'");
+      if (assistProvResult.length > 0 && assistProvResult[0].values.length > 0) {
+        providerName = assistProvResult[0].values[0][0];
+        var assistModelResult = db.exec("SELECT value FROM platform_settings WHERE key = 'ai_assistant_model'");
+        if (assistModelResult.length > 0 && assistModelResult[0].values.length > 0) {
+          model = assistModelResult[0].values[0][0];
+        }
+      } else {
+        // Fall back to summarization settings
+        var sumProvResult = db.exec("SELECT value FROM platform_settings WHERE key = 'ai_summarization_provider'");
+        if (sumProvResult.length > 0 && sumProvResult[0].values.length > 0) {
+          providerName = sumProvResult[0].values[0][0];
+        }
+        var sumModelResult = db.exec("SELECT value FROM platform_settings WHERE key = 'ai_summarization_model'");
+        if (sumModelResult.length > 0 && sumModelResult[0].values.length > 0) {
+          model = sumModelResult[0].values[0][0];
+        }
+      }
+    } catch (e) {
+      logger.warn('[AI Provider] Could not read assistant settings from DB: ' + e.message);
+    }
+  }
+
+  var provider = providers[providerName];
+  if (!provider) {
+    logger.warn('[AI Provider] Unknown assistant provider: ' + providerName + ', falling back to openai');
+    provider = providers.openai;
+    providerName = 'openai';
+  }
+
+  return { provider: provider, providerName: providerName, model: model };
+}
+
+/**
  * Check if any AI provider is configured.
  * @returns {boolean}
  */
@@ -178,13 +224,58 @@ async function chat(messages, options, db) {
   return result;
 }
 
+/**
+ * Unified streaming chat function - uses the active provider.
+ * Returns an async generator that yields text chunks.
+ * Falls back to non-streaming chat wrapped in a single-chunk generator if provider doesn't support streaming.
+ * @param {Array} messages - Array of {role, content} messages
+ * @param {object} options - { model, temperature, max_tokens, provider, purpose }
+ * @param {object} db - Database instance (optional, for reading settings)
+ * @returns {AsyncGenerator<{text: string, done: boolean, fullText?: string, model?: string}>}
+ */
+async function* chatStream(messages, options, db) {
+  options = options || {};
+
+  var providerName, provider, model;
+
+  if (options.provider) {
+    providerName = options.provider;
+    provider = providers[providerName];
+    model = options.model;
+    if (!provider) throw new Error('Unknown AI provider: ' + providerName);
+  } else {
+    var active = getActiveProvider(db);
+    provider = active.provider;
+    providerName = active.providerName;
+    model = options.model || active.model;
+  }
+
+  if (!provider.isConfigured()) {
+    throw new Error('AI provider ' + providerName + ' is not configured (missing API key)');
+  }
+
+  // If provider supports streaming, use it
+  if (typeof provider.chatStream === 'function') {
+    var stream = provider.chatStream(messages, { model: model, temperature: options.temperature, max_tokens: options.max_tokens });
+    for await (var chunk of stream) {
+      yield chunk;
+    }
+  } else {
+    // Fallback: non-streaming chat wrapped as a single chunk
+    var result = await provider.chat(messages, { model: model, temperature: options.temperature, max_tokens: options.max_tokens });
+    yield { text: result.text, done: true, fullText: result.text, model: result.model };
+  }
+}
+
 module.exports = {
   getProvider: getProvider,
   getActiveProvider: getActiveProvider,
+  getActiveAssistantProvider: getActiveAssistantProvider,
   detectProviderForModel: detectProviderForModel,
   isAnyConfigured: isAnyConfigured,
   getConfiguredProviders: getConfiguredProviders,
   getAllModels: getAllModels,
   chat: chat,
+  chatStream: chatStream,
   providers: providers
 };

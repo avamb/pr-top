@@ -513,6 +513,59 @@ function applySchema(db) {
     logger.warn('Email normalization migration skipped: ' + e.message);
   }
 
+  // Create assistant_chats table for therapist-assistant chat history
+  db.run(`CREATE TABLE IF NOT EXISTS assistant_chats (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    therapist_id INTEGER NOT NULL REFERENCES users(id),
+    messages TEXT NOT NULL DEFAULT '[]',
+    page_context TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`);
+
+  // Add deleted_at column for soft-delete support
+  try {
+    db.run('ALTER TABLE assistant_chats ADD COLUMN deleted_at TEXT DEFAULT NULL');
+  } catch (e) {
+    // Column already exists
+  }
+
+  // Add title column for auto-generated conversation titles
+  try {
+    db.run('ALTER TABLE assistant_chats ADD COLUMN title TEXT DEFAULT NULL');
+  } catch (e) {
+    // Column already exists
+  }
+
+  // Add archived_at column for auto-archive support
+  try {
+    db.run('ALTER TABLE assistant_chats ADD COLUMN archived_at TEXT DEFAULT NULL');
+  } catch (e) {
+    // Column already exists
+  }
+
+  // Create assistant_cached_answers table for self-learning cache
+  db.run(`CREATE TABLE IF NOT EXISTS assistant_cached_answers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    question_embedding TEXT NOT NULL,
+    question_text TEXT NOT NULL,
+    answer_text TEXT NOT NULL,
+    usage_count INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`);
+
+  // Create assistant_knowledge table for knowledge base indexing
+  db.run(`CREATE TABLE IF NOT EXISTS assistant_knowledge (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chunk_text TEXT NOT NULL,
+    embedding TEXT NOT NULL,
+    source_file TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    chunk_index INTEGER DEFAULT 0,
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`);
+
   // Create indexes for performance
   db.run('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
   db.run('CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)');
@@ -528,6 +581,51 @@ function applySchema(db) {
   db.run('CREATE INDEX IF NOT EXISTS idx_subscriptions_therapist ON subscriptions(therapist_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_exercise_deliveries_client ON exercise_deliveries(client_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_sos_events_client ON sos_events(client_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_assistant_chats_therapist_updated ON assistant_chats(therapist_id, updated_at DESC)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_assistant_cached_answers_usage ON assistant_cached_answers(usage_count DESC)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_assistant_knowledge_source ON assistant_knowledge(source_file)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_assistant_knowledge_type ON assistant_knowledge(source_type)');
+
+  // Create assistant_conversations table for analytics-grade chat tracking
+  db.run(`CREATE TABLE IF NOT EXISTS assistant_conversations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    therapist_id INTEGER NOT NULL REFERENCES users(id),
+    started_at TEXT DEFAULT (datetime('now')),
+    last_message_at TEXT DEFAULT (datetime('now')),
+    page_context TEXT,
+    language TEXT DEFAULT 'en',
+    message_count INTEGER DEFAULT 0
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_assistant_conversations_therapist ON assistant_conversations(therapist_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_assistant_conversations_started ON assistant_conversations(started_at DESC)');
+
+  // Create assistant_messages table for individual message tracking
+  db.run(`CREATE TABLE IF NOT EXISTS assistant_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id INTEGER NOT NULL REFERENCES assistant_conversations(id),
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    is_cached INTEGER DEFAULT 0,
+    tokens_used INTEGER DEFAULT 0,
+    tags TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_assistant_messages_conversation ON assistant_messages(conversation_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_assistant_messages_created ON assistant_messages(created_at DESC)');
+
+  // Create assistant_admin_comments table for superadmin feedback on assistant responses
+  db.run(`CREATE TABLE IF NOT EXISTS assistant_admin_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id INTEGER NOT NULL REFERENCES assistant_messages(id),
+    admin_id INTEGER NOT NULL REFERENCES users(id),
+    comment_text TEXT,
+    rating TEXT CHECK(rating IN ('good', 'bad', 'neutral')),
+    correction_text TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_admin_comments_message ON assistant_admin_comments(message_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_admin_comments_admin ON assistant_admin_comments(admin_id)');
 
   // Insert default platform settings
   const defaultSettings = [
@@ -547,6 +645,7 @@ function applySchema(db) {
     ['ai_transcription_model', 'whisper-1'],
     ['ai_monthly_limit_usd', '0'],
     ['ai_limit_warning_percent', '80'],
+    ['assistant_chat_archive_days', '90'],
   ];
 
   for (const [key, value] of defaultSettings) {

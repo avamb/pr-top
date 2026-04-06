@@ -15,18 +15,27 @@ export default function AdminAIModels() {
   // Data from API
   const [summarizationProviders, setSummarizationProviders] = useState([]);
   const [transcriptionProviders, setTranscriptionProviders] = useState([]);
+  const [assistantProviders, setAssistantProviders] = useState([]);
 
   // Form state
   const [sumProvider, setSumProvider] = useState('openai');
   const [sumModel, setSumModel] = useState('gpt-4o-mini');
   const [transProvider, setTransProvider] = useState('openai');
   const [transModel, setTransModel] = useState('whisper-1');
+  const [assistProvider, setAssistProvider] = useState('openai');
+  const [assistModel, setAssistModel] = useState('gpt-4o-mini');
 
   // Track what was originally loaded to detect changes
   const [original, setOriginal] = useState({});
 
+  // Knowledge base state
+  const [kbStats, setKbStats] = useState(null);
+  const [reindexing, setReindexing] = useState(false);
+  const [kbMessage, setKbMessage] = useState(null);
+
   useEffect(() => {
     loadModels();
+    loadKBStats();
   }, []);
 
   const loadModels = async () => {
@@ -39,16 +48,21 @@ export default function AdminAIModels() {
         const data = await res.json();
         setSummarizationProviders(data.summarization_providers || []);
         setTranscriptionProviders(data.transcription_providers || []);
+        setAssistantProviders(data.assistant_providers || []);
         if (data.current) {
           setSumProvider(data.current.summarization?.provider || 'openai');
           setSumModel(data.current.summarization?.model || 'gpt-4o-mini');
           setTransProvider(data.current.transcription?.provider || 'openai');
           setTransModel(data.current.transcription?.model || 'whisper-1');
+          setAssistProvider(data.current.assistant?.provider || data.current.summarization?.provider || 'openai');
+          setAssistModel(data.current.assistant?.model || data.current.summarization?.model || 'gpt-4o-mini');
           setOriginal({
             sumProvider: data.current.summarization?.provider || 'openai',
             sumModel: data.current.summarization?.model || 'gpt-4o-mini',
             transProvider: data.current.transcription?.provider || 'openai',
-            transModel: data.current.transcription?.model || 'whisper-1'
+            transModel: data.current.transcription?.model || 'whisper-1',
+            assistProvider: data.current.assistant?.provider || data.current.summarization?.provider || 'openai',
+            assistModel: data.current.assistant?.model || data.current.summarization?.model || 'gpt-4o-mini'
           });
         }
       }
@@ -74,7 +88,8 @@ export default function AdminAIModels() {
         },
         body: JSON.stringify({
           summarization: { provider: sumProvider, model: sumModel },
-          transcription: { provider: transProvider, model: transModel }
+          transcription: { provider: transProvider, model: transModel },
+          assistant: { provider: assistProvider, model: assistModel }
         })
       });
       const data = await res.json();
@@ -85,7 +100,9 @@ export default function AdminAIModels() {
             sumProvider: data.current.summarization?.provider,
             sumModel: data.current.summarization?.model,
             transProvider: data.current.transcription?.provider,
-            transModel: data.current.transcription?.model
+            transModel: data.current.transcription?.model,
+            assistProvider: data.current.assistant?.provider,
+            assistModel: data.current.assistant?.model
           });
         }
       } else {
@@ -112,6 +129,44 @@ export default function AdminAIModels() {
       setTestResult({ provider: providerName, success: false, message: 'Network error: ' + err.message });
     } finally {
       setTesting(null);
+    }
+  };
+
+  const loadKBStats = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/admin/assistant/knowledge-stats`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setKbStats(data);
+      }
+    } catch (err) {
+      // Non-critical, ignore
+    }
+  };
+
+  const handleReindex = async () => {
+    setReindexing(true);
+    setKbMessage(null);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/admin/assistant/reindex`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setKbMessage({ type: 'success', text: `${t('admin.ai.reindexSuccess')}: ${data.indexed} files, ${data.chunks} chunks (${data.elapsed_ms}ms)` });
+        loadKBStats();
+      } else {
+        setKbMessage({ type: 'error', text: data.error || 'Failed to re-index' });
+      }
+    } catch (err) {
+      setKbMessage({ type: 'error', text: 'Network error: ' + err.message });
+    } finally {
+      setReindexing(false);
     }
   };
 
@@ -357,6 +412,92 @@ export default function AdminAIModels() {
               )}
             </div>
           </div>
+
+          {/* Assistant Chat Section */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h3 className="text-lg font-semibold text-text mb-1">{t('admin.ai.assistant')}</h3>
+            <p className="text-sm text-secondary mb-4">{t('admin.ai.assistantDesc')}</p>
+
+            {/* Provider Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              {assistantProviders.map(prov => {
+                const isSelected = assistProvider === prov.provider;
+                return (
+                  <div
+                    key={prov.provider}
+                    onClick={() => {
+                      setAssistProvider(prov.provider);
+                      setAssistModel(prov.models[0] || '');
+                    }}
+                    className={`border-2 rounded-lg p-4 cursor-pointer transition-colors ${
+                      isSelected ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-semibold text-text">{providerDisplayName(prov.provider)}</span>
+                      <div className="flex items-center gap-2">
+                        {prov.configured ? (
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                            {t('admin.ai.configured')}
+                          </span>
+                        ) : (
+                          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                            {t('admin.ai.notConfigured')}
+                          </span>
+                        )}
+                        {isSelected && (
+                          <span className="text-xs bg-primary text-white px-2 py-0.5 rounded-full font-medium">
+                            {t('admin.ai.active')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-xs text-secondary">
+                      {prov.models.length} {t('admin.ai.modelsAvailable')}
+                      {!prov.configured && ` \u2022 ${t('admin.ai.setEnvVar')}: ${providerEnvHint(prov.provider)}`}
+                    </p>
+                    {/* Test Connection Button */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleTestConnection(prov.provider); }}
+                      disabled={testing === prov.provider}
+                      className="mt-2 text-xs px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {testing === prov.provider ? t('admin.ai.testing') : t('admin.ai.testConnection')}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Model Dropdown */}
+            <div>
+              <label className="block text-sm font-medium text-text mb-1">{t('admin.ai.selectModel')}</label>
+              <select
+                value={assistModel}
+                onChange={(e) => setAssistModel(e.target.value)}
+                className="w-full max-w-sm px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm"
+              >
+                {getModelsForProvider(assistantProviders, assistProvider).map(m => {
+                  const hint = getModelPriceHint(m);
+                  const badge = recommendedModels[m];
+                  return (
+                    <option key={m} value={m}>
+                      {m}{hint ? ` (${hint})` : ''}{badge ? ` \u2B50 ${badge}` : ''}
+                    </option>
+                  );
+                })}
+              </select>
+              {original.assistProvider === assistProvider && original.assistModel === assistModel && (
+                <p className="text-xs text-green-600 mt-1">{t('admin.ai.currentActive')}</p>
+              )}
+              {recommendedModels[assistModel] && (
+                <p className="text-xs text-amber-600 mt-1">\u2B50 {t('admin.ai.recommended')}: {recommendedModels[assistModel]}</p>
+              )}
+              {getModelPriceHint(assistModel) && (
+                <p className="text-xs text-secondary mt-0.5">{t('admin.ai.pricing')}: {getModelPriceHint(assistModel)}</p>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="mt-8 flex justify-end">
@@ -366,6 +507,71 @@ export default function AdminAIModels() {
             className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 font-medium"
           >
             {saving ? t('admin.ai.saving') : t('admin.ai.save')}
+          </button>
+        </div>
+
+        {/* Knowledge Base Section */}
+        <div className="mt-10 border-t pt-8">
+          <h3 className="text-lg font-semibold text-heading mb-2">{t('admin.ai.knowledgeBase')}</h3>
+          <p className="text-sm text-secondary mb-4">{t('admin.ai.knowledgeBaseDesc')}</p>
+
+          {kbStats && (
+            <div className="bg-gray-50 rounded-lg p-4 mb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <span className="text-secondary">{t('admin.ai.kbFiles')}:</span>
+                  <span className="ml-1 font-medium">{kbStats.total_files}</span>
+                </div>
+                <div>
+                  <span className="text-secondary">{t('admin.ai.kbChunks')}:</span>
+                  <span className="ml-1 font-medium">{kbStats.total_chunks}</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-secondary">{t('admin.ai.kbLastUpdated')}:</span>
+                  <span className="ml-1 font-medium">
+                    {kbStats.last_updated ? new Date(kbStats.last_updated + 'Z').toLocaleString() : t('admin.ai.kbNever')}
+                  </span>
+                </div>
+              </div>
+              {kbStats.by_type && Object.keys(kbStats.by_type).length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {Object.entries(kbStats.by_type).map(([type, count]) => (
+                    <span key={type} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-primary/10 text-primary">
+                      {type}: {count}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {kbMessage && (
+            <div className={`mb-4 p-3 rounded-lg text-sm ${kbMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+              {kbMessage.text}
+            </div>
+          )}
+
+          <button
+            onClick={handleReindex}
+            disabled={reindexing}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 font-medium flex items-center gap-2"
+          >
+            {reindexing ? (
+              <>
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                {t('admin.ai.reindexing')}
+              </>
+            ) : (
+              <>
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {t('admin.ai.reindexKnowledgeBase')}
+              </>
+            )}
           </button>
         </div>
       </main>

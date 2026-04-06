@@ -5,6 +5,8 @@ const { logger, getSystemLogs } = require('../utils/logger');
 const { authenticate, requireRole } = require('../middleware/auth');
 const backupService = require('../services/backupService');
 const aiProviders = require('../services/aiProviders');
+const assistantKnowledge = require('../services/assistantKnowledge');
+const assistantCache = require('../services/assistantCache');
 
 const router = express.Router();
 
@@ -1023,20 +1025,29 @@ router.get('/ai/models', (req, res) => {
       return (r.length > 0 && r[0].values.length > 0) ? r[0].values[0][0] : fallback;
     };
 
+    // Default assistant provider/model to same as summarization
+    const sumProv = getSettingValue('ai_summarization_provider', 'openai');
+    const sumMod = getSettingValue('ai_summarization_model', 'gpt-4o-mini');
+
     const current = {
       summarization: {
-        provider: getSettingValue('ai_summarization_provider', 'openai'),
-        model: getSettingValue('ai_summarization_model', 'gpt-4o-mini')
+        provider: sumProv,
+        model: sumMod
       },
       transcription: {
         provider: getSettingValue('ai_transcription_provider', 'openai'),
         model: getSettingValue('ai_transcription_model', 'whisper-1')
+      },
+      assistant: {
+        provider: getSettingValue('ai_assistant_provider', sumProv),
+        model: getSettingValue('ai_assistant_model', sumMod)
       }
     };
 
     res.json({
       summarization_providers: allModels,
       transcription_providers: transcriptionModels,
+      assistant_providers: allModels,
       current
     });
   } catch (error) {
@@ -1048,7 +1059,7 @@ router.get('/ai/models', (req, res) => {
 // PUT /api/admin/ai/models - Save selected AI models
 router.put('/ai/models', (req, res) => {
   try {
-    const { summarization, transcription } = req.body;
+    const { summarization, transcription, assistant } = req.body;
     const db = getDatabase();
     const updated = [];
 
@@ -1086,6 +1097,23 @@ router.put('/ai/models', (req, res) => {
       }
     }
 
+    if (assistant) {
+      if (assistant.provider) {
+        db.run(
+          "INSERT INTO platform_settings (key, value, updated_by, updated_at) VALUES ('ai_assistant_provider', ?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')",
+          [assistant.provider, req.user.id, assistant.provider, req.user.id]
+        );
+        updated.push('ai_assistant_provider');
+      }
+      if (assistant.model) {
+        db.run(
+          "INSERT INTO platform_settings (key, value, updated_by, updated_at) VALUES ('ai_assistant_model', ?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')",
+          [assistant.model, req.user.id, assistant.model, req.user.id]
+        );
+        updated.push('ai_assistant_model');
+      }
+    }
+
     if (updated.length > 0) {
       // Audit log
       db.run(
@@ -1103,17 +1131,24 @@ router.put('/ai/models', (req, res) => {
       return (r.length > 0 && r[0].values.length > 0) ? r[0].values[0][0] : fallback;
     };
 
+    const sumProv = getSettingValue('ai_summarization_provider', 'openai');
+    const sumMod = getSettingValue('ai_summarization_model', 'gpt-4o-mini');
+
     res.json({
       message: 'AI model settings updated successfully',
       updated,
       current: {
         summarization: {
-          provider: getSettingValue('ai_summarization_provider', 'openai'),
-          model: getSettingValue('ai_summarization_model', 'gpt-4o-mini')
+          provider: sumProv,
+          model: sumMod
         },
         transcription: {
           provider: getSettingValue('ai_transcription_provider', 'openai'),
           model: getSettingValue('ai_transcription_model', 'whisper-1')
+        },
+        assistant: {
+          provider: getSettingValue('ai_assistant_provider', sumProv),
+          model: getSettingValue('ai_assistant_model', sumMod)
         }
       }
     });
@@ -1172,6 +1207,1074 @@ router.get('/ai/test', async (req, res) => {
       configured: true,
       message: 'Connection failed: ' + error.message
     });
+  }
+});
+
+// ==================== Assistant AI Settings (Dedicated Endpoints) ====================
+
+// GET /api/admin/settings/assistant-ai - Get assistant AI provider/model config
+router.get('/settings/assistant-ai', (req, res) => {
+  try {
+    const db = getDatabase();
+    const allModels = aiProviders.getAllModels();
+
+    const getSettingValue = (key, fallback) => {
+      const r = db.exec("SELECT value FROM platform_settings WHERE key = ?", [key]);
+      return (r.length > 0 && r[0].values.length > 0) ? r[0].values[0][0] : fallback;
+    };
+
+    // Fallback to summarization settings if assistant not explicitly set
+    const sumProv = getSettingValue('ai_summarization_provider', 'openai');
+    const sumMod = getSettingValue('ai_summarization_model', 'gpt-4o-mini');
+
+    const assistantProvider = getSettingValue('ai_assistant_provider', sumProv);
+    const assistantModel = getSettingValue('ai_assistant_model', sumMod);
+
+    // Check if the selected provider has a valid API key
+    const selectedProviderObj = aiProviders.getProvider(assistantProvider);
+    const providerConfigured = selectedProviderObj ? selectedProviderObj.isConfigured() : false;
+
+    res.json({
+      assistant: {
+        provider: assistantProvider,
+        model: assistantModel,
+        provider_configured: providerConfigured
+      },
+      available_providers: allModels.map(p => ({
+        provider: p.provider,
+        configured: p.configured,
+        models: p.models
+      }))
+    });
+  } catch (error) {
+    logger.error('Admin get assistant AI settings error: ' + error.message);
+    res.status(500).json({ error: 'Failed to get assistant AI settings' });
+  }
+});
+
+// PUT /api/admin/settings/assistant-ai - Update assistant AI provider/model config
+router.put('/settings/assistant-ai', (req, res) => {
+  try {
+    const { provider, model } = req.body;
+    const db = getDatabase();
+
+    if (!provider || !model) {
+      return res.status(400).json({ error: 'Both provider and model are required' });
+    }
+
+    // Validate provider exists
+    const providerObj = aiProviders.getProvider(provider);
+    if (!providerObj) {
+      return res.status(400).json({ error: 'Unknown AI provider: ' + provider });
+    }
+
+    // Validate provider has a valid API key configured
+    if (!providerObj.isConfigured()) {
+      return res.status(400).json({
+        error: 'Provider ' + provider + ' does not have a valid API key configured. Please configure the API key first.'
+      });
+    }
+
+    // Validate model is available for this provider
+    const availableModels = providerObj.listModels();
+    if (!availableModels.includes(model)) {
+      return res.status(400).json({
+        error: 'Model ' + model + ' is not available for provider ' + provider + '. Available: ' + availableModels.join(', ')
+      });
+    }
+
+    // Save assistant provider
+    db.run(
+      "INSERT INTO platform_settings (key, value, updated_by, updated_at) VALUES ('ai_assistant_provider', ?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')",
+      [provider, req.user.id, provider, req.user.id]
+    );
+
+    // Save assistant model
+    db.run(
+      "INSERT INTO platform_settings (key, value, updated_by, updated_at) VALUES ('ai_assistant_model', ?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')",
+      [model, req.user.id, model, req.user.id]
+    );
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'update_assistant_ai', 'platform_settings', NULL, ?, datetime('now'))",
+      [req.user.id, JSON.stringify({ provider, model })]
+    );
+
+    saveDatabaseAfterWrite();
+
+    logger.info(`Superadmin ${req.user.id} updated assistant AI settings: provider=${provider}, model=${model}`);
+
+    res.json({
+      message: 'Assistant AI settings updated successfully',
+      assistant: {
+        provider,
+        model,
+        provider_configured: true
+      }
+    });
+  } catch (error) {
+    logger.error('Admin update assistant AI settings error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update assistant AI settings' });
+  }
+});
+
+// ==================== Assistant Knowledge Base ====================
+
+// POST /api/admin/assistant/reindex - Trigger knowledge base re-indexing
+router.post('/assistant/reindex', (req, res) => {
+  try {
+    const stats = assistantKnowledge.reindex();
+
+    // Audit log
+    const db = getDatabase();
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'reindex_knowledge_base', 'assistant_knowledge', NULL, ?, datetime('now'))",
+      [req.user.id, JSON.stringify(stats)]
+    );
+    saveDatabaseAfterWrite();
+
+    logger.info(`Superadmin ${req.user.id} triggered knowledge base re-index: ${stats.indexed} files, ${stats.chunks} chunks`);
+
+    res.json({
+      message: 'Knowledge base re-indexed successfully',
+      ...stats
+    });
+  } catch (error) {
+    logger.error('Admin reindex knowledge base error: ' + error.message);
+    res.status(500).json({ error: 'Failed to re-index knowledge base' });
+  }
+});
+
+// GET /api/admin/assistant/knowledge-stats - Get knowledge base statistics
+router.get('/assistant/knowledge-stats', (req, res) => {
+  try {
+    const stats = assistantKnowledge.getStats();
+    res.json(stats);
+  } catch (error) {
+    logger.error('Admin knowledge stats error: ' + error.message);
+    res.status(500).json({ error: 'Failed to get knowledge base stats' });
+  }
+});
+
+// ==================== Assistant Cached Answers ====================
+
+// GET /api/admin/assistant/cached-answers - List cached answers (paginated)
+router.get('/assistant/cached-answers', (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const result = assistantCache.getCachedAnswers(page, limit);
+    res.json(result);
+  } catch (error) {
+    logger.error('Admin list cached answers error: ' + error.message);
+    res.status(500).json({ error: 'Failed to list cached answers' });
+  }
+});
+
+// PUT /api/admin/assistant/cached-answers/:id - Edit a cached answer
+router.put('/assistant/cached-answers/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { answer_text } = req.body;
+
+    if (!answer_text || typeof answer_text !== 'string' || answer_text.trim().length === 0) {
+      return res.status(400).json({ error: 'answer_text is required' });
+    }
+
+    const success = assistantCache.updateCachedAnswer(id, answer_text.trim());
+    if (!success) {
+      return res.status(404).json({ error: 'Cached answer not found' });
+    }
+
+    // Audit log
+    const db = getDatabase();
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'edit_cached_answer', 'assistant_cached_answers', ?, ?, datetime('now'))",
+      [req.user.id, String(id), JSON.stringify({ action: 'edit' })]
+    );
+    saveDatabaseAfterWrite();
+
+    res.json({ message: 'Cached answer updated', id });
+  } catch (error) {
+    logger.error('Admin edit cached answer error: ' + error.message);
+    res.status(500).json({ error: 'Failed to edit cached answer' });
+  }
+});
+
+// DELETE /api/admin/assistant/cached-answers/:id - Delete a cached answer
+router.delete('/assistant/cached-answers/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const success = assistantCache.deleteCachedAnswer(id);
+    if (!success) {
+      return res.status(404).json({ error: 'Cached answer not found' });
+    }
+
+    // Audit log
+    const db = getDatabase();
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'delete_cached_answer', 'assistant_cached_answers', ?, ?, datetime('now'))",
+      [req.user.id, String(id), JSON.stringify({ action: 'delete' })]
+    );
+    saveDatabaseAfterWrite();
+
+    res.json({ message: 'Cached answer deleted', id });
+  } catch (error) {
+    logger.error('Admin delete cached answer error: ' + error.message);
+    res.status(500).json({ error: 'Failed to delete cached answer' });
+  }
+});
+
+// =====================================================
+// ASSISTANT CHAT ANALYTICS
+// =====================================================
+
+// GET /api/admin/assistant/analytics - Aggregated assistant chat statistics
+router.get('/assistant/analytics', (req, res) => {
+  try {
+    const db = getDatabase();
+
+    // Total conversations
+    const totalConvResult = db.exec('SELECT COUNT(*) FROM assistant_conversations');
+    const totalConversations = (totalConvResult.length > 0 && totalConvResult[0].values.length > 0) ? totalConvResult[0].values[0][0] : 0;
+
+    // Total messages
+    const totalMsgResult = db.exec('SELECT COUNT(*) FROM assistant_messages');
+    const totalMessages = (totalMsgResult.length > 0 && totalMsgResult[0].values.length > 0) ? totalMsgResult[0].values[0][0] : 0;
+
+    // Cached vs fresh responses
+    const cachedResult = db.exec("SELECT is_cached, COUNT(*) FROM assistant_messages WHERE role = 'assistant' GROUP BY is_cached");
+    let cachedCount = 0, freshCount = 0;
+    if (cachedResult.length > 0) {
+      for (const row of cachedResult[0].values) {
+        if (row[0] === 1) cachedCount = row[1];
+        else freshCount = row[1];
+      }
+    }
+
+    // Tag breakdown
+    const tagResult = db.exec("SELECT tags, COUNT(*) FROM assistant_messages WHERE role = 'user' AND tags IS NOT NULL GROUP BY tags ORDER BY COUNT(*) DESC");
+    const tagBreakdown = {};
+    if (tagResult.length > 0 && tagResult[0].values) {
+      for (const row of tagResult[0].values) {
+        tagBreakdown[row[0]] = row[1];
+      }
+    }
+
+    // Conversations by language
+    const langResult = db.exec("SELECT language, COUNT(*) FROM assistant_conversations GROUP BY language ORDER BY COUNT(*) DESC");
+    const byLanguage = {};
+    if (langResult.length > 0 && langResult[0].values) {
+      for (const row of langResult[0].values) {
+        byLanguage[row[0] || 'unknown'] = row[1];
+      }
+    }
+
+    // Top page contexts
+    const contextResult = db.exec("SELECT page_context, COUNT(*) FROM assistant_conversations WHERE page_context IS NOT NULL GROUP BY page_context ORDER BY COUNT(*) DESC LIMIT 10");
+    const topContexts = [];
+    if (contextResult.length > 0 && contextResult[0].values) {
+      for (const row of contextResult[0].values) {
+        topContexts.push({ context: row[0], count: row[1] });
+      }
+    }
+
+    // Most asked questions (user messages sorted by frequency)
+    const topQuestionsResult = db.exec("SELECT content, COUNT(*) as cnt FROM assistant_messages WHERE role = 'user' GROUP BY content ORDER BY cnt DESC LIMIT 20");
+    const topQuestions = [];
+    if (topQuestionsResult.length > 0 && topQuestionsResult[0].values) {
+      for (const row of topQuestionsResult[0].values) {
+        topQuestions.push({ question: row[0], count: row[1] });
+      }
+    }
+
+    // Feature requests
+    const featureReqResult = db.exec("SELECT content FROM assistant_messages WHERE role = 'user' AND tags = 'feature_request' ORDER BY created_at DESC LIMIT 20");
+    const featureRequests = [];
+    if (featureReqResult.length > 0 && featureReqResult[0].values) {
+      for (const row of featureReqResult[0].values) {
+        featureRequests.push(row[0]);
+      }
+    }
+
+    // Common difficulties
+    const difficultyResult = db.exec("SELECT content FROM assistant_messages WHERE role = 'user' AND tags = 'difficulty' ORDER BY created_at DESC LIMIT 20");
+    const difficulties = [];
+    if (difficultyResult.length > 0 && difficultyResult[0].values) {
+      for (const row of difficultyResult[0].values) {
+        difficulties.push(row[0]);
+      }
+    }
+
+    // Daily usage (last 30 days)
+    const dailyResult = db.exec("SELECT date(created_at) as day, SUM(CASE WHEN is_cached = 1 THEN 1 ELSE 0 END) as cached, SUM(CASE WHEN is_cached = 0 THEN 1 ELSE 0 END) as fresh FROM assistant_messages WHERE role = 'assistant' AND created_at >= datetime('now', '-30 days') GROUP BY day ORDER BY day");
+    const dailyUsage = [];
+    if (dailyResult.length > 0 && dailyResult[0].values) {
+      for (const row of dailyResult[0].values) {
+        dailyUsage.push({ date: row[0], cached: row[1], fresh: row[2] });
+      }
+    }
+
+    // Conversations by therapist
+    const byTherapistResult = db.exec("SELECT c.therapist_id, u.email, COUNT(*) as conv_count, SUM(c.message_count) as msg_count FROM assistant_conversations c JOIN users u ON u.id = c.therapist_id GROUP BY c.therapist_id ORDER BY conv_count DESC LIMIT 20");
+    const byTherapist = [];
+    if (byTherapistResult.length > 0 && byTherapistResult[0].values) {
+      for (const row of byTherapistResult[0].values) {
+        byTherapist.push({ therapist_id: row[0], email: row[1], conversations: row[2], messages: row[3] });
+      }
+    }
+
+    res.json({
+      total_conversations: totalConversations,
+      total_messages: totalMessages,
+      cached_responses: cachedCount,
+      fresh_responses: freshCount,
+      tag_breakdown: tagBreakdown,
+      by_language: byLanguage,
+      top_contexts: topContexts,
+      top_questions: topQuestions,
+      feature_requests: featureRequests,
+      difficulties: difficulties,
+      daily_usage: dailyUsage,
+      by_therapist: byTherapist
+    });
+  } catch (error) {
+    logger.error('Admin assistant analytics error: ' + error.message);
+    res.status(500).json({ error: 'Failed to load assistant analytics' });
+  }
+});
+
+// GET /api/admin/assistant/conversations - Paginated conversation list
+router.get('/assistant/conversations', (req, res) => {
+  try {
+    const db = getDatabase();
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const offset = (page - 1) * limit;
+    const language = req.query.language || null;
+    const therapistId = req.query.therapist_id ? parseInt(req.query.therapist_id) : null;
+
+    let whereClause = '';
+    const params = [];
+    const conditions = [];
+
+    const search = req.query.search || null;
+    const dateFrom = req.query.date_from || null;
+    const dateTo = req.query.date_to || null;
+
+    if (language) {
+      conditions.push('c.language = ?');
+      params.push(language);
+    }
+    if (therapistId) {
+      conditions.push('c.therapist_id = ?');
+      params.push(therapistId);
+    }
+    if (dateFrom) {
+      conditions.push('c.started_at >= ?');
+      params.push(dateFrom);
+    }
+    if (dateTo) {
+      conditions.push('c.started_at <= ?');
+      params.push(dateTo + ' 23:59:59');
+    }
+    if (search) {
+      conditions.push('c.id IN (SELECT DISTINCT conversation_id FROM assistant_messages WHERE content LIKE ?)');
+      params.push('%' + search + '%');
+    }
+    if (conditions.length > 0) {
+      whereClause = 'WHERE ' + conditions.join(' AND ');
+    }
+
+    const countResult = db.exec('SELECT COUNT(*) FROM assistant_conversations c ' + whereClause, params);
+    const total = (countResult.length > 0 && countResult[0].values.length > 0) ? countResult[0].values[0][0] : 0;
+
+    const result = db.exec(
+      'SELECT c.id, c.therapist_id, u.email, c.started_at, c.last_message_at, c.page_context, c.language, c.message_count FROM assistant_conversations c JOIN users u ON u.id = c.therapist_id ' + whereClause + ' ORDER BY c.last_message_at DESC LIMIT ? OFFSET ?',
+      [...params, limit, offset]
+    );
+
+    const conversations = [];
+    if (result.length > 0 && result[0].values) {
+      for (const row of result[0].values) {
+        conversations.push({
+          id: row[0],
+          therapist_id: row[1],
+          email: row[2],
+          started_at: row[3],
+          last_message_at: row[4],
+          page_context: row[5],
+          language: row[6],
+          message_count: row[7]
+        });
+      }
+    }
+
+    res.json({
+      conversations,
+      total,
+      page,
+      pages: Math.ceil(total / limit)
+    });
+  } catch (error) {
+    logger.error('Admin assistant conversations error: ' + error.message);
+    res.status(500).json({ error: 'Failed to load conversations' });
+  }
+});
+
+// GET /api/admin/assistant/conversations/:id/messages - Messages for a conversation
+router.get('/assistant/conversations/:id/messages', (req, res) => {
+  try {
+    const db = getDatabase();
+    const convId = parseInt(req.params.id);
+
+    // Get conversation info
+    const convResult = db.exec(
+      'SELECT c.id, c.therapist_id, u.email, c.started_at, c.page_context, c.language FROM assistant_conversations c JOIN users u ON u.id = c.therapist_id WHERE c.id = ?',
+      [convId]
+    );
+
+    if (!convResult.length || !convResult[0].values.length) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    const conv = convResult[0].values[0];
+
+    // Get messages with comment counts
+    const msgResult = db.exec(
+      `SELECT m.id, m.role, m.content, m.is_cached, m.tokens_used, m.tags, m.created_at,
+              (SELECT COUNT(*) FROM assistant_admin_comments WHERE message_id = m.id) as comment_count,
+              (SELECT rating FROM assistant_admin_comments WHERE message_id = m.id ORDER BY created_at DESC LIMIT 1) as latest_rating
+       FROM assistant_messages m WHERE m.conversation_id = ? ORDER BY m.created_at ASC`,
+      [convId]
+    );
+
+    const messages = [];
+    if (msgResult.length > 0 && msgResult[0].values) {
+      for (const row of msgResult[0].values) {
+        messages.push({
+          id: row[0],
+          role: row[1],
+          content: row[2],
+          is_cached: row[3] === 1,
+          tokens_used: row[4],
+          tags: row[5],
+          created_at: row[6],
+          comment_count: row[7] || 0,
+          latest_rating: row[8] || null
+        });
+      }
+    }
+
+    res.json({
+      conversation: {
+        id: conv[0],
+        therapist_id: conv[1],
+        email: conv[2],
+        started_at: conv[3],
+        page_context: conv[4],
+        language: conv[5]
+      },
+      messages
+    });
+  } catch (error) {
+    logger.error('Admin assistant messages error: ' + error.message);
+    res.status(500).json({ error: 'Failed to load conversation messages' });
+  }
+});
+
+// GET /api/admin/assistant/export - Export conversation data as CSV or JSON
+router.get('/assistant/export', (req, res) => {
+  try {
+    const db = getDatabase();
+    const format = req.query.format || 'json';
+
+    // Get all conversations with messages
+    const convResult = db.exec(
+      'SELECT c.id, c.therapist_id, u.email, c.started_at, c.last_message_at, c.page_context, c.language, c.message_count FROM assistant_conversations c JOIN users u ON u.id = c.therapist_id ORDER BY c.started_at DESC'
+    );
+
+    const conversations = [];
+    if (convResult.length > 0 && convResult[0].values) {
+      for (const row of convResult[0].values) {
+        const conv = {
+          id: row[0], therapist_id: row[1], email: row[2], started_at: row[3],
+          last_message_at: row[4], page_context: row[5], language: row[6], message_count: row[7]
+        };
+
+        // Get messages for this conversation
+        const msgResult = db.exec(
+          'SELECT role, content, is_cached, tags, created_at FROM assistant_messages WHERE conversation_id = ? ORDER BY created_at ASC',
+          [row[0]]
+        );
+        conv.messages = [];
+        if (msgResult.length > 0 && msgResult[0].values) {
+          for (const m of msgResult[0].values) {
+            conv.messages.push({ role: m[0], content: m[1], is_cached: m[2] === 1, tags: m[3], created_at: m[4] });
+          }
+        }
+        conversations.push(conv);
+      }
+    }
+
+    if (format === 'csv') {
+      // Flatten to CSV rows (one row per message)
+      const csvRows = ['conversation_id,therapist_email,started_at,page_context,language,message_role,message_content,is_cached,tags,created_at'];
+      for (const conv of conversations) {
+        for (const msg of conv.messages) {
+          const escapeCsv = (s) => s ? '"' + String(s).replace(/"/g, '""') + '"' : '""';
+          csvRows.push([
+            conv.id, escapeCsv(conv.email), conv.started_at, escapeCsv(conv.page_context), conv.language,
+            msg.role, escapeCsv(msg.content), msg.is_cached ? 1 : 0, msg.tags || '', msg.created_at
+          ].join(','));
+        }
+      }
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="assistant_conversations.csv"');
+      res.send(csvRows.join('\n'));
+    } else {
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', 'attachment; filename="assistant_conversations.json"');
+      res.json({ conversations, exported_at: new Date().toISOString() });
+    }
+  } catch (error) {
+    logger.error('Admin assistant export error: ' + error.message);
+    res.status(500).json({ error: 'Failed to export conversation data' });
+  }
+});
+
+// ==========================================
+// Admin Comments on Assistant Messages
+// ==========================================
+
+// POST /api/admin/assistant/messages/:messageId/comments - Create a comment on an assistant message
+router.post('/assistant/messages/:messageId/comments', (req, res) => {
+  try {
+    const db = getDatabase();
+    const messageId = parseInt(req.params.messageId);
+    const adminId = req.user.id;
+    const { comment_text, rating, correction_text } = req.body;
+
+    if (!rating || !['good', 'bad', 'neutral'].includes(rating)) {
+      return res.status(400).json({ error: 'Rating must be good, bad, or neutral' });
+    }
+
+    // Verify message exists
+    const msgCheck = db.exec('SELECT id, role FROM assistant_messages WHERE id = ?', [messageId]);
+    if (!msgCheck.length || !msgCheck[0].values.length) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    db.run(
+      "INSERT INTO assistant_admin_comments (message_id, admin_id, comment_text, rating, correction_text, created_at, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
+      [messageId, adminId, comment_text || null, rating, correction_text || null]
+    );
+
+    const idResult = db.exec('SELECT last_insert_rowid()');
+    const commentId = idResult[0].values[0][0];
+    saveDatabaseAfterWrite();
+
+    // If correction_text is provided and rating is 'bad', integrate into cached answers
+    if (correction_text && rating === 'bad') {
+      try {
+        // Get the original user question (previous message in same conversation)
+        const msgData = db.exec(
+          'SELECT conversation_id, content FROM assistant_messages WHERE id = ?',
+          [messageId]
+        );
+        if (msgData.length && msgData[0].values.length) {
+          const convId = msgData[0].values[0][0];
+          // Find the user message just before this assistant message
+          const userMsg = db.exec(
+            "SELECT content FROM assistant_messages WHERE conversation_id = ? AND role = 'user' AND id < ? ORDER BY id DESC LIMIT 1",
+            [convId, messageId]
+          );
+          if (userMsg.length && userMsg[0].values.length) {
+            const questionText = userMsg[0].values[0][0];
+            // Store or update cached answer with the correction
+            assistantCache.storeCachedAnswer(questionText, correction_text);
+            logger.info(`[AdminComments] Stored correction as cached answer for message #${messageId}`);
+          }
+        }
+      } catch (cacheErr) {
+        logger.warn('[AdminComments] Failed to store correction in cache: ' + cacheErr.message);
+      }
+    }
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, created_at) VALUES (?, 'admin_comment_create', 'assistant_message', ?, datetime('now'))",
+      [adminId, messageId]
+    );
+    saveDatabaseAfterWrite();
+
+    res.status(201).json({
+      id: commentId,
+      message_id: messageId,
+      admin_id: adminId,
+      comment_text: comment_text || null,
+      rating,
+      correction_text: correction_text || null
+    });
+  } catch (error) {
+    logger.error('Admin create comment error: ' + error.message);
+    res.status(500).json({ error: 'Failed to create comment' });
+  }
+});
+
+// GET /api/admin/assistant/messages/:messageId/comments - Get all comments for a message
+router.get('/assistant/messages/:messageId/comments', (req, res) => {
+  try {
+    const db = getDatabase();
+    const messageId = parseInt(req.params.messageId);
+
+    const result = db.exec(
+      `SELECT c.id, c.message_id, c.admin_id, u.email as admin_email, c.comment_text, c.rating, c.correction_text, c.created_at, c.updated_at
+       FROM assistant_admin_comments c
+       JOIN users u ON u.id = c.admin_id
+       WHERE c.message_id = ?
+       ORDER BY c.created_at DESC`,
+      [messageId]
+    );
+
+    const comments = [];
+    if (result.length > 0 && result[0].values) {
+      for (const row of result[0].values) {
+        comments.push({
+          id: row[0],
+          message_id: row[1],
+          admin_id: row[2],
+          admin_email: row[3],
+          comment_text: row[4],
+          rating: row[5],
+          correction_text: row[6],
+          created_at: row[7],
+          updated_at: row[8]
+        });
+      }
+    }
+
+    res.json({ comments });
+  } catch (error) {
+    logger.error('Admin get comments error: ' + error.message);
+    res.status(500).json({ error: 'Failed to load comments' });
+  }
+});
+
+// PUT /api/admin/assistant/comments/:commentId - Update a comment
+router.put('/assistant/comments/:commentId', (req, res) => {
+  try {
+    const db = getDatabase();
+    const commentId = parseInt(req.params.commentId);
+    const { comment_text, rating, correction_text } = req.body;
+
+    // Verify comment exists
+    const existing = db.exec('SELECT id, message_id FROM assistant_admin_comments WHERE id = ?', [commentId]);
+    if (!existing.length || !existing[0].values.length) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+
+    if (rating && !['good', 'bad', 'neutral'].includes(rating)) {
+      return res.status(400).json({ error: 'Rating must be good, bad, or neutral' });
+    }
+
+    const updates = [];
+    const params = [];
+    if (comment_text !== undefined) { updates.push('comment_text = ?'); params.push(comment_text || null); }
+    if (rating !== undefined) { updates.push('rating = ?'); params.push(rating); }
+    if (correction_text !== undefined) { updates.push('correction_text = ?'); params.push(correction_text || null); }
+    updates.push("updated_at = datetime('now')");
+    params.push(commentId);
+
+    db.run(`UPDATE assistant_admin_comments SET ${updates.join(', ')} WHERE id = ?`, params);
+    saveDatabaseAfterWrite();
+
+    res.json({ success: true, id: commentId });
+  } catch (error) {
+    logger.error('Admin update comment error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update comment' });
+  }
+});
+
+// DELETE /api/admin/assistant/comments/:commentId - Delete a comment
+router.delete('/assistant/comments/:commentId', (req, res) => {
+  try {
+    const db = getDatabase();
+    const commentId = parseInt(req.params.commentId);
+
+    // Verify comment exists
+    const existing = db.exec('SELECT id FROM assistant_admin_comments WHERE id = ?', [commentId]);
+    if (!existing.length || !existing[0].values.length) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+
+    db.run('DELETE FROM assistant_admin_comments WHERE id = ?', [commentId]);
+    saveDatabaseAfterWrite();
+
+    res.json({ success: true, id: commentId });
+  } catch (error) {
+    logger.error('Admin delete comment error: ' + error.message);
+    res.status(500).json({ error: 'Failed to delete comment' });
+  }
+});
+
+// GET /api/admin/assistant/comments/export - Export all comments for training data
+router.get('/assistant/comments/export', (req, res) => {
+  try {
+    const db = getDatabase();
+    const format = req.query.format || 'json';
+
+    const result = db.exec(
+      `SELECT c.id, c.message_id, c.admin_id, u.email as admin_email, c.comment_text, c.rating, c.correction_text, c.created_at,
+              m.role as message_role, m.content as message_content, m.tags as message_tags,
+              conv.id as conversation_id, conv.page_context, conv.language,
+              (SELECT content FROM assistant_messages WHERE conversation_id = conv.id AND role = 'user' AND id < m.id ORDER BY id DESC LIMIT 1) as user_question
+       FROM assistant_admin_comments c
+       JOIN users u ON u.id = c.admin_id
+       JOIN assistant_messages m ON m.id = c.message_id
+       JOIN assistant_conversations conv ON conv.id = m.conversation_id
+       ORDER BY c.created_at DESC`
+    );
+
+    const comments = [];
+    if (result.length > 0 && result[0].values) {
+      for (const row of result[0].values) {
+        comments.push({
+          id: row[0],
+          message_id: row[1],
+          admin_id: row[2],
+          admin_email: row[3],
+          comment_text: row[4],
+          rating: row[5],
+          correction_text: row[6],
+          created_at: row[7],
+          message_role: row[8],
+          message_content: row[9],
+          message_tags: row[10],
+          conversation_id: row[11],
+          page_context: row[12],
+          language: row[13],
+          user_question: row[14]
+        });
+      }
+    }
+
+    if (format === 'csv') {
+      const csvRows = ['id,message_id,admin_email,rating,comment_text,correction_text,message_role,message_content,user_question,page_context,language,created_at'];
+      for (const c of comments) {
+        const escapeCsv = (s) => s ? '"' + String(s).replace(/"/g, '""') + '"' : '""';
+        csvRows.push([
+          c.id, c.message_id, escapeCsv(c.admin_email), c.rating, escapeCsv(c.comment_text),
+          escapeCsv(c.correction_text), c.message_role, escapeCsv(c.message_content),
+          escapeCsv(c.user_question), escapeCsv(c.page_context), c.language, c.created_at
+        ].join(','));
+      }
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="assistant_admin_comments.csv"');
+      res.send(csvRows.join('\n'));
+    } else {
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', 'attachment; filename="assistant_admin_comments.json"');
+      res.json({ comments, exported_at: new Date().toISOString(), total: comments.length });
+    }
+  } catch (error) {
+    logger.error('Admin export comments error: ' + error.message);
+    res.status(500).json({ error: 'Failed to export comments' });
+  }
+});
+
+// =====================================================
+// ASSISTANT CONVERSATION SUMMARY & INSIGHTS (AI-powered)
+// =====================================================
+
+// POST /api/admin/assistant/summary - Generate AI summary of assistant conversations
+router.post('/assistant/summary', async (req, res) => {
+  try {
+    const db = getDatabase();
+    const { dateFrom, dateTo, therapistId, tags } = req.body;
+
+    if (!dateFrom || !dateTo) {
+      return res.status(400).json({ error: 'dateFrom and dateTo are required' });
+    }
+
+    // Build query to collect messages within the date range
+    let conversationQuery = `
+      SELECT ac.id as conversation_id, ac.therapist_id, ac.page_context, ac.language, ac.message_count,
+             u.email as therapist_email
+      FROM assistant_conversations ac
+      LEFT JOIN users u ON u.id = ac.therapist_id
+      WHERE ac.started_at >= ? AND ac.started_at <= ?
+    `;
+    const params = [dateFrom, dateTo + 'T23:59:59'];
+
+    if (therapistId) {
+      conversationQuery += ' AND ac.therapist_id = ?';
+      params.push(parseInt(therapistId));
+    }
+
+    conversationQuery += ' ORDER BY ac.started_at ASC';
+
+    const convResult = db.exec(conversationQuery, params);
+    if (!convResult.length || !convResult[0].values.length) {
+      return res.status(200).json({
+        summary: {
+          feature_requests: [],
+          bugs: [],
+          faq: [],
+          trends: [],
+          recommendations: []
+        },
+        meta: { conversations_analyzed: 0, messages_analyzed: 0, period: { from: dateFrom, to: dateTo } }
+      });
+    }
+
+    const convColumns = convResult[0].columns;
+    const conversations = convResult[0].values.map(row => {
+      const obj = {};
+      convColumns.forEach((col, i) => { obj[col] = row[i]; });
+      return obj;
+    });
+
+    const conversationIds = conversations.map(c => c.conversation_id);
+
+    // Fetch messages for these conversations, optionally filtered by tags
+    let msgQuery = `
+      SELECT am.conversation_id, am.role, am.content, am.tags, am.created_at
+      FROM assistant_messages am
+      WHERE am.conversation_id IN (${conversationIds.map(() => '?').join(',')})
+    `;
+    const msgParams = [...conversationIds];
+
+    if (tags && tags.length > 0) {
+      msgQuery += ` AND (am.role = 'assistant' OR am.tags IN (${tags.map(() => '?').join(',')}))`;
+      msgParams.push(...tags);
+    }
+
+    msgQuery += ' ORDER BY am.conversation_id, am.created_at ASC';
+
+    const msgResult = db.exec(msgQuery, msgParams);
+    let allMessages = [];
+    if (msgResult.length && msgResult[0].values.length) {
+      const msgColumns = msgResult[0].columns;
+      allMessages = msgResult[0].values.map(row => {
+        const obj = {};
+        msgColumns.forEach((col, i) => { obj[col] = row[i]; });
+        return obj;
+      });
+    }
+
+    // Group messages by conversation
+    const conversationMap = {};
+    for (const conv of conversations) {
+      conversationMap[conv.conversation_id] = {
+        ...conv,
+        messages: []
+      };
+    }
+    for (const msg of allMessages) {
+      if (conversationMap[msg.conversation_id]) {
+        conversationMap[msg.conversation_id].messages.push(msg);
+      }
+    }
+
+    // Build digest for AI analysis (truncate to avoid token overflow)
+    const conversationsWithMessages = Object.values(conversationMap).filter(c => c.messages.length > 0);
+    let totalMessages = 0;
+
+    let digest = '';
+    for (const conv of conversationsWithMessages) {
+      digest += `\n--- Conversation (therapist: ${conv.therapist_email || 'unknown'}, context: ${conv.page_context || 'general'}, lang: ${conv.language || 'en'}) ---\n`;
+      for (const msg of conv.messages) {
+        const tag = msg.tags ? ` [${msg.tags}]` : '';
+        digest += `${msg.role}${tag}: ${msg.content}\n`;
+        totalMessages++;
+      }
+      // Limit digest size to ~50k chars to avoid token limits
+      if (digest.length > 50000) {
+        digest += '\n[... additional conversations truncated for analysis ...]\n';
+        break;
+      }
+    }
+
+    if (!digest.trim()) {
+      return res.status(200).json({
+        summary: {
+          feature_requests: [],
+          bugs: [],
+          faq: [],
+          trends: [],
+          recommendations: []
+        },
+        meta: { conversations_analyzed: 0, messages_analyzed: 0, period: { from: dateFrom, to: dateTo } }
+      });
+    }
+
+    // Check if AI is configured
+    const activeProvider = aiProviders.getActiveAssistantProvider(db);
+    if (!activeProvider.provider.isConfigured()) {
+      return res.status(503).json({
+        error: 'AI provider is not configured. Please configure an AI provider in Admin > AI Models.',
+        code: 'AI_NOT_CONFIGURED'
+      });
+    }
+
+    // Set up SSE streaming
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    });
+
+    // Send meta info first
+    res.write(`data: ${JSON.stringify({
+      type: 'meta',
+      conversations_analyzed: conversationsWithMessages.length,
+      messages_analyzed: totalMessages,
+      period: { from: dateFrom, to: dateTo }
+    })}\n\n`);
+
+    const analysisPrompt = `You are an expert product analyst reviewing user support conversations from a SaaS platform (PR-TOP — a therapist-controlled between-session assistant for psychologists).
+
+Analyze the following assistant chat conversations between therapists and the in-app AI assistant. Extract and categorize insights.
+
+CONVERSATIONS:
+${digest}
+
+Return a JSON object with EXACTLY this structure (no markdown, no code fences, just raw JSON):
+{
+  "feature_requests": [
+    { "title": "Short title", "description": "Details of what the user wants", "frequency": 1, "priority": "high|medium|low" }
+  ],
+  "bugs": [
+    { "title": "Short title", "description": "What went wrong", "severity": "critical|high|medium|low" }
+  ],
+  "faq": [
+    { "question": "Common question", "frequency": 1, "category": "navigation|workflow|billing|technical|other" }
+  ],
+  "trends": [
+    { "trend": "Description of observed pattern", "impact": "high|medium|low" }
+  ],
+  "recommendations": [
+    { "action": "Specific recommendation", "rationale": "Why this matters", "effort": "low|medium|high" }
+  ]
+}
+
+Guidelines:
+- Group similar requests/issues together, noting frequency
+- Prioritize by frequency and impact
+- Be specific and actionable in recommendations
+- If no items found for a category, return an empty array
+- Return ONLY the JSON object, nothing else`;
+
+    try {
+      const stream = aiProviders.chatStream(
+        [
+          { role: 'system', content: 'You are a product analytics expert. Always respond with valid JSON only.' },
+          { role: 'user', content: analysisPrompt }
+        ],
+        {
+          provider: activeProvider.providerName,
+          model: activeProvider.model,
+          temperature: 0.3,
+          max_tokens: 4000
+        },
+        db
+      );
+
+      let fullText = '';
+      for await (const chunk of stream) {
+        if (chunk.text) {
+          fullText += chunk.text;
+          res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk.text })}\n\n`);
+        }
+        if (chunk.done) {
+          // Try to parse the full response as JSON
+          let parsed = null;
+          try {
+            // Strip markdown code fences if present
+            let cleanText = fullText.trim();
+            if (cleanText.startsWith('```')) {
+              cleanText = cleanText.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+            }
+            parsed = JSON.parse(cleanText);
+          } catch (parseErr) {
+            logger.warn('[Admin Summary] Could not parse AI response as JSON: ' + parseErr.message);
+            parsed = {
+              feature_requests: [],
+              bugs: [],
+              faq: [],
+              trends: [],
+              recommendations: [],
+              raw_text: fullText
+            };
+          }
+
+          res.write(`data: ${JSON.stringify({
+            type: 'done',
+            summary: parsed,
+            meta: {
+              conversations_analyzed: conversationsWithMessages.length,
+              messages_analyzed: totalMessages,
+              period: { from: dateFrom, to: dateTo },
+              model: activeProvider.model,
+              provider: activeProvider.providerName
+            }
+          })}\n\n`);
+        }
+      }
+    } catch (aiErr) {
+      logger.error('[Admin Summary] AI error: ' + aiErr.message);
+      res.write(`data: ${JSON.stringify({ type: 'error', error: aiErr.message })}\n\n`);
+    }
+
+    res.write('data: [DONE]\n\n');
+    res.end();
+
+    // Audit log
+    try {
+      db.run(
+        "INSERT INTO audit_log (user_id, action, details, created_at) VALUES (?, 'admin_generate_summary', ?, datetime('now'))",
+        [req.user.id, JSON.stringify({ dateFrom, dateTo, therapistId: therapistId || null, tags: tags || null, conversations: conversationsWithMessages.length })]
+      );
+      saveDatabaseAfterWrite();
+    } catch (auditErr) {
+      logger.warn('[Admin Summary] Audit log failed: ' + auditErr.message);
+    }
+
+  } catch (error) {
+    logger.error('Admin generate summary error: ' + error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to generate summary' });
+    } else {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+      res.end();
+    }
+  }
+});
+
+// POST /api/admin/assistant/summary/export - Export summary as JSON
+router.post('/assistant/summary/export', async (req, res) => {
+  try {
+    const { summary, meta } = req.body;
+    if (!summary) {
+      return res.status(400).json({ error: 'Summary data is required' });
+    }
+
+    const exportData = {
+      generated_at: new Date().toISOString(),
+      platform: 'PR-TOP',
+      meta: meta || {},
+      summary
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="assistant-summary-${new Date().toISOString().split('T')[0]}.json"`);
+    res.json(exportData);
+  } catch (error) {
+    logger.error('Admin export summary error: ' + error.message);
+    res.status(500).json({ error: 'Failed to export summary' });
   }
 });
 

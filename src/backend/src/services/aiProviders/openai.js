@@ -76,6 +76,87 @@ async function chat(messages, options) {
   };
 }
 
+/**
+ * Send a streaming chat completion request to OpenAI.
+ * Returns an async generator that yields text chunks.
+ * @param {Array} messages - Array of {role, content} messages
+ * @param {object} options - { model, temperature, max_tokens }
+ * @returns {AsyncGenerator<{text: string, done: boolean, input_tokens?: number, output_tokens?: number, model?: string}>}
+ */
+async function* chatStream(messages, options) {
+  options = options || {};
+  var model = options.model || process.env.AI_MODEL || 'gpt-4o-mini';
+  var temperature = options.temperature != null ? options.temperature : 0.3;
+  var maxTokens = options.max_tokens || 2000;
+
+  logger.info('[OpenAI] Calling streaming chat completions: model=' + model);
+
+  var response = await fetch(API_URL + '/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + API_KEY,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: model,
+      messages: messages,
+      temperature: temperature,
+      max_tokens: maxTokens,
+      stream: true
+    }),
+    signal: AbortSignal.timeout(120000)
+  });
+
+  if (!response.ok) {
+    var errorDetail = '';
+    try {
+      var errorBody = await response.text();
+      errorDetail = ' - ' + errorBody.slice(0, 500);
+    } catch (_) {}
+    throw new Error('OpenAI API returned ' + response.status + errorDetail);
+  }
+
+  var reader = response.body.getReader();
+  var decoder = new TextDecoder();
+  var buffer = '';
+  var fullText = '';
+
+  try {
+    while (true) {
+      var readResult = await reader.read();
+      if (readResult.done) break;
+
+      buffer += decoder.decode(readResult.value, { stream: true });
+      var lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].trim();
+        if (!line || !line.startsWith('data: ')) continue;
+        var data = line.slice(6);
+        if (data === '[DONE]') {
+          yield { text: '', done: true, fullText: fullText, model: model };
+          return;
+        }
+        try {
+          var parsed = JSON.parse(data);
+          var content = parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content;
+          if (content) {
+            fullText += content;
+            yield { text: content, done: false };
+          }
+        } catch (e) {
+          // Skip unparseable chunks
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  yield { text: '', done: true, fullText: fullText, model: model };
+}
+
 function listModels() {
   return SUPPORTED_MODELS;
 }
@@ -84,5 +165,6 @@ module.exports = {
   name: 'openai',
   isConfigured: isConfigured,
   chat: chat,
+  chatStream: chatStream,
   listModels: listModels
 };

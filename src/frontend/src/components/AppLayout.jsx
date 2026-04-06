@@ -2,7 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import TimezoneDetectionBanner from './TimezoneDetectionBanner';
+import AssistantChatButton from './AssistantChatButton';
+import AssistantChatPanel from './AssistantChatPanel';
 import { UnsavedChangesProvider } from '../contexts/UnsavedChangesContext';
+// Assistant chat state is now managed via Zustand store (stores/assistantStore.js)
 
 const API_URL = '/api';
 
@@ -73,6 +76,12 @@ export default function AppLayout({ user, children }) {
           <TimezoneDetectionBanner user={user} />
           {typeof children === 'function' ? children({ user }) : children}
         </div>
+
+        {/* Floating assistant chat button - visible on all authenticated pages */}
+        <AssistantChatButton />
+
+        {/* Assistant chat side panel */}
+        <AssistantChatPanel />
       </div>
     </UnsavedChangesProvider>
   );
