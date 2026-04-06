@@ -245,6 +245,17 @@ A: Try refreshing the page. If the issue persists, it may be a temporary server 
     prompt += contextHint + '\n';
   }
 
+  // Add proactive feedback collection instruction
+  if (options.shouldPromptFeedback) {
+    prompt += `\n## PROACTIVE FEEDBACK
+After answering the user's current question, gently ask if they have any feature requests or suggestions for improving the platform. Use the user's language. Examples:
+- English: "By the way, are there any features you'd like to see on the platform, or anything that could be improved?"
+- Russian: "Кстати, есть ли функции, которые вы хотели бы видеть на платформе, или что-то, что можно улучшить?"
+- Spanish: "Por cierto, ¿hay alguna función que le gustaría ver en la plataforma o algo que se pueda mejorar?"
+- Ukrainian: "До речі, чи є функції, які ви хотіли б бачити на платформі, або щось, що можна покращити?"
+Keep it natural and non-intrusive — append it as a friendly PS after your main answer. Do not force it if it feels awkward in context.\n`;
+  }
+
   // Add plan-specific hints
   if (plan === 'trial') {
     prompt += '\n## PLAN NOTE\nThe user is on the Trial plan (14 days, 3 clients, 5 sessions/month). Mention upgrade options when relevant features are limited.\n';

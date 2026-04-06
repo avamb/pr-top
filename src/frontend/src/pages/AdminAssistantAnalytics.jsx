@@ -820,16 +820,34 @@ export default function AdminAssistantAnalytics() {
             </div>
           </div>
 
-          {/* Feature Requests */}
+          {/* Feature Requests from Therapists (enhanced) */}
           <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-lg font-semibold text-text mb-4">
-              💡 {t('admin.assistantAnalytics.featureRequests', 'Feature Requests')}
+            <h3 className="text-lg font-semibold text-text mb-3 flex items-center gap-2">
+              💡 {t('admin.assistantAnalytics.featureRequestsFromTherapists', 'Feature Requests from Therapists')}
+              {analytics.feature_request_details?.length > 0 && (
+                <span className="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded-full">{analytics.feature_request_details.length}</span>
+              )}
             </h3>
+            {analytics.feedback_prompt_stats && (
+              <p className="text-xs text-secondary mb-3">
+                {t('admin.assistantAnalytics.feedbackPromptStats', 'Proactive feedback prompts sent to')} {analytics.feedback_prompt_stats.therapists_prompted} {t('admin.assistantAnalytics.therapists', 'therapists')}
+                {analytics.feedback_prompt_stats.total_prompts > 0 && ` (${analytics.feedback_prompt_stats.total_prompts} ${t('admin.assistantAnalytics.totalPrompts', 'total prompts')})`}
+              </p>
+            )}
             <div className="space-y-2 max-h-80 overflow-y-auto">
-              {analytics.feature_requests.map((fr, i) => (
-                <div key={i} className="p-2 bg-purple-50 rounded text-sm text-text">{fr}</div>
+              {(analytics.feature_request_details || analytics.feature_requests?.map(fr => ({ content: fr })) || []).map((fr, i) => (
+                <div key={i} className="p-3 bg-purple-50 rounded-lg border border-purple-100">
+                  <p className="text-sm text-text">{fr.content || fr}</p>
+                  {fr.therapist && (
+                    <div className="flex items-center gap-2 mt-1 text-xs text-secondary">
+                      <span>{fr.therapist}</span>
+                      {fr.created_at && <span>· {fr.created_at}</span>}
+                      {fr.language && <span className="uppercase bg-purple-100 text-purple-700 px-1.5 rounded">{fr.language}</span>}
+                    </div>
+                  )}
+                </div>
               ))}
-              {analytics.feature_requests.length === 0 && (
+              {(!analytics.feature_request_details || analytics.feature_request_details.length === 0) && analytics.feature_requests.length === 0 && (
                 <p className="text-center text-secondary py-4">{t('admin.assistantAnalytics.noFeatureRequests', 'No feature requests detected')}</p>
               )}
             </div>

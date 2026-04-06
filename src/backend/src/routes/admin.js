@@ -1525,6 +1525,32 @@ router.get('/assistant/analytics', (req, res) => {
       }
     }
 
+    // Feature requests with therapist info (grouped)
+    const featureReqDetailResult = db.exec(`
+      SELECT am.content, u.email, am.created_at, ac.language
+      FROM assistant_messages am
+      JOIN assistant_conversations ac ON ac.id = am.conversation_id
+      JOIN users u ON u.id = ac.therapist_id
+      WHERE am.role = 'user' AND am.tags = 'feature_request'
+      ORDER BY am.created_at DESC LIMIT 50
+    `);
+    const featureRequestDetails = [];
+    if (featureReqDetailResult.length > 0 && featureReqDetailResult[0].values) {
+      for (const row of featureReqDetailResult[0].values) {
+        featureRequestDetails.push({ content: row[0], therapist: row[1], created_at: row[2], language: row[3] });
+      }
+    }
+
+    // Feedback prompt stats
+    const promptStatsResult = db.exec("SELECT COUNT(*) as total_prompts, COUNT(DISTINCT therapist_id) as therapists_prompted FROM assistant_feedback_prompts");
+    let feedbackPromptStats = { total_prompts: 0, therapists_prompted: 0 };
+    if (promptStatsResult.length > 0 && promptStatsResult[0].values.length > 0) {
+      feedbackPromptStats = {
+        total_prompts: promptStatsResult[0].values[0][0] || 0,
+        therapists_prompted: promptStatsResult[0].values[0][1] || 0
+      };
+    }
+
     res.json({
       total_conversations: totalConversations,
       total_messages: totalMessages,
@@ -1535,9 +1561,11 @@ router.get('/assistant/analytics', (req, res) => {
       top_contexts: topContexts,
       top_questions: topQuestions,
       feature_requests: featureRequests,
+      feature_request_details: featureRequestDetails,
       difficulties: difficulties,
       daily_usage: dailyUsage,
-      by_therapist: byTherapist
+      by_therapist: byTherapist,
+      feedback_prompt_stats: feedbackPromptStats
     });
   } catch (error) {
     logger.error('Admin assistant analytics error: ' + error.message);
