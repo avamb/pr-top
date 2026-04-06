@@ -1,3 +1,69 @@
+## Session: 2026-04-06 - Features #315, #316
+
+### Completed: Superadmin Conversation Summary & Insights (#315) - PASSING
+
+**What was built:**
+- POST /api/admin/assistant/summary endpoint (superadmin only) with SSE streaming
+  - Accepts dateFrom, dateTo, therapistId (optional), tags (optional)
+  - Collects messages from assistant_messages, groups by conversation_id
+  - Sends to AI with structured analysis prompt for feature requests, bugs, FAQ, trends, recommendations
+  - Returns structured JSON response via SSE streaming
+  - Returns empty result gracefully when no conversations found
+  - Returns proper error when AI provider not configured
+- POST /api/admin/assistant/summary/export for JSON export of results
+- AI Summary tab in AdminAssistantAnalytics.jsx with:
+  - Date range picker (default last 30 days)
+  - Therapist filter dropdown (populated from analytics data)
+  - Message tag filters (question, feature_request, difficulty, feedback)
+  - "Generate Summary" button with loading spinner
+  - Streaming text display during AI analysis
+  - Results displayed in 4 category cards: Feature Requests, Bugs, FAQ, Trends
+  - Full-width Recommendations section
+  - Export JSON button
+  - Empty state with helpful description
+  - Meta info bar showing conversations/messages analyzed and AI model used
+- Audit logging for summary generation
+
+**Verification:**
+- AI Summary tab renders correctly with all controls ✅
+- Date range, therapist filter, tag filters all functional ✅
+- Empty date range returns 0 conversations result correctly ✅
+- AI not configured shows proper error message ✅
+- Results display with category cards and meta info ✅
+- Export JSON button present ✅
+- Zero feature-related console errors ✅
+- No mock data patterns ✅
+
+### Completed: Proactive Feature Request Collection from Therapists (#316) - PASSING
+
+**What was built:**
+- Database: assistant_feedback_prompts table (therapist_id UNIQUE, last_prompted_at, prompt_count)
+- Backend (assistant.js):
+  - updateFeedbackPromptTracking() helper function
+  - Proactive feedback check: triggers after 14+ days since last prompt, not on first message, requires 3+ conversations
+  - Superadmins excluded from feedback prompts
+  - Tracking updated after both SSE and non-streaming responses
+- Backend (assistantPrompt.js): PROACTIVE FEEDBACK section in system prompt with multilingual examples (EN/RU/ES/UK)
+- Backend (assistant.js): Enhanced tagMessage() with multilingual keywords (RU/ES/UK) for feature_request, difficulty, feedback patterns
+- Backend (admin.js): Analytics endpoint now returns feature_request_details (with therapist email, date, language) and feedback_prompt_stats
+- Frontend: Enhanced Insights tab "Feature Requests from Therapists" section with:
+  - Therapist email, date, language badge per request
+  - Count badge
+  - Proactive feedback prompt stats (therapists prompted, total prompts)
+
+**Verification:**
+- assistant_feedback_prompts table created (tableCount 24) ✅
+- Analytics API returns feature_request_details and feedback_prompt_stats ✅
+- Insights tab shows enhanced feature requests with therapist info ✅
+- Feedback prompt stats displayed correctly (0 therapists, expected) ✅
+- Multilingual tagging patterns in place ✅
+- Zero feature-related console errors ✅
+- No mock data patterns ✅
+
+### Current Status
+- Features passing: 314/317
+- Features #315, #316: BOTH PASSING
+
 ## Session: 2026-04-06 - Features #313, #314, #317
 
 ### Completed: Fix Assistant Self-Identity in System Prompt (#313) - PASSING

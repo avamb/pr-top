@@ -32,16 +32,16 @@ function tagMessage(content) {
   if (!content || typeof content !== 'string') return null;
   const lower = content.toLowerCase();
 
-  // Feature request patterns
-  if (/(?:can you add|i wish|it would be nice|please add|feature request|could you implement|i need|i want)/i.test(lower)) {
+  // Feature request patterns (EN + RU + ES + UK)
+  if (/(?:can you add|i wish|it would be nice|please add|feature request|could you implement|i need a feature|i want a feature|would be great if|хочу функцию|нужна функция|было бы хорошо|добавьте|хотел бы видеть|мне нужно|хотелось бы|можно добавить|necesito|me gustaría|sería bueno|podrían agregar|хочу функцію|потрібна функція|було б добре|додайте|хотів би бачити)/i.test(lower)) {
     return 'feature_request';
   }
-  // Difficulty/problem patterns
-  if (/(?:doesn't work|not working|can't find|where is|how do i|i'm stuck|error|problem|issue|broken|bug|confused)/i.test(lower)) {
+  // Difficulty/problem patterns (EN + RU + ES + UK)
+  if (/(?:doesn't work|not working|can't find|where is|how do i|i'm stuck|error|problem|issue|broken|bug|confused|не работает|не могу найти|ошибка|проблема|не понимаю|сломано|no funciona|no puedo|error|problema|не працює|не можу знайти|помилка)/i.test(lower)) {
     return 'difficulty';
   }
-  // Feedback patterns
-  if (/(?:great|love|thank|awesome|perfect|excellent|good job|well done|amazing)/i.test(lower)) {
+  // Feedback patterns (EN + RU + ES + UK)
+  if (/(?:great|love|thank|awesome|perfect|excellent|good job|well done|amazing|спасибо|отлично|прекрасно|замечательно|gracias|excelente|perfecto|genial|дякую|чудово|прекрасно)/i.test(lower)) {
     return 'feedback';
   }
   // Default: question
@@ -107,6 +107,31 @@ function saveChatExchange(db, therapistId, activeChatId, messages, sanitized, as
 
   saveDatabaseAfterWrite();
   return chatId;
+}
+
+// === Feedback Prompt Tracking ===
+// Update the last_prompted_at timestamp for a therapist after feedback prompt was included
+function updateFeedbackPromptTracking(db, therapistId) {
+  try {
+    const existing = db.exec(
+      "SELECT id FROM assistant_feedback_prompts WHERE therapist_id = ?",
+      [therapistId]
+    );
+    if (existing.length > 0 && existing[0].values.length > 0) {
+      db.run(
+        "UPDATE assistant_feedback_prompts SET last_prompted_at = datetime('now'), prompt_count = prompt_count + 1 WHERE therapist_id = ?",
+        [therapistId]
+      );
+    } else {
+      db.run(
+        "INSERT INTO assistant_feedback_prompts (therapist_id, last_prompted_at, prompt_count) VALUES (?, datetime('now'), 1)",
+        [therapistId]
+      );
+    }
+    saveDatabaseAfterWrite();
+  } catch (err) {
+    logger.warn('[Assistant] Failed to update feedback prompt tracking: ' + err.message);
+  }
 }
 
 // All routes require authentication
@@ -307,12 +332,47 @@ router.post('/chat', async (req, res) => {
       logger.warn('[Assistant] RAG search error: ' + ragError.message);
     }
 
+    // === Proactive Feedback Prompt Check ===
+    // Check if we should ask the therapist for feature feedback (every 14 days, not on first message)
+    let shouldPromptFeedback = false;
+    const userMessageCount = messages.filter(m => m.role === 'user').length;
+    if (userMessageCount > 1 && req.user.role !== 'superadmin') {
+      try {
+        const feedbackResult = db.exec(
+          "SELECT last_prompted_at FROM assistant_feedback_prompts WHERE therapist_id = ?",
+          [req.user.id]
+        );
+        const FEEDBACK_INTERVAL_DAYS = 14;
+        if (feedbackResult.length > 0 && feedbackResult[0].values.length > 0) {
+          const lastPrompted = new Date(feedbackResult[0].values[0][0]);
+          const daysSince = (Date.now() - lastPrompted.getTime()) / (1000 * 60 * 60 * 24);
+          if (daysSince >= FEEDBACK_INTERVAL_DAYS) {
+            shouldPromptFeedback = true;
+          }
+        } else {
+          // Never prompted before — check if user has had at least 3 total conversations
+          const convCountResult = db.exec(
+            "SELECT COUNT(*) FROM assistant_conversations WHERE therapist_id = ?",
+            [req.user.id]
+          );
+          const convCount = (convCountResult.length > 0 && convCountResult[0].values.length > 0)
+            ? convCountResult[0].values[0][0] : 0;
+          if (convCount >= 3) {
+            shouldPromptFeedback = true;
+          }
+        }
+      } catch (fbErr) {
+        logger.warn('[Assistant] Feedback prompt check error: ' + fbErr.message);
+      }
+    }
+
     // Build system prompt with context + RAG
     const systemPrompt = buildAssistantSystemPrompt({
       pageContext: page_context || '',
       locale: detectedLanguage,
       plan: plan,
-      role: req.user.role || 'therapist'
+      role: req.user.role || 'therapist',
+      shouldPromptFeedback: shouldPromptFeedback
     }) + ragContext;
 
     // Prepare messages for AI (system + conversation history, limit to last 20 messages)
@@ -362,6 +422,11 @@ router.post('/chat', async (req, res) => {
         messages.push({ role: 'assistant', content: assistantReply, timestamp: new Date().toISOString() });
         const conversationId = req.body._conversation_id || null;
         const savedChatId = saveChatExchange(db, req.user.id, activeChatId, messages, sanitized, assistantReply, false, page_context, detectedLanguage, conversationId);
+
+        // Track feedback prompt if it was included
+        if (shouldPromptFeedback) {
+          updateFeedbackPromptTracking(db, req.user.id);
+        }
 
         // Send done event with metadata
         res.write(`data: ${JSON.stringify({ type: 'done', chat_id: savedChatId, language: detectedLanguage, cached: false, messages: messages })}\n\n`);
@@ -421,6 +486,11 @@ router.post('/chat', async (req, res) => {
 
     const conversationId = req.body._conversation_id || null;
     const savedChatId = saveChatExchange(db, req.user.id, activeChatId, messages, sanitized, assistantReply, false, page_context, detectedLanguage, conversationId);
+
+    // Track feedback prompt if it was included
+    if (shouldPromptFeedback) {
+      updateFeedbackPromptTracking(db, req.user.id);
+    }
 
     res.json({
       chat_id: savedChatId,

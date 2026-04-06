@@ -627,6 +627,16 @@ function applySchema(db) {
   db.run('CREATE INDEX IF NOT EXISTS idx_admin_comments_message ON assistant_admin_comments(message_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_admin_comments_admin ON assistant_admin_comments(admin_id)');
 
+  // Create assistant_feedback_prompts table for tracking proactive feature request prompts
+  db.run(`CREATE TABLE IF NOT EXISTS assistant_feedback_prompts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    therapist_id INTEGER NOT NULL REFERENCES users(id),
+    last_prompted_at TEXT DEFAULT (datetime('now')),
+    prompt_count INTEGER DEFAULT 1,
+    UNIQUE(therapist_id)
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_feedback_prompts_therapist ON assistant_feedback_prompts(therapist_id)');
+
   // Insert default platform settings
   const defaultSettings = [
     ['trial_duration_days', '14'],
