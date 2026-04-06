@@ -1,3 +1,52 @@
+## Session: 2026-04-06 - Features #311, #312
+
+### Completed: Superadmin can comment on assistant responses to train the assistant (#311) - PASSING
+
+**What was built:**
+- Created `assistant_admin_comments` DB table (message_id FK, admin_id, comment_text, rating good/bad/neutral, correction_text, timestamps)
+- API endpoints: POST/GET /api/admin/assistant/messages/:id/comments, PUT/DELETE /api/admin/assistant/comments/:id
+- Training data export: GET /api/admin/assistant/comments/export (CSV/JSON)
+- Updated conversation messages API with comment_count and latest_rating per message
+- Frontend: CommentForm with rating buttons, comment text, correction text (appears on Bad rating)
+- Frontend: MessageComments expandable inline section on assistant messages
+- Bad-rated corrections auto-stored in assistant_cached_answers via assistantCache.storeCachedAnswer()
+- Training Data export button added to AdminAssistantAnalytics header
+
+**Verification:**
+- Created comment with Bad rating + correction text -> saved and displayed ✅
+- Comment shows rating badge, admin email, timestamp, edit/delete buttons ✅
+- Correction text displayed in blue box ✅
+- Edit pre-populates form with existing values ✅
+- Delete with confirmation dialog works ✅
+- Data persists after server restart ✅
+- No mock data patterns ✅
+- Zero feature-related console errors ✅
+
+### Completed: Superadmin can view all therapist-assistant dialogues (#312) - PASSING
+
+**What was built:**
+- Created AdminAssistantConversations.jsx with master-detail layout
+- Left panel: conversation list with email, date, language, msg count, page context
+- Right panel: chat-bubble formatted messages (user=primary right-aligned, assistant=gray left-aligned)
+- Filters: search content, therapist dropdown (from API), language select, date from/to
+- Backend: added search, date_from, date_to query params to GET /api/admin/assistant/conversations
+- Admin comments from #311 fully integrated (Feedback button on assistant messages)
+- Route /admin/assistant-conversations, sidebar nav link "Conversations" with icon
+- i18n: nav labels in EN (Conversations), RU (Диалоги), ES (Conversaciones), UK (Діалоги)
+
+**Verification:**
+- Page renders with conversation list and master-detail layout ✅
+- Search filter: "client" returns 4 results with Clear button ✅
+- Clicking conversation shows chat-bubble messages ✅
+- Feedback button on assistant messages expands comment section ✅
+- Sidebar shows "Conversations" link in admin section ✅
+- No mock data patterns ✅
+- Only pre-existing console errors (Umami, React Router) ✅
+
+### Current Status
+- Features passing: 309/312 (99.0%)
+- Features #311, #312: BOTH PASSING
+
 ## Session: 2026-04-06 - Feature #310
 
 ### Completed: Assistant should not suggest technical actions to therapists (#310) - PASSING
