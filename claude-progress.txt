@@ -1,3 +1,36 @@
+## Session: 2026-04-06 - Feature #308
+
+### Completed: Fix AudioPlayer race condition - mediaRef vs loading (#308) - PASSING
+
+**What was fixed:**
+- Race condition: when loading=true, component returned spinner early, never mounting <audio>/<video> element
+- loadMedia() created blob URL and tried to set mediaRef.current.src — but mediaRef.current was null
+- After setLoading(false), element mounted without src — clicking Play silently failed with AbortError
+- Memory leak: no URL.revokeObjectURL cleanup for blob URLs
+
+**Changes to src/frontend/src/components/AudioPlayer.jsx:**
+1. Added `mediaUrl` state (useState) to store blob URL declaratively instead of imperative ref assignment
+2. Removed early return when loading (lines 154-161) — media element always rendered in DOM
+3. Removed early return when error (lines 142-151) — error shown as banner alongside controls
+4. Pass `mediaUrl` as `src` JSX attribute: `<audio src={mediaUrl || undefined} />`
+5. Added useEffect cleanup: `URL.revokeObjectURL(mediaUrl)` on unmount and URL change
+6. Revoke previous URL before loading new one to prevent leaks
+7. Added `disabled={!!error || !mediaUrl}` to Play button
+8. handleError only sets error when mediaUrl exists (avoids false errors on empty elements)
+
+**Verification:**
+- Video diary entry: shows video element (black), error banner ("Failed to load media file"), controls with disabled Play ✅
+- Voice diary entry: shows error banner and controls with disabled Play ✅
+- Text diary entry: no AudioPlayer rendered (correct) ✅
+- Entries without audio files: no AudioPlayer rendered (correct) ✅
+- No mock data patterns in source code ✅
+- Zero AudioPlayer-related console errors ✅
+- Only pre-existing errors: Umami analytics (400), WebSocket handshake ✅
+
+### Current Status
+- Features passing: 308/312
+- Feature #308: PASSING
+
 ## Session: 2026-04-06 - Feature #309
 
 ### Completed: Fix numbered list rendering (all items show as 1) (#309) - PASSING
