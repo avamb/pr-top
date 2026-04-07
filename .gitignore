@@ -40,6 +40,7 @@ FIRST_MILESTONE_CHECKLIST.md
 /app_spec.txt
 !prompts/app_spec.txt
 claude-progress.txt
+docs/MARKETING.md
 
 # Utility scripts (kill, restart, setup, check, etc.)
 kill_*.js
@@ -71,8 +72,25 @@ create_test_*.js
 
 # Temporary files
 tmp_*.js
+tmp_*.json
+tmp_*.txt
+.tmp_*
 .tmp_*.js
 *.tmp
+
+# Regression/test scripts at repo root (AutoForge working files)
+regtest_*.js
+regtest_*.json
+regtest_*.txt
+csrf_*.json
+csrf_*.txt
+login_f*.json
+_verify_*.js
+diagnose_*.js
+read_output.js
+watch_db.js
+restart_test_email.txt
+Projectsdev-psy-bot*
 
 # Temporary response/data files
 *_resp.json
