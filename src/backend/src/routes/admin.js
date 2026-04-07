@@ -464,7 +464,9 @@ router.put('/settings', (req, res) => {
       pro_session_limit: { min: 1, max: 100000, type: 'integer' },
       basic_price_monthly: { min: 100, max: 100000, type: 'integer' },
       pro_price_monthly: { min: 100, max: 100000, type: 'integer' },
-      premium_price_monthly: { min: 100, max: 100000, type: 'integer' }
+      premium_price_monthly: { min: 100, max: 100000, type: 'integer' },
+      assistant_prompt_viewer_anonymous: { type: 'text', maxLength: 10000 },
+      assistant_prompt_viewer_registered: { type: 'text', maxLength: 10000 }
     };
 
     const updated = [];
@@ -477,26 +479,44 @@ router.put('/settings', (req, res) => {
       }
 
       const rule = allowedKeys[key];
-      const numVal = parseInt(value, 10);
 
-      if (isNaN(numVal)) {
-        errors.push(`${key} must be a number`);
-        continue;
+      if (rule.type === 'text') {
+        // Text validation
+        const strVal = String(value || '');
+        if (rule.maxLength && strVal.length > rule.maxLength) {
+          errors.push(`${key} must be at most ${rule.maxLength} characters`);
+          continue;
+        }
+        db.run(
+          `INSERT INTO platform_settings (key, value, updated_by, updated_at)
+           VALUES (?, ?, ?, datetime('now'))
+           ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')`,
+          [key, strVal, req.user.id, strVal, req.user.id]
+        );
+        updated.push({ key, value: strVal });
+      } else {
+        // Integer validation (default)
+        const numVal = parseInt(value, 10);
+
+        if (isNaN(numVal)) {
+          errors.push(`${key} must be a number`);
+          continue;
+        }
+
+        if (numVal < rule.min || numVal > rule.max) {
+          errors.push(`${key} must be between ${rule.min} and ${rule.max}`);
+          continue;
+        }
+
+        // Upsert the setting
+        db.run(
+          `INSERT INTO platform_settings (key, value, updated_by, updated_at)
+           VALUES (?, ?, ?, datetime('now'))
+           ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')`,
+          [key, String(numVal), req.user.id, String(numVal), req.user.id]
+        );
+        updated.push({ key, value: numVal });
       }
-
-      if (numVal < rule.min || numVal > rule.max) {
-        errors.push(`${key} must be between ${rule.min} and ${rule.max}`);
-        continue;
-      }
-
-      // Upsert the setting
-      db.run(
-        `INSERT INTO platform_settings (key, value, updated_by, updated_at)
-         VALUES (?, ?, ?, datetime('now'))
-         ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')`,
-        [key, String(numVal), req.user.id, String(numVal), req.user.id]
-      );
-      updated.push({ key, value: numVal });
     }
 
     if (updated.length > 0) {
@@ -2303,6 +2323,160 @@ router.post('/assistant/summary/export', async (req, res) => {
   } catch (error) {
     logger.error('Admin export summary error: ' + error.message);
     res.status(500).json({ error: 'Failed to export summary' });
+  }
+});
+
+// ── Newsletter Management ───────────────────────────────────────────────
+
+// GET /api/admin/newsletter - List all newsletter subscribers
+router.get('/newsletter', (req, res) => {
+  try {
+    const db = getDatabase();
+    const { status, search, page = 1, limit = 50 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    let whereClause = '1=1';
+    const params = [];
+
+    if (status === 'confirmed') {
+      whereClause += ' AND confirmed = 1 AND unsubscribed_at IS NULL';
+    } else if (status === 'unconfirmed') {
+      whereClause += ' AND confirmed = 0 AND unsubscribed_at IS NULL';
+    } else if (status === 'unsubscribed') {
+      whereClause += ' AND unsubscribed_at IS NOT NULL';
+    }
+
+    if (search) {
+      whereClause += ' AND email LIKE ?';
+      params.push('%' + search + '%');
+    }
+
+    const countResult = db.exec(`SELECT COUNT(*) FROM newsletter_subscribers WHERE ${whereClause}`, params);
+    const total = countResult.length > 0 ? countResult[0].values[0][0] : 0;
+
+    const result = db.exec(
+      `SELECT id, email, language, confirmed, confirmed_at, unsubscribed_at, source, utm_source, utm_medium, utm_campaign, created_at
+       FROM newsletter_subscribers
+       WHERE ${whereClause}
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, parseInt(limit), offset]
+    );
+
+    const subscribers = (result.length > 0 ? result[0].values : []).map(row => ({
+      id: row[0],
+      email: row[1],
+      language: row[2],
+      confirmed: !!row[3],
+      confirmed_at: row[4],
+      unsubscribed_at: row[5],
+      source: row[6],
+      utm_source: row[7],
+      utm_medium: row[8],
+      utm_campaign: row[9],
+      created_at: row[10]
+    }));
+
+    res.json({
+      subscribers,
+      total,
+      page: parseInt(page),
+      totalPages: Math.ceil(total / parseInt(limit))
+    });
+  } catch (error) {
+    logger.error('Admin newsletter list error: ' + error.message);
+    res.status(500).json({ error: 'Failed to load subscribers' });
+  }
+});
+
+// GET /api/admin/newsletter/stats - Newsletter statistics
+router.get('/newsletter/stats', (req, res) => {
+  try {
+    const db = getDatabase();
+
+    const totalResult = db.exec('SELECT COUNT(*) FROM newsletter_subscribers');
+    const confirmedResult = db.exec('SELECT COUNT(*) FROM newsletter_subscribers WHERE confirmed = 1 AND unsubscribed_at IS NULL');
+    const unconfirmedResult = db.exec('SELECT COUNT(*) FROM newsletter_subscribers WHERE confirmed = 0 AND unsubscribed_at IS NULL');
+    const unsubscribedResult = db.exec('SELECT COUNT(*) FROM newsletter_subscribers WHERE unsubscribed_at IS NOT NULL');
+
+    const byLanguage = db.exec(
+      "SELECT language, COUNT(*) as count FROM newsletter_subscribers WHERE confirmed = 1 AND unsubscribed_at IS NULL GROUP BY language ORDER BY count DESC"
+    );
+
+    const languageBreakdown = (byLanguage.length > 0 ? byLanguage[0].values : []).map(row => ({
+      language: row[0],
+      count: row[1]
+    }));
+
+    res.json({
+      total: totalResult.length > 0 ? totalResult[0].values[0][0] : 0,
+      confirmed: confirmedResult.length > 0 ? confirmedResult[0].values[0][0] : 0,
+      unconfirmed: unconfirmedResult.length > 0 ? unconfirmedResult[0].values[0][0] : 0,
+      unsubscribed: unsubscribedResult.length > 0 ? unsubscribedResult[0].values[0][0] : 0,
+      byLanguage: languageBreakdown
+    });
+  } catch (error) {
+    logger.error('Admin newsletter stats error: ' + error.message);
+    res.status(500).json({ error: 'Failed to load newsletter stats' });
+  }
+});
+
+// GET /api/admin/newsletter/export - Export subscribers as CSV
+router.get('/newsletter/export', (req, res) => {
+  try {
+    const db = getDatabase();
+    const { status } = req.query;
+
+    let whereClause = '1=1';
+    if (status === 'confirmed') {
+      whereClause = 'confirmed = 1 AND unsubscribed_at IS NULL';
+    } else if (status === 'unsubscribed') {
+      whereClause = 'unsubscribed_at IS NOT NULL';
+    }
+
+    const result = db.exec(
+      `SELECT email, language, confirmed, confirmed_at, unsubscribed_at, source, utm_source, utm_medium, utm_campaign, utm_content, utm_term, created_at
+       FROM newsletter_subscribers
+       WHERE ${whereClause}
+       ORDER BY created_at DESC`
+    );
+
+    const headers = ['email', 'language', 'confirmed', 'confirmed_at', 'unsubscribed_at', 'source', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'created_at'];
+    const rows = result.length > 0 ? result[0].values : [];
+
+    let csv = headers.join(',') + '\n';
+    for (const row of rows) {
+      csv += row.map(v => v === null ? '' : `"${String(v).replace(/"/g, '""')}"`).join(',') + '\n';
+    }
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="newsletter-subscribers-${new Date().toISOString().split('T')[0]}.csv"`);
+    res.send(csv);
+  } catch (error) {
+    logger.error('Admin newsletter export error: ' + error.message);
+    res.status(500).json({ error: 'Failed to export subscribers' });
+  }
+});
+
+// DELETE /api/admin/newsletter/:id - Delete a subscriber
+router.delete('/newsletter/:id', (req, res) => {
+  try {
+    const db = getDatabase();
+    const { id } = req.params;
+
+    const existing = db.exec('SELECT email FROM newsletter_subscribers WHERE id = ?', [parseInt(id)]);
+    if (!existing.length || !existing[0].values.length) {
+      return res.status(404).json({ error: 'Subscriber not found' });
+    }
+
+    db.run('DELETE FROM newsletter_subscribers WHERE id = ?', [parseInt(id)]);
+    saveDatabaseAfterWrite();
+
+    logger.info(`[ADMIN] Deleted newsletter subscriber id=${id}, email=${existing[0].values[0][0]}`);
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Admin newsletter delete error: ' + error.message);
+    res.status(500).json({ error: 'Failed to delete subscriber' });
   }
 });
 

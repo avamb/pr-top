@@ -14,6 +14,22 @@ export default function AdminSettings() {
   const [message, setMessage] = useState(null);
   const [errors, setErrors] = useState([]);
 
+  // Text-type settings for viewer prompts
+  const PROMPT_FIELDS = [
+    {
+      key: 'assistant_prompt_viewer_anonymous',
+      label: t('admin.viewerAnonymousPrompt', 'Anonymous Visitor Prompt'),
+      description: t('admin.viewerAnonymousPromptDesc', 'System prompt for anonymous visitors on the landing page (public chat). Leave empty to use default.'),
+      placeholder: t('admin.viewerPromptPlaceholder', 'Leave empty to use the built-in default prompt...'),
+    },
+    {
+      key: 'assistant_prompt_viewer_registered',
+      label: t('admin.viewerRegisteredPrompt', 'Registered Viewer Prompt'),
+      description: t('admin.viewerRegisteredPromptDesc', 'System prompt for registered users with viewer role. Leave empty to use default.'),
+      placeholder: t('admin.viewerPromptPlaceholder', 'Leave empty to use the built-in default prompt...'),
+    }
+  ];
+
   const SETTING_GROUPS = [
     {
       title: t('admin.trialConfig'),
@@ -71,6 +87,9 @@ export default function AdminSettings() {
             values[field.key] = data.settings[field.key]?.value || '';
           }
         }
+        for (const field of PROMPT_FIELDS) {
+          values[field.key] = data.settings[field.key]?.value || '';
+        }
         setFormValues(values);
       }
     } catch (err) {
@@ -126,6 +145,9 @@ export default function AdminSettings() {
             for (const field of group.fields) {
               values[field.key] = data.settings[field.key]?.value || '';
             }
+          }
+          for (const field of PROMPT_FIELDS) {
+            values[field.key] = data.settings[field.key]?.value || '';
           }
           setFormValues(values);
         }
@@ -218,6 +240,45 @@ export default function AdminSettings() {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Viewer Assistant Prompts Section */}
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h3 className="text-lg font-semibold text-text mb-1">
+            {t('admin.viewerPromptsTitle', 'Assistant Chat Prompts (Visitors)')}
+          </h3>
+          <p className="text-sm text-secondary mb-4">
+            {t('admin.viewerPromptsDesc', 'Customize the AI assistant system prompts for visitors and registered viewers. Leave empty to use built-in defaults. A soft CTA is automatically injected every 3rd response.')}
+          </p>
+
+          <div className="space-y-6">
+            {PROMPT_FIELDS.map((field) => (
+              <div key={field.key}>
+                <label className="block text-sm font-medium text-text mb-1">
+                  {field.label}
+                </label>
+                <p className="text-xs text-secondary mb-2">{field.description}</p>
+                <textarea
+                  value={formValues[field.key] || ''}
+                  onChange={(e) => handleChange(field.key, e.target.value)}
+                  placeholder={field.placeholder}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm font-mono"
+                  rows={6}
+                  maxLength={10000}
+                />
+                <div className="flex justify-between items-center mt-1">
+                  <span className="text-xs text-secondary">
+                    {(formValues[field.key] || '').length}/10000
+                  </span>
+                  {settings[field.key]?.updated_at && (
+                    <span className="text-xs text-secondary">
+                      {t('admin.lastUpdated', { date: formatUserDateOnly(settings[field.key].updated_at) })}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="mt-8 flex justify-end">
