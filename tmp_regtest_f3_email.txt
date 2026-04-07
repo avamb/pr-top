@@ -1,2 +1,0 @@
-REGTEST_F3F5_1773678307071@test.com
-TestPass123!
