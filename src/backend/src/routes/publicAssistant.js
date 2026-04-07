@@ -55,13 +55,13 @@ setInterval(() => {
 // Helper: get or create viewer session
 function getOrCreateViewerSession(db, uuid, ip, userAgent, language) {
   const existing = db.exec(
-    'SELECT id, message_count FROM viewer_sessions WHERE uuid = ?',
+    'SELECT id, message_count, email, user_id FROM viewer_sessions WHERE uuid = ?',
     [uuid]
   );
 
   if (existing.length > 0 && existing[0].values.length > 0) {
-    const [id, messageCount] = existing[0].values[0];
-    return { id, messageCount, isNew: false };
+    const [id, messageCount, email, userId] = existing[0].values[0];
+    return { id, messageCount, isNew: false, email, userId };
   }
 
   // Create new session
@@ -181,15 +181,58 @@ router.post('/public-chat', async (req, res) => {
     // Get or create viewer session
     const session = getOrCreateViewerSession(db, session_uuid, clientIp, userAgent, uiLocale);
 
-    // Check message limit (5 messages per session)
-    if (session.messageCount >= MAX_MESSAGES_PER_SESSION) {
+    // Determine effective message limit based on lead status
+    let effectiveLimit = MAX_MESSAGES_PER_SESSION; // 5 for anonymous
+    let isLead = false;
+    let leadVerified = false;
+
+    if (session.email) {
+      // Check leads table for extended limits
+      try {
+        const leadResult = db.exec(
+          'SELECT id, verified, extra_messages_limit FROM leads WHERE email = ?',
+          [session.email]
+        );
+        if (leadResult.length > 0 && leadResult[0].values.length > 0) {
+          const [, verified, extraLimit] = leadResult[0].values[0];
+          isLead = true;
+          leadVerified = !!verified;
+          effectiveLimit = MAX_MESSAGES_PER_SESSION + (extraLimit || 10);
+        }
+      } catch (e) {
+        logger.warn('[PublicAssistant] Lead lookup error: ' + e.message);
+      }
+    }
+
+    // Check message limit
+    if (session.messageCount >= effectiveLimit) {
+      const detectedLang = detectLanguage(sanitized, uiLocale);
+
+      if (isLead) {
+        // Lead has used all extended messages
+        const limitMessages = {
+          en: 'You have used all your available messages. Register for a free trial to get full access to the platform!',
+          ru: 'Вы использовали все доступные сообщения. Зарегистрируйтесь для бесплатного пробного периода, чтобы получить полный доступ!',
+          es: 'Has usado todos tus mensajes disponibles. Registrate para una prueba gratuita y obtener acceso completo!',
+          uk: 'Ви використали всі доступні повідомлення. Зареєструйтесь для безкоштовного пробного періоду, щоб отримати повний доступ!'
+        };
+        const limitMsg = limitMessages[detectedLang] || limitMessages.en;
+        return res.status(403).json({
+          error: 'message_limit_reached',
+          message: limitMsg,
+          limit: effectiveLimit,
+          show_cta: false,
+          show_register: true
+        });
+      }
+
+      // Anonymous - show lead capture CTA
       const limitMessages = {
         en: 'You have reached the message limit for anonymous chat. Please register for a free trial to continue the conversation!',
         ru: 'Вы достигли лимита сообщений для анонимного чата. Зарегистрируйтесь для бесплатного пробного периода, чтобы продолжить!',
         es: 'Has alcanzado el limite de mensajes para el chat anonimo. Registrate para una prueba gratuita para continuar la conversacion!',
         uk: 'Ви досягли ліміту повідомлень для анонімного чату. Зареєструйтесь для безкоштовного пробного періоду, щоб продовжити!'
       };
-      const detectedLang = detectLanguage(sanitized, uiLocale);
       const limitMsg = limitMessages[detectedLang] || limitMessages.en;
 
       return res.status(403).json({
@@ -225,7 +268,7 @@ router.post('/public-chat', async (req, res) => {
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
         res.write(`data: ${JSON.stringify({ type: 'chunk', text: assistantReply })}\n\n`);
-        res.write(`data: ${JSON.stringify({ type: 'done', conversation_id: convId, language: detectedLanguage, cached: true, messages_remaining: MAX_MESSAGES_PER_SESSION - session.messageCount - 1 })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'done', conversation_id: convId, language: detectedLanguage, cached: true, messages_remaining: effectiveLimit - session.messageCount - 1 })}\n\n`);
         return res.end();
       }
 
@@ -234,7 +277,7 @@ router.post('/public-chat', async (req, res) => {
         conversation_id: convId,
         language: detectedLanguage,
         cached: true,
-        messages_remaining: MAX_MESSAGES_PER_SESSION - session.messageCount - 1
+        messages_remaining: effectiveLimit - session.messageCount - 1
       });
     }
 
@@ -306,7 +349,7 @@ router.post('/public-chat', async (req, res) => {
         assistantCache.storeCachedAnswer(sanitized, assistantReply);
 
         const convId = savePublicChatExchange(db, session.id, sanitized, assistantReply, false, detectedLanguage, conversation_id || null);
-        const remaining = MAX_MESSAGES_PER_SESSION - session.messageCount - 1;
+        const remaining = effectiveLimit - session.messageCount - 1;
 
         res.write(`data: ${JSON.stringify({ type: 'done', conversation_id: convId, language: detectedLanguage, cached: false, messages_remaining: remaining })}\n\n`);
         res.end();
@@ -322,7 +365,7 @@ router.post('/public-chat', async (req, res) => {
         const convId = savePublicChatExchange(db, session.id, sanitized, fallbackMsg, false, detectedLanguage, conversation_id || null);
 
         res.write(`data: ${JSON.stringify({ type: 'chunk', text: fallbackMsg })}\n\n`);
-        res.write(`data: ${JSON.stringify({ type: 'done', conversation_id: convId, language: detectedLanguage, cached: false, messages_remaining: MAX_MESSAGES_PER_SESSION - session.messageCount - 1 })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'done', conversation_id: convId, language: detectedLanguage, cached: false, messages_remaining: effectiveLimit - session.messageCount - 1 })}\n\n`);
         res.end();
       }
       return;
@@ -350,7 +393,7 @@ router.post('/public-chat', async (req, res) => {
     }
 
     const convId = savePublicChatExchange(db, session.id, sanitized, assistantReply, false, detectedLanguage, conversation_id || null);
-    const remaining = MAX_MESSAGES_PER_SESSION - session.messageCount - 1;
+    const remaining = effectiveLimit - session.messageCount - 1;
 
     res.json({
       response: assistantReply,

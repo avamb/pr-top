@@ -505,6 +505,73 @@ function viewerWelcomeTemplate(data, locale) {
   };
 }
 
+/**
+ * Lead email verification template (landing chat email capture)
+ */
+function leadVerificationTemplate(data, locale) {
+  const l = locale || 'en';
+  const verifyUrl = data.verifyUrl || '#';
+
+  const titles = {
+    en: 'Verify your email — PR-TOP',
+    ru: 'Подтвердите email — PR-TOP',
+    es: 'Verifica tu email — PR-TOP',
+    uk: 'Підтвердіть email — PR-TOP'
+  };
+
+  const bodies = {
+    en: `
+      <h2 style="color:#4f46e5;margin-bottom:16px">Confirm your email</h2>
+      <p>Thank you for your interest in PR-TOP — the professional platform for therapists that helps preserve client context, reduce double documentation, and work deeper between sessions.</p>
+      <p>Click the button below to verify your email address and unlock additional chat messages:</p>
+      <div style="text-align:center;margin:24px 0">
+        <a href="${escapeHtml(verifyUrl)}" style="display:inline-block;background:#4f46e5;color:white;padding:14px 36px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px">Verify Email</a>
+      </div>
+      <p style="color:#6b7280;font-size:13px">This link is valid for 24 hours. If you didn't request this, you can safely ignore this email.</p>
+      <p style="font-size:12px;color:#9ca3af;margin-top:24px">If the button doesn't work, copy and paste this link into your browser:<br>
+      <span style="word-break:break-all;font-family:monospace;font-size:11px">${escapeHtml(verifyUrl)}</span></p>
+    `,
+    ru: `
+      <h2 style="color:#4f46e5;margin-bottom:16px">Подтвердите ваш email</h2>
+      <p>Спасибо за интерес к PR-TOP — профессиональной платформе для терапевтов, которая помогает сохранять контекст клиента, сокращать двойную документацию и работать глубже между сессиями.</p>
+      <p>Нажмите кнопку ниже, чтобы подтвердить email и получить дополнительные сообщения в чате:</p>
+      <div style="text-align:center;margin:24px 0">
+        <a href="${escapeHtml(verifyUrl)}" style="display:inline-block;background:#4f46e5;color:white;padding:14px 36px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px">Подтвердить email</a>
+      </div>
+      <p style="color:#6b7280;font-size:13px">Ссылка действительна 24 часа. Если вы не запрашивали это, просто проигнорируйте письмо.</p>
+      <p style="font-size:12px;color:#9ca3af;margin-top:24px">Если кнопка не работает, скопируйте и вставьте ссылку в браузер:<br>
+      <span style="word-break:break-all;font-family:monospace;font-size:11px">${escapeHtml(verifyUrl)}</span></p>
+    `,
+    es: `
+      <h2 style="color:#4f46e5;margin-bottom:16px">Confirma tu email</h2>
+      <p>Gracias por tu interes en PR-TOP — la plataforma profesional para terapeutas que ayuda a preservar el contexto del cliente, reducir la doble documentacion y trabajar mas profundamente entre sesiones.</p>
+      <p>Haz clic en el boton para verificar tu email y desbloquear mensajes adicionales en el chat:</p>
+      <div style="text-align:center;margin:24px 0">
+        <a href="${escapeHtml(verifyUrl)}" style="display:inline-block;background:#4f46e5;color:white;padding:14px 36px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px">Verificar email</a>
+      </div>
+      <p style="color:#6b7280;font-size:13px">Este enlace es valido por 24 horas. Si no lo solicitaste, puedes ignorar este correo.</p>
+      <p style="font-size:12px;color:#9ca3af;margin-top:24px">Si el boton no funciona, copia y pega este enlace en tu navegador:<br>
+      <span style="word-break:break-all;font-family:monospace;font-size:11px">${escapeHtml(verifyUrl)}</span></p>
+    `,
+    uk: `
+      <h2 style="color:#4f46e5;margin-bottom:16px">Підтвердіть ваш email</h2>
+      <p>Дякуємо за інтерес до PR-TOP — професійної платформи для терапевтів, яка допомагає зберігати контекст клієнта, скорочувати подвійну документацію та працювати глибше між сесіями.</p>
+      <p>Натисніть кнопку нижче, щоб підтвердити email та отримати додаткові повідомлення в чаті:</p>
+      <div style="text-align:center;margin:24px 0">
+        <a href="${escapeHtml(verifyUrl)}" style="display:inline-block;background:#4f46e5;color:white;padding:14px 36px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px">Підтвердити email</a>
+      </div>
+      <p style="color:#6b7280;font-size:13px">Посилання дійсне 24 години. Якщо ви не запитували це, просто ігноруйте лист.</p>
+      <p style="font-size:12px;color:#9ca3af;margin-top:24px">Якщо кнопка не працює, скопіюйте та вставте посилання у браузер:<br>
+      <span style="word-break:break-all;font-family:monospace;font-size:11px">${escapeHtml(verifyUrl)}</span></p>
+    `
+  };
+
+  return {
+    subject: titles[l] || titles.en,
+    html: baseLayout(bodies[l] || bodies.en, l)
+  };
+}
+
 // ── Utility ────────────────────────────────────────────────────────────────
 
 function escapeHtml(str) {
@@ -594,6 +661,9 @@ async function sendEmail(to, templateName, templateData, locale) {
       break;
     case 'viewer_welcome':
       template = viewerWelcomeTemplate(templateData, l);
+      break;
+    case 'lead_verification':
+      template = leadVerificationTemplate(templateData, l);
       break;
     default:
       logger.warn(`[EMAIL] Unknown template: ${templateName}`);
@@ -687,6 +757,20 @@ async function sendViewerWelcomeEmail(email, locale) {
   return sendEmail(email, 'viewer_welcome', { email }, locale);
 }
 
+/**
+ * Send lead email verification (landing chat email capture)
+ * @param {string} email - Lead's email
+ * @param {string} verificationToken - Token for verification
+ * @param {string} [locale='en'] - Language code
+ * @returns {Promise<{sent: boolean, error?: string}>}
+ */
+async function sendLeadVerificationEmail(email, verificationToken, locale) {
+  const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:3002';
+  const verifyUrl = `${appUrl}/verify-lead?token=${encodeURIComponent(verificationToken)}`;
+  logger.info(`[EMAIL] Lead verification link for ${email}: ${verifyUrl}`);
+  return sendEmail(email, 'lead_verification', { verifyUrl }, locale);
+}
+
 module.exports = {
   isConfigured,
   sendEmail,
@@ -695,5 +779,6 @@ module.exports = {
   sendViewerWelcomeEmail,
   sendPaymentReceipt,
   sendSubscriptionExpiryWarning,
-  sendPasswordReset
+  sendPasswordReset,
+  sendLeadVerificationEmail
 };

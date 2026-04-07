@@ -1253,7 +1253,21 @@
     "existingAccount": "Ya existe una cuenta con este email. Por favor inicia sesion.",
     "registrationError": "Algo salio mal. Intenta de nuevo.",
     "registrationSuccess": "Bienvenido! Ahora puedes continuar chateando.",
-    "ctaNoCard": "No se requiere tarjeta de credito"
+    "ctaNoCard": "No se requiere tarjeta de credito",
+    "leadWelcome": "Gracias! Te he enviado un correo de verificacion. Haz clic en el enlace para confirmar. Mientras tanto, puedes seguir chateando!",
+    "verifyEmailHint": "Verifica tu email para desbloquear aun mas mensajes!",
+    "emailVerified": "Email verificado! Ahora tienes mensajes adicionales disponibles."
+  },
+  "verifyLead": {
+    "successTitle": "Email verificado!",
+    "successDesc": "Tu email ha sido confirmado. Vuelve al chat para continuar la conversacion con mensajes adicionales desbloqueados!",
+    "alreadyTitle": "Ya verificado",
+    "alreadyDesc": "Tu email ya fue confirmado. Vuelve al chat para continuar la conversacion!",
+    "expiredTitle": "Enlace expirado",
+    "expiredDesc": "Este enlace de verificacion ha expirado. Vuelve al chat y registrate de nuevo.",
+    "errorTitle": "Verificacion fallida",
+    "errorDesc": "Algo salio mal durante la verificacion. Intenta de nuevo mas tarde.",
+    "backToChat": "Volver a PR-TOP"
   },
   "viewerAnalytics": {
     "title": "Analítica de leads",

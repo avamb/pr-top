@@ -2,7 +2,10 @@ import { create } from 'zustand';
 
 const SESSION_UUID_KEY = 'public_assistant_session_uuid';
 const PANEL_STATE_KEY = 'public_assistant_panel_open';
+const LEAD_EMAIL_KEY = 'public_assistant_lead_email';
 const MAX_MESSAGES = 5;
+const MAX_MESSAGES_LEAD = 15; // 5 base + 10 after email
+const MAX_MESSAGES_VERIFIED = 25; // 5 base + 10 + 10 after verification
 
 // Generate a UUID v4
 function generateUUID() {
@@ -41,6 +44,14 @@ function getViewerRegistered() {
   }
 }
 
+function getLeadEmail() {
+  try {
+    return localStorage.getItem(LEAD_EMAIL_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
 const usePublicAssistantStore = create((set, get) => ({
   // Panel state
   isOpen: false,
@@ -57,6 +68,8 @@ const usePublicAssistantStore = create((set, get) => ({
   conversationId: null,
   sessionUUID: getSessionUUID(),
   isRegistered: getViewerRegistered(),
+  leadEmail: getLeadEmail(),
+  maxMessages: getViewerRegistered() ? MAX_MESSAGES_LEAD : MAX_MESSAGES,
 
   // Panel actions
   togglePanel: () => set(state => ({ isOpen: !state.isOpen })),
@@ -64,20 +77,30 @@ const usePublicAssistantStore = create((set, get) => ({
   closePanel: () => set({ isOpen: false }),
 
   /**
-   * Handle successful viewer registration.
-   * Resets message limits so user can continue chatting seamlessly.
+   * Handle successful lead registration.
+   * Keeps messagesUsed intact (backend tracks real count), but extends the limit.
    */
-  registerViewer: (data) => {
+  registerLead: (data) => {
     try {
       localStorage.setItem(VIEWER_REGISTERED_KEY, 'true');
+      if (data?.lead?.email) {
+        localStorage.setItem(LEAD_EMAIL_KEY, data.lead.email);
+      }
     } catch {}
 
+    const currentUsed = get().messagesUsed;
     set({
       isRegistered: true,
       showCta: false,
-      messagesUsed: 0,
-      messagesRemaining: MAX_MESSAGES,
+      leadEmail: data?.lead?.email || null,
+      maxMessages: MAX_MESSAGES_LEAD,
+      messagesRemaining: MAX_MESSAGES_LEAD - currentUsed,
     });
+  },
+
+  // Kept for backward compat
+  registerViewer: (data) => {
+    get().registerLead(data);
   },
 
   /**
@@ -88,8 +111,8 @@ const usePublicAssistantStore = create((set, get) => ({
     if (!trimmed || get().isLoading) return;
 
     const state = get();
-    if (state.messagesUsed >= MAX_MESSAGES) {
-      set({ showCta: true });
+    if (state.messagesUsed >= state.maxMessages) {
+      set({ showCta: !state.isRegistered });
       return;
     }
 
@@ -130,12 +153,24 @@ const usePublicAssistantStore = create((set, get) => ({
       if (res.status === 403) {
         const errData = await res.json().catch(() => ({}));
         if (errData.error === 'message_limit_reached') {
+          const isReg = get().isRegistered;
           set(s => ({
-            showCta: true,
-            messagesUsed: MAX_MESSAGES,
+            showCta: !isReg && errData.show_cta !== false,
+            messagesUsed: s.maxMessages,
             messagesRemaining: 0,
             isLoading: false
           }));
+          // If registered lead hits limit, show message in chat
+          if (isReg && errData.message) {
+            set(s => ({
+              messages: [...s.messages, {
+                role: 'assistant',
+                content: errData.message,
+                timestamp: new Date().toISOString(),
+                isError: true
+              }]
+            }));
+          }
           return;
         }
       }
@@ -198,7 +233,8 @@ const usePublicAssistantStore = create((set, get) => ({
         };
 
         const newUsed = get().messagesUsed + 1;
-        const remaining = messagesRemaining != null ? messagesRemaining : MAX_MESSAGES - newUsed;
+        const curMax = get().maxMessages;
+        const remaining = messagesRemaining != null ? messagesRemaining : curMax - newUsed;
 
         set(s => ({
           messages: [...s.messages, assistantMessage],
@@ -208,7 +244,7 @@ const usePublicAssistantStore = create((set, get) => ({
           isLoading: false,
           isStreaming: false,
           streamingText: '',
-          showCta: remaining <= 0
+          showCta: remaining <= 0 && !s.isRegistered
         }));
 
       } else {
@@ -221,7 +257,8 @@ const usePublicAssistantStore = create((set, get) => ({
         };
 
         const newUsed = get().messagesUsed + 1;
-        const remaining = data.messages_remaining != null ? data.messages_remaining : MAX_MESSAGES - newUsed;
+        const curMax = get().maxMessages;
+        const remaining = data.messages_remaining != null ? data.messages_remaining : curMax - newUsed;
 
         set(s => ({
           messages: [...s.messages, assistantMessage],
@@ -229,7 +266,7 @@ const usePublicAssistantStore = create((set, get) => ({
           messagesUsed: newUsed,
           messagesRemaining: remaining,
           isLoading: false,
-          showCta: remaining <= 0
+          showCta: remaining <= 0 && !s.isRegistered
         }));
       }
     } catch (err) {

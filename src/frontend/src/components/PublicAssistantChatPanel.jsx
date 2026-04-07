@@ -147,7 +147,7 @@ function ViewerRegistrationCTA({ t, onRegister, csrfToken, sessionUUID, language
       const headers = { 'Content-Type': 'application/json' };
       if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
-      const res = await fetch('/api/auth/register-viewer', {
+      const res = await fetch('/api/auth/register-lead', {
         method: 'POST',
         headers,
         credentials: 'include',
@@ -169,11 +169,6 @@ function ViewerRegistrationCTA({ t, onRegister, csrfToken, sessionUUID, language
 
       if (!res.ok) {
         throw new Error(data.error || 'Registration failed');
-      }
-
-      // Store JWT token
-      if (data.token) {
-        localStorage.setItem('token', data.token);
       }
 
       setSuccess(true);
@@ -272,7 +267,8 @@ export default function PublicAssistantChatPanel() {
   const sessionUUID = usePublicAssistantStore(s => s.sessionUUID);
   const closePanel = usePublicAssistantStore(s => s.closePanel);
   const sendMessage = usePublicAssistantStore(s => s.sendMessage);
-  const registerViewer = usePublicAssistantStore(s => s.registerViewer);
+  const registerLead = usePublicAssistantStore(s => s.registerLead);
+  const addMessage = (msg) => usePublicAssistantStore.setState(s => ({ messages: [...s.messages, msg] }));
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -419,7 +415,16 @@ export default function PublicAssistantChatPanel() {
             csrfToken={csrfToken}
             sessionUUID={sessionUUID}
             language={i18n.language}
-            onRegister={(data) => registerViewer(data)}
+            onRegister={(data) => {
+              registerLead(data);
+              // Add welcome message from assistant after registration
+              const welcomeMsg = t('publicChat.leadWelcome', 'Thanks! I\'ve sent a verification email. Click the link in your inbox to confirm. Meanwhile, you can continue chatting!');
+              addMessage({
+                role: 'assistant',
+                content: welcomeMsg,
+                timestamp: new Date().toISOString()
+              });
+            }}
           />
         ) : (
           <div className="border-t p-3">

@@ -735,6 +735,29 @@ function applySchema(db) {
     // Column may already exist
   }
 
+  // Create leads table for landing page chat lead capture
+  db.run(`CREATE TABLE IF NOT EXISTS leads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    session_uuid TEXT,
+    language TEXT DEFAULT 'en',
+    source TEXT DEFAULT 'landing_chat',
+    verified INTEGER DEFAULT 0,
+    verification_token TEXT,
+    token_expires_at TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    last_active TEXT DEFAULT (datetime('now')),
+    message_count INTEGER DEFAULT 0,
+    extra_messages_limit INTEGER DEFAULT 10,
+    conversation_id INTEGER,
+    utm_source TEXT,
+    utm_medium TEXT,
+    utm_campaign TEXT
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_leads_email ON leads(email)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_leads_session_uuid ON leads(session_uuid)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_leads_verification_token ON leads(verification_token)');
+
   // Create newsletter_subscribers table for email newsletter subscriptions
   db.run(`CREATE TABLE IF NOT EXISTS newsletter_subscribers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

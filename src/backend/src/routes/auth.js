@@ -396,6 +396,181 @@ router.post('/register-viewer', async (req, res) => {
   }
 });
 
+// POST /api/auth/register-lead
+// Creates a lead record (NOT a user) in the leads table, generates verification token, sends verification email.
+// After registration, lead gets +10 messages in the chat. After email verification, +10 more.
+router.post('/register-lead', async (req, res) => {
+  try {
+    const { email, session_uuid, language, utm_source, utm_medium, utm_campaign } = req.body;
+
+    // Validate email
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+    const normalizedEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
+
+    const db = getDatabase();
+    const supportedLanguages = ['en', 'ru', 'es', 'uk'];
+    const leadLanguage = supportedLanguages.includes(language) ? language : 'en';
+
+    // Check if this email is already a therapist/admin user
+    const existingUser = db.exec('SELECT id, role FROM users WHERE email = ?', [normalizedEmail]);
+    if (existingUser.length > 0 && existingUser[0].values.length > 0) {
+      const role = existingUser[0].values[0][1];
+      if (role !== 'viewer') {
+        return res.status(409).json({
+          error: 'An account with this email already exists. Please use the login page.',
+          existing_role: role,
+          login_url: '/login'
+        });
+      }
+    }
+
+    // Check if lead already exists
+    const existingLead = db.exec('SELECT id, verified, extra_messages_limit, message_count FROM leads WHERE email = ?', [normalizedEmail]);
+    if (existingLead.length > 0 && existingLead[0].values.length > 0) {
+      const lead = existingLead[0].values[0];
+      const leadId = lead[0];
+      const verified = lead[1];
+      const extraLimit = lead[2];
+
+      // Update session_uuid and last_active for returning lead
+      if (session_uuid) {
+        db.run("UPDATE leads SET session_uuid = ?, last_active = datetime('now') WHERE id = ?", [session_uuid, leadId]);
+        // Link viewer_sessions
+        db.run('UPDATE viewer_sessions SET email = ? WHERE uuid = ?', [normalizedEmail, session_uuid]);
+        saveDatabaseAfterWrite();
+      }
+
+      return res.json({
+        message: 'Welcome back!',
+        existing: true,
+        lead: { id: leadId, email: normalizedEmail, verified: !!verified, extra_messages_limit: extraLimit }
+      });
+    }
+
+    // Create new lead
+    const verificationToken = uuidv4();
+    const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 hours
+
+    db.run(
+      `INSERT INTO leads (email, session_uuid, language, source, verified, verification_token, token_expires_at, extra_messages_limit, utm_source, utm_medium, utm_campaign)
+       VALUES (?, ?, ?, 'landing_chat', 0, ?, ?, 10, ?, ?, ?)`,
+      [normalizedEmail, session_uuid || null, leadLanguage, verificationToken, tokenExpiry,
+       utm_source || null, utm_medium || null, utm_campaign || null]
+    );
+    saveDatabaseAfterWrite();
+
+    // Link viewer_sessions with email
+    if (session_uuid) {
+      try {
+        db.run('UPDATE viewer_sessions SET email = ? WHERE uuid = ?', [normalizedEmail, session_uuid]);
+        saveDatabaseAfterWrite();
+      } catch (e) {
+        logger.warn('[LeadReg] Could not link viewer session: ' + e.message);
+      }
+    }
+
+    // Get the created lead
+    const newLeadResult = db.exec('SELECT id FROM leads WHERE email = ?', [normalizedEmail]);
+    const leadId = newLeadResult[0].values[0][0];
+
+    logger.info(`[LeadReg] Lead registered: id=${leadId}, email=${normalizedEmail}`);
+
+    // Send verification email (non-blocking)
+    emailService.sendLeadVerificationEmail(normalizedEmail, verificationToken, leadLanguage)
+      .then(result => {
+        if (result.sent) {
+          logger.info(`[LeadReg] Verification email sent to ${normalizedEmail}`);
+        } else {
+          logger.info(`[EMAIL] Lead verification for ${normalizedEmail}: ${result.error || 'not sent'}`);
+        }
+      })
+      .catch(err => {
+        logger.error(`[LeadReg] Verification email error for ${normalizedEmail}: ${err.message}`);
+      });
+
+    res.status(201).json({
+      message: 'Registered successfully! Check your email to verify.',
+      lead: {
+        id: leadId,
+        email: normalizedEmail,
+        verified: false,
+        extra_messages_limit: 10
+      }
+    });
+  } catch (error) {
+    logger.error('[LeadReg] Registration error: ' + error.message);
+    logger.error('Stack: ' + error.stack);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
+  }
+});
+
+// GET /api/auth/verify-lead?token=xxx
+// Verifies a lead's email, sets verified=true, adds extra messages
+router.get('/verify-lead', async (req, res) => {
+  try {
+    const { token } = req.query;
+
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ error: 'Verification token is required' });
+    }
+
+    const db = getDatabase();
+
+    const result = db.exec(
+      'SELECT id, email, verified, token_expires_at, extra_messages_limit FROM leads WHERE verification_token = ?',
+      [token]
+    );
+
+    if (!result.length || !result[0].values.length) {
+      return res.status(404).json({ error: 'Invalid or expired verification token', verified: false });
+    }
+
+    const lead = result[0].values[0];
+    const leadId = lead[0];
+    const leadEmail = lead[1];
+    const alreadyVerified = lead[2];
+    const tokenExpiry = lead[3];
+    const currentExtraLimit = lead[4];
+
+    // Check if already verified
+    if (alreadyVerified) {
+      // Redirect to frontend verification success page
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3002';
+      return res.redirect(`${frontendUrl}/verify-lead?status=already_verified`);
+    }
+
+    // Check token expiry
+    if (tokenExpiry && new Date(tokenExpiry) < new Date()) {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3002';
+      return res.redirect(`${frontendUrl}/verify-lead?status=expired`);
+    }
+
+    // Mark as verified and add 10 more messages
+    const newExtraLimit = (currentExtraLimit || 10) + 10;
+    db.run(
+      "UPDATE leads SET verified = 1, extra_messages_limit = ?, last_active = datetime('now') WHERE id = ?",
+      [newExtraLimit, leadId]
+    );
+    saveDatabaseAfterWrite();
+
+    logger.info(`[LeadVerify] Lead verified: id=${leadId}, email=${leadEmail}, new_limit=${newExtraLimit}`);
+
+    // Redirect to frontend verification success page
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3002';
+    return res.redirect(`${frontendUrl}/verify-lead?status=success`);
+  } catch (error) {
+    logger.error('[LeadVerify] Verification error: ' + error.message);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3002';
+    return res.redirect(`${frontendUrl}/verify-lead?status=error`);
+  }
+});
+
 // POST /api/auth/logout - Clear session cookie and invalidate token
 router.post('/logout', (req, res) => {
   // Clear the session cookie

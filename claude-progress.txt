@@ -1,3 +1,35 @@
+## Session: 2026-04-07 - Feature #338
+
+### Completed: Lead capture with email verification & chat continuation fix (#338) - PASSING
+
+**What was built:**
+- **DB**: Created `leads` table with fields: id, email (unique), session_uuid, language, source, verified, verification_token, token_expires_at, created_at, last_active, message_count, extra_messages_limit, conversation_id, utm_source/medium/campaign
+- **API**: POST /api/auth/register-lead — creates lead record (not a user), generates verification token, sends verification email, returns lead data with extra_messages_limit=10
+- **API**: GET /api/auth/verify-lead?token=xxx — verifies email, sets verified=true, adds +10 extra messages, redirects to frontend /verify-lead?status=success|expired|already_verified|error
+- **Email**: sendLeadVerificationEmail() with HTML verification button, localized in EN/RU/ES/UK, link logged to console in dev
+- **Backend fix**: publicAssistant.js now checks leads table for registered leads and uses extended limit (5 + extra_messages_limit) instead of fixed 5
+- **Frontend fix**: publicAssistantStore.js — registerLead() keeps messagesUsed intact but extends maxMessages to 15; 403 handler no longer shows CTA for registered leads
+- **Frontend**: ViewerRegistrationCTA now calls /api/auth/register-lead, adds localized welcome message after registration
+- **Frontend**: Created VerifyLead.jsx page with success/expired/error/already_verified states + "Return to PR-TOP" button
+- **i18n**: Added publicChat.leadWelcome, verifyEmailHint, emailVerified + verifyLead.* keys in EN/RU/ES/UK
+
+**Verification:**
+- 5 anonymous messages → CTA shown (403 with show_cta=true) ✅
+- Lead registration via CTA → 201 + welcome message in chat ✅
+- Chat continues after registration (extended limit) ✅
+- Email verification link logged to console (dev mode) ✅
+- Verify-lead endpoint: verified=0→1, extra_limit=10→20 ✅
+- Chat continues after verification with more messages ✅
+- Duplicate email → returns existing lead (no duplicate) ✅
+- /verify-lead page renders with correct statuses ✅
+- Data persists after server restart ✅
+- No mock data patterns in source code ✅
+- Zero feature-related console errors ✅
+
+### Current Status
+- Features passing: 338/339
+- Feature #338: PASSING
+
 ## Session: 2026-04-07 - Features #336, #337
 
 ### Completed: Landing page chat: use shared knowledge base from dashboard prompt (#336) - PASSING
@@ -2097,3 +2129,25 @@ Already fully implemented as part of #292. UI has:
 ### Current Status
 - Features passing: 303/307 (98.7%)
 - Features #304, #305, #306: ALL PASSING
+
+## Session: 2026-04-07 - Feature #339
+
+### Completed: Add missing landing.footerDesc translation key (#339) - PASSING
+
+**What was done:**
+- Added footerDesc key to landing object in all 4 i18n files:
+  - en.json: "PR-TOP - a practice assistant for psychologists and therapists. Less routine, more continuity between sessions."
+  - ru.json: Russian translation
+  - es.json: Spanish translation
+  - uk.json: Ukrainian translation
+
+**Verification:**
+- English footer shows correct text (ref=e303)
+- Russian footer shows correct translated text
+- Spanish footer shows correct translated text
+- Ukrainian footer shows correct translated text
+- Zero feature-related console errors
+
+### Current Status
+- Features passing: 338/339 (99.7%)
+- Feature #339: PASSING

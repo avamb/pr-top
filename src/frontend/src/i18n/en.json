@@ -1269,7 +1269,21 @@
     "existingAccount": "An account with this email already exists. Please log in.",
     "registrationError": "Something went wrong. Please try again.",
     "registrationSuccess": "Welcome! You can now continue chatting.",
-    "ctaNoCard": "No credit card required"
+    "ctaNoCard": "No credit card required",
+    "leadWelcome": "Thanks! I've sent a verification email. Click the link in your inbox to confirm. Meanwhile, you can continue chatting!",
+    "verifyEmailHint": "Verify your email to unlock even more messages!",
+    "emailVerified": "Email verified! You now have additional messages available."
+  },
+  "verifyLead": {
+    "successTitle": "Email verified!",
+    "successDesc": "Your email has been confirmed. Return to the chat to continue the conversation with extra messages unlocked!",
+    "alreadyTitle": "Already verified",
+    "alreadyDesc": "Your email was already confirmed. Return to the chat to continue the conversation!",
+    "expiredTitle": "Link expired",
+    "expiredDesc": "This verification link has expired. Please return to the chat and register again.",
+    "errorTitle": "Verification failed",
+    "errorDesc": "Something went wrong during verification. Please try again later.",
+    "backToChat": "Return to PR-TOP"
   },
   "viewerAnalytics": {
     "title": "Lead Analytics",

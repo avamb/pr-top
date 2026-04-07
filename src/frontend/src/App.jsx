@@ -35,6 +35,7 @@ import SecurityAuditLog from './pages/SecurityAuditLog';
 import SecurityDataSovereignty from './pages/SecurityDataSovereignty';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
+import VerifyLead from './pages/VerifyLead';
 import NotFound from './pages/NotFound';
 import InstallPrompt from './components/InstallPrompt';
 import NotificationToast from './components/NotificationToast';
@@ -87,6 +88,7 @@ function App() {
         <Route path="/security/data-sovereignty" element={<SecurityDataSovereignty />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfService />} />
+        <Route path="/verify-lead" element={<VerifyLead />} />
 
         {/* Authenticated therapist routes - AuthGuard + TherapistGuard + AppLayout */}
         <Route path="/dashboard" element={<GuardedLayout><Dashboard /></GuardedLayout>} />
