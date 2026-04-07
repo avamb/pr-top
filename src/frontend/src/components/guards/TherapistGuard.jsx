@@ -24,6 +24,12 @@ export default function TherapistGuard({ user, children }) {
       return;
     }
 
+    // Viewer role can only access landing page + assistant chat, not dashboard
+    if (user.role === 'viewer') {
+      navigate('/', { replace: true });
+      return;
+    }
+
     // Must be therapist or superadmin
     if (user.role !== 'therapist' && user.role !== 'superadmin') {
       navigate('/login', { state: { accessDenied: true } });

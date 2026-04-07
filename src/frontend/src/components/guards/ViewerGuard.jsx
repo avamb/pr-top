@@ -2,23 +2,20 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 /**
- * AdminGuard - Ensures user has superadmin role.
- * Non-superadmin users are redirected to /dashboard.
+ * ViewerGuard - Restricts viewer role to only landing page + assistant chat.
+ * Viewers cannot access /dashboard/*, /admin/*, /clients/*, etc.
+ * If viewer tries to access a protected route, redirect to landing page.
  * Must be used inside AuthGuard (expects user prop).
  */
-export default function AdminGuard({ user, children }) {
+export default function ViewerGuard({ user, children }) {
   const navigate = useNavigate();
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
     if (!user) return;
 
-    if (user.role !== 'superadmin') {
-      if (user.role === 'viewer') {
-        navigate('/', { replace: true });
-      } else {
-        navigate('/dashboard', { replace: true });
-      }
+    if (user.role === 'viewer') {
+      navigate('/', { replace: true });
       return;
     }
 
@@ -27,7 +24,6 @@ export default function AdminGuard({ user, children }) {
 
   if (!checked) return null;
 
-  // Pass user through to children
   if (typeof children === 'function') {
     return children({ user });
   }

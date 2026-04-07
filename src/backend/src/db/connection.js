@@ -123,7 +123,7 @@ function applySchema(db) {
       telegram_id TEXT UNIQUE,
       email TEXT UNIQUE COLLATE NOCASE,
       password_hash TEXT,
-      role TEXT NOT NULL CHECK(role IN ('therapist', 'client', 'superadmin')),
+      role TEXT NOT NULL CHECK(role IN ('therapist', 'client', 'superadmin', 'viewer')),
       therapist_id INTEGER REFERENCES users(id),
       consent_therapist_access INTEGER DEFAULT 0,
       invite_code TEXT UNIQUE,
@@ -664,6 +664,63 @@ function applySchema(db) {
 
   // Insert initial encryption key
   db.run('INSERT OR IGNORE INTO encryption_keys (key_version, status) VALUES (?, ?)', [1, 'active']);
+
+  // Migration: Add 'viewer' role to users table CHECK constraint
+  // SQLite doesn't support ALTER CHECK, so we recreate the table
+  try {
+    const checkInfo = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'");
+    if (checkInfo.length > 0 && checkInfo[0].values.length > 0) {
+      const createSql = checkInfo[0].values[0][0];
+      if (createSql && !createSql.includes("'viewer'")) {
+        logger.info('Migrating users table to add viewer role...');
+        db.run('PRAGMA foreign_keys = OFF');
+        try { db.run('DROP TABLE IF EXISTS users_new'); } catch (e2) { /* ignore */ }
+        db.run(`CREATE TABLE users_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          telegram_id TEXT UNIQUE,
+          email TEXT UNIQUE,
+          password_hash TEXT,
+          role TEXT NOT NULL CHECK(role IN ('therapist', 'client', 'superadmin', 'viewer')),
+          therapist_id INTEGER REFERENCES users(id),
+          consent_therapist_access INTEGER DEFAULT 0,
+          invite_code TEXT UNIQUE,
+          language TEXT DEFAULT 'en',
+          timezone TEXT DEFAULT 'UTC',
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now')),
+          blocked_at TEXT,
+          utm_source TEXT,
+          utm_medium TEXT,
+          utm_campaign TEXT,
+          utm_content TEXT,
+          utm_term TEXT,
+          escalation_preferences TEXT DEFAULT '{}',
+          first_name TEXT,
+          last_name TEXT,
+          phone TEXT,
+          telegram_username TEXT,
+          other_info TEXT
+        )`);
+        db.run(`INSERT INTO users_new SELECT
+          id, telegram_id, email, password_hash, role, therapist_id,
+          consent_therapist_access, invite_code, language, timezone,
+          created_at, updated_at, blocked_at,
+          utm_source, utm_medium, utm_campaign, utm_content, utm_term,
+          escalation_preferences, first_name, last_name, phone, telegram_username, other_info
+        FROM users`);
+        db.run('DROP TABLE users');
+        db.run('ALTER TABLE users_new RENAME TO users');
+        db.run('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
+        db.run('CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)');
+        db.run('CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)');
+        db.run('CREATE INDEX IF NOT EXISTS idx_users_therapist_id ON users(therapist_id)');
+        db.run('PRAGMA foreign_keys = ON');
+        logger.info('Users table migrated to include viewer role');
+      }
+    }
+  } catch (e) {
+    logger.warn('Viewer role migration skipped: ' + e.message);
+  }
 
   // Seed default superadmin account if not exists
   seedSuperadmin(db);
