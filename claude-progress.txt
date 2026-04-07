@@ -1,3 +1,43 @@
+## Session: 2026-04-07 - Features #336, #337
+
+### Completed: Landing page chat: use shared knowledge base from dashboard prompt (#336) - PASSING
+
+**What was built:**
+- Extracted reusable knowledge sections from main therapist prompt into standalone constants:
+  - SHARED_PLATFORM_OVERVIEW: three-component description (Dashboard, Bot, Admin)
+  - SHARED_FEATURE_DESCRIPTIONS_VISITOR: 9 feature descriptions adapted for visitors (not step-by-step UI instructions)
+  - SHARED_TELEGRAM_BOT_COMMANDS: all /start, /diary, /exercises, /sos, /consent, /help, /timezone, /disconnect
+  - SHARED_SUBSCRIPTION_TIERS: full comparison table (Trial/Basic/Pro/Premium)
+- Modified buildViewerPrompt() to append shared knowledge sections after base prompt
+- Added ANTI_HALLUCINATION_RULES in all 4 languages (EN/RU/ES/UK)
+- Excluded dashboard-only sections: NAVIGATION_MAP, TROUBLESHOOTING, SUPERADMIN_CONTEXT, page context hints
+- Increased max_tokens from 512 to 800 in both streaming and non-streaming paths
+
+### Completed: Landing chat: full codebase knowledge + no hallucinations + generous token limits (#337) - PASSING
+
+**What was built:**
+- Added STRICT ACCURACY RULE to all 4 language variants of DEFAULT_VIEWER_ANONYMOUS_PROMPTS
+- Added STRICT ACCURACY RULE to all 4 language variants of DEFAULT_VIEWER_REGISTERED_PROMPTS
+- Explicitly bans: appointment scheduling, video consultations, online sessions, financial reporting, client feedback collection, CRM, calendar integration
+- Defines PR-TOP as "specifically a BETWEEN-SESSION assistant" (not a generic practice management tool)
+- Increased max_tokens from 800 to 1500 for generous landing chat responses
+
+**Verification (both features):**
+- 44 comprehensive unit tests all passing
+- Visitor EN/RU/ES/UK prompts include all shared knowledge sections
+- STRICT ACCURACY RULE present in all 8 default prompt variants (4 anonymous + 4 registered)
+- Banned features explicitly listed in all languages
+- Therapist prompt completely unaffected (has NAVIGATION_MAP, TROUBLESHOOTING, no STRICT ACCURACY)
+- CTA injection still works on every 3rd message
+- RAG context still appended after expanded prompt
+- max_tokens = 1500 in both streaming and non-streaming paths
+- Zero feature-related console errors
+- No mock data patterns in source code
+
+### Current Status
+- Features passing: 337/337 (100.0%)
+- Features #336, #337: BOTH PASSING
+
 ## Session: 2026-04-07 - Feature #335
 
 ### Completed: Hide message counter and show lead registration after limit (#335) - PASSING
