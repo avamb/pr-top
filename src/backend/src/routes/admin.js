@@ -2480,4 +2480,152 @@ router.delete('/newsletter/:id', (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════
+// GET /api/admin/stats/viewers — Viewer analytics dashboard metrics
+// ══════════════════════════════════════════════════════════════════════════
+router.get('/stats/viewers', (req, res) => {
+  try {
+    const db = getDatabase();
+    const { range } = req.query; // today, 7d, 30d, custom
+    const { start, end } = req.query;
+
+    // Build date filter
+    let dateFilter = '';
+    let dateFilterConv = '';
+    if (range === 'today') {
+      dateFilter = "AND vs.created_at >= date('now', 'start of day')";
+      dateFilterConv = "AND ac.started_at >= date('now', 'start of day')";
+    } else if (range === '7d') {
+      dateFilter = "AND vs.created_at >= date('now', '-7 days')";
+      dateFilterConv = "AND ac.started_at >= date('now', '-7 days')";
+    } else if (range === '30d') {
+      dateFilter = "AND vs.created_at >= date('now', '-30 days')";
+      dateFilterConv = "AND ac.started_at >= date('now', '-30 days')";
+    } else if (range === 'custom' && start && end) {
+      dateFilter = `AND vs.created_at >= '${start}' AND vs.created_at <= '${end} 23:59:59'`;
+      dateFilterConv = `AND ac.started_at >= '${start}' AND ac.started_at <= '${end} 23:59:59'`;
+    }
+
+    // 1. Total anonymous sessions
+    const totalSessionsResult = db.exec(`SELECT COUNT(*) FROM viewer_sessions vs WHERE 1=1 ${dateFilter}`);
+    const totalSessions = totalSessionsResult.length > 0 ? totalSessionsResult[0].values[0][0] : 0;
+
+    // 2. Total registered viewers
+    const totalViewersResult = db.exec(`SELECT COUNT(*) FROM users WHERE role = 'viewer'`);
+    const totalViewers = totalViewersResult.length > 0 ? totalViewersResult[0].values[0][0] : 0;
+
+    // 3. Viewers registered in range
+    let viewersInRange = totalViewers;
+    if (dateFilter) {
+      const rangeViewersResult = db.exec(`SELECT COUNT(*) FROM users WHERE role = 'viewer' AND created_at >= (SELECT MIN(vs.created_at) FROM viewer_sessions vs WHERE 1=1 ${dateFilter})`);
+      viewersInRange = rangeViewersResult.length > 0 ? rangeViewersResult[0].values[0][0] : 0;
+    }
+
+    // 4. Viewer → therapist conversion rate
+    const totalTherapistsFromViewers = db.exec(`SELECT COUNT(*) FROM users WHERE role = 'therapist' AND email IN (SELECT DISTINCT email FROM viewer_sessions WHERE email IS NOT NULL)`);
+    const therapistConversions = totalTherapistsFromViewers.length > 0 ? totalTherapistsFromViewers[0].values[0][0] : 0;
+
+    // 5. Messages per anonymous session (avg)
+    const avgMsgAnon = db.exec(`SELECT AVG(message_count) FROM viewer_sessions vs WHERE user_id IS NULL ${dateFilter}`);
+    const avgMessagesAnon = avgMsgAnon.length > 0 && avgMsgAnon[0].values[0][0] != null ? Number(avgMsgAnon[0].values[0][0]).toFixed(1) : '0';
+
+    // 6. Messages per registered viewer (avg)
+    const avgMsgReg = db.exec(`SELECT AVG(message_count) FROM viewer_sessions vs WHERE user_id IS NOT NULL ${dateFilter}`);
+    const avgMessagesRegistered = avgMsgReg.length > 0 && avgMsgReg[0].values[0][0] != null ? Number(avgMsgReg[0].values[0][0]).toFixed(1) : '0';
+
+    // 7. Top viewer questions (by tag)
+    const topQuestionsResult = db.exec(`
+      SELECT am.content, COUNT(*) as cnt
+      FROM assistant_messages am
+      JOIN assistant_conversations ac ON am.conversation_id = ac.id
+      WHERE ac.therapist_id = 0 AND am.role = 'user' ${dateFilterConv}
+      GROUP BY am.content
+      ORDER BY cnt DESC
+      LIMIT 10
+    `);
+    const topQuestions = topQuestionsResult.length > 0
+      ? topQuestionsResult[0].values.map(r => ({ question: r[0], count: r[1] }))
+      : [];
+
+    // 8. Popular landing page languages
+    const langResult = db.exec(`
+      SELECT language, COUNT(*) as cnt
+      FROM viewer_sessions vs WHERE 1=1 ${dateFilter}
+      GROUP BY language
+      ORDER BY cnt DESC
+    `);
+    const languages = langResult.length > 0
+      ? langResult[0].values.map(r => ({ language: r[0] || 'en', count: r[1] }))
+      : [];
+
+    // 9. Drop-off point (which message # viewers leave on)
+    const dropoffResult = db.exec(`
+      SELECT message_count, COUNT(*) as cnt
+      FROM viewer_sessions vs WHERE user_id IS NULL ${dateFilter}
+      GROUP BY message_count
+      ORDER BY message_count ASC
+    `);
+    const dropoffPoints = dropoffResult.length > 0
+      ? dropoffResult[0].values.map(r => ({ messageNumber: r[0], sessions: r[1] }))
+      : [];
+
+    // 10. AI cost per viewer session (estimate via token counts)
+    const tokenResult = db.exec(`
+      SELECT COALESCE(SUM(am.tokens_used), 0)
+      FROM assistant_messages am
+      JOIN assistant_conversations ac ON am.conversation_id = ac.id
+      WHERE ac.therapist_id = 0 ${dateFilterConv}
+    `);
+    const totalTokens = tokenResult.length > 0 ? tokenResult[0].values[0][0] : 0;
+    const estimatedCost = (totalTokens / 1000000 * 0.15).toFixed(4); // rough estimate
+    const costPerSession = totalSessions > 0 ? (parseFloat(estimatedCost) / totalSessions).toFixed(4) : '0';
+
+    // 11. Daily stats for chart
+    const dailyResult = db.exec(`
+      SELECT date(vs.created_at) as day, COUNT(*) as sessions,
+             SUM(CASE WHEN vs.user_id IS NOT NULL THEN 1 ELSE 0 END) as registered
+      FROM viewer_sessions vs
+      WHERE vs.created_at >= date('now', '-30 days') ${dateFilter}
+      GROUP BY day
+      ORDER BY day ASC
+    `);
+    const dailyStats = dailyResult.length > 0
+      ? dailyResult[0].values.map(r => ({ date: r[0], sessions: r[1], registered: r[2] }))
+      : [];
+
+    // 12. Conversion funnel: anonymous → viewer (email) → therapist (trial)
+    const sessionsWithEmail = db.exec(`SELECT COUNT(DISTINCT email) FROM viewer_sessions vs WHERE email IS NOT NULL ${dateFilter}`);
+    const emailCount = sessionsWithEmail.length > 0 ? sessionsWithEmail[0].values[0][0] : 0;
+
+    const conversionFunnel = {
+      anonymous: totalSessions,
+      registered_viewer: emailCount,
+      therapist: therapistConversions,
+      anonymous_to_viewer_rate: totalSessions > 0 ? ((emailCount / totalSessions) * 100).toFixed(1) : '0',
+      viewer_to_therapist_rate: emailCount > 0 ? ((therapistConversions / emailCount) * 100).toFixed(1) : '0'
+    };
+
+    res.json({
+      totalSessions,
+      totalViewers,
+      viewersInRange,
+      therapistConversions,
+      avgMessagesAnon,
+      avgMessagesRegistered,
+      topQuestions,
+      languages,
+      dropoffPoints,
+      totalTokens,
+      estimatedCost,
+      costPerSession,
+      dailyStats,
+      conversionFunnel
+    });
+
+  } catch (error) {
+    logger.error('Admin viewer stats error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch viewer analytics' });
+  }
+});
+
 module.exports = router;

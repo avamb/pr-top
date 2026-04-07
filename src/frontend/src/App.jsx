@@ -27,6 +27,7 @@ import AdminAIModels from './pages/AdminAIModels';
 import AdminCachedAnswers from './pages/AdminCachedAnswers';
 import AdminAssistantAnalytics from './pages/AdminAssistantAnalytics';
 import AdminAssistantConversations from './pages/AdminAssistantConversations';
+import AdminViewerAnalytics from './pages/AdminViewerAnalytics';
 import TherapistGuide from './pages/TherapistGuide';
 import SecurityEncryption from './pages/SecurityEncryption';
 import SecurityGDPR from './pages/SecurityGDPR';
@@ -110,6 +111,7 @@ function App() {
         <Route path="/admin/cached-answers" element={<AdminLayout><AdminCachedAnswers /></AdminLayout>} />
         <Route path="/admin/assistant-analytics" element={<AdminLayout><AdminAssistantAnalytics /></AdminLayout>} />
         <Route path="/admin/assistant-conversations" element={<AdminLayout><AdminAssistantConversations /></AdminLayout>} />
+        <Route path="/admin/viewer-analytics" element={<AdminLayout><AdminViewerAnalytics /></AdminLayout>} />
         <Route path="/admin/*" element={<AdminLayout><AdminDashboard /></AdminLayout>} />
 
         <Route path="*" element={<NotFound />} />
