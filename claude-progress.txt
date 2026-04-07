@@ -1,3 +1,37 @@
+## Session: 2026-04-07 - Feature #323
+
+### Completed: Viewer role — DB schema and auth middleware (#323) - PASSING
+
+**What was built:**
+- Updated users table CHECK constraint: role IN ('therapist', 'client', 'superadmin', 'viewer')
+- Added DB migration for existing databases (recreates users table to update CHECK constraint)
+- Handles duplicate case-insensitive emails by preserving original UNIQUE constraint
+- Created ViewerGuard.jsx frontend component (redirects viewer to landing page)
+- Updated TherapistGuard.jsx to explicitly block viewer role (redirect to /)
+- Updated AdminGuard.jsx to redirect viewers to landing page instead of /dashboard
+- Added viewer role i18n translations in EN/RU/ES/UK (roles.viewer, roles.viewerDescription)
+- Backend already blocks viewers from all dashboard/admin API routes via requireRole('therapist', 'superadmin')
+
+**Verification:**
+- Viewer can login successfully (200, role: 'viewer') ✅
+- Viewer blocked from /api/dashboard/stats (403) ✅
+- Viewer blocked from /api/admin/therapists (403) ✅
+- Viewer blocked from /api/clients (403) ✅
+- Viewer blocked from /api/search (403) ✅
+- Viewer blocked from /api/export/clients (403) ✅
+- Viewer CAN access /api/assistant/chat (200) ✅
+- Frontend: viewer redirected from /dashboard to / ✅
+- Frontend: viewer redirected from /admin to / ✅
+- Frontend: viewer redirected from /clients to / ✅
+- Superadmin still works correctly (can access /admin) ✅
+- Data persists after server restart ✅
+- No mock data patterns in source code ✅
+- Zero application console errors ✅
+
+### Current Status
+- Features passing: 323/334
+- Feature #323: PASSING
+
 ## Session: 2026-04-06 - Features #315, #316
 
 ### Completed: Superadmin Conversation Summary & Insights (#315) - PASSING
