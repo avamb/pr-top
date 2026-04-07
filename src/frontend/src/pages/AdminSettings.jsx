@@ -24,8 +24,8 @@ export default function AdminSettings() {
     },
     {
       key: 'assistant_prompt_viewer_registered',
-      label: t('admin.viewerRegisteredPrompt', 'Registered Viewer Prompt'),
-      description: t('admin.viewerRegisteredPromptDesc', 'System prompt for registered users with viewer role. Leave empty to use default.'),
+      label: t('admin.viewerRegisteredPrompt', 'Registered Lead Prompt'),
+      description: t('admin.viewerRegisteredPromptDesc', 'System prompt for registered users with lead role. Leave empty to use default.'),
       placeholder: t('admin.viewerPromptPlaceholder', 'Leave empty to use the built-in default prompt...'),
     }
   ];

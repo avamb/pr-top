@@ -121,7 +121,7 @@ export default function AdminViewerAnalytics() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-text">
-            {t('viewerAnalytics.title', 'Viewer Analytics')}
+            {t('viewerAnalytics.title', 'Lead Analytics')}
           </h1>
           <p className="text-sm text-secondary mt-1">
             {t('viewerAnalytics.subtitle', 'Track anonymous visitors and conversion funnel')}
@@ -184,7 +184,7 @@ export default function AdminViewerAnalytics() {
           color="bg-blue-50"
         />
         <StatCard
-          label={t('viewerAnalytics.registeredViewers', 'Registered Viewers')}
+          label={t('viewerAnalytics.registeredViewers', 'Registered Leads')}
           value={data.totalViewers}
           icon="📧"
           color="bg-green-50"
@@ -216,7 +216,7 @@ export default function AdminViewerAnalytics() {
           color="bg-blue-400"
         />
         <FunnelBar
-          label={t('viewerAnalytics.funnelViewer', 'Registered Viewers (email)')}
+          label={t('viewerAnalytics.funnelViewer', 'Registered Leads (email)')}
           value={funnel.registered_viewer || 0}
           total={funnel.anonymous || 1}
           color="bg-green-400"
@@ -228,8 +228,8 @@ export default function AdminViewerAnalytics() {
           color="bg-purple-400"
         />
         <div className="flex gap-6 mt-3 text-xs text-secondary">
-          <span>{t('viewerAnalytics.anonToViewer', 'Anonymous → Viewer')}: <strong>{funnel.anonymous_to_viewer_rate || 0}%</strong></span>
-          <span>{t('viewerAnalytics.viewerToTherapist', 'Viewer → Therapist')}: <strong>{funnel.viewer_to_therapist_rate || 0}%</strong></span>
+          <span>{t('viewerAnalytics.anonToViewer', 'Anonymous → Lead')}: <strong>{funnel.anonymous_to_viewer_rate || 0}%</strong></span>
+          <span>{t('viewerAnalytics.viewerToTherapist', 'Lead → Therapist')}: <strong>{funnel.viewer_to_therapist_rate || 0}%</strong></span>
         </div>
       </div>
 

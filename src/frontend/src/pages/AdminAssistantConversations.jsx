@@ -364,7 +364,7 @@ export default function AdminAssistantConversations() {
               className="border border-border rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary/50"
             >
               <option value="">{t('admin.conversations.allTherapists', 'All')}</option>
-              <option value="0">{t('admin.conversations.viewersOnly', '👤 Viewers Only')}</option>
+              <option value="0">{t('admin.conversations.viewersOnly', '👤 Leads Only')}</option>
               {therapists.map(th => (
                 <option key={th.id} value={th.id}>{th.email}</option>
               ))}

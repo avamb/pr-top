@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
 import usePublicAssistantStore from '../stores/publicAssistantStore';
 import { useCsrfToken } from '../hooks/useCsrfToken';
 
@@ -247,21 +246,6 @@ function ViewerRegistrationCTA({ t, onRegister, csrfToken, sessionUUID, language
         <p className="text-xs text-secondary mt-3">
           {t('publicChat.ctaNoCard', 'No credit card required')}
         </p>
-
-        <div className="mt-3 pt-3 border-t border-primary/10">
-          <p className="text-xs text-secondary mb-1">
-            {t('publicChat.orStartTrial', 'Or unlock the full platform:')}
-          </p>
-          <Link
-            to="/register"
-            className="inline-flex items-center text-xs text-primary font-medium hover:underline"
-          >
-            {t('publicChat.ctaButton', 'Start Free Trial')}
-            <svg className="w-3 h-3 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </Link>
-        </div>
       </div>
     </div>
   );
@@ -284,8 +268,6 @@ export default function PublicAssistantChatPanel() {
   const isStreaming = usePublicAssistantStore(s => s.isStreaming);
   const streamingText = usePublicAssistantStore(s => s.streamingText);
   const showCta = usePublicAssistantStore(s => s.showCta);
-  const messagesRemaining = usePublicAssistantStore(s => s.messagesRemaining);
-  const messagesUsed = usePublicAssistantStore(s => s.messagesUsed);
   const isRegistered = usePublicAssistantStore(s => s.isRegistered);
   const sessionUUID = usePublicAssistantStore(s => s.sessionUUID);
   const closePanel = usePublicAssistantStore(s => s.closePanel);
@@ -343,10 +325,6 @@ export default function PublicAssistantChatPanel() {
             </h3>
           </div>
           <div className="flex items-center gap-3">
-            {/* Messages remaining indicator */}
-            <span className="text-xs text-white/70">
-              {messagesUsed}/{5}
-            </span>
             <button
               onClick={closePanel}
               className="p-1 rounded hover:bg-white/20 transition-colors"
@@ -396,9 +374,6 @@ export default function PublicAssistantChatPanel() {
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-secondary mt-4">
-                {t('publicChat.freeMessages', 'You have {{count}} free messages', { count: 5 })}
-              </p>
             </div>
           )}
 
@@ -448,23 +423,6 @@ export default function PublicAssistantChatPanel() {
           />
         ) : (
           <div className="border-t p-3">
-            {/* Messages remaining bar */}
-            {messagesUsed > 0 && (
-              <div className="mb-2">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-xs text-secondary">
-                    {t('publicChat.messagesLeft', '{{count}} messages remaining', { count: messagesRemaining })}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-1">
-                  <div
-                    className={`h-1 rounded-full transition-all duration-300 ${messagesRemaining <= 1 ? 'bg-red-500' : messagesRemaining <= 2 ? 'bg-amber-500' : 'bg-primary'}`}
-                    style={{ width: `${(messagesRemaining / 5) * 100}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
             <div className="flex items-end gap-2">
               <textarea
                 ref={inputRef}
