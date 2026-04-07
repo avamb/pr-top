@@ -124,7 +124,7 @@ export default function Landing() {
       features: [
         'Up to 3 clients',
         '5 sessions / month',
-        'Transcription & AI summary',
+        'Transcription & summary',
         'Basic exercise library',
         'SOS alerts',
         'Client timeline',
@@ -139,7 +139,7 @@ export default function Landing() {
       features: [
         'Up to 10 clients',
         '20 sessions / month',
-        'Transcription & AI summary',
+        'Transcription & summary',
         'Full exercise library',
         'SOS alerts',
         'Client timeline',
@@ -154,7 +154,7 @@ export default function Landing() {
       features: [
         'Up to 30 clients',
         '60 sessions / month',
-        'Transcription & AI summary',
+        'Transcription & summary',
         'Full + custom exercises',
         'Natural-language queries',
         'SOS alerts',
@@ -169,7 +169,7 @@ export default function Landing() {
       features: [
         'Unlimited clients',
         'Unlimited sessions',
-        'Transcription & AI summary',
+        'Transcription & summary',
         'Full + custom exercises',
         'Natural-language queries',
         'Priority support',

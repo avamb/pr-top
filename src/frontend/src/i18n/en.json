@@ -65,7 +65,7 @@
   "landing": {
     "heroTitle1": "Keep Your Practice",
     "heroTitle2": "on Top",
-    "heroDesc": "PR-TOP is an AI-powered practice assistant for psychologists and therapists — built to reduce routine, support continuity between sessions, and keep care human.",
+    "heroDesc": "PR-TOP is a practice assistant for psychologists and therapists — built to reduce routine, support continuity between sessions, and keep care human.",
     "startTrial": "Start Free Trial",
     "learnMore": "See How It Works",
     "featuresTitle": "Features That Work for You",
@@ -90,7 +90,7 @@
     "termsOfService": "Terms of Service",
     "copyright": "© {{year}} PR-TOP. All rights reserved.",
     "feature1Title": "Less Documentation Routine",
-    "feature1Desc": "Automatic session transcription and smart AI summaries. No more spending evenings on notes — documentation is generated for you, you just review.",
+    "feature1Desc": "Automatic session transcription and smart summaries. No more spending evenings on notes — documentation is generated for you, you just review.",
     "feature2Title": "Between-Session Continuity",
     "feature2Desc": "All work history, context, and important details are reliably stored in one place. Even with a heavy caseload — no nuance is ever lost.",
     "feature3Title": "Data Security",
@@ -1212,5 +1212,12 @@
     "older": "Older",
     "msgs": "msgs",
     "archived": "archived"
+  },
+  "roles": {
+    "therapist": "Therapist",
+    "client": "Client",
+    "superadmin": "Super Admin",
+    "viewer": "Viewer",
+    "viewerDescription": "View-only access to landing page and assistant chat"
   }
 }

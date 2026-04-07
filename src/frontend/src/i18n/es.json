@@ -65,7 +65,7 @@
   "landing": {
     "heroTitle1": "Mantén tu práctica",
     "heroTitle2": "en lo más alto",
-    "heroDesc": "PR-TOP es un asistente de práctica con IA para psicólogos y terapeutas — diseñado para reducir la rutina, apoyar la continuidad entre sesiones y mantener la atención humana.",
+    "heroDesc": "PR-TOP es un asistente de práctica para psicólogos y terapeutas — diseñado para reducir la rutina, apoyar la continuidad entre sesiones y mantener la atención humana.",
     "startTrial": "Prueba gratuita",
     "learnMore": "Cómo funciona",
     "featuresTitle": "Funciones que trabajan para usted",
@@ -90,7 +90,7 @@
     "termsOfService": "Términos de servicio",
     "copyright": "© {{year}} PR-TOP. Todos los derechos reservados.",
     "feature1Title": "Menos rutina documental",
-    "feature1Desc": "Transcripción automática de sesiones y resúmenes inteligentes con IA. No más noches dedicadas a las notas — la documentación se genera sola, usted solo revisa.",
+    "feature1Desc": "Transcripción automática de sesiones y resúmenes inteligentes. No más noches dedicadas a las notas — la documentación se genera sola, usted solo revisa.",
     "feature2Title": "Continuidad entre sesiones",
     "feature2Desc": "Todo el historial de trabajo, contexto y detalles importantes se almacenan de forma fiable en un solo lugar. Incluso con alta carga — ningún matiz se pierde.",
     "feature3Title": "Seguridad de datos",
@@ -1212,5 +1212,12 @@
     "older": "Anteriores",
     "msgs": "msgs",
     "archived": "archivado"
+  },
+  "roles": {
+    "therapist": "Terapeuta",
+    "client": "Cliente",
+    "superadmin": "Superadministrador",
+    "viewer": "Observador",
+    "viewerDescription": "Acceso solo a la página principal y al chat del asistente"
   }
 }
