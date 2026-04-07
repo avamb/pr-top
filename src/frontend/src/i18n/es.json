@@ -102,7 +102,18 @@
     "feature6Title": "Flujo de cliente nativo en Telegram",
     "feature6Desc": "Los clientes interactúan a través de Telegram — sin aplicaciones nuevas que instalar. Diario, ejercicios y alertas SOS en su mensajero habitual.",
     "burnoutTitle": "Creamos esto para que tenga más tiempo para usted",
-    "burnoutText": "El agotamiento y la fatiga por compasión son una realidad de las profesiones de ayuda. Necesita tiempo para un descanso adecuado y recuperación. Nosotros nos encargamos de las tareas rutinarias, protegemos sus límites personales y liberamos tiempo para la vida."
+    "burnoutText": "El agotamiento y la fatiga por compasión son una realidad de las profesiones de ayuda. Necesita tiempo para un descanso adecuado y recuperación. Nosotros nos encargamos de las tareas rutinarias, protegemos sus límites personales y liberamos tiempo para la vida.",
+    "faqTitle": "Preguntas frecuentes",
+    "faqQ1": "¿Quién puede leer mis notas y comunicaciones con clientes?",
+    "faqA1": "Todos los datos confidenciales están cifrados a nivel de aplicación (AES-256). Nadie más que usted tiene acceso al contenido — incluyendo el equipo de soporte y desarrollo del servicio.",
+    "faqQ2": "¿Hay un botón SOS para que los clientes me contacten urgentemente?",
+    "faqA2": "Sí. El sistema integrado de alertas SOS permite a los clientes enviar una señal de emergencia directamente a través del bot de Telegram. Recibirá una notificación instantánea y podrá responder de inmediato.",
+    "faqQ3": "Tengo pocos clientes y me las arreglo sola. ¿Cómo puede ayudarme?",
+    "faqA3": "Incluso con pocos clientes, el servicio se encarga de la rutina: transcripciones, notas, recordatorios. Obtiene más tiempo libre. Y a medida que crece su práctica — una infraestructura lista que escala con usted.",
+    "faqQ4": "¿Hay funciones de recordatorios y mensajes para clientes?",
+    "faqA4": "Sí. Puede crear seguimientos, recordatorios de sesiones y mensajes de apoyo — de forma rápida y cómoda. Su enfoque se mantiene en la terapia, no en la administración.",
+    "faqQ5": "¿A quién le será más útil el servicio?",
+    "faqA5": "A profesionales que llevan historiales de clientes, asignan tareas y quieren mantener contacto entre sesiones. Cuantos más clientes tenga — más tiempo y energía le ahorra el servicio."
   },
   "auth": {
     "loginTitle": "Iniciar sesión",

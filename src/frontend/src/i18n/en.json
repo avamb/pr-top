@@ -102,7 +102,18 @@
     "feature6Title": "Telegram-Native Client Flow",
     "feature6Desc": "Clients interact through Telegram — no new apps to install. Diary entries, exercises, and SOS alerts in their existing messenger.",
     "burnoutTitle": "We built this so you have more time for yourself",
-    "burnoutText": "Burnout and compassion fatigue are a reality of helping professions. You need time for proper rest and recovery. We take on the routine tasks, protect your personal boundaries, and free up time for life."
+    "burnoutText": "Burnout and compassion fatigue are a reality of helping professions. You need time for proper rest and recovery. We take on the routine tasks, protect your personal boundaries, and free up time for life.",
+    "faqTitle": "Frequently Asked Questions",
+    "faqQ1": "Who can read my notes and client communications?",
+    "faqA1": "All confidential data is encrypted at the application level (AES-256). No one but you has access to the content — including the service support and development team.",
+    "faqQ2": "Is there an SOS button for clients to reach me urgently?",
+    "faqA2": "Yes. The built-in SOS alert system lets clients send an emergency signal directly through the Telegram bot. You'll receive an instant notification and can respond promptly.",
+    "faqQ3": "I only have a few clients and manage fine on my own. How can this help?",
+    "faqA3": "Even with a small caseload, the service handles the routine: transcriptions, notes, reminders. You get more free time. And as your practice grows — a ready infrastructure that scales with you.",
+    "faqQ4": "Are there reminder and messaging features for clients?",
+    "faqA4": "Yes. You can create follow-ups, session reminders, and support messages — quickly and conveniently. Your focus stays on therapy, not administration.",
+    "faqQ5": "Who will benefit most from the service?",
+    "faqA5": "Professionals who keep client histories, assign homework, and want to maintain contact between sessions. The more clients you have — the more time and energy the service saves."
   },
   "auth": {
     "loginTitle": "Log In",

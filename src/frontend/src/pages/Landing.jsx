@@ -1,7 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import AccordionItem from '../components/AccordionItem';
 import { trackUmamiEvent } from '../utils/umami';
 
 /* ───────── Feature Highlights (icons only, text from i18n) ───────── */
@@ -28,6 +29,44 @@ const featureKeys = [
   { titleKey: 'landing.feature5Title', descKey: 'landing.feature5Desc' },
   { titleKey: 'landing.feature6Title', descKey: 'landing.feature6Desc' },
 ];
+
+/* ───────── FAQ Section ───────── */
+const faqKeys = [
+  { q: 'landing.faqQ1', a: 'landing.faqA1' },
+  { q: 'landing.faqQ2', a: 'landing.faqA2' },
+  { q: 'landing.faqQ3', a: 'landing.faqA3' },
+  { q: 'landing.faqQ4', a: 'landing.faqA4' },
+  { q: 'landing.faqQ5', a: 'landing.faqA5' },
+];
+
+function FaqSection({ t }) {
+  const [openIndex, setOpenIndex] = useState(null);
+
+  return (
+    <section id="faq" aria-label="FAQ" className="py-20 bg-surface">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl sm:text-4xl font-bold text-text">
+            {t('landing.faqTitle')}
+          </h2>
+        </div>
+        <div>
+          {faqKeys.map((fk, i) => (
+            <AccordionItem
+              key={i}
+              id={`faq-${i}`}
+              title={t(fk.q)}
+              isOpen={openIndex === i}
+              onToggle={() => setOpenIndex(openIndex === i ? null : i)}
+            >
+              {t(fk.a)}
+            </AccordionItem>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
 
 /* ═══════════════════════════════════════════ */
 /*                Landing Page                 */
@@ -319,6 +358,9 @@ export default function Landing() {
           </p>
         </div>
       </section>
+
+      {/* ─── FAQ ─── */}
+      <FaqSection t={t} />
 
       {/* ─── Pricing ─── */}
       <section id="pricing" ref={pricingRef} aria-label="Pricing" className="py-20 bg-background">
