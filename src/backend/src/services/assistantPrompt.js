@@ -578,6 +578,16 @@ function buildViewerPrompt(options) {
 
   var prompt = getViewerPromptFromSettings(db, settingKey, locale, defaults);
 
+  // Append shared knowledge sections (visitor-adapted: feature descriptions, not UI instructions)
+  prompt += '\n\n---\n';
+  prompt += SHARED_PLATFORM_OVERVIEW;
+  prompt += SHARED_FEATURE_DESCRIPTIONS_VISITOR;
+  prompt += SHARED_TELEGRAM_BOT_COMMANDS;
+  prompt += SHARED_SUBSCRIPTION_TIERS;
+
+  // Anti-hallucination rule (localized)
+  prompt += ANTI_HALLUCINATION_RULES[locale] || ANTI_HALLUCINATION_RULES.en;
+
   // Inject soft CTA every 3rd response
   if (messageCount > 0 && messageCount % 3 === 0) {
     var cta = VIEWER_CTA_MESSAGES[locale] || VIEWER_CTA_MESSAGES.en;
@@ -586,6 +596,105 @@ function buildViewerPrompt(options) {
 
   return prompt;
 }
+
+// ============================================================
+// SHARED KNOWLEDGE SECTIONS
+// Reusable knowledge blocks included in both therapist and viewer prompts.
+// Viewer prompts get visitor-adapted versions (feature descriptions, not UI instructions).
+// ============================================================
+
+/**
+ * Platform overview — shared across all roles.
+ */
+var SHARED_PLATFORM_OVERVIEW = `
+## PLATFORM OVERVIEW
+
+PR-TOP has three main components:
+- **Therapist Dashboard** (Web) — Where therapists manage clients, sessions, exercises, diary entries, and analytics
+- **Telegram Bot** (Client-facing) — Where clients interact: diary entries (text/voice/video), exercises, SOS crisis alerts, consent management
+- **Admin Panel** (Web, superadmin only) — Platform administration and monitoring
+`;
+
+/**
+ * Feature descriptions for visitors — describes what exists, NOT step-by-step UI instructions.
+ */
+var SHARED_FEATURE_DESCRIPTIONS_VISITOR = `
+## PLATFORM FEATURES
+
+### AI Session Transcription & Summaries
+Therapists upload audio or video session recordings (up to 100MB). The platform automatically transcribes speech-to-text using AI (Whisper) and generates AI-powered session summaries. Recordings can be played back at adjustable speeds (0.5x, 1x, 1.5x, 2x).
+
+### Client Diary via Telegram
+Clients write diary entries through a Telegram bot — no new apps to install. Entries can be text, voice messages, or video notes. Therapists see all entries on the dashboard with transcription and playback support.
+
+### Exercise Library
+A pre-built multilingual library of therapeutic exercises (CBT, mindfulness, journaling, etc.) plus the ability to create custom exercises. Exercises are assigned to clients and delivered through the Telegram bot.
+
+### SOS Crisis Alerts
+Clients can trigger a one-tap SOS alert through the Telegram bot. Therapists receive instant notifications (in-app and email). Each SOS event is tracked through its full lifecycle: triggered → acknowledged → resolved.
+
+### End-to-End Encryption
+All sensitive client data (diary entries, therapist notes, session transcripts, AI summaries) is encrypted with AES-256 at the application layer. Files are stored with opaque IDs and streamed with signed access.
+
+### Semantic Search
+Therapists can search across all client data (sessions, diary entries, notes) using natural language queries. The platform uses vector embeddings for semantic matching. Natural language search is available on Pro and Premium plans.
+
+### Analytics & Export
+Dashboard analytics with charts tracking sessions per week, diary entries over time, and client activity. Data can be exported as PDF, CSV, or JSON depending on the subscription tier.
+
+### Multi-language Support
+Full interface support for English, Russian, Spanish, and Ukrainian — across the web dashboard, Telegram bot, and all notifications.
+
+### Client Consent Management
+Clients control their data sharing consent through the Telegram bot. When consent is revoked, client data is hidden from the therapist's dashboard. Therapist notes remain accessible as intellectual property.
+`;
+
+/**
+ * Telegram bot commands reference — shared.
+ */
+var SHARED_TELEGRAM_BOT_COMMANDS = `
+## TELEGRAM BOT (Client Side)
+
+Clients interact with PR-TOP through a Telegram bot. Key commands:
+- **/start** — Begin registration or connect with an invite code from their therapist
+- **/diary** — Write a diary entry (text, voice, or video)
+- **/exercises** — View assigned exercises
+- **/sos** — Trigger a crisis alert (sends instant notification to therapist)
+- **/consent** — Manage data sharing consent
+- **/help** — View available commands
+- **/timezone** — Set their timezone
+- **/disconnect** — Disconnect from therapist
+`;
+
+/**
+ * Subscription tiers table — shared.
+ */
+var SHARED_SUBSCRIPTION_TIERS = `
+## SUBSCRIPTION PLANS
+
+| Feature | Trial | Basic | Pro | Premium |
+|---------|-------|-------|-----|---------|
+| Duration | 14 days free | Unlimited | Unlimited | Unlimited |
+| Price | Free | $19/mo | $49/mo | $99/mo |
+| Clients | 3 | 10 | 50 | Unlimited |
+| Sessions/month | 5 | 20 | 100 | Unlimited |
+| AI Summaries | Basic | Full | Full + NL Search | Full + NL Search |
+| Analytics Export | No | CSV | CSV + PDF | CSV + PDF + JSON |
+`;
+
+/**
+ * Anti-hallucination rules for viewer prompts — all 4 languages.
+ */
+var ANTI_HALLUCINATION_RULES = {
+  en: `\n## ANTI-HALLUCINATION RULE
+CRITICAL: Only mention features described in your knowledge base above. If you do not find information about a specific feature, do NOT invent it. Say honestly that you don't have details about that feature, and direct the user to the website or suggest registering for a trial to learn more. NEVER mention: appointment scheduling, video consultations, financial reporting, client feedback collection, calendar integration, or any other feature not described above.`,
+  ru: `\n## ПРАВИЛО ПРОТИВ ГАЛЛЮЦИНАЦИЙ
+КРИТИЧЕСКИ ВАЖНО: Упоминайте только функции, описанные в вашей базе знаний выше. Если вы не находите информацию о конкретной функции, НЕ выдумывайте её. Честно скажите, что у вас нет подробностей об этой функции, и направьте пользователя на сайт или предложите зарегистрироваться для пробного периода. НИКОГДА не упоминайте: планирование встреч, видеоконсультации, финансовую отчётность, сбор отзывов клиентов, интеграцию с календарём или любые другие функции, не описанные выше.`,
+  es: `\n## REGLA ANTI-ALUCINACIÓN
+CRÍTICO: Solo menciona funciones descritas en tu base de conocimiento anterior. Si no encuentras información sobre una función específica, NO la inventes. Di honestamente que no tienes detalles sobre esa función y dirige al usuario al sitio web o sugiere registrarse para una prueba. NUNCA menciones: programación de citas, videoconsultas, informes financieros, recopilación de comentarios de clientes, integración de calendario, o cualquier otra función no descrita arriba.`,
+  uk: `\n## ПРАВИЛО ПРОТИ ГАЛЮЦИНАЦІЙ
+КРИТИЧНО: Згадуйте лише функції, описані у вашій базі знань вище. Якщо ви не знаходите інформацію про конкретну функцію, НЕ вигадуйте її. Чесно скажіть, що у вас немає деталей про цю функцію, і направте користувача на сайт або запропонуйте зареєструватися для пробного періоду. НІКОЛИ не згадуйте: планування зустрічей, відеоконсультації, фінансову звітність, збір відгуків клієнтів, інтеграцію з календарем або будь-які інші функції, не описані вище.`
+};
 
 module.exports = {
   buildAssistantSystemPrompt: buildAssistantSystemPrompt,
