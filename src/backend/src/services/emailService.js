@@ -418,6 +418,93 @@ function passwordResetTemplate(data, locale) {
   };
 }
 
+/**
+ * Viewer welcome email template (email-only registration from chat)
+ */
+function viewerWelcomeTemplate(data, locale) {
+  const l = locale || 'en';
+  const frontendUrl = data.frontendUrl || process.env.FRONTEND_URL || 'http://localhost:3000';
+
+  const titles = {
+    en: 'Welcome to PR-TOP!',
+    ru: 'Добро пожаловать в PR-TOP!',
+    es: 'Bienvenido a PR-TOP!',
+    uk: 'Ласкаво просимо до PR-TOP!'
+  };
+
+  const bodies = {
+    en: `
+      <h2 style="color:#4f46e5;margin-bottom:16px">Welcome to PR-TOP!</h2>
+      <p>Thank you for your interest in our therapist platform. You now have access to continue chatting with our AI assistant.</p>
+      <p>Ready to unlock the full platform? Start your free 14-day trial to access:</p>
+      <ul style="margin:12px 0;padding-left:20px">
+        <li>Client management dashboard</li>
+        <li>Session recording & AI transcription</li>
+        <li>Exercise library & assignments</li>
+        <li>Encrypted diary & notes</li>
+        <li>SOS crisis management</li>
+      </ul>
+      <div style="text-align:center;margin:24px 0">
+        <a href="${frontendUrl}/register" style="display:inline-block;background:#4f46e5;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600">Start Free Trial</a>
+      </div>
+      <p style="color:#6b7280;font-size:13px">No credit card required. 14-day free trial.</p>
+    `,
+    ru: `
+      <h2 style="color:#4f46e5;margin-bottom:16px">Добро пожаловать в PR-TOP!</h2>
+      <p>Спасибо за интерес к нашей платформе для терапевтов. Теперь вы можете продолжить общение с нашим AI-ассистентом.</p>
+      <p>Готовы получить полный доступ? Начните бесплатный 14-дневный пробный период:</p>
+      <ul style="margin:12px 0;padding-left:20px">
+        <li>Панель управления клиентами</li>
+        <li>Запись сессий и AI-транскрипция</li>
+        <li>Библиотека упражнений и назначения</li>
+        <li>Зашифрованный дневник и заметки</li>
+        <li>Управление кризисными ситуациями (SOS)</li>
+      </ul>
+      <div style="text-align:center;margin:24px 0">
+        <a href="${frontendUrl}/register" style="display:inline-block;background:#4f46e5;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600">Начать бесплатно</a>
+      </div>
+      <p style="color:#6b7280;font-size:13px">Банковская карта не требуется. 14 дней бесплатно.</p>
+    `,
+    es: `
+      <h2 style="color:#4f46e5;margin-bottom:16px">Bienvenido a PR-TOP!</h2>
+      <p>Gracias por tu interes en nuestra plataforma para terapeutas. Ahora puedes continuar chateando con nuestro asistente de IA.</p>
+      <p>Listo para desbloquear la plataforma completa? Comienza tu prueba gratuita de 14 dias:</p>
+      <ul style="margin:12px 0;padding-left:20px">
+        <li>Panel de gestion de clientes</li>
+        <li>Grabacion de sesiones y transcripcion con IA</li>
+        <li>Biblioteca de ejercicios y asignaciones</li>
+        <li>Diario y notas encriptados</li>
+        <li>Gestion de crisis (SOS)</li>
+      </ul>
+      <div style="text-align:center;margin:24px 0">
+        <a href="${frontendUrl}/register" style="display:inline-block;background:#4f46e5;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600">Comenzar prueba gratuita</a>
+      </div>
+      <p style="color:#6b7280;font-size:13px">No se requiere tarjeta de credito. 14 dias gratis.</p>
+    `,
+    uk: `
+      <h2 style="color:#4f46e5;margin-bottom:16px">Ласкаво просимо до PR-TOP!</h2>
+      <p>Дякуємо за інтерес до нашої платформи для терапевтів. Тепер ви можете продовжити спілкування з нашим AI-асистентом.</p>
+      <p>Готові отримати повний доступ? Почніть безкоштовний 14-денний пробний період:</p>
+      <ul style="margin:12px 0;padding-left:20px">
+        <li>Панель управління клієнтами</li>
+        <li>Запис сесій та AI-транскрипція</li>
+        <li>Бібліотека вправ та призначення</li>
+        <li>Зашифрований щоденник та нотатки</li>
+        <li>Управління кризовими ситуаціями (SOS)</li>
+      </ul>
+      <div style="text-align:center;margin:24px 0">
+        <a href="${frontendUrl}/register" style="display:inline-block;background:#4f46e5;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600">Почати безкоштовно</a>
+      </div>
+      <p style="color:#6b7280;font-size:13px">Банківська картка не потрібна. 14 днів безкоштовно.</p>
+    `
+  };
+
+  return {
+    subject: titles[l] || titles.en,
+    html: baseLayout(bodies[l] || bodies.en, l)
+  };
+}
+
 // ── Utility ────────────────────────────────────────────────────────────────
 
 function escapeHtml(str) {
@@ -505,6 +592,9 @@ async function sendEmail(to, templateName, templateData, locale) {
     case 'password_reset':
       template = passwordResetTemplate(templateData, l);
       break;
+    case 'viewer_welcome':
+      template = viewerWelcomeTemplate(templateData, l);
+      break;
     default:
       logger.warn(`[EMAIL] Unknown template: ${templateName}`);
       return { sent: false, error: `Unknown template: ${templateName}` };
@@ -587,11 +677,22 @@ async function sendPasswordReset(email, resetToken, locale) {
   }, locale);
 }
 
+/**
+ * Send viewer welcome email (email-only registration from chat CTA)
+ * @param {string} email - Viewer's email
+ * @param {string} [locale='en'] - Language code
+ * @returns {Promise<{sent: boolean, error?: string}>}
+ */
+async function sendViewerWelcomeEmail(email, locale) {
+  return sendEmail(email, 'viewer_welcome', { email }, locale);
+}
+
 module.exports = {
   isConfigured,
   sendEmail,
   sendSosAlert,
   sendWelcomeEmail,
+  sendViewerWelcomeEmail,
   sendPaymentReceipt,
   sendSubscriptionExpiryWarning,
   sendPasswordReset

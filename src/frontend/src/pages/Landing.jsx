@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import AccordionItem from '../components/AccordionItem';
 import { trackUmamiEvent } from '../utils/umami';
+import PublicAssistantChatButton from '../components/PublicAssistantChatButton';
+import PublicAssistantChatPanel from '../components/PublicAssistantChatPanel';
 
 /* ───────── Feature Highlights (icons only, text from i18n) ───────── */
 const highlightIcons = [
@@ -483,6 +485,9 @@ export default function Landing() {
           </div>
         </div>
       </footer>
+      {/* Public chat FAB + panel */}
+      <PublicAssistantChatButton />
+      <PublicAssistantChatPanel />
     </div>
   );
 }

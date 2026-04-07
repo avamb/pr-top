@@ -120,9 +120,89 @@ function StreamingMessage({ text }) {
 }
 
 /**
- * CTA component shown after 5 messages are used.
+ * Inline email registration form shown after 5-message limit.
+ * On submit: creates viewer account, issues JWT, continues chat seamlessly.
  */
-function RegisterCTA({ t }) {
+function ViewerRegistrationCTA({ t, onRegister, csrfToken, sessionUUID, language }) {
+  const [email, setEmail] = React.useState('');
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const [success, setSuccess] = React.useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || isSubmitting) return;
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setError(t('publicChat.invalidEmail', 'Please enter a valid email address'));
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+
+      const res = await fetch('/api/auth/register-viewer', {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({
+          email: trimmedEmail,
+          session_uuid: sessionUUID,
+          language: language || 'en'
+        })
+      });
+
+      const data = await res.json();
+
+      if (res.status === 409 && data.login_url) {
+        // Existing therapist/admin account - show login link
+        setError(t('publicChat.existingAccount', 'An account with this email already exists. Please log in.'));
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Registration failed');
+      }
+
+      // Store JWT token
+      if (data.token) {
+        localStorage.setItem('token', data.token);
+      }
+
+      setSuccess(true);
+
+      // Notify parent to continue chat seamlessly
+      if (onRegister) {
+        onRegister(data);
+      }
+    } catch (err) {
+      setError(err.message || t('publicChat.registrationError', 'Something went wrong. Please try again.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (success) {
+    return (
+      <div className="p-4 bg-gradient-to-r from-green-50 to-green-100 border-t border-green-200">
+        <div className="text-center">
+          <div className="text-2xl mb-2">&#x2705;</div>
+          <p className="text-sm font-semibold text-green-800">
+            {t('publicChat.registrationSuccess', 'Welcome! You can now continue chatting.')}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 bg-gradient-to-r from-primary/10 to-primary/5 border-t border-primary/20">
       <div className="text-center">
@@ -131,17 +211,57 @@ function RegisterCTA({ t }) {
           {t('publicChat.ctaTitle', 'Want to continue the conversation?')}
         </p>
         <p className="text-xs text-secondary mb-3">
-          {t('publicChat.ctaDesc', 'Register for a free 14-day trial to get unlimited access to our AI assistant and all platform features.')}
+          {t('publicChat.ctaEmailDesc', 'Enter your email to continue chatting with our AI assistant for free.')}
         </p>
-        <Link
-          to="/register"
-          className="inline-flex items-center justify-center px-6 py-2.5 rounded-lg bg-primary text-white font-semibold text-sm hover:bg-primary-600 transition-colors shadow-md shadow-primary/20"
-        >
-          {t('publicChat.ctaButton', 'Start Free Trial')}
-        </Link>
-        <p className="text-xs text-secondary mt-2">
+
+        <form onSubmit={handleSubmit} className="max-w-xs mx-auto">
+          <div className="flex gap-2">
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => { setEmail(e.target.value); setError(null); }}
+              placeholder={t('publicChat.emailPlaceholder', 'your@email.com')}
+              className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+              disabled={isSubmitting}
+              autoFocus
+            />
+            <button
+              type="submit"
+              disabled={isSubmitting || !email.trim()}
+              className="px-4 py-2 rounded-lg bg-primary text-white font-semibold text-sm hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-md shadow-primary/20 whitespace-nowrap"
+            >
+              {isSubmitting ? (
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : t('publicChat.continueBtn', 'Continue')}
+            </button>
+          </div>
+
+          {error && (
+            <p className="text-xs text-red-600 mt-2">{error}</p>
+          )}
+        </form>
+
+        <p className="text-xs text-secondary mt-3">
           {t('publicChat.ctaNoCard', 'No credit card required')}
         </p>
+
+        <div className="mt-3 pt-3 border-t border-primary/10">
+          <p className="text-xs text-secondary mb-1">
+            {t('publicChat.orStartTrial', 'Or unlock the full platform:')}
+          </p>
+          <Link
+            to="/register"
+            className="inline-flex items-center text-xs text-primary font-medium hover:underline"
+          >
+            {t('publicChat.ctaButton', 'Start Free Trial')}
+            <svg className="w-3 h-3 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+        </div>
       </div>
     </div>
   );
@@ -166,8 +286,11 @@ export default function PublicAssistantChatPanel() {
   const showCta = usePublicAssistantStore(s => s.showCta);
   const messagesRemaining = usePublicAssistantStore(s => s.messagesRemaining);
   const messagesUsed = usePublicAssistantStore(s => s.messagesUsed);
+  const isRegistered = usePublicAssistantStore(s => s.isRegistered);
+  const sessionUUID = usePublicAssistantStore(s => s.sessionUUID);
   const closePanel = usePublicAssistantStore(s => s.closePanel);
   const sendMessage = usePublicAssistantStore(s => s.sendMessage);
+  const registerViewer = usePublicAssistantStore(s => s.registerViewer);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -315,8 +438,14 @@ export default function PublicAssistantChatPanel() {
         </div>
 
         {/* CTA or Input */}
-        {showCta ? (
-          <RegisterCTA t={t} />
+        {showCta && !isRegistered ? (
+          <ViewerRegistrationCTA
+            t={t}
+            csrfToken={csrfToken}
+            sessionUUID={sessionUUID}
+            language={i18n.language}
+            onRegister={(data) => registerViewer(data)}
+          />
         ) : (
           <div className="border-t p-3">
             {/* Messages remaining bar */}

@@ -715,10 +715,25 @@ function applySchema(db) {
     created_at TEXT DEFAULT (datetime('now')),
     last_active TEXT DEFAULT (datetime('now')),
     message_count INTEGER DEFAULT 0,
-    email TEXT DEFAULT NULL
+    email TEXT DEFAULT NULL,
+    user_id INTEGER DEFAULT NULL
   )`);
   db.run('CREATE INDEX IF NOT EXISTS idx_viewer_sessions_uuid ON viewer_sessions(uuid)');
   db.run('CREATE INDEX IF NOT EXISTS idx_viewer_sessions_ip ON viewer_sessions(ip)');
+
+  // Migration: add user_id column to viewer_sessions if missing
+  try {
+    const vsColCheck = db.exec("PRAGMA table_info(viewer_sessions)");
+    if (vsColCheck.length > 0) {
+      const cols = vsColCheck[0].values.map(r => r[1]);
+      if (!cols.includes('user_id')) {
+        db.run('ALTER TABLE viewer_sessions ADD COLUMN user_id INTEGER DEFAULT NULL');
+        logger.info('[DB] Added user_id column to viewer_sessions');
+      }
+    }
+  } catch (e) {
+    // Column may already exist
+  }
 
   // Create newsletter_subscribers table for email newsletter subscriptions
   db.run(`CREATE TABLE IF NOT EXISTS newsletter_subscribers (

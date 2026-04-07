@@ -156,6 +156,7 @@ app.get('/api/health', async (req, res) => {
 
 // Mount route handlers
 app.use('/api/auth', authRoutes);
+app.use('/api/assistant', require('./routes/publicAssistant')); // Public chat (no auth, mounted before auth-gated assistant routes)
 app.use('/api/bot', botRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/admin', adminRoutes);

@@ -252,6 +252,150 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// POST /api/auth/register-viewer
+// Email-only registration from the public chat CTA.
+// Creates a user with role='viewer', links anonymous session, migrates messages, issues JWT.
+router.post('/register-viewer', async (req, res) => {
+  try {
+    const { email, session_uuid, language } = req.body;
+
+    // Validate email
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+    const normalizedEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
+
+    const db = getDatabase();
+
+    // Check if user already exists
+    const existing = db.exec('SELECT id, role, email FROM users WHERE email = ?', [normalizedEmail]);
+    if (existing.length > 0 && existing[0].values.length > 0) {
+      const existingUser = existing[0].values[0];
+      const existingRole = existingUser[1];
+
+      // If they're already a viewer, log them in
+      if (existingRole === 'viewer') {
+        const token = jwt.sign(
+          { userId: existingUser[0], email: existingUser[2], role: 'viewer' },
+          JWT_SECRET,
+          { expiresIn: '24h' }
+        );
+
+        // Link session if provided
+        if (session_uuid) {
+          try {
+            db.run('UPDATE viewer_sessions SET email = ?, user_id = ? WHERE uuid = ?', [normalizedEmail, existingUser[0], session_uuid]);
+            saveDatabaseAfterWrite();
+          } catch (e) {
+            logger.warn('Could not link viewer session: ' + e.message);
+          }
+        }
+
+        res.cookie('session_token', token, SESSION_COOKIE_OPTIONS);
+        return res.json({
+          message: 'Welcome back! You are now logged in.',
+          existing: true,
+          user: { id: existingUser[0], email: existingUser[2], role: 'viewer' },
+          token
+        });
+      }
+
+      // If they're a therapist/admin, tell them to use the login page
+      return res.status(409).json({
+        error: 'An account with this email already exists. Please use the login page.',
+        existing_role: existingRole,
+        login_url: '/login'
+      });
+    }
+
+    // Create new viewer user (no password required)
+    const inviteCode = uuidv4().slice(0, 8);
+    const supportedLanguages = ['en', 'ru', 'es', 'uk'];
+    const userLanguage = supportedLanguages.includes(language) ? language : 'en';
+
+    db.run(
+      'INSERT INTO users (email, password_hash, role, invite_code, language, timezone) VALUES (?, ?, ?, ?, ?, ?)',
+      [normalizedEmail, '', 'viewer', inviteCode, userLanguage, 'UTC']
+    );
+    saveDatabaseAfterWrite();
+
+    // Get the inserted user
+    const result = db.exec('SELECT id, email, role, created_at FROM users WHERE email = ?', [normalizedEmail]);
+    const user = result[0].values[0];
+    const userId = user[0];
+
+    // Link anonymous session to viewer account
+    if (session_uuid) {
+      try {
+        // Update viewer_sessions with email and user_id
+        db.run('UPDATE viewer_sessions SET email = ?, user_id = ? WHERE uuid = ?', [normalizedEmail, userId, session_uuid]);
+
+        // Migrate anonymous conversations (therapist_id=0) to this user
+        // Find the conversation linked to this session
+        const sessionResult = db.exec('SELECT id FROM viewer_sessions WHERE uuid = ?', [session_uuid]);
+        if (sessionResult.length > 0 && sessionResult[0].values.length > 0) {
+          const viewerSessionId = sessionResult[0].values[0][0];
+          // Update conversations that were created as anonymous (therapist_id=0) for this session's timeframe
+          // We link them by updating therapist_id from 0 to the new viewer userId
+          db.run(
+            "UPDATE assistant_conversations SET therapist_id = ? WHERE therapist_id = 0 AND page_context = 'landing' AND id IN (SELECT ac.id FROM assistant_conversations ac WHERE ac.therapist_id = 0 AND ac.page_context = 'landing' ORDER BY ac.last_message_at DESC LIMIT 1)",
+            [userId]
+          );
+        }
+
+        saveDatabaseAfterWrite();
+        logger.info(`[ViewerReg] Linked session ${session_uuid} to viewer user ${userId}`);
+      } catch (e) {
+        logger.warn('[ViewerReg] Session linking error: ' + e.message);
+      }
+    }
+
+    // Generate JWT
+    const token = jwt.sign(
+      { userId: userId, email: user[1], role: 'viewer' },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    logger.info(`[ViewerReg] Viewer registered: id=${userId}, email=${normalizedEmail}`);
+
+    // Send viewer welcome email (non-blocking)
+    emailService.sendViewerWelcomeEmail(normalizedEmail, userLanguage)
+      .then(result => {
+        if (result.sent) {
+          logger.info(`[ViewerReg] Welcome email sent to ${normalizedEmail}`);
+        } else {
+          logger.info(`[EMAIL] Viewer welcome for ${normalizedEmail}: ${result.error || 'not sent'}`);
+        }
+      })
+      .catch(err => {
+        logger.error(`[ViewerReg] Welcome email error for ${normalizedEmail}: ${err.message}`);
+      });
+
+    // Set secure HttpOnly session cookie
+    res.cookie('session_token', token, SESSION_COOKIE_OPTIONS);
+
+    res.status(201).json({
+      message: 'Registered successfully! You can continue chatting.',
+      user: {
+        id: userId,
+        email: user[1],
+        role: 'viewer',
+        created_at: user[3]
+      },
+      token
+    });
+  } catch (error) {
+    logger.error('[ViewerReg] Registration error: ' + error.message);
+    logger.error('Stack: ' + error.stack);
+    res.status(500).json({ error: 'Something went wrong. Please try again later.' });
+  }
+});
+
 // POST /api/auth/logout - Clear session cookie and invalidate token
 router.post('/logout', (req, res) => {
   // Clear the session cookie

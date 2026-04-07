@@ -31,6 +31,16 @@ function getSessionUUID() {
  * Zustand store for the public (anonymous) assistant chat on the landing page.
  * Limited to 5 messages per session. No auth required.
  */
+const VIEWER_REGISTERED_KEY = 'public_assistant_viewer_registered';
+
+function getViewerRegistered() {
+  try {
+    return localStorage.getItem(VIEWER_REGISTERED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
 const usePublicAssistantStore = create((set, get) => ({
   // Panel state
   isOpen: false,
@@ -46,11 +56,29 @@ const usePublicAssistantStore = create((set, get) => ({
   showCta: false,
   conversationId: null,
   sessionUUID: getSessionUUID(),
+  isRegistered: getViewerRegistered(),
 
   // Panel actions
   togglePanel: () => set(state => ({ isOpen: !state.isOpen })),
   openPanel: () => set({ isOpen: true }),
   closePanel: () => set({ isOpen: false }),
+
+  /**
+   * Handle successful viewer registration.
+   * Resets message limits so user can continue chatting seamlessly.
+   */
+  registerViewer: (data) => {
+    try {
+      localStorage.setItem(VIEWER_REGISTERED_KEY, 'true');
+    } catch {}
+
+    set({
+      isRegistered: true,
+      showCta: false,
+      messagesUsed: 0,
+      messagesRemaining: MAX_MESSAGES,
+    });
+  },
 
   /**
    * Send a message to the public assistant chat.
