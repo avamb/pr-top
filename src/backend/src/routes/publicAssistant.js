@@ -283,6 +283,7 @@ router.post('/public-chat', async (req, res) => {
 
     // RAG: Search knowledge base
     let ragContext = '';
+    let hasRagContext = false;
     try {
       const kbResults = await assistantKnowledge.search(sanitized, 3);
       if (kbResults.length > 0) {
@@ -293,6 +294,7 @@ router.post('/public-chat', async (req, res) => {
           ragContext = '\n\n## RELEVANT PLATFORM DOCUMENTATION\n' +
             'Use the following context to help answer the user\'s question:\n\n' +
             contextParts.join('\n\n---\n\n');
+          hasRagContext = true;
         }
       }
     } catch (ragError) {
@@ -300,7 +302,7 @@ router.post('/public-chat', async (req, res) => {
     }
 
     // Build system prompt (public/visitor context) using viewer-specific prompts
-    const systemPrompt = buildAssistantSystemPrompt({
+    let systemPrompt = buildAssistantSystemPrompt({
       pageContext: 'landing',
       locale: detectedLanguage,
       plan: 'visitor',
@@ -309,6 +311,17 @@ router.post('/public-chat', async (req, res) => {
       db: db,
       messageCount: session.messageCount
     }) + ragContext + '\n\nIMPORTANT: This is an anonymous visitor on the landing page. They are NOT a registered user. Keep answers concise and helpful. Encourage them to register for a free trial if they want to use the platform. Do not discuss specific client data or admin features in detail.';
+
+    // When RAG context is empty, instruct the AI not to hallucinate
+    if (!hasRagContext) {
+      const noKnowledgeFallbacks = {
+        en: '\n\nIMPORTANT: No relevant documentation was found in the knowledge base for this query. You MUST NOT guess or invent features that may not exist. If the question is about a specific platform feature, workflow, or setting, say that you don\'t have detailed information about this topic in your current knowledge base and suggest the visitor register for a free trial to explore the platform.',
+        ru: '\n\nВАЖНО: В базе знаний не найдена релевантная документация по этому запросу. Вы НЕ ДОЛЖНЫ угадывать или придумывать функции, которых может не существовать. Если вопрос касается конкретной функции платформы, скажите, что у вас нет подробной информации по этой теме, и предложите посетителю зарегистрироваться для пробного периода.',
+        es: '\n\nIMPORTANTE: No se encontró documentación relevante en la base de conocimientos para esta consulta. NO DEBE adivinar ni inventar funciones que pueden no existir. Si la pregunta es sobre una función específica de la plataforma, diga que no tiene información detallada sobre este tema y sugiera al visitante registrarse para una prueba gratuita.',
+        uk: '\n\nВАЖЛИВО: У базі знань не знайдено релевантної документації для цього запиту. Ви НЕ ПОВИННІ вгадувати або вигадувати функції, яких може не існувати. Якщо питання стосується конкретної функції платформи, скажіть, що у вас немає детальної інформації з цієї теми, і запропонуйте відвідувачу зареєструватися для пробного періоду.'
+      };
+      systemPrompt += noKnowledgeFallbacks[detectedLanguage] || noKnowledgeFallbacks.en;
+    }
 
     // Build messages (just the current exchange for public chat - no history beyond conversation)
     const aiMessages = [
@@ -351,7 +364,7 @@ router.post('/public-chat', async (req, res) => {
         const convId = savePublicChatExchange(db, session.id, sanitized, assistantReply, false, detectedLanguage, conversation_id || null);
         const remaining = effectiveLimit - session.messageCount - 1;
 
-        res.write(`data: ${JSON.stringify({ type: 'done', conversation_id: convId, language: detectedLanguage, cached: false, messages_remaining: remaining })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'done', conversation_id: convId, language: detectedLanguage, cached: false, has_rag_context: hasRagContext, messages_remaining: remaining })}\n\n`);
         res.end();
       } catch (aiError) {
         logger.error('[PublicAssistant] AI streaming error: ' + aiError.message);
@@ -365,7 +378,7 @@ router.post('/public-chat', async (req, res) => {
         const convId = savePublicChatExchange(db, session.id, sanitized, fallbackMsg, false, detectedLanguage, conversation_id || null);
 
         res.write(`data: ${JSON.stringify({ type: 'chunk', text: fallbackMsg })}\n\n`);
-        res.write(`data: ${JSON.stringify({ type: 'done', conversation_id: convId, language: detectedLanguage, cached: false, messages_remaining: effectiveLimit - session.messageCount - 1 })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'done', conversation_id: convId, language: detectedLanguage, cached: false, has_rag_context: hasRagContext, messages_remaining: effectiveLimit - session.messageCount - 1 })}\n\n`);
         res.end();
       }
       return;
@@ -400,6 +413,7 @@ router.post('/public-chat', async (req, res) => {
       conversation_id: convId,
       language: detectedLanguage,
       cached: false,
+      has_rag_context: hasRagContext,
       messages_remaining: remaining
     });
 

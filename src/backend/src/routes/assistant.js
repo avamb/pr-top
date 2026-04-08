@@ -370,7 +370,7 @@ router.post('/chat', async (req, res) => {
 
     // Build system prompt with context + RAG
     const userRole = req.user.role || 'therapist';
-    const systemPrompt = buildAssistantSystemPrompt({
+    let systemPrompt = buildAssistantSystemPrompt({
       pageContext: page_context || '',
       locale: detectedLanguage,
       plan: plan,
@@ -379,6 +379,17 @@ router.post('/chat', async (req, res) => {
       db: db,
       messageCount: userMessageCount
     }) + ragContext;
+
+    // When RAG context is empty, instruct the AI not to hallucinate
+    if (!hasRagContext) {
+      const noKnowledgeFallbacks = {
+        en: '\n\nIMPORTANT: No relevant documentation was found in the knowledge base for this query. You MUST NOT guess or invent features that may not exist. If the question is about a specific platform feature, workflow, or setting, say that you don\'t have information about this topic in your current knowledge base and suggest the user check the Guide section or contact their administrator for help.',
+        ru: '\n\nВАЖНО: В базе знаний не найдена релевантная документация по этому запросу. Вы НЕ ДОЛЖНЫ угадывать или придумывать функции, которых может не существовать. Если вопрос касается конкретной функции платформы, рабочего процесса или настройки, скажите, что у вас нет информации по этой теме в текущей базе знаний, и предложите пользователю обратиться к разделу Руководство или связаться с администратором.',
+        es: '\n\nIMPORTANTE: No se encontró documentación relevante en la base de conocimientos para esta consulta. NO DEBE adivinar ni inventar funciones que pueden no existir. Si la pregunta es sobre una función específica de la plataforma, flujo de trabajo o configuración, diga que no tiene información sobre este tema en su base de conocimientos actual y sugiera al usuario consultar la sección Guía o contactar a su administrador.',
+        uk: '\n\nВАЖЛИВО: У базі знань не знайдено релевантної документації для цього запиту. Ви НЕ ПОВИННІ вгадувати або вигадувати функції, яких може не існувати. Якщо питання стосується конкретної функції платформи, робочого процесу або налаштування, скажіть, що у вас немає інформації з цієї теми в поточній базі знань, і запропонуйте користувачу перевірити розділ Довідник або звернутися до адміністратора.'
+      };
+      systemPrompt += noKnowledgeFallbacks[detectedLanguage] || noKnowledgeFallbacks.en;
+    }
 
     // Prepare messages for AI (system + conversation history, limit to last 20 messages)
     const aiMessages = [
@@ -434,7 +445,7 @@ router.post('/chat', async (req, res) => {
         }
 
         // Send done event with metadata
-        res.write(`data: ${JSON.stringify({ type: 'done', chat_id: savedChatId, language: detectedLanguage, cached: false, messages: messages })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'done', chat_id: savedChatId, language: detectedLanguage, cached: false, has_rag_context: hasRagContext, messages: messages })}\n\n`);
         res.end();
 
       } catch (aiError) {
@@ -502,6 +513,7 @@ router.post('/chat', async (req, res) => {
       response: assistantReply,
       language: detectedLanguage,
       cached: false,
+      has_rag_context: hasRagContext,
       messages: messages
     });
 
