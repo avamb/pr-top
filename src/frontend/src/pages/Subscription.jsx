@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -24,10 +24,62 @@ export default function Subscription() {
   const [success, setSuccess] = useState('');
   const [payments, setPayments] = useState([]);
   const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [promoOpen, setPromoOpen] = useState(false);
+  const [promoCode, setPromoCode] = useState('');
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoError, setPromoError] = useState('');
+  const [promoSuccess, setPromoSuccess] = useState('');
+  const [redemptions, setRedemptions] = useState([]);
+  const [redemptionsLoading, setRedemptionsLoading] = useState(false);
 
   const token = localStorage.getItem('token');
 
   const isExpiredRedirect = location.state?.expired === true;
+
+  const fetchRedemptions = useCallback(async () => {
+    setRedemptionsLoading(true);
+    try {
+      const res = await fetch('/api/subscription/my-promos', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      setRedemptions(data.redemptions || []);
+    } catch (err) {
+      setRedemptions([]);
+    } finally {
+      setRedemptionsLoading(false);
+    }
+  }, [token]);
+
+  const handleApplyPromo = async () => {
+    if (!promoCode.trim()) return;
+    setPromoLoading(true);
+    setPromoError('');
+    setPromoSuccess('');
+    try {
+      const res = await fetch('/api/subscription/apply-promo', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ code: promoCode.trim() })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPromoError(data.error || t('subscription.promo.applyFailed'));
+        return;
+      }
+      const planName = data.promo?.plan ? data.promo.plan.charAt(0).toUpperCase() + data.promo.plan.slice(1) : '';
+      setPromoSuccess(t('subscription.promo.applySuccess', { plan: planName, days: data.promo?.duration_days || '' }));
+      setPromoCode('');
+      fetchRedemptions();
+    } catch (err) {
+      setPromoError(t('subscription.networkError'));
+    } finally {
+      setPromoLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!token) {
@@ -36,6 +88,7 @@ export default function Subscription() {
     }
     fetchSubscription();
     fetchPayments();
+    fetchRedemptions();
 
     if (location.pathname === '/subscription/success') {
       setSuccess(t('subscription.upgradeSuccess', { plan: '' }));
@@ -417,6 +470,89 @@ export default function Subscription() {
             </div>
           </>
         )}
+
+        {/* Promo Code Section */}
+        <div className="mt-8">
+          <button
+            onClick={() => setPromoOpen(!promoOpen)}
+            className="flex items-center gap-2 text-sm font-medium text-teal-700 hover:text-teal-800 transition-colors"
+          >
+            <svg className={`w-4 h-4 transform transition-transform ${promoOpen ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            {t('subscription.promo.haveCode')}
+          </button>
+
+          {promoOpen && (
+            <div className="mt-4 p-6 bg-white rounded-xl border border-stone-200 shadow-sm">
+              <h3 className="text-base font-semibold text-stone-900 mb-3">{t('subscription.promo.applyTitle')}</h3>
+
+              {promoError && (
+                <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                  {promoError}
+                </div>
+              )}
+              {promoSuccess && (
+                <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+                  {promoSuccess}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={promoCode}
+                  onChange={(e) => setPromoCode(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleApplyPromo()}
+                  placeholder={t('subscription.promo.placeholder')}
+                  className="flex-1 px-4 py-2 border border-stone-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
+                  disabled={promoLoading}
+                />
+                <button
+                  onClick={handleApplyPromo}
+                  disabled={promoLoading || !promoCode.trim()}
+                  className="px-5 py-2 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {promoLoading && <LoadingSpinner size={14} />}
+                  {promoLoading ? t('subscription.promo.applying') : t('subscription.promo.applyBtn')}
+                </button>
+              </div>
+
+              {/* Existing Redemptions */}
+              {redemptionsLoading ? (
+                <div className="mt-4 text-center text-stone-400 text-sm">{t('subscription.promo.loadingRedemptions')}</div>
+              ) : redemptions.length > 0 && (
+                <div className="mt-5">
+                  <h4 className="text-sm font-medium text-stone-700 mb-2">{t('subscription.promo.yourRedemptions')}</h4>
+                  <div className="space-y-2">
+                    {redemptions.map((r) => (
+                      <div key={r.id} className="flex items-center justify-between p-3 bg-stone-50 rounded-lg border border-stone-100">
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono text-sm font-medium text-stone-800">{r.code}</span>
+                          <span className="text-sm text-stone-500">
+                            {r.plan.charAt(0).toUpperCase() + r.plan.slice(1)} &middot; {r.duration_days} {t('subscription.promo.days')}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-stone-400">{formatUserDateOnly(r.redeemed_at)}</span>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            r.status === 'applied' ? 'bg-green-100 text-green-800' :
+                            r.status === 'pending' ? 'bg-amber-100 text-amber-800' :
+                            'bg-stone-100 text-stone-600'
+                          }`}>
+                            {r.status === 'applied' ? t('subscription.promo.statusApplied') :
+                             r.status === 'pending' ? t('subscription.promo.statusPending') :
+                             t('subscription.promo.statusExpired')}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Payment History - hidden for manual override users */}
         {!isManualOverride && (

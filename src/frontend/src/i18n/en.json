@@ -603,7 +603,22 @@
     "validUntil": "Valid until {{date}}",
     "unlimitedDuration": "Unlimited duration",
     "overrideExpiredTitle": "Your free access has expired",
-    "overrideExpiredDesc": "Your administrator-granted plan has expired. Please subscribe to continue using premium features."
+    "overrideExpiredDesc": "Your administrator-granted plan has expired. Please subscribe to continue using premium features.",
+    "promo": {
+      "haveCode": "Have a promo code?",
+      "applyTitle": "Apply Promo Code",
+      "placeholder": "Enter promo code",
+      "applyBtn": "Apply",
+      "applying": "Applying...",
+      "applySuccess": "Promo code applied! You'll receive {{plan}} plan for {{days}} days once approved.",
+      "applyFailed": "Failed to apply promo code",
+      "yourRedemptions": "Your Promo Codes",
+      "loadingRedemptions": "Loading redemptions...",
+      "days": "days",
+      "statusPending": "Pending",
+      "statusApplied": "Applied",
+      "statusExpired": "Expired"
+    }
   },
   "sessionDetail": {
     "loadingSession": "Loading session...",

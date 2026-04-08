@@ -587,7 +587,22 @@
     "validUntil": "Válido hasta {{date}}",
     "unlimitedDuration": "Duración ilimitada",
     "overrideExpiredTitle": "Su acceso gratuito ha expirado",
-    "overrideExpiredDesc": "El plan otorgado por el administrador ha expirado. Suscríbase para seguir usando las funciones premium."
+    "overrideExpiredDesc": "El plan otorgado por el administrador ha expirado. Suscríbase para seguir usando las funciones premium.",
+    "promo": {
+      "haveCode": "¿Tiene un código promocional?",
+      "applyTitle": "Aplicar código promocional",
+      "placeholder": "Ingrese el código promocional",
+      "applyBtn": "Aplicar",
+      "applying": "Aplicando...",
+      "applySuccess": "¡Código aplicado! Recibirá el plan {{plan}} por {{days}} días tras la aprobación.",
+      "applyFailed": "No se pudo aplicar el código promocional",
+      "yourRedemptions": "Sus códigos promocionales",
+      "loadingRedemptions": "Cargando...",
+      "days": "días",
+      "statusPending": "Pendiente",
+      "statusApplied": "Aplicado",
+      "statusExpired": "Expirado"
+    }
   },
   "sessionDetail": {
     "loadingSession": "Cargando sesión...",

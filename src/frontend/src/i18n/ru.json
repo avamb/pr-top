@@ -585,7 +585,22 @@
     "validUntil": "Действует до {{date}}",
     "unlimitedDuration": "Бессрочно",
     "overrideExpiredTitle": "Ваш бесплатный доступ истёк",
-    "overrideExpiredDesc": "Срок плана, назначенного администратором, истёк. Оформите подписку для продолжения использования."
+    "overrideExpiredDesc": "Срок плана, назначенного администратором, истёк. Оформите подписку для продолжения использования.",
+    "promo": {
+      "haveCode": "Есть промокод?",
+      "applyTitle": "Применить промокод",
+      "placeholder": "Введите промокод",
+      "applyBtn": "Применить",
+      "applying": "Применяется...",
+      "applySuccess": "Промокод применён! Вы получите план {{plan}} на {{days}} дней после одобрения.",
+      "applyFailed": "Не удалось применить промокод",
+      "yourRedemptions": "Ваши промокоды",
+      "loadingRedemptions": "Загрузка...",
+      "days": "дней",
+      "statusPending": "Ожидает",
+      "statusApplied": "Применён",
+      "statusExpired": "Истёк"
+    }
   },
   "sessionDetail": {
     "loadingSession": "Загрузка сессии...",
