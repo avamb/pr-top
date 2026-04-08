@@ -577,6 +577,11 @@ function ExerciseLibrary() {
           )}
         </div>
 
+        {/* Hint for library tab */}
+        {activeView === 'library' && (
+          <p className="text-xs text-stone-400 -mt-4 mb-4">{t('exerciseLibrary.libraryTabHint')}</p>
+        )}
+
         {/* Success message */}
         {successMsg && (
           <div className="bg-green-50 text-green-700 p-3 rounded-lg mb-4 text-sm font-medium">{successMsg}</div>
