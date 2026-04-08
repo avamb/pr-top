@@ -20,7 +20,7 @@ export default function Register() {
     }
   }, [navigate]);
 
-  // Capture UTM params from URL
+  // Capture UTM params and referral code from URL
   const utmParams = useMemo(() => ({
     utm_source: searchParams.get('utm_source') || undefined,
     utm_medium: searchParams.get('utm_medium') || undefined,
@@ -28,6 +28,7 @@ export default function Register() {
     utm_content: searchParams.get('utm_content') || undefined,
     utm_term: searchParams.get('utm_term') || undefined,
   }), [searchParams]);
+  const refCode = useMemo(() => searchParams.get('ref') || undefined, [searchParams]);
   const [form, setForm] = useState({ email: '', password: '', confirmPassword: '' });
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
@@ -115,6 +116,7 @@ export default function Register() {
           role: 'therapist',
           language: i18n.language || 'en',
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+          ref: refCode,
           ...utmParams
         })
       });

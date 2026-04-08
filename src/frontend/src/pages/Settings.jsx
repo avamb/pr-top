@@ -119,6 +119,10 @@ export default function Settings() {
   const [phone, setPhone] = useState('');
   const [telegramUsername, setTelegramUsername] = useState('');
   const [otherInfo, setOtherInfo] = useState('');
+  const [referralLink, setReferralLink] = useState('');
+  const [referralLoading, setReferralLoading] = useState(false);
+  const [referralError, setReferralError] = useState('');
+  const [referralCopied, setReferralCopied] = useState(false);
 
   const abortControllerRef = React.useRef(null);
 
@@ -126,6 +130,7 @@ export default function Settings() {
     const token = localStorage.getItem('token');
     if (!token) { navigate('/login'); return; }
     fetchProfile(token);
+    fetchReferralLink(token);
 
     return () => {
       if (abortControllerRef.current) {
@@ -133,6 +138,44 @@ export default function Settings() {
       }
     };
   }, []);
+
+  async function fetchReferralLink(token) {
+    setReferralLoading(true);
+    setReferralError('');
+    try {
+      const res = await fetch(`${API_URL}/user/referral-link`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        setReferralError(t('settings.referralError'));
+        return;
+      }
+      const data = await res.json();
+      setReferralLink(data.referral_link || '');
+    } catch (err) {
+      setReferralError(t('settings.referralError'));
+    } finally {
+      setReferralLoading(false);
+    }
+  }
+
+  async function handleCopyReferral() {
+    try {
+      await navigator.clipboard.writeText(referralLink);
+      setReferralCopied(true);
+      setTimeout(() => setReferralCopied(false), 2000);
+    } catch (err) {
+      // Fallback for older browsers
+      const textarea = document.createElement('textarea');
+      textarea.value = referralLink;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setReferralCopied(true);
+      setTimeout(() => setReferralCopied(false), 2000);
+    }
+  }
 
   async function fetchProfile(token) {
     if (abortControllerRef.current) {
@@ -541,6 +584,41 @@ export default function Settings() {
                 </div>
               </form>
             </div>
+
+            {/* Referral Link Section */}
+            {(profile.role === 'therapist' || profile.role === 'superadmin') && (
+              <div className="bg-white rounded-lg shadow-md p-8 mb-6">
+                <h3 className="text-lg font-semibold text-stone-700 mb-2">{t('settings.referralTitle')}</h3>
+                <p className="text-sm text-stone-500 mb-4">{t('settings.referralDesc')}</p>
+
+                {referralLoading ? (
+                  <p className="text-sm text-stone-400">{t('settings.referralLoading')}</p>
+                ) : referralError ? (
+                  <p className="text-sm text-red-500">{referralError}</p>
+                ) : referralLink ? (
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="text"
+                      readOnly
+                      value={referralLink}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-stone-700 text-sm font-mono select-all"
+                      onClick={(e) => e.target.select()}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCopyReferral}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                        referralCopied
+                          ? 'bg-green-100 text-green-700 border border-green-300'
+                          : 'bg-teal-600 text-white hover:bg-teal-700'
+                      }`}
+                    >
+                      {referralCopied ? t('settings.referralCopied') : t('settings.referralCopy')}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            )}
 
             {/* Escalation Preferences Section */}
             {(profile.role === 'therapist' || profile.role === 'superadmin') && (
