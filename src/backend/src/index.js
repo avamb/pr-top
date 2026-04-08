@@ -332,8 +332,8 @@ async function start() {
 
     // Auto-reindex assistant knowledge base on startup
     try {
-      const kbStats = assistantKnowledge.reindex();
-      logger.info(`Assistant knowledge base reindexed on startup: ${kbStats.indexed} files, ${kbStats.chunks} chunks, ${kbStats.removed} stale removed (${kbStats.elapsed_ms}ms)`);
+      const kbStats = await assistantKnowledge.reindex();
+      logger.info(`Assistant knowledge base reindexed on startup: ${kbStats.indexed} files, ${kbStats.chunks} chunks, ${kbStats.removed} stale removed, embedding=${kbStats.embedding_type} (${kbStats.elapsed_ms}ms)`);
     } catch (kbError) {
       logger.warn('Assistant knowledge base reindex failed on startup: ' + kbError.message);
     }

@@ -1,6 +1,7 @@
 // Assistant Knowledge Base Builder
 // Indexes project documentation, UI components, routes, API endpoints, and i18n strings
-// into the assistant_knowledge table with TF-IDF embeddings for semantic retrieval.
+// into the assistant_knowledge table with AI embeddings for semantic retrieval.
+// Falls back to TF-IDF embeddings when AI embedding API is unavailable.
 // READ-ONLY access to source files - never modifies any source code.
 
 const fs = require('fs');
@@ -8,9 +9,154 @@ const path = require('path');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 
-// --- Embedding utilities (shared with vectorStore.js approach) ---
+// --- Configuration ---
 
-const VOCAB_SIZE = 256;
+// AI embedding dimensions (OpenAI text-embedding-3-small = 1536)
+const AI_EMBEDDING_DIMENSIONS = 1536;
+// TF-IDF fallback dimensions
+const TFIDF_VOCAB_SIZE = 256;
+// Similarity thresholds
+const AI_SIMILARITY_THRESHOLD = 0.3;
+const TFIDF_SIMILARITY_THRESHOLD = 0.05;
+// Batch size for AI embedding API calls (max 2048 for OpenAI)
+const EMBEDDING_BATCH_SIZE = 50;
+
+// Track which embedding type is currently in use
+let currentEmbeddingType = 'tfidf'; // 'ai' or 'tfidf'
+
+// --- AI Embedding via OpenAI API ---
+
+/**
+ * Get the OpenAI API key and URL for embeddings.
+ * Checks platform_settings first, then env vars.
+ */
+function getEmbeddingConfig() {
+  let apiKey = process.env.AI_API_KEY;
+  let apiUrl = process.env.AI_API_URL || 'https://api.openai.com/v1';
+  let model = 'text-embedding-3-small';
+
+  // Try to read from DB settings for OpenAI key
+  try {
+    const db = getDatabase();
+    // Check if openai is configured as a provider with an API key
+    const keyResult = db.exec("SELECT value FROM platform_settings WHERE key = 'ai_openai_api_key'");
+    if (keyResult.length > 0 && keyResult[0].values.length > 0 && keyResult[0].values[0][0]) {
+      apiKey = keyResult[0].values[0][0];
+    }
+  } catch (e) {
+    // Ignore DB errors, use env vars
+  }
+
+  return { apiKey, apiUrl, model };
+}
+
+/**
+ * Check if AI embeddings are available (OpenAI API key configured).
+ */
+function isAIEmbeddingAvailable() {
+  const { apiKey } = getEmbeddingConfig();
+  return !!(apiKey && apiKey !== 'your-ai-api-key' && apiKey.length > 10);
+}
+
+/**
+ * Generate AI embeddings for a single text using OpenAI text-embedding-3-small.
+ * @param {string} text - Text to embed
+ * @returns {Promise<Float64Array|null>} Embedding vector or null on failure
+ */
+async function embedText(text) {
+  if (!text || !text.trim()) return null;
+
+  const { apiKey, apiUrl, model } = getEmbeddingConfig();
+  if (!apiKey || apiKey === 'your-ai-api-key' || apiKey.length <= 10) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(apiUrl + '/embeddings', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: model,
+        input: text.substring(0, 8000), // Limit input size
+        dimensions: AI_EMBEDDING_DIMENSIONS
+      }),
+      signal: AbortSignal.timeout(30000)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      logger.warn(`[AssistantKB] Embedding API error ${response.status}: ${errorText.substring(0, 200)}`);
+      return null;
+    }
+
+    const data = await response.json();
+    if (!data.data || !data.data[0] || !data.data[0].embedding) {
+      logger.warn('[AssistantKB] Unexpected embedding API response format');
+      return null;
+    }
+
+    return new Float64Array(data.data[0].embedding);
+  } catch (e) {
+    logger.warn('[AssistantKB] Embedding API call failed: ' + e.message);
+    return null;
+  }
+}
+
+/**
+ * Generate AI embeddings for multiple texts in a batch.
+ * @param {string[]} texts - Array of texts to embed
+ * @returns {Promise<(Float64Array|null)[]>} Array of embedding vectors
+ */
+async function embedTextBatch(texts) {
+  if (!texts || texts.length === 0) return [];
+
+  const { apiKey, apiUrl, model } = getEmbeddingConfig();
+  if (!apiKey || apiKey === 'your-ai-api-key' || apiKey.length <= 10) {
+    return texts.map(() => null);
+  }
+
+  try {
+    // Truncate each text to 8000 chars
+    const inputs = texts.map(t => (t || '').substring(0, 8000));
+
+    const response = await fetch(apiUrl + '/embeddings', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: model,
+        input: inputs,
+        dimensions: AI_EMBEDDING_DIMENSIONS
+      }),
+      signal: AbortSignal.timeout(60000)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      logger.warn(`[AssistantKB] Batch embedding API error ${response.status}: ${errorText.substring(0, 200)}`);
+      return texts.map(() => null);
+    }
+
+    const data = await response.json();
+    if (!data.data || !Array.isArray(data.data)) {
+      return texts.map(() => null);
+    }
+
+    // Sort by index to match input order
+    const sorted = data.data.sort((a, b) => a.index - b.index);
+    return sorted.map(item => item.embedding ? new Float64Array(item.embedding) : null);
+  } catch (e) {
+    logger.warn('[AssistantKB] Batch embedding API call failed: ' + e.message);
+    return texts.map(() => null);
+  }
+}
+
+// --- TF-IDF Fallback Embedding ---
 
 const STOP_WORDS = new Set([
   'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
@@ -45,30 +191,75 @@ function hashToken(token) {
     hash ^= token.charCodeAt(i);
     hash = (hash * 16777619) >>> 0;
   }
-  return hash % VOCAB_SIZE;
+  return hash % TFIDF_VOCAB_SIZE;
 }
 
-function generateEmbedding(text) {
+function generateTfidfEmbedding(text) {
   const tokens = tokenize(text);
   if (tokens.length === 0) return null;
-  const tf = new Float64Array(VOCAB_SIZE);
+  const tf = new Float64Array(TFIDF_VOCAB_SIZE);
   for (const token of tokens) {
     tf[hashToken(token)] += 1;
   }
-  for (let i = 0; i < VOCAB_SIZE; i++) {
+  for (let i = 0; i < TFIDF_VOCAB_SIZE; i++) {
     if (tf[i] > 0) tf[i] = 1 + Math.log(tf[i]);
   }
   let norm = 0;
-  for (let i = 0; i < VOCAB_SIZE; i++) norm += tf[i] * tf[i];
+  for (let i = 0; i < TFIDF_VOCAB_SIZE; i++) norm += tf[i] * tf[i];
   norm = Math.sqrt(norm);
   if (norm > 0) {
-    for (let i = 0; i < VOCAB_SIZE; i++) tf[i] /= norm;
+    for (let i = 0; i < TFIDF_VOCAB_SIZE; i++) tf[i] /= norm;
   }
   return tf;
 }
 
-function serializeEmbedding(embedding) {
+// --- Unified embedding functions ---
+
+/**
+ * Generate embedding for text (sync, TF-IDF only - used for backward compat).
+ * For AI embeddings, use embedText() or generateEmbeddingAsync().
+ */
+function generateEmbedding(text) {
+  return generateTfidfEmbedding(text);
+}
+
+/**
+ * Generate embedding for text (async, tries AI first then TF-IDF fallback).
+ * @param {string} text
+ * @returns {Promise<{embedding: Float64Array|null, type: string}>}
+ */
+async function generateEmbeddingAsync(text) {
+  if (isAIEmbeddingAvailable()) {
+    const aiEmb = await embedText(text);
+    if (aiEmb) {
+      return { embedding: aiEmb, type: 'ai' };
+    }
+  }
+  // Fallback to TF-IDF
+  return { embedding: generateTfidfEmbedding(text), type: 'tfidf' };
+}
+
+// --- Serialization ---
+
+/**
+ * Serialize embedding to string for DB storage.
+ * AI embeddings: JSON array (dense vectors).
+ * TF-IDF embeddings: sparse format "idx:val,idx:val,...".
+ */
+function serializeEmbedding(embedding, type) {
   if (!embedding) return null;
+
+  if (type === 'ai' || embedding.length === AI_EMBEDDING_DIMENSIONS) {
+    // AI embeddings: store as JSON array (more compact for dense vectors)
+    // Use reduced precision to save space
+    const arr = [];
+    for (let i = 0; i < embedding.length; i++) {
+      arr.push(parseFloat(embedding[i].toFixed(7)));
+    }
+    return 'AI:' + JSON.stringify(arr);
+  }
+
+  // TF-IDF: sparse format
   const parts = [];
   for (let i = 0; i < embedding.length; i++) {
     if (embedding[i] !== 0) parts.push(`${i}:${embedding[i].toFixed(6)}`);
@@ -76,14 +267,39 @@ function serializeEmbedding(embedding) {
   return parts.join(',');
 }
 
+/**
+ * Deserialize embedding from DB string.
+ * Auto-detects format: "AI:[...]" for AI embeddings, "idx:val,..." for TF-IDF.
+ */
 function deserializeEmbedding(str) {
   if (!str) return null;
-  const embedding = new Float64Array(VOCAB_SIZE);
+
+  // AI embedding format: "AI:[...]"
+  if (str.startsWith('AI:')) {
+    try {
+      const arr = JSON.parse(str.substring(3));
+      return new Float64Array(arr);
+    } catch (e) {
+      logger.warn('[AssistantKB] Failed to deserialize AI embedding');
+      return null;
+    }
+  }
+
+  // TF-IDF sparse format: "idx:val,idx:val,..."
+  const embedding = new Float64Array(TFIDF_VOCAB_SIZE);
   for (const part of str.split(',')) {
     const [idx, val] = part.split(':');
     embedding[parseInt(idx)] = parseFloat(val);
   }
   return embedding;
+}
+
+/**
+ * Detect the type of a serialized embedding.
+ */
+function getEmbeddingType(serialized) {
+  if (!serialized) return 'unknown';
+  return serialized.startsWith('AI:') ? 'ai' : 'tfidf';
 }
 
 function cosineSimilarity(a, b) {
@@ -108,6 +324,14 @@ function ensureTable() {
   )`);
   db.run('CREATE INDEX IF NOT EXISTS idx_assistant_knowledge_source ON assistant_knowledge(source_file)');
   db.run('CREATE INDEX IF NOT EXISTS idx_assistant_knowledge_type ON assistant_knowledge(source_type)');
+
+  // Add embedding_type column if it doesn't exist
+  try {
+    db.run("ALTER TABLE assistant_knowledge ADD COLUMN embedding_type TEXT DEFAULT 'tfidf'");
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
   saveDatabaseAfterWrite();
 }
 
@@ -370,16 +594,21 @@ function discoverFiles() {
 
 /**
  * Perform a full re-index of the knowledge base.
+ * Tries AI embeddings first, falls back to TF-IDF if unavailable.
  * READ-ONLY on source files. Writes only to assistant_knowledge table.
  *
- * @returns {{ indexed: number, chunks: number, removed: number, errors: number }}
+ * @returns {Promise<{ indexed: number, chunks: number, removed: number, errors: number, embedding_type: string }>}
  */
-function reindex() {
+async function reindex() {
   ensureTable();
   const db = getDatabase();
   const startTime = Date.now();
 
-  logger.info('[AssistantKB] Starting knowledge base re-index...');
+  const useAI = isAIEmbeddingAvailable();
+  const embeddingType = useAI ? 'ai' : 'tfidf';
+  currentEmbeddingType = embeddingType;
+
+  logger.info(`[AssistantKB] Starting knowledge base re-index (embedding: ${embeddingType})...`);
 
   const files = discoverFiles();
   logger.info(`[AssistantKB] Discovered ${files.length} files to index`);
@@ -388,6 +617,9 @@ function reindex() {
   const processedFiles = new Set();
   let totalChunks = 0;
   let errors = 0;
+
+  // Collect all chunks first for batch embedding
+  const allChunkData = []; // { chunk, relativePath, sourceType, chunkIndex }
 
   for (const file of files) {
     try {
@@ -399,25 +631,77 @@ function reindex() {
 
       const chunks = chunkFile(content, file.path, file.type);
 
-      // Remove old entries for this file
-      db.run("DELETE FROM assistant_knowledge WHERE source_file = ?", [relativePath]);
-
-      // Insert new chunks with embeddings
       for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        const embedding = generateEmbedding(chunk);
-        if (!embedding) continue;
-
-        const serialized = serializeEmbedding(embedding);
-        db.run(
-          "INSERT INTO assistant_knowledge (chunk_text, embedding, source_file, source_type, chunk_index, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
-          [chunk, serialized, relativePath, file.type, i]
-        );
-        totalChunks++;
+        allChunkData.push({
+          chunk: chunks[i],
+          relativePath,
+          sourceType: file.type,
+          chunkIndex: i
+        });
       }
     } catch (e) {
       errors++;
-      logger.warn('[AssistantKB] Error indexing file: ' + file.path + ' - ' + e.message);
+      logger.warn('[AssistantKB] Error processing file: ' + file.path + ' - ' + e.message);
+    }
+  }
+
+  logger.info(`[AssistantKB] Processing ${allChunkData.length} chunks with ${embeddingType} embeddings...`);
+
+  // Clear existing entries for processed files
+  for (const relativePath of processedFiles) {
+    db.run("DELETE FROM assistant_knowledge WHERE source_file = ?", [relativePath]);
+  }
+
+  if (useAI) {
+    // Batch AI embedding generation
+    for (let batchStart = 0; batchStart < allChunkData.length; batchStart += EMBEDDING_BATCH_SIZE) {
+      const batch = allChunkData.slice(batchStart, batchStart + EMBEDDING_BATCH_SIZE);
+      const texts = batch.map(c => c.chunk);
+
+      let embeddings;
+      try {
+        embeddings = await embedTextBatch(texts);
+      } catch (e) {
+        logger.warn(`[AssistantKB] Batch embedding failed at offset ${batchStart}, falling back to TF-IDF for this batch: ${e.message}`);
+        embeddings = texts.map(() => null);
+      }
+
+      for (let i = 0; i < batch.length; i++) {
+        const { chunk, relativePath, sourceType, chunkIndex } = batch[i];
+        let embedding = embeddings[i];
+        let type = 'ai';
+
+        // Fall back to TF-IDF for failed embeddings
+        if (!embedding) {
+          embedding = generateTfidfEmbedding(chunk);
+          type = 'tfidf';
+          if (!embedding) continue;
+        }
+
+        const serialized = serializeEmbedding(embedding, type);
+        db.run(
+          "INSERT INTO assistant_knowledge (chunk_text, embedding, source_file, source_type, chunk_index, embedding_type, updated_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
+          [chunk, serialized, relativePath, sourceType, chunkIndex, type]
+        );
+        totalChunks++;
+      }
+
+      // Log batch progress
+      const processed = Math.min(batchStart + EMBEDDING_BATCH_SIZE, allChunkData.length);
+      logger.info(`[AssistantKB] Embedded ${processed}/${allChunkData.length} chunks...`);
+    }
+  } else {
+    // TF-IDF embedding (synchronous, fast)
+    for (const { chunk, relativePath, sourceType, chunkIndex } of allChunkData) {
+      const embedding = generateTfidfEmbedding(chunk);
+      if (!embedding) continue;
+
+      const serialized = serializeEmbedding(embedding, 'tfidf');
+      db.run(
+        "INSERT INTO assistant_knowledge (chunk_text, embedding, source_file, source_type, chunk_index, embedding_type, updated_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
+        [chunk, serialized, relativePath, sourceType, chunkIndex, 'tfidf']
+      );
+      totalChunks++;
     }
   }
 
@@ -443,10 +727,11 @@ function reindex() {
     chunks: totalChunks,
     removed: removed,
     errors: errors,
-    elapsed_ms: elapsed
+    elapsed_ms: elapsed,
+    embedding_type: embeddingType
   };
 
-  logger.info(`[AssistantKB] Re-index complete: ${stats.indexed} files, ${stats.chunks} chunks, ${stats.removed} removed, ${stats.errors} errors (${elapsed}ms)`);
+  logger.info(`[AssistantKB] Re-index complete: ${stats.indexed} files, ${stats.chunks} chunks, ${stats.removed} removed, ${stats.errors} errors, embedding=${embeddingType} (${elapsed}ms)`);
 
   return stats;
 }
@@ -475,32 +760,82 @@ function getStats() {
   const lastUpdatedResult = db.exec("SELECT MAX(updated_at) FROM assistant_knowledge");
   const lastUpdated = (lastUpdatedResult.length > 0 && lastUpdatedResult[0].values.length > 0) ? lastUpdatedResult[0].values[0][0] : null;
 
-  return { total_chunks: total, total_files: files, by_type: byType, last_updated: lastUpdated };
+  // Count by embedding type
+  const embTypeResult = db.exec("SELECT embedding_type, COUNT(*) as cnt FROM assistant_knowledge GROUP BY embedding_type");
+  const byEmbeddingType = {};
+  if (embTypeResult.length > 0 && embTypeResult[0].values) {
+    for (const row of embTypeResult[0].values) {
+      byEmbeddingType[row[0] || 'tfidf'] = row[1];
+    }
+  }
+
+  return {
+    total_chunks: total,
+    total_files: files,
+    by_type: byType,
+    by_embedding_type: byEmbeddingType,
+    last_updated: lastUpdated,
+    ai_embeddings_available: isAIEmbeddingAvailable()
+  };
 }
 
 /**
  * Search the knowledge base for relevant chunks.
+ * Uses AI embeddings when available (cross-language semantic search),
+ * falls back to TF-IDF for local/offline operation.
  *
  * @param {string} query - Search query text
  * @param {number} limit - Max results (default 5)
- * @returns {Array<{chunk_text: string, source_file: string, source_type: string, similarity: number}>}
+ * @returns {Promise<Array<{chunk_text: string, source_file: string, source_type: string, similarity: number}>>}
  */
-function search(query, limit) {
+async function search(query, limit) {
   limit = limit || 5;
   ensureTable();
 
-  const queryEmbedding = generateEmbedding(query);
-  if (!queryEmbedding) return [];
-
   const db = getDatabase();
-  const allChunks = db.exec("SELECT id, chunk_text, embedding, source_file, source_type FROM assistant_knowledge");
+  const allChunks = db.exec("SELECT id, chunk_text, embedding, source_file, source_type, embedding_type FROM assistant_knowledge");
   if (!allChunks.length || !allChunks[0].values) return [];
+
+  // Determine what embedding types exist in the DB
+  const hasAIEmbeddings = allChunks[0].values.some(row => getEmbeddingType(row[2]) === 'ai');
+  const hasTfidfEmbeddings = allChunks[0].values.some(row => getEmbeddingType(row[2]) !== 'ai');
+
+  // Try to generate AI embedding for the query if we have AI embeddings in DB
+  let queryAIEmbedding = null;
+  let queryTfidfEmbedding = null;
+
+  if (hasAIEmbeddings && isAIEmbeddingAvailable()) {
+    queryAIEmbedding = await embedText(query);
+  }
+  if (hasTfidfEmbeddings || !queryAIEmbedding) {
+    queryTfidfEmbedding = generateTfidfEmbedding(query);
+  }
+
+  if (!queryAIEmbedding && !queryTfidfEmbedding) return [];
 
   const results = [];
   for (const row of allChunks[0].values) {
+    const chunkEmbType = getEmbeddingType(row[2]);
     const chunkEmbedding = deserializeEmbedding(row[2]);
-    const similarity = cosineSimilarity(queryEmbedding, chunkEmbedding);
-    if (similarity > 0.05) {
+    if (!chunkEmbedding) continue;
+
+    let similarity = 0;
+    let threshold = TFIDF_SIMILARITY_THRESHOLD;
+
+    if (chunkEmbType === 'ai' && queryAIEmbedding) {
+      // AI vs AI comparison (best quality, cross-language)
+      similarity = cosineSimilarity(queryAIEmbedding, chunkEmbedding);
+      threshold = AI_SIMILARITY_THRESHOLD;
+    } else if (chunkEmbType !== 'ai' && queryTfidfEmbedding) {
+      // TF-IDF vs TF-IDF comparison
+      similarity = cosineSimilarity(queryTfidfEmbedding, chunkEmbedding);
+      threshold = TFIDF_SIMILARITY_THRESHOLD;
+    } else {
+      // Mismatched embedding types - skip (can't compare AI with TF-IDF)
+      continue;
+    }
+
+    if (similarity > threshold) {
       results.push({
         id: row[0],
         chunk_text: row[1],
@@ -515,13 +850,26 @@ function search(query, limit) {
   return results.slice(0, limit);
 }
 
+/**
+ * Get the current embedding type being used.
+ */
+function getCurrentEmbeddingType() {
+  return currentEmbeddingType;
+}
+
 module.exports = {
   ensureTable,
   reindex,
   getStats,
   search,
+  embedText,
+  embedTextBatch,
   generateEmbedding,
+  generateEmbeddingAsync,
+  generateTfidfEmbedding,
   serializeEmbedding,
   deserializeEmbedding,
-  cosineSimilarity
+  cosineSimilarity,
+  isAIEmbeddingAvailable,
+  getCurrentEmbeddingType
 };

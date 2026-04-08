@@ -284,7 +284,7 @@ router.post('/public-chat', async (req, res) => {
     // RAG: Search knowledge base
     let ragContext = '';
     try {
-      const kbResults = assistantKnowledge.search(sanitized, 3);
+      const kbResults = await assistantKnowledge.search(sanitized, 3);
       if (kbResults.length > 0) {
         const contextParts = kbResults
           .filter(r => r.similarity > 0.1)
