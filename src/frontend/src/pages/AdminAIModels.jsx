@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 
@@ -40,10 +41,8 @@ export default function AdminAIModels() {
 
   const loadModels = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/admin/ai/models`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API_URL}/admin/ai/models`);
+      if (res.status === 401) return;
       if (res.ok) {
         const data = await res.json();
         setSummarizationProviders(data.summarization_providers || []);
@@ -79,11 +78,9 @@ export default function AdminAIModels() {
     setMessage(null);
     setError(null);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/admin/ai/models`, {
+      const res = await fetchApi(`${API_URL}/admin/ai/models`, {
         method: 'PUT',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -92,6 +89,7 @@ export default function AdminAIModels() {
           assistant: { provider: assistProvider, model: assistModel }
         })
       });
+      if (res.status === 401) return;
       const data = await res.json();
       if (res.ok) {
         setMessage(data.message || t('admin.ai.saved'));
@@ -119,10 +117,8 @@ export default function AdminAIModels() {
     setTesting(providerName);
     setTestResult(null);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/admin/ai/test?provider=${providerName}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API_URL}/admin/ai/test?provider=${providerName}`);
+      if (res.status === 401) return;
       const data = await res.json();
       setTestResult(data);
     } catch (err) {
@@ -134,10 +130,8 @@ export default function AdminAIModels() {
 
   const loadKBStats = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/admin/assistant/knowledge-stats`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API_URL}/admin/assistant/knowledge-stats`);
+      if (res.status === 401) return; // Session expired — global handler will redirect
       if (res.ok) {
         const data = await res.json();
         setKbStats(data);
@@ -151,11 +145,11 @@ export default function AdminAIModels() {
     setReindexing(true);
     setKbMessage(null);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/admin/assistant/reindex`, {
+      const res = await fetchApi(`${API_URL}/admin/assistant/reindex`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' }
       });
+      if (res.status === 401) return; // Session expired — global handler will redirect
       const data = await res.json();
       if (res.ok) {
         setKbMessage({ type: 'success', text: `${t('admin.ai.reindexSuccess')}: ${data.indexed} files, ${data.chunks} chunks (${data.elapsed_ms}ms)` });

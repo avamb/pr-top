@@ -12,6 +12,7 @@ export default function Login() {
   const csrfToken = useCsrfToken();
   const redirectTo = location.state?.from || null;
   const accessDenied = location.state?.accessDenied || false;
+  const sessionExpiredMessage = location.state?.message || null;
 
   // Redirect if already authenticated (prevents back-button resubmit)
   useEffect(() => {
@@ -21,7 +22,11 @@ export default function Login() {
     }
   }, [navigate, accessDenied]);
   const [form, setForm] = useState({ email: '', password: '' });
-  const [error, setError] = useState(accessDenied ? t('auth.clientAccessDenied', 'Access denied. The web panel is for therapists only. Clients should use the Telegram bot.') : '');
+  const [error, setError] = useState(
+    accessDenied ? t('auth.clientAccessDenied', 'Access denied. The web panel is for therapists only. Clients should use the Telegram bot.')
+    : sessionExpiredMessage ? sessionExpiredMessage
+    : ''
+  );
   const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
 

@@ -5,6 +5,7 @@ import TimezoneDetectionBanner from './TimezoneDetectionBanner';
 import AssistantChatButton from './AssistantChatButton';
 import AssistantChatPanel from './AssistantChatPanel';
 import { UnsavedChangesProvider } from '../contexts/UnsavedChangesContext';
+import { setupSessionExpiredHandler } from '../utils/fetchApi';
 // Assistant chat state is now managed via Zustand store (stores/assistantStore.js)
 
 const API_URL = '/api';
@@ -20,6 +21,11 @@ export default function AppLayout({ user, children }) {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const subscriptionCheckedRef = useRef(false);
+
+  // Global handler: redirect to login when session expires (401 from any API call)
+  useEffect(() => {
+    return setupSessionExpiredHandler(navigate);
+  }, [navigate]);
 
   // Check subscription status once per mount (not on every navigation)
   useEffect(() => {
