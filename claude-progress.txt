@@ -1,3 +1,25 @@
+## Session: 2026-04-08 - Feature #351
+
+### Completed: Clarify exercise library tab names (#351) - PASSING
+
+**What was changed:**
+- Renamed "Library" tab to "Sample Library" (EN), "Примеры упражнений" (RU), "Ejemplos" (ES), "Приклади вправ" (UK)
+- Added libraryTabHint i18n key with subtitle explaining exercises are pre-made examples
+- Added hint paragraph below tabs (only visible when library view is active, hidden on "My Exercises" tab)
+- "My Exercises" tab unchanged — clearly separated as therapist's own exercises
+
+**Verification:**
+- EN: "Sample Library" tab + "Pre-made examples — use as templates or assign directly" hint ✅
+- RU: "Примеры упражнений" tab + "Готовые примеры — используйте как шаблоны или назначайте напрямую" hint ✅
+- "My Exercises" tab unchanged, hint hidden when active ✅
+- Tab layout not broken, visually clean ✅
+- Zero feature-related console errors (only pre-existing Umami/React Router) ✅
+- No mock data patterns ✅
+
+### Current Status
+- Features passing: 346/351 (98.6%)
+- Feature #351: PASSING
+
 ## Session: 2026-04-08 - Feature #344
 
 ### Completed: Admin referral analytics API (#344) - PASSING
