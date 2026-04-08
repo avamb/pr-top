@@ -123,6 +123,15 @@ export default function AdminCachedAnswers() {
                       <span className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded">
                         {t('admin.cache.usedTimes', { count: item.usage_count })}
                       </span>
+                      {item.has_rag_context ? (
+                        <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded" title="Answer was generated with RAG context">
+                          ✅ RAG
+                        </span>
+                      ) : (
+                        <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded" title="No RAG context — excluded from cache serving">
+                          ⚠️ No RAG
+                        </span>
+                      )}
                       <span className="text-xs text-secondary">
                         {new Date(item.updated_at + 'Z').toLocaleDateString()}
                       </span>

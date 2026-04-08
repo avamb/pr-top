@@ -1342,9 +1342,9 @@ router.put('/settings/assistant-ai', (req, res) => {
 // ==================== Assistant Knowledge Base ====================
 
 // POST /api/admin/assistant/reindex - Trigger knowledge base re-indexing
-router.post('/assistant/reindex', (req, res) => {
+router.post('/assistant/reindex', async (req, res) => {
   try {
-    const stats = assistantKnowledge.reindex();
+    const stats = await assistantKnowledge.reindex();
 
     // Audit log
     const db = getDatabase();
@@ -1571,6 +1571,20 @@ router.get('/assistant/analytics', (req, res) => {
       };
     }
 
+    // Cache poisoning stats: cached answers with vs without RAG context
+    let cacheWithRag = 0, cacheWithoutRag = 0;
+    try {
+      const cacheRagResult = db.exec("SELECT has_rag_context, COUNT(*) FROM assistant_cached_answers GROUP BY has_rag_context");
+      if (cacheRagResult.length > 0 && cacheRagResult[0].values) {
+        for (const row of cacheRagResult[0].values) {
+          if (row[0] === 1) cacheWithRag = row[1];
+          else cacheWithoutRag = row[1];
+        }
+      }
+    } catch (e) {
+      // Column may not exist yet on older databases
+    }
+
     res.json({
       total_conversations: totalConversations,
       total_messages: totalMessages,
@@ -1585,7 +1599,8 @@ router.get('/assistant/analytics', (req, res) => {
       difficulties: difficulties,
       daily_usage: dailyUsage,
       by_therapist: byTherapist,
-      feedback_prompt_stats: feedbackPromptStats
+      feedback_prompt_stats: feedbackPromptStats,
+      cache_rag_stats: { with_rag: cacheWithRag, without_rag: cacheWithoutRag }
     });
   } catch (error) {
     logger.error('Admin assistant analytics error: ' + error.message);

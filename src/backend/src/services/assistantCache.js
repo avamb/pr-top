@@ -49,7 +49,8 @@ function findCachedAnswer(questionText) {
     const db = getDatabase();
     const threshold = getThreshold();
 
-    const allCached = db.exec("SELECT id, question_embedding, answer_text FROM assistant_cached_answers");
+    // Only return cache hits where RAG context was present (has_rag_context = 1)
+    const allCached = db.exec("SELECT id, question_embedding, answer_text FROM assistant_cached_answers WHERE has_rag_context = 1");
     if (!allCached.length || !allCached[0].values) return { hit: false };
 
     let bestMatch = null;
@@ -92,12 +93,20 @@ function findCachedAnswer(questionText) {
 
 /**
  * Store a Q&A pair in the cache for future use.
+ * Only caches answers where RAG context was present to prevent cache poisoning.
  *
  * @param {string} questionText - The user's question
  * @param {string} answerText - The AI's answer
- * @returns {number|null} The ID of the cached entry, or null on error
+ * @param {boolean} hasRagContext - Whether RAG context was available for this answer
+ * @returns {number|null} The ID of the cached entry, or null on error/skipped
  */
-function storeCachedAnswer(questionText, answerText) {
+function storeCachedAnswer(questionText, answerText, hasRagContext) {
+  // Prevent cache poisoning: only cache answers that had RAG context
+  if (!hasRagContext) {
+    logger.info('[AssistantCache] Skipping cache storage — no RAG context for this answer');
+    return null;
+  }
+
   try {
     const questionEmbedding = generateEmbedding(questionText);
     if (!questionEmbedding) return null;
@@ -106,8 +115,8 @@ function storeCachedAnswer(questionText, answerText) {
     const db = getDatabase();
 
     db.run(
-      "INSERT INTO assistant_cached_answers (question_embedding, question_text, answer_text, usage_count, created_at, updated_at) VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))",
-      [serialized, questionText, answerText]
+      "INSERT INTO assistant_cached_answers (question_embedding, question_text, answer_text, usage_count, has_rag_context, created_at, updated_at) VALUES (?, ?, ?, 1, ?, datetime('now'), datetime('now'))",
+      [serialized, questionText, answerText, hasRagContext ? 1 : 0]
     );
 
     const idResult = db.exec('SELECT last_insert_rowid()');
@@ -141,7 +150,7 @@ function getCachedAnswers(page, limit) {
   const total = (countResult.length > 0 && countResult[0].values.length > 0) ? countResult[0].values[0][0] : 0;
 
   const result = db.exec(
-    "SELECT id, question_text, answer_text, usage_count, created_at, updated_at FROM assistant_cached_answers ORDER BY usage_count DESC, updated_at DESC LIMIT ? OFFSET ?",
+    "SELECT id, question_text, answer_text, usage_count, created_at, updated_at, has_rag_context FROM assistant_cached_answers ORDER BY usage_count DESC, updated_at DESC LIMIT ? OFFSET ?",
     [limit, offset]
   );
 
@@ -154,7 +163,8 @@ function getCachedAnswers(page, limit) {
         answer_text: row[2],
         usage_count: row[3],
         created_at: row[4],
-        updated_at: row[5]
+        updated_at: row[5],
+        has_rag_context: !!row[6]
       });
     }
   }

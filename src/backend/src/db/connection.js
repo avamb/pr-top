@@ -622,9 +622,17 @@ function applySchema(db) {
     question_text TEXT NOT NULL,
     answer_text TEXT NOT NULL,
     usage_count INTEGER DEFAULT 1,
+    has_rag_context INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
   )`);
+
+  // Add has_rag_context column if missing (migration for existing databases)
+  try {
+    db.run('ALTER TABLE assistant_cached_answers ADD COLUMN has_rag_context INTEGER DEFAULT 0');
+  } catch (e) {
+    // Column already exists
+  }
 
   // Create assistant_knowledge table for knowledge base indexing
   db.run(`CREATE TABLE IF NOT EXISTS assistant_knowledge (

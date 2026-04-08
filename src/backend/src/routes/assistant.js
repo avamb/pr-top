@@ -315,8 +315,9 @@ router.post('/chat', async (req, res) => {
 
     // === RAG: Search knowledge base for relevant context ===
     let ragContext = '';
+    let hasRagContext = false;
     try {
-      const kbResults = assistantKnowledge.search(sanitized, 3);
+      const kbResults = await assistantKnowledge.search(sanitized, 3);
       if (kbResults.length > 0) {
         const contextParts = kbResults
           .filter(r => r.similarity > 0.1)
@@ -325,6 +326,7 @@ router.post('/chat', async (req, res) => {
           ragContext = '\n\n## RELEVANT PLATFORM DOCUMENTATION\n' +
             'Use the following context to help answer the user\'s question:\n\n' +
             contextParts.join('\n\n---\n\n');
+          hasRagContext = true;
           logger.info(`[Assistant] RAG: found ${contextParts.length} relevant knowledge chunks`);
         }
       }
@@ -418,8 +420,8 @@ router.post('/chat', async (req, res) => {
 
         assistantReply = fullText || '';
 
-        // Store Q&A in cache
-        assistantCache.storeCachedAnswer(sanitized, assistantReply);
+        // Store Q&A in cache (only if RAG context was present to prevent cache poisoning)
+        assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext);
 
         // Save to database
         messages.push({ role: 'assistant', content: assistantReply, timestamp: new Date().toISOString() });
@@ -472,8 +474,8 @@ router.post('/chat', async (req, res) => {
       }, db);
       assistantReply = result.text;
 
-      // Store Q&A in cache
-      assistantCache.storeCachedAnswer(sanitized, assistantReply);
+      // Store Q&A in cache (only if RAG context was present to prevent cache poisoning)
+      assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext);
     } catch (aiError) {
       logger.error('[Assistant] AI provider error: ' + aiError.message);
       const fallbacks = {
