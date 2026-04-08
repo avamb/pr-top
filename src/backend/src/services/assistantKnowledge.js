@@ -445,15 +445,54 @@ function chunkFile(content, filePath, sourceType) {
   const MAX_CHUNK_SIZE = 2000; // characters per chunk
 
   if (sourceType === 'i18n' && filePath.endsWith('.json')) {
-    // For i18n JSON files, extract key paths as documentation
+    // For i18n JSON files, group keys by top-level namespace for thematic coherence.
+    // This ensures related keys (e.g., all settings.* keys) are in the same chunk,
+    // improving RAG search relevance for semantic queries.
     try {
       const data = JSON.parse(content);
-      const keys = flattenKeys(data);
-      // Group keys into chunks of ~50 keys
-      for (let i = 0; i < keys.length; i += 50) {
-        const batch = keys.slice(i, i + 50);
-        const text = `Translation keys from ${relativePath}:\n` + batch.join('\n');
-        chunks.push(text);
+      const namespaces = Object.keys(data);
+      const MAX_KEYS_PER_CHUNK = 100;
+
+      for (const ns of namespaces) {
+        const nsValue = data[ns];
+        if (typeof nsValue !== 'object' || nsValue === null || Array.isArray(nsValue)) {
+          // Simple key-value (e.g., brand: "PR-TOP")
+          const val = typeof nsValue === 'string' ? nsValue.substring(0, 100) : String(nsValue);
+          chunks.push(`Translation keys for [${ns}] from ${relativePath}:\n${ns} = ${val}`);
+          continue;
+        }
+
+        const nsKeys = flattenKeys(nsValue, ns);
+
+        if (nsKeys.length <= MAX_KEYS_PER_CHUNK) {
+          // Namespace fits in one chunk
+          const text = `Translation keys for [${ns}] from ${relativePath}:\n` + nsKeys.join('\n');
+          chunks.push(text);
+        } else {
+          // Large namespace: split by second-level prefix
+          const subGroups = {};
+          for (const keyLine of nsKeys) {
+            // Extract second-level prefix: "admin.therapists.name = ..." -> "therapists"
+            const dotIdx = keyLine.indexOf('.');
+            const secondDotIdx = dotIdx >= 0 ? keyLine.indexOf('.', dotIdx + 1) : -1;
+            let subPrefix;
+            if (secondDotIdx >= 0) {
+              subPrefix = keyLine.substring(dotIdx + 1, secondDotIdx);
+            } else {
+              subPrefix = '_root';
+            }
+            if (!subGroups[subPrefix]) subGroups[subPrefix] = [];
+            subGroups[subPrefix].push(keyLine);
+          }
+
+          const subPrefixes = Object.keys(subGroups);
+          for (const sub of subPrefixes) {
+            const subKeys = subGroups[sub];
+            const label = sub === '_root' ? ns : `${ns}.${sub}`;
+            const text = `Translation keys for [${label}] from ${relativePath}:\n` + subKeys.join('\n');
+            chunks.push(text);
+          }
+        }
       }
     } catch (e) {
       chunks.push(`i18n file ${relativePath}: ${content.substring(0, MAX_CHUNK_SIZE)}`);
