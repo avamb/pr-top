@@ -1,3 +1,54 @@
+## Session: 2026-04-08 - Features #343, #345, #349
+
+### Completed: Promo code validation and redemption API (#343) - PASSING
+
+**What was verified (code already existed):**
+- POST /api/subscription/apply-promo: validates code exists, is_active, not expired, usage < max_uses, no duplicate redemption
+- Creates promo_redemptions record with status='pending', increments usage_count
+- Returns promo details (plan, duration_days) on success, clear error messages on failure
+- GET /api/subscription/my-promos: returns therapist's own redemptions with status
+
+**Verification:**
+- Valid promo code → 201 with pending status ✅
+- Duplicate redemption → 409 ✅
+- Non-existent code → 404 ✅
+- Empty code → 400 ✅
+- Inactive code → 400 ✅
+- My promos returns redemption list ✅
+- No auth → rejected ✅
+- usage_count incremented ✅
+- Data persists in SQLite ✅
+
+### Completed: Admin promo redemption management API (#345) - PASSING
+
+**What was fixed:**
+- Route conflict: GET /promos/redemptions was being matched by GET /promos/:id (where :id = "redemptions")
+- Moved /promos/redemptions and /promos/redemptions/:id/apply routes BEFORE /promos/:id to fix ordering
+
+**What was verified:**
+- GET /api/admin/promos/redemptions: lists all redemptions with therapist email, current plan, promo details
+- PUT /api/admin/promos/redemptions/:id/apply: marks redemption as applied, creates plan override
+- Filter by status (pending/applied/expired) works correctly
+- Non-admin access blocked (403)
+- Data persists across server restart ✅
+
+### Completed: Admin Promos tab — promo code management (#349) - PASSING
+
+**What was verified (UI component already existed):**
+- AdminPromos.jsx page with Create form, Codes table, Redemptions section
+- Sidebar has "Promo Codes" nav item in admin section
+- Route /admin/promos in App.jsx
+- Create form: code input, plan select (Basic/Pro/Premium), duration_days, max_uses, expires_at
+- Codes table: code, plan, duration, max_uses, used, status badges, expires_at, Deactivate button
+- Redemptions section: filter buttons (All/Pending/Applied/Expired), therapist info, Apply button
+- Apply button works: changes status from Pending to Applied, updates current_plan
+- i18n translations in all 4 languages (en/ru/es/uk)
+- Zero feature-related console errors ✅
+
+### Current Status
+- Features passing: 348/350
+- Features #343, #345, #349: ALL PASSING
+
 ## Session: 2026-04-08 - Feature #346
 
 ### Completed: Promo code input on Subscription page (#346) - PASSING
