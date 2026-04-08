@@ -1,3 +1,64 @@
+## Session: 2026-04-08 - Features #352, #355, #353
+
+### Completed: Replace TF-IDF with AI Embeddings for RAG Search (#352) - PASSING
+
+**What was built:**
+- Added embedText() function calling OpenAI text-embedding-3-small API (1536 dimensions)
+- Added embedTextBatch() for efficient batch embedding during reindex
+- Updated serializeEmbedding/deserializeEmbedding to handle both AI (JSON with "AI:" prefix) and TF-IDF (sparse format)
+- Made reindex() async with batch AI embedding API calls (batch size 50)
+- Made search() async: embeds query via AI, compares with cosine similarity (threshold 0.3 for AI vs 0.05 for TF-IDF)
+- Added embedding_type column to assistant_knowledge table
+- Added by_embedding_type and ai_embeddings_available to getStats()
+- Falls back gracefully to TF-IDF when AI API key unavailable
+- Updated all callers (index.js, admin.js, assistant.js, publicAssistant.js) for async
+
+**Verification:**
+- Backend starts and reindexes with TF-IDF fallback (108 files, 449 chunks) ✅
+- Knowledge stats show by_embedding_type and ai_embeddings_available fields ✅
+- Admin reindex endpoint returns embedding_type ✅
+- Chat endpoint search works without crashing ✅
+- Data persists after server restart ✅
+- No mock data patterns ✅
+- Zero feature-related console errors ✅
+
+### Completed: Improve i18n chunk quality for RAG indexing (#355) - PASSING
+
+**What was built:**
+- Updated chunkFile() i18n section to group keys by top-level namespace instead of arbitrary batches of 50
+- Each namespace gets its own chunk with header: "Translation keys for [settings] from en.json:"
+- Large namespaces (>100 keys like admin, clientDetail) split by second-level prefix
+- i18n chunks went from 105 to 421 (thematically coherent), total chunks from 449 to 765
+
+**Verification:**
+- Reindex produces 765 chunks (up from 449) ✅
+- i18n chunk count: 421 (namespace-grouped) ✅
+- Search for "referral" works ✅
+- Search for "SOS" works ✅
+- Total chunk count reasonable (< 2000) ✅
+- No 500 errors ✅
+- Zero feature-related console errors ✅
+
+### Completed: Add 'I don't know' fallback when RAG context is empty (#353) - PASSING
+
+**What was built:**
+- When hasRagContext is false, append no-hallucination instruction to system prompt
+- Instruction in 4 languages (EN/RU/ES/UK) telling AI to say "I don't have information about this"
+- Applied to both assistant.js (therapist chat) and publicAssistant.js (public chat)
+- Added has_rag_context boolean flag to response metadata (JSON and SSE done events)
+- Public chat version suggests registration instead of admin contact
+
+**Verification:**
+- has_rag_context field present in all assistant responses ✅
+- has_rag_context field present in public chat responses ✅
+- No 500 errors from assistant routes ✅
+- No mock data patterns ✅
+- Zero feature-related console errors ✅
+
+### Current Status
+- Features passing: 354/355 (99.7%)
+- Features #352, #355, #353: ALL PASSING
+
 ## Session: 2026-04-08 - Feature #354
 
 ### Completed: Prevent cache poisoning from answers without RAG context (#354) - PASSING
