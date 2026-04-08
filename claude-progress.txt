@@ -1,3 +1,32 @@
+## Session: 2026-04-08 - Feature #350
+
+### Completed: Admin Referrals section — referral tracking (#350) - PASSING
+
+**What was built:**
+- Added tab navigation to AdminPromos.jsx: "Promo Codes" and "Referrals" tabs
+- Referrals tab fetches data from existing GET /api/admin/referrals endpoint
+- Summary stats cards: Total Referrals, This Month, Paid Conversions, Conversion Rate
+- Top Referrers table: rank, name/email, referral count, paid conversions
+- All Referrals table: referred user name/email, referrer name/email, registration date, current plan
+- Pagination controls for referral list (prev/next with page indicator)
+- Lazy loading: referral data only fetched when Referrals tab is first activated
+- i18n: 20 new translation keys (refTotalReferrals, refThisMonth, refTopReferrers, etc.) in EN/RU/ES/UK
+
+**Verification:**
+- Promos tab still works correctly with create form, codes table, redemptions ✅
+- Referrals tab shows summary stats (2 total, 2 this month, 0 paid, 0% conversion) ✅
+- Top Referrers table shows Admin with 2 referrals ✅
+- All Referrals table shows 2 referred users with trial plans ✅
+- Tab switching works cleanly with active state indicator ✅
+- No mock data patterns in source code ✅
+- Zero feature-related console errors (only pre-existing Umami/React Router warnings) ✅
+- Real database data displayed (referral_test_347@test.com, test_referral_341@example.com) ✅
+
+### Current Status
+- Features passing: 351/351 (100.0%)
+- Feature #350: PASSING
+- ALL FEATURES COMPLETE
+
 ## Session: 2026-04-08 - Features #343, #345, #349
 
 ### Completed: Promo code validation and redemption API (#343) - PASSING
