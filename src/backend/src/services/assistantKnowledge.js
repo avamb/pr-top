@@ -337,8 +337,14 @@ function ensureTable() {
 
 // --- File discovery and chunking ---
 
-// Project root (relative to this service file)
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+// Project root detection:
+// - In Docker: source files are mounted at /app/project-root/ (read-only)
+// - In local dev: resolve relative to this service file (4 levels up)
+const DOCKER_PROJECT_ROOT = '/app/project-root';
+const LOCAL_PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+const PROJECT_ROOT = fs.existsSync(path.join(DOCKER_PROJECT_ROOT, 'src'))
+  ? DOCKER_PROJECT_ROOT
+  : LOCAL_PROJECT_ROOT;
 
 /**
  * File categories to index with glob-like patterns.
