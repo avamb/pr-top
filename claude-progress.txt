@@ -1,3 +1,53 @@
+## Session: 2026-04-08 - Features #356, #357, #358
+
+### Completed: Fix PROJECT_ROOT and volume mounts for Docker RAG indexing (#356) - PASSING
+
+**What was built:**
+- Added read-only volume mounts to docker-compose.yml backend service: ./src, ./docs, ./docker-compose.yml, ./README.md, ./.env.example → /app/project-root/
+- Updated PROJECT_ROOT in assistantKnowledge.js to detect Docker environment (checks /app/project-root/src existence) vs local dev fallback
+- INDEX_SOURCES paths work correctly for both environments since project structure is mirrored
+
+**Verification:**
+- Knowledge base shows 108 files, 765 chunks after restart ✅
+- Reindex via UI button: "108 files, 765 chunks (238ms)" ✅
+- GET /api/admin/assistant/knowledge-stats returns non-zero counts ✅
+- Local dev still works correctly (PROJECT_ROOT resolves to project directory) ✅
+- Zero feature-related console errors ✅
+
+### Completed: Fix 'Invalid or expired token' on admin reindex action (#357) - PASSING
+
+**What was built:**
+- Created src/frontend/src/utils/fetchApi.js — global fetch wrapper with:
+  - Auto-inject Authorization Bearer header from localStorage token
+  - 401 response detection → clears token, dispatches 'session-expired' custom event
+  - setupSessionExpiredHandler() for redirect to /login with message
+- Updated AppLayout.jsx to set up global session-expired handler via useEffect
+- Updated AdminAIModels.jsx to use fetchApi for all 5 API calls (loadModels, handleSave, handleTestConnection, loadKBStats, handleReindex)
+- Updated Login.jsx to show session-expired message from navigation state
+
+**Verification:**
+- Login works, admin dashboard loads ✅
+- AI Models page loads with fetchApi (no manual token handling) ✅
+- Reindex button works and shows success message ✅
+- API returns 401 with "Invalid or expired token" for bad tokens ✅
+- fetchApi properly clears localStorage and dispatches event on 401 ✅
+- Login page can display session-expired message ✅
+- Zero feature-related console errors ✅
+
+### Completed: Verify RAG chat quality after reindex fix (#358) - PASSING
+
+**What was verified:**
+- Knowledge base: 108 files, 765 chunks indexed (TF-IDF embeddings) ✅
+- RAG search returns ranked results for queries (tested: referral, SOS, Docker, exercises) ✅
+- Dashboard assistant: question sent, graceful fallback when no AI provider configured ✅
+- Landing page assistant: question sent, shows "Sorry, I cannot respond right now" gracefully ✅
+- No-RAG-context fallback: code has explicit "I don't know" instructions in EN/RU/ES/UK ✅
+- No hallucination: without AI provider, shows clear error message instead of generic response ✅
+
+### Current Status
+- Features passing: 358/358 (100.0%)
+- Features #356, #357, #358: ALL PASSING
+
 ## Session: 2026-04-08 - Features #352, #355, #353
 
 ### Completed: Replace TF-IDF with AI Embeddings for RAG Search (#352) - PASSING
