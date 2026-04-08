@@ -2816,6 +2816,153 @@ router.put('/promos/:id/deactivate', (req, res) => {
   }
 });
 
+// ============================================================
+// Promo Redemption Management
+// ============================================================
+
+// GET /api/admin/promos/redemptions - List all redemptions with therapist info
+router.get('/promos/redemptions', (req, res) => {
+  try {
+    const db = getDatabase();
+    const { status } = req.query;
+
+    let query = `
+      SELECT r.id, r.promo_code_id, r.therapist_id, r.redeemed_at, r.status,
+             p.code, p.plan, p.duration_days,
+             u.email as therapist_email, u.first_name, u.last_name,
+             COALESCE(s.plan, 'trial') as current_plan
+      FROM promo_redemptions r
+      JOIN promo_codes p ON p.id = r.promo_code_id
+      JOIN users u ON u.id = r.therapist_id
+      LEFT JOIN subscriptions s ON s.therapist_id = r.therapist_id
+    `;
+    const params = [];
+
+    if (status && ['pending', 'applied', 'expired'].includes(status)) {
+      query += ' WHERE r.status = ?';
+      params.push(status);
+    }
+
+    query += ' ORDER BY r.redeemed_at DESC';
+
+    const result = db.exec(query, params);
+
+    const redemptions = (result.length > 0 ? result[0].values : []).map(row => ({
+      id: row[0],
+      promo_code_id: row[1],
+      therapist_id: row[2],
+      redeemed_at: row[3],
+      status: row[4],
+      promo_code: row[5],
+      promo_plan: row[6],
+      duration_days: row[7],
+      therapist_email: row[8],
+      therapist_first_name: row[9] || '',
+      therapist_last_name: row[10] || '',
+      current_plan: row[11]
+    }));
+
+    res.json({ redemptions, total: redemptions.length });
+  } catch (error) {
+    logger.error('Admin list redemptions error: ' + error.message);
+    res.status(500).json({ error: 'Failed to list promo redemptions' });
+  }
+});
+
+// PUT /api/admin/promos/redemptions/:id/apply - Mark redemption as applied
+router.put('/promos/redemptions/:id/apply', (req, res) => {
+  try {
+    const db = getDatabase();
+    const redemptionId = parseInt(req.params.id, 10);
+    if (isNaN(redemptionId)) {
+      return res.status(400).json({ error: 'Invalid redemption ID' });
+    }
+
+    // Get redemption details
+    const redemptionResult = db.exec(
+      `SELECT r.id, r.promo_code_id, r.therapist_id, r.status,
+              p.code, p.plan, p.duration_days
+       FROM promo_redemptions r
+       JOIN promo_codes p ON p.id = r.promo_code_id
+       WHERE r.id = ?`,
+      [redemptionId]
+    );
+
+    if (!redemptionResult.length || !redemptionResult[0].values.length) {
+      return res.status(404).json({ error: 'Redemption not found' });
+    }
+
+    const row = redemptionResult[0].values[0];
+    const currentStatus = row[3];
+    const therapistId = row[2];
+    const promoCode = row[4];
+    const promoPlan = row[5];
+    const durationDays = row[6];
+
+    if (currentStatus === 'applied') {
+      return res.status(400).json({ error: 'Redemption is already applied' });
+    }
+
+    if (currentStatus === 'expired') {
+      return res.status(400).json({ error: 'Redemption has expired and cannot be applied' });
+    }
+
+    // Mark as applied
+    db.run(
+      "UPDATE promo_redemptions SET status = 'applied' WHERE id = ?",
+      [redemptionId]
+    );
+
+    // Apply plan override to therapist subscription
+    const now = new Date();
+    const overrideExpires = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
+
+    // Check if subscription exists
+    const subResult = db.exec(
+      'SELECT id FROM subscriptions WHERE therapist_id = ?',
+      [therapistId]
+    );
+
+    if (subResult.length > 0 && subResult[0].values.length > 0) {
+      db.run(
+        `UPDATE subscriptions SET plan = ?, is_manual_override = 1, override_reason = ?,
+         override_expires_at = ?, override_set_by = ?, updated_at = datetime('now')
+         WHERE therapist_id = ?`,
+        [promoPlan, `Promo code: ${promoCode}`, overrideExpires.toISOString(), req.user.id, therapistId]
+      );
+    } else {
+      db.run(
+        `INSERT INTO subscriptions (therapist_id, plan, status, is_manual_override, override_reason, override_expires_at, override_set_by, created_at, updated_at)
+         VALUES (?, ?, 'active', 1, ?, ?, ?, datetime('now'), datetime('now'))`,
+        [therapistId, promoPlan, `Promo code: ${promoCode}`, overrideExpires.toISOString(), req.user.id]
+      );
+    }
+
+    saveDatabaseAfterWrite();
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'promo_redemption_applied', 'promo_redemption', ?, ?, datetime('now'))",
+      [req.user.id, redemptionId, JSON.stringify({ promo_code: promoCode, plan: promoPlan, duration_days: durationDays, therapist_id: therapistId })]
+    );
+    saveDatabaseAfterWrite();
+
+    logger.info(`[Admin] Promo redemption ${redemptionId} applied: ${promoCode} -> therapist ${therapistId} (${promoPlan} for ${durationDays} days) by admin ${req.user.id}`);
+
+    res.json({
+      message: 'Redemption applied successfully',
+      redemption_id: redemptionId,
+      therapist_id: therapistId,
+      plan: promoPlan,
+      duration_days: durationDays,
+      override_expires_at: overrideExpires.toISOString()
+    });
+  } catch (error) {
+    logger.error('Admin apply redemption error: ' + error.message);
+    res.status(500).json({ error: 'Failed to apply redemption' });
+  }
+});
+
 // GET /api/admin/referrals - Referral analytics: list referrals, summary stats, top referrers
 router.get('/referrals', (req, res) => {
   try {
