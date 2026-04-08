@@ -1,3 +1,95 @@
+## Session: 2026-04-08 - Feature #344
+
+### Completed: Admin referral analytics API (#344) - PASSING
+
+**What was built:**
+- Added GET /api/admin/referrals endpoint to admin routes
+- Returns paginated list of referrals with: referred user (id, email, name, registration date), referrer (id, email, name), and current subscription plan
+- Summary stats: total_referrals, referrals_this_month, paid_conversions, conversion_rate
+- Top referrers leaderboard (top 10) with referral_count and paid_count
+- Pagination support (page, limit query params)
+- Date range filtering (from, to query params)
+- Requires superadmin role (uses existing router.use middleware)
+- Audit logged on access
+
+**Verification:**
+- Endpoint returns real referral data from database ✅
+- Pagination works (page=1, limit=10) ✅
+- Date range filter works (from/to params) ✅
+- Empty result for future dates ✅
+- Unauthenticated access returns 401 ✅
+- Superadmin role enforced via middleware ✅
+- Data persists after server restart ✅
+- No mock data patterns in source code ✅
+- Zero feature-related console errors ✅
+
+### Current Status
+- Features passing: 342/350
+- Feature #344: PASSING
+
+## Session: 2026-04-08 - Features #340, #341, #342
+
+### Completed: Promo codes database schema (#340) - PASSING
+
+**What was built:**
+- Created promo_codes table (id, code UNIQUE, plan CHECK, duration_days, max_uses, usage_count, is_active, created_by FK, created_at, expires_at)
+- Created promo_redemptions table (id, promo_code_id FK, therapist_id FK, redeemed_at, status CHECK)
+- Added referred_by column to users table (nullable FK to users.id)
+- Added indexes for code lookup, active status, redemption lookups
+
+**Verification:**
+- Tables created on startup (tableCount 28→30) ✅
+- All columns and constraints verified via PRAGMA table_info ✅
+- Data persists after server restart ✅
+- No mock data patterns ✅
+
+### Completed: Referral link generation and tracking (#341) - PASSING
+
+**What was built:**
+- Added referral_code column to users table with unique index
+- Backfill migration generates referral_code for existing therapists/superadmins
+- Registration generates unique referral_code (8 hex chars via crypto.randomBytes)
+- Registration accepts ref param (body or query), resolves to user id, saves in referred_by
+- GET /api/user/referral-link endpoint returns therapist's referral_code and full URL
+- Updated both viewer role migration blocks to include new columns
+
+**Verification:**
+- Superadmin has backfilled referral_code ✅
+- GET /api/user/referral-link returns code and URL ✅
+- Registration with ref code sets referred_by correctly ✅
+- Registration without ref works normally ✅
+- New users get auto-generated referral_code ✅
+- Data persists after server restart ✅
+
+### Completed: Promo code CRUD API for admin (#342) - PASSING
+
+**What was built:**
+- POST /api/admin/promos: create promo code with validation (code uniqueness, plan values, positive duration)
+- GET /api/admin/promos: list all promo codes with usage stats and creator email
+- GET /api/admin/promos/:id: view single promo with redemption list
+- PUT /api/admin/promos/:id/deactivate: disable a promo code
+- All endpoints require superadmin role (authenticate + requireRole middleware)
+- Audit logging on create and deactivate actions
+- Input validation for all fields
+
+**Verification:**
+- Create promo: 201 with correct data ✅
+- Duplicate code rejected: 409 ✅
+- Invalid plan rejected: 400 ✅
+- Missing duration rejected: 400 ✅
+- List promos returns created code ✅
+- Get single promo with redemptions ✅
+- Non-existent promo: 404 ✅
+- Deactivate: 200, is_active=false ✅
+- Double deactivate rejected: 400 ✅
+- Non-admin access blocked: 403 ✅
+- Data persists after restart ✅
+- Zero console errors from changes ✅
+
+### Current Status
+- Features passing: 342/350 (97.7%)
+- Features #340, #341, #342: ALL PASSING
+
 ## Session: 2026-04-07 - Feature #338
 
 ### Completed: Lead capture with email verification & chat continuation fix (#338) - PASSING
