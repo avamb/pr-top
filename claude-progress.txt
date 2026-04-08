@@ -1,3 +1,31 @@
+## Session: 2026-04-08 - Feature #354
+
+### Completed: Prevent cache poisoning from answers without RAG context (#354) - PASSING
+
+**What was built:**
+- Database: Added `has_rag_context` BOOLEAN column to `assistant_cached_answers` table with migration for existing databases
+- assistantCache.js: `storeCachedAnswer()` now accepts `hasRagContext` parameter — skips caching when no RAG context (logs skip)
+- assistantCache.js: `findCachedAnswer()` only returns entries WHERE `has_rag_context = 1`
+- assistantCache.js: `getCachedAnswers()` returns `has_rag_context` field for admin display
+- assistant.js: Both streaming and non-streaming paths track `hasRagContext` flag from RAG search and pass it to `storeCachedAnswer()`
+- admin.js: Analytics endpoint returns `cache_rag_stats` with `with_rag` and `without_rag` counts
+- AdminAssistantAnalytics.jsx: New "Cache Quality (RAG Context)" section showing with-RAG count, without-RAG count, RAG-verified cache rate %, and warning for legacy entries
+- AdminCachedAnswers.jsx: RAG badge indicators (✅ RAG / ⚠️ No RAG) on each cached answer entry
+
+**Verification:**
+- Backend API returns `has_rag_context` field in cached answers list ✅
+- Analytics API returns `cache_rag_stats: { with_rag: 0, without_rag: 1 }` for legacy data ✅
+- Admin Chat Analytics page shows "Cache Quality (RAG Context)" section with correct counts ✅
+- Legacy entry shows red "1" without-RAG count and warning message ✅
+- Admin Cached Answers page shows ⚠️ No RAG badge on legacy entry ✅
+- Data persists across server restart ✅
+- No mock data patterns in source code ✅
+- Zero feature-related console errors ✅
+
+### Current Status
+- Features passing: 352/355 (99.2%)
+- Feature #354: PASSING
+
 ## Session: 2026-04-08 - Feature #350
 
 ### Completed: Admin Referrals section — referral tracking (#350) - PASSING
