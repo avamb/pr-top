@@ -2,6 +2,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
@@ -98,10 +99,30 @@ router.post('/register', async (req, res) => {
     const userLanguage = supportedLanguages.includes(language) ? language : 'en';
     const userTimezone = (timezone && typeof timezone === 'string' && timezone.length <= 100) ? timezone : 'UTC';
 
-    // Insert user into database with UTM tracking and locale defaults
+    // Generate unique referral code for the new therapist
+    const referralCode = crypto.randomBytes(4).toString('hex'); // 8 hex chars
+
+    // Resolve referral: check if ref param is provided
+    let referredBy = null;
+    const refCode = req.body.ref || req.query.ref;
+    if (refCode) {
+      try {
+        const refResult = db.exec('SELECT id FROM users WHERE referral_code = ?', [refCode]);
+        if (refResult.length > 0 && refResult[0].values.length > 0) {
+          referredBy = refResult[0].values[0][0];
+          logger.info(`Referral resolved: code=${refCode} -> user_id=${referredBy}`);
+        } else {
+          logger.warn(`Referral code not found: ${refCode}`);
+        }
+      } catch (e) {
+        logger.warn('Referral resolution error: ' + e.message);
+      }
+    }
+
+    // Insert user into database with UTM tracking, locale defaults, referral code, and referred_by
     db.run(
-      'INSERT INTO users (email, password_hash, role, invite_code, language, timezone, utm_source, utm_medium, utm_campaign, utm_content, utm_term) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [normalizedEmail, passwordHash, userRole, inviteCode, userLanguage, userTimezone, utm_source || null, utm_medium || null, utm_campaign || null, utm_content || null, utm_term || null]
+      'INSERT INTO users (email, password_hash, role, invite_code, language, timezone, utm_source, utm_medium, utm_campaign, utm_content, utm_term, referral_code, referred_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [normalizedEmail, passwordHash, userRole, inviteCode, userLanguage, userTimezone, utm_source || null, utm_medium || null, utm_campaign || null, utm_content || null, utm_term || null, referralCode, referredBy]
     );
 
     // Save to disk after write

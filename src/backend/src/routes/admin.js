@@ -2628,4 +2628,320 @@ router.get('/stats/viewers', (req, res) => {
   }
 });
 
+// ============================================================
+// Promo Code Management
+// ============================================================
+
+// POST /api/admin/promos - Create a new promo code
+router.post('/promos', (req, res) => {
+  try {
+    const { code, plan, duration_days, max_uses, expires_at } = req.body;
+
+    // Validate required fields
+    if (!code || typeof code !== 'string' || code.trim().length < 3) {
+      return res.status(400).json({ error: 'Code is required and must be at least 3 characters' });
+    }
+    if (!plan || !['basic', 'pro', 'premium'].includes(plan)) {
+      return res.status(400).json({ error: 'Plan must be one of: basic, pro, premium' });
+    }
+    if (!duration_days || !Number.isInteger(duration_days) || duration_days < 1) {
+      return res.status(400).json({ error: 'duration_days must be a positive integer' });
+    }
+    if (max_uses !== undefined && max_uses !== null && (!Number.isInteger(max_uses) || max_uses < 1)) {
+      return res.status(400).json({ error: 'max_uses must be a positive integer or null for unlimited' });
+    }
+    if (expires_at && isNaN(Date.parse(expires_at))) {
+      return res.status(400).json({ error: 'expires_at must be a valid date string' });
+    }
+
+    const db = getDatabase();
+    const normalizedCode = code.trim().toUpperCase();
+
+    // Check uniqueness
+    const existing = db.exec('SELECT id FROM promo_codes WHERE code = ?', [normalizedCode]);
+    if (existing.length > 0 && existing[0].values.length > 0) {
+      return res.status(409).json({ error: 'A promo code with this code already exists' });
+    }
+
+    db.run(
+      'INSERT INTO promo_codes (code, plan, duration_days, max_uses, is_active, created_by, expires_at) VALUES (?, ?, ?, ?, 1, ?, ?)',
+      [normalizedCode, plan, duration_days, max_uses || null, req.user.id, expires_at || null]
+    );
+    saveDatabaseAfterWrite();
+
+    const result = db.exec('SELECT id, code, plan, duration_days, max_uses, usage_count, is_active, created_by, created_at, expires_at FROM promo_codes WHERE code = ?', [normalizedCode]);
+    const row = result[0].values[0];
+
+    logger.info(`[Admin] Promo code created: ${normalizedCode} by user ${req.user.id}`);
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, created_at) VALUES (?, 'promo_code_created', 'promo_code', ?, datetime('now'))",
+      [req.user.id, row[0]]
+    );
+    saveDatabaseAfterWrite();
+
+    res.status(201).json({
+      message: 'Promo code created successfully',
+      promo: {
+        id: row[0], code: row[1], plan: row[2], duration_days: row[3],
+        max_uses: row[4], usage_count: row[5], is_active: !!row[6],
+        created_by: row[7], created_at: row[8], expires_at: row[9]
+      }
+    });
+  } catch (error) {
+    logger.error('Admin create promo error: ' + error.message);
+    res.status(500).json({ error: 'Failed to create promo code' });
+  }
+});
+
+// GET /api/admin/promos - List all promo codes with usage stats
+router.get('/promos', (req, res) => {
+  try {
+    const db = getDatabase();
+    const result = db.exec(`
+      SELECT p.id, p.code, p.plan, p.duration_days, p.max_uses, p.usage_count,
+             p.is_active, p.created_by, p.created_at, p.expires_at,
+             u.email as creator_email
+      FROM promo_codes p
+      LEFT JOIN users u ON u.id = p.created_by
+      ORDER BY p.created_at DESC
+    `);
+
+    const promos = (result.length > 0 ? result[0].values : []).map(row => ({
+      id: row[0], code: row[1], plan: row[2], duration_days: row[3],
+      max_uses: row[4], usage_count: row[5], is_active: !!row[6],
+      created_by: row[7], created_at: row[8], expires_at: row[9],
+      creator_email: row[10],
+      is_expired: row[9] ? new Date(row[9]) < new Date() : false,
+      is_maxed: row[4] !== null && row[5] >= row[4]
+    }));
+
+    res.json({ promos, total: promos.length });
+  } catch (error) {
+    logger.error('Admin list promos error: ' + error.message);
+    res.status(500).json({ error: 'Failed to list promo codes' });
+  }
+});
+
+// GET /api/admin/promos/:id - View single promo code with redemptions
+router.get('/promos/:id', (req, res) => {
+  try {
+    const db = getDatabase();
+    const promoId = parseInt(req.params.id, 10);
+    if (isNaN(promoId)) {
+      return res.status(400).json({ error: 'Invalid promo code ID' });
+    }
+
+    const promoResult = db.exec(`
+      SELECT p.id, p.code, p.plan, p.duration_days, p.max_uses, p.usage_count,
+             p.is_active, p.created_by, p.created_at, p.expires_at,
+             u.email as creator_email
+      FROM promo_codes p
+      LEFT JOIN users u ON u.id = p.created_by
+      WHERE p.id = ?
+    `, [promoId]);
+
+    if (!promoResult.length || !promoResult[0].values.length) {
+      return res.status(404).json({ error: 'Promo code not found' });
+    }
+
+    const row = promoResult[0].values[0];
+    const promo = {
+      id: row[0], code: row[1], plan: row[2], duration_days: row[3],
+      max_uses: row[4], usage_count: row[5], is_active: !!row[6],
+      created_by: row[7], created_at: row[8], expires_at: row[9],
+      creator_email: row[10],
+      is_expired: row[9] ? new Date(row[9]) < new Date() : false,
+      is_maxed: row[4] !== null && row[5] >= row[4]
+    };
+
+    // Get redemptions
+    const redemptionResult = db.exec(`
+      SELECT r.id, r.therapist_id, r.redeemed_at, r.status, u.email as therapist_email
+      FROM promo_redemptions r
+      LEFT JOIN users u ON u.id = r.therapist_id
+      WHERE r.promo_code_id = ?
+      ORDER BY r.redeemed_at DESC
+    `, [promoId]);
+
+    const redemptions = (redemptionResult.length > 0 ? redemptionResult[0].values : []).map(r => ({
+      id: r[0], therapist_id: r[1], redeemed_at: r[2], status: r[3], therapist_email: r[4]
+    }));
+
+    res.json({ promo, redemptions });
+  } catch (error) {
+    logger.error('Admin get promo error: ' + error.message);
+    res.status(500).json({ error: 'Failed to get promo code details' });
+  }
+});
+
+// PUT /api/admin/promos/:id/deactivate - Deactivate a promo code
+router.put('/promos/:id/deactivate', (req, res) => {
+  try {
+    const db = getDatabase();
+    const promoId = parseInt(req.params.id, 10);
+    if (isNaN(promoId)) {
+      return res.status(400).json({ error: 'Invalid promo code ID' });
+    }
+
+    const existing = db.exec('SELECT id, code, is_active FROM promo_codes WHERE id = ?', [promoId]);
+    if (!existing.length || !existing[0].values.length) {
+      return res.status(404).json({ error: 'Promo code not found' });
+    }
+
+    const promoCode = existing[0].values[0][1];
+    const isActive = existing[0].values[0][2];
+
+    if (!isActive) {
+      return res.status(400).json({ error: 'Promo code is already deactivated' });
+    }
+
+    db.run('UPDATE promo_codes SET is_active = 0 WHERE id = ?', [promoId]);
+    saveDatabaseAfterWrite();
+
+    logger.info(`[Admin] Promo code deactivated: ${promoCode} by user ${req.user.id}`);
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, created_at) VALUES (?, 'promo_code_deactivated', 'promo_code', ?, datetime('now'))",
+      [req.user.id, promoId]
+    );
+    saveDatabaseAfterWrite();
+
+    res.json({ message: 'Promo code deactivated successfully', promo_id: promoId, code: promoCode });
+  } catch (error) {
+    logger.error('Admin deactivate promo error: ' + error.message);
+    res.status(500).json({ error: 'Failed to deactivate promo code' });
+  }
+});
+
+// GET /api/admin/referrals - Referral analytics: list referrals, summary stats, top referrers
+router.get('/referrals', (req, res) => {
+  try {
+    const db = getDatabase();
+    const { page = 1, limit = 50, from, to } = req.query;
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 50));
+    const offset = (pageNum - 1) * limitNum;
+
+    // Build date filter clause
+    let dateFilter = '';
+    const dateParams = [];
+    if (from) {
+      dateFilter += ' AND u.created_at >= ?';
+      dateParams.push(from);
+    }
+    if (to) {
+      dateFilter += ' AND u.created_at <= ?';
+      dateParams.push(to + 'T23:59:59');
+    }
+
+    // 1. Get paginated referrals list
+    const referralsResult = db.exec(`
+      SELECT u.id, u.email, u.first_name, u.last_name, u.created_at,
+             ref.id AS referrer_id, ref.email AS referrer_email,
+             ref.first_name AS referrer_first_name, ref.last_name AS referrer_last_name,
+             COALESCE(s.plan, 'trial') AS current_plan
+      FROM users u
+      INNER JOIN users ref ON u.referred_by = ref.id
+      LEFT JOIN subscriptions s ON s.therapist_id = u.id
+      WHERE u.referred_by IS NOT NULL${dateFilter}
+      ORDER BY u.created_at DESC
+      LIMIT ? OFFSET ?
+    `, [...dateParams, limitNum, offset]);
+
+    const referrals = (referralsResult.length > 0 ? referralsResult[0].values : []).map(row => ({
+      id: row[0],
+      email: row[1],
+      first_name: row[2] || '',
+      last_name: row[3] || '',
+      registered_at: row[4],
+      referrer: {
+        id: row[5],
+        email: row[6],
+        first_name: row[7] || '',
+        last_name: row[8] || ''
+      },
+      current_plan: row[9]
+    }));
+
+    // 2. Total count for pagination
+    const countResult = db.exec(`
+      SELECT COUNT(*) FROM users u
+      WHERE u.referred_by IS NOT NULL${dateFilter}
+    `, dateParams);
+    const totalReferrals = countResult.length > 0 ? countResult[0].values[0][0] : 0;
+
+    // 3. Referrals this month
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const monthStartStr = monthStart.toISOString().slice(0, 10);
+    const thisMonthResult = db.exec(
+      "SELECT COUNT(*) FROM users WHERE referred_by IS NOT NULL AND created_at >= ?",
+      [monthStartStr]
+    );
+    const referralsThisMonth = thisMonthResult.length > 0 ? thisMonthResult[0].values[0][0] : 0;
+
+    // 4. Conversion to paid (non-trial plans)
+    const paidResult = db.exec(`
+      SELECT COUNT(*) FROM users u
+      INNER JOIN subscriptions s ON s.therapist_id = u.id
+      WHERE u.referred_by IS NOT NULL AND s.plan != 'trial'${dateFilter}
+    `, dateParams);
+    const paidConversions = paidResult.length > 0 ? paidResult[0].values[0][0] : 0;
+
+    // 5. Top referrers (top 10 by referral count)
+    const topReferrersResult = db.exec(`
+      SELECT ref.id, ref.email, ref.first_name, ref.last_name,
+             COUNT(u.id) AS referral_count,
+             SUM(CASE WHEN COALESCE(s.plan, 'trial') != 'trial' THEN 1 ELSE 0 END) AS paid_count
+      FROM users u
+      INNER JOIN users ref ON u.referred_by = ref.id
+      LEFT JOIN subscriptions s ON s.therapist_id = u.id
+      WHERE u.referred_by IS NOT NULL${dateFilter}
+      GROUP BY ref.id
+      ORDER BY referral_count DESC
+      LIMIT 10
+    `, dateParams);
+
+    const topReferrers = (topReferrersResult.length > 0 ? topReferrersResult[0].values : []).map(row => ({
+      id: row[0],
+      email: row[1],
+      first_name: row[2] || '',
+      last_name: row[3] || '',
+      referral_count: row[4],
+      paid_count: row[5]
+    }));
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, created_at) VALUES (?, 'view_referral_analytics', 'system', NULL, datetime('now'))",
+      [req.user.id]
+    );
+    saveDatabaseAfterWrite();
+
+    res.json({
+      referrals,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: totalReferrals,
+        total_pages: Math.ceil(totalReferrals / limitNum)
+      },
+      summary: {
+        total_referrals: totalReferrals,
+        referrals_this_month: referralsThisMonth,
+        paid_conversions: paidConversions,
+        conversion_rate: totalReferrals > 0 ? Math.round((paidConversions / totalReferrals) * 10000) / 100 : 0
+      },
+      top_referrers: topReferrers
+    });
+  } catch (error) {
+    logger.error('Admin referral analytics error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch referral analytics' });
+  }
+});
+
 module.exports = router;

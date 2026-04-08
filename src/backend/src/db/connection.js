@@ -556,14 +556,17 @@ function applySchema(db) {
           last_name TEXT,
           phone TEXT,
           telegram_username TEXT,
-          other_info TEXT
+          other_info TEXT,
+          referred_by INTEGER REFERENCES users(id),
+          referral_code TEXT UNIQUE
         )`);
         db.run(`INSERT INTO users_new SELECT
           id, telegram_id, email, password_hash, role, therapist_id,
           consent_therapist_access, invite_code, language, timezone,
           created_at, updated_at, blocked_at,
           utm_source, utm_medium, utm_campaign, utm_content, utm_term,
-          escalation_preferences, first_name, last_name, phone, telegram_username, other_info
+          escalation_preferences, first_name, last_name, phone, telegram_username, other_info,
+          referred_by, referral_code
         FROM users`);
         db.run('DROP TABLE users');
         db.run('ALTER TABLE users_new RENAME TO users');
@@ -572,6 +575,7 @@ function applySchema(db) {
         db.run('CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)');
         db.run('CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)');
         db.run('CREATE INDEX IF NOT EXISTS idx_users_therapist_id ON users(therapist_id)');
+        db.run('CREATE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code)');
         db.run('PRAGMA foreign_keys = ON');
         logger.info('Users table migrated to include viewer role');
       }
@@ -778,6 +782,65 @@ function applySchema(db) {
   db.run('CREATE INDEX IF NOT EXISTS idx_newsletter_email ON newsletter_subscribers(email)');
   db.run('CREATE INDEX IF NOT EXISTS idx_newsletter_token ON newsletter_subscribers(confirm_token)');
 
+  // Create promo_codes table for promotional/discount codes
+  db.run(`CREATE TABLE IF NOT EXISTS promo_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    plan TEXT NOT NULL CHECK(plan IN ('basic', 'pro', 'premium')),
+    duration_days INTEGER NOT NULL,
+    max_uses INTEGER DEFAULT NULL,
+    usage_count INTEGER DEFAULT 0,
+    is_active INTEGER DEFAULT 1,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT DEFAULT (datetime('now')),
+    expires_at TEXT DEFAULT NULL
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_promo_codes_code ON promo_codes(code)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_promo_codes_active ON promo_codes(is_active)');
+
+  // Create promo_redemptions table for tracking code usage
+  db.run(`CREATE TABLE IF NOT EXISTS promo_redemptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    promo_code_id INTEGER NOT NULL REFERENCES promo_codes(id),
+    therapist_id INTEGER NOT NULL REFERENCES users(id),
+    redeemed_at TEXT DEFAULT (datetime('now')),
+    status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'applied', 'expired'))
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_promo_redemptions_code ON promo_redemptions(promo_code_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_promo_redemptions_therapist ON promo_redemptions(therapist_id)');
+
+  // Add referred_by column to users table (migration)
+  try {
+    db.run('ALTER TABLE users ADD COLUMN referred_by INTEGER REFERENCES users(id)');
+    logger.info('Added referred_by column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  // Add referral_code column to users table (unique referral code per therapist)
+  try {
+    db.run('ALTER TABLE users ADD COLUMN referral_code TEXT');
+    logger.info('Added referral_code column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code)');
+
+  // Backfill referral_code for existing therapists/superadmins that don't have one
+  try {
+    const therapistsWithout = db.exec("SELECT id FROM users WHERE role IN ('therapist', 'superadmin') AND referral_code IS NULL");
+    if (therapistsWithout.length > 0 && therapistsWithout[0].values.length > 0) {
+      const crypto = require('crypto');
+      for (const row of therapistsWithout[0].values) {
+        const code = crypto.randomBytes(4).toString('hex'); // 8 hex chars
+        db.run('UPDATE users SET referral_code = ? WHERE id = ?', [code, row[0]]);
+      }
+      logger.info('Backfilled referral_code for ' + therapistsWithout[0].values.length + ' existing users');
+    }
+  } catch (e) {
+    logger.warn('Referral code backfill skipped: ' + e.message);
+  }
+
   // Insert default platform settings
   const defaultSettings = [
     ['trial_duration_days', '14'],
@@ -842,14 +905,17 @@ function applySchema(db) {
           last_name TEXT,
           phone TEXT,
           telegram_username TEXT,
-          other_info TEXT
+          other_info TEXT,
+          referred_by INTEGER REFERENCES users(id),
+          referral_code TEXT UNIQUE
         )`);
         db.run(`INSERT INTO users_new SELECT
           id, telegram_id, email, password_hash, role, therapist_id,
           consent_therapist_access, invite_code, language, timezone,
           created_at, updated_at, blocked_at,
           utm_source, utm_medium, utm_campaign, utm_content, utm_term,
-          escalation_preferences, first_name, last_name, phone, telegram_username, other_info
+          escalation_preferences, first_name, last_name, phone, telegram_username, other_info,
+          referred_by, referral_code
         FROM users`);
         db.run('DROP TABLE users');
         db.run('ALTER TABLE users_new RENAME TO users');
@@ -857,6 +923,7 @@ function applySchema(db) {
         db.run('CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)');
         db.run('CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)');
         db.run('CREATE INDEX IF NOT EXISTS idx_users_therapist_id ON users(therapist_id)');
+        db.run('CREATE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code)');
         db.run('PRAGMA foreign_keys = ON');
         logger.info('Users table migrated to include viewer role');
       }

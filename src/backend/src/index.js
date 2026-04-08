@@ -124,6 +124,26 @@ app.patch('/api/profile/language', authenticate, (req, res) => {
   }
 });
 
+// GET /api/user/referral-link - Get the authenticated therapist's referral URL
+app.get('/api/user/referral-link', authenticate, (req, res) => {
+  try {
+    const { getDatabase } = require('./db/connection');
+    const db = getDatabase();
+    const result = db.exec('SELECT referral_code FROM users WHERE id = ?', [req.user.id]);
+    if (!result.length || !result[0].values.length || !result[0].values[0][0]) {
+      return res.status(404).json({ error: 'Referral code not found' });
+    }
+    const referralCode = result[0].values[0][0];
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3002';
+    const referralLink = `${frontendUrl}/register?ref=${referralCode}`;
+    res.json({ referral_code: referralCode, referral_link: referralLink });
+  } catch (error) {
+    const { logger } = require('./utils/logger');
+    logger.error('Referral link error: ' + error.message);
+    res.status(500).json({ error: 'Failed to get referral link' });
+  }
+});
+
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
   const db = global.db;
