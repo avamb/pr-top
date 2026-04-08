@@ -1,3 +1,31 @@
+## Session: 2026-04-08 - Feature #346
+
+### Completed: Promo code input on Subscription page (#346) - PASSING
+
+**What was built:**
+- Added collapsible "Have a promo code?" section below plan cards in Subscription.jsx
+- Input field + Apply button calls POST /api/subscription/apply-promo
+- Success message shows plan name and duration (e.g., "You'll receive Basic plan for 60 days once approved")
+- Error messages for invalid codes (404), expired codes, already-redeemed codes (409)
+- Redemption list fetched from GET /api/subscription/my-promos showing code, plan, duration, date, status badge
+- Status badges: Pending (amber), Applied (green), Expired (gray)
+- Enter key support on input field
+- i18n: subscription.promo.* keys added in EN, RU, ES, UK (14 keys each)
+
+**Verification:**
+- Collapsible toggle expands/collapses correctly ✅
+- Invalid code shows "Promo code not found" error ✅
+- Valid code (TEST346CODE) shows success message with plan + days ✅
+- Duplicate redemption shows "You have already redeemed this promo code" ✅
+- Redemption list displays with correct code, plan, duration, date, status ✅
+- Data persists after page refresh ✅
+- No mock data patterns in source code ✅
+- Zero feature-related console errors ✅
+
+### Current Status
+- Features passing: 348/351 (99.1%)
+- Feature #346: PASSING
+
 ## Session: 2026-04-08 - Feature #351
 
 ### Completed: Clarify exercise library tab names (#351) - PASSING
