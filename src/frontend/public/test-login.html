@@ -14,14 +14,15 @@ async function login() {
         'Content-Type': 'application/json',
         'X-CSRF-Token': csrf.csrfToken
       },
-      body: JSON.stringify({email: 'admin@psylink.app', password: 'Admin123!'})
+      body: JSON.stringify({email: 'admin@pr-top.com', password: 'Admin123!'})
     });
     const data = await loginRes.json();
     if (data.token) {
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
       document.getElementById('status').textContent = 'Login OK - redirecting...';
-      window.location.href = '/admin/system-logs';
+      const params = new URLSearchParams(window.location.search);
+      window.location.href = params.get('redirect') || '/admin/promos';
     } else {
       document.getElementById('status').textContent = 'Login failed: ' + JSON.stringify(data);
     }

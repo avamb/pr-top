@@ -602,4 +602,134 @@ router.post('/cancel', requireAuth, (req, res) => {
   }
 });
 
+// ============================================================
+// Promo Code Validation & Redemption (Therapist-facing)
+// ============================================================
+
+// POST /api/subscription/apply-promo - Validate and redeem a promo code
+router.post('/apply-promo', requireAuth, (req, res) => {
+  try {
+    const db = getDatabase();
+    const userId = req.user.userId;
+    const { code } = req.body;
+
+    if (!code || typeof code !== 'string' || !code.trim()) {
+      return res.status(400).json({ error: 'Promo code is required' });
+    }
+
+    const normalizedCode = code.trim().toUpperCase();
+
+    // 1. Check code exists
+    const codeResult = db.exec(
+      `SELECT id, code, plan, duration_days, max_uses, usage_count, is_active, expires_at
+       FROM promo_codes WHERE code = ?`,
+      [normalizedCode]
+    );
+
+    if (!codeResult.length || !codeResult[0].values.length) {
+      return res.status(404).json({ error: 'Promo code not found' });
+    }
+
+    const row = codeResult[0].values[0];
+    const promo = {
+      id: row[0], code: row[1], plan: row[2], duration_days: row[3],
+      max_uses: row[4], usage_count: row[5], is_active: !!row[6], expires_at: row[7]
+    };
+
+    // 2. Validate is_active
+    if (!promo.is_active) {
+      return res.status(400).json({ error: 'This promo code is no longer active' });
+    }
+
+    // 3. Validate not expired
+    if (promo.expires_at) {
+      const now = new Date();
+      const expiresAt = new Date(promo.expires_at);
+      if (now > expiresAt) {
+        return res.status(400).json({ error: 'This promo code has expired' });
+      }
+    }
+
+    // 4. Validate usage_count < max_uses
+    if (promo.max_uses !== null && promo.usage_count >= promo.max_uses) {
+      return res.status(400).json({ error: 'This promo code has reached its maximum number of uses' });
+    }
+
+    // 5. Check therapist hasn't already redeemed this code
+    const existingRedemption = db.exec(
+      'SELECT id, status FROM promo_redemptions WHERE promo_code_id = ? AND therapist_id = ?',
+      [promo.id, userId]
+    );
+
+    if (existingRedemption.length > 0 && existingRedemption[0].values.length > 0) {
+      const existingStatus = existingRedemption[0].values[0][1];
+      return res.status(409).json({
+        error: 'You have already redeemed this promo code',
+        status: existingStatus
+      });
+    }
+
+    // 6. Create redemption record with status 'pending'
+    db.run(
+      `INSERT INTO promo_redemptions (promo_code_id, therapist_id, redeemed_at, status)
+       VALUES (?, ?, datetime('now'), 'pending')`,
+      [promo.id, userId]
+    );
+
+    // 7. Increment usage_count
+    db.run(
+      'UPDATE promo_codes SET usage_count = usage_count + 1 WHERE id = ?',
+      [promo.id]
+    );
+
+    saveDatabaseAfterWrite();
+
+    logger.info(`[Promo] Code ${normalizedCode} redeemed by therapist ${userId} (pending)`);
+
+    res.status(201).json({
+      message: 'Promo code applied successfully! It is pending admin approval.',
+      promo: {
+        code: promo.code,
+        plan: promo.plan,
+        duration_days: promo.duration_days
+      },
+      status: 'pending'
+    });
+  } catch (error) {
+    logger.error('Apply promo error: ' + error.message);
+    res.status(500).json({ error: 'Failed to apply promo code' });
+  }
+});
+
+// GET /api/subscription/my-promos - List therapist's own promo redemptions
+router.get('/my-promos', requireAuth, (req, res) => {
+  try {
+    const db = getDatabase();
+    const userId = req.user.userId;
+
+    const result = db.exec(`
+      SELECT r.id, r.redeemed_at, r.status,
+             p.code, p.plan, p.duration_days
+      FROM promo_redemptions r
+      JOIN promo_codes p ON p.id = r.promo_code_id
+      WHERE r.therapist_id = ?
+      ORDER BY r.redeemed_at DESC
+    `, [userId]);
+
+    const redemptions = (result.length > 0 ? result[0].values : []).map(row => ({
+      id: row[0],
+      redeemed_at: row[1],
+      status: row[2],
+      code: row[3],
+      plan: row[4],
+      duration_days: row[5]
+    }));
+
+    res.json({ redemptions });
+  } catch (error) {
+    logger.error('My promos error: ' + error.message);
+    res.status(500).json({ error: 'Failed to get promo redemptions' });
+  }
+});
+
 module.exports = router;

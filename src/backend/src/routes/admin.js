@@ -2724,100 +2724,8 @@ router.get('/promos', (req, res) => {
   }
 });
 
-// GET /api/admin/promos/:id - View single promo code with redemptions
-router.get('/promos/:id', (req, res) => {
-  try {
-    const db = getDatabase();
-    const promoId = parseInt(req.params.id, 10);
-    if (isNaN(promoId)) {
-      return res.status(400).json({ error: 'Invalid promo code ID' });
-    }
-
-    const promoResult = db.exec(`
-      SELECT p.id, p.code, p.plan, p.duration_days, p.max_uses, p.usage_count,
-             p.is_active, p.created_by, p.created_at, p.expires_at,
-             u.email as creator_email
-      FROM promo_codes p
-      LEFT JOIN users u ON u.id = p.created_by
-      WHERE p.id = ?
-    `, [promoId]);
-
-    if (!promoResult.length || !promoResult[0].values.length) {
-      return res.status(404).json({ error: 'Promo code not found' });
-    }
-
-    const row = promoResult[0].values[0];
-    const promo = {
-      id: row[0], code: row[1], plan: row[2], duration_days: row[3],
-      max_uses: row[4], usage_count: row[5], is_active: !!row[6],
-      created_by: row[7], created_at: row[8], expires_at: row[9],
-      creator_email: row[10],
-      is_expired: row[9] ? new Date(row[9]) < new Date() : false,
-      is_maxed: row[4] !== null && row[5] >= row[4]
-    };
-
-    // Get redemptions
-    const redemptionResult = db.exec(`
-      SELECT r.id, r.therapist_id, r.redeemed_at, r.status, u.email as therapist_email
-      FROM promo_redemptions r
-      LEFT JOIN users u ON u.id = r.therapist_id
-      WHERE r.promo_code_id = ?
-      ORDER BY r.redeemed_at DESC
-    `, [promoId]);
-
-    const redemptions = (redemptionResult.length > 0 ? redemptionResult[0].values : []).map(r => ({
-      id: r[0], therapist_id: r[1], redeemed_at: r[2], status: r[3], therapist_email: r[4]
-    }));
-
-    res.json({ promo, redemptions });
-  } catch (error) {
-    logger.error('Admin get promo error: ' + error.message);
-    res.status(500).json({ error: 'Failed to get promo code details' });
-  }
-});
-
-// PUT /api/admin/promos/:id/deactivate - Deactivate a promo code
-router.put('/promos/:id/deactivate', (req, res) => {
-  try {
-    const db = getDatabase();
-    const promoId = parseInt(req.params.id, 10);
-    if (isNaN(promoId)) {
-      return res.status(400).json({ error: 'Invalid promo code ID' });
-    }
-
-    const existing = db.exec('SELECT id, code, is_active FROM promo_codes WHERE id = ?', [promoId]);
-    if (!existing.length || !existing[0].values.length) {
-      return res.status(404).json({ error: 'Promo code not found' });
-    }
-
-    const promoCode = existing[0].values[0][1];
-    const isActive = existing[0].values[0][2];
-
-    if (!isActive) {
-      return res.status(400).json({ error: 'Promo code is already deactivated' });
-    }
-
-    db.run('UPDATE promo_codes SET is_active = 0 WHERE id = ?', [promoId]);
-    saveDatabaseAfterWrite();
-
-    logger.info(`[Admin] Promo code deactivated: ${promoCode} by user ${req.user.id}`);
-
-    // Audit log
-    db.run(
-      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, created_at) VALUES (?, 'promo_code_deactivated', 'promo_code', ?, datetime('now'))",
-      [req.user.id, promoId]
-    );
-    saveDatabaseAfterWrite();
-
-    res.json({ message: 'Promo code deactivated successfully', promo_id: promoId, code: promoCode });
-  } catch (error) {
-    logger.error('Admin deactivate promo error: ' + error.message);
-    res.status(500).json({ error: 'Failed to deactivate promo code' });
-  }
-});
-
 // ============================================================
-// Promo Redemption Management
+// Promo Redemption Management (MUST be before /promos/:id to avoid route conflict)
 // ============================================================
 
 // GET /api/admin/promos/redemptions - List all redemptions with therapist info
@@ -2960,6 +2868,98 @@ router.put('/promos/redemptions/:id/apply', (req, res) => {
   } catch (error) {
     logger.error('Admin apply redemption error: ' + error.message);
     res.status(500).json({ error: 'Failed to apply redemption' });
+  }
+});
+
+// GET /api/admin/promos/:id - View single promo code with redemptions
+router.get('/promos/:id', (req, res) => {
+  try {
+    const db = getDatabase();
+    const promoId = parseInt(req.params.id, 10);
+    if (isNaN(promoId)) {
+      return res.status(400).json({ error: 'Invalid promo code ID' });
+    }
+
+    const promoResult = db.exec(`
+      SELECT p.id, p.code, p.plan, p.duration_days, p.max_uses, p.usage_count,
+             p.is_active, p.created_by, p.created_at, p.expires_at,
+             u.email as creator_email
+      FROM promo_codes p
+      LEFT JOIN users u ON u.id = p.created_by
+      WHERE p.id = ?
+    `, [promoId]);
+
+    if (!promoResult.length || !promoResult[0].values.length) {
+      return res.status(404).json({ error: 'Promo code not found' });
+    }
+
+    const row = promoResult[0].values[0];
+    const promo = {
+      id: row[0], code: row[1], plan: row[2], duration_days: row[3],
+      max_uses: row[4], usage_count: row[5], is_active: !!row[6],
+      created_by: row[7], created_at: row[8], expires_at: row[9],
+      creator_email: row[10],
+      is_expired: row[9] ? new Date(row[9]) < new Date() : false,
+      is_maxed: row[4] !== null && row[5] >= row[4]
+    };
+
+    // Get redemptions
+    const redemptionResult = db.exec(`
+      SELECT r.id, r.therapist_id, r.redeemed_at, r.status, u.email as therapist_email
+      FROM promo_redemptions r
+      LEFT JOIN users u ON u.id = r.therapist_id
+      WHERE r.promo_code_id = ?
+      ORDER BY r.redeemed_at DESC
+    `, [promoId]);
+
+    const redemptions = (redemptionResult.length > 0 ? redemptionResult[0].values : []).map(r => ({
+      id: r[0], therapist_id: r[1], redeemed_at: r[2], status: r[3], therapist_email: r[4]
+    }));
+
+    res.json({ promo, redemptions });
+  } catch (error) {
+    logger.error('Admin get promo error: ' + error.message);
+    res.status(500).json({ error: 'Failed to get promo code details' });
+  }
+});
+
+// PUT /api/admin/promos/:id/deactivate - Deactivate a promo code
+router.put('/promos/:id/deactivate', (req, res) => {
+  try {
+    const db = getDatabase();
+    const promoId = parseInt(req.params.id, 10);
+    if (isNaN(promoId)) {
+      return res.status(400).json({ error: 'Invalid promo code ID' });
+    }
+
+    const existing = db.exec('SELECT id, code, is_active FROM promo_codes WHERE id = ?', [promoId]);
+    if (!existing.length || !existing[0].values.length) {
+      return res.status(404).json({ error: 'Promo code not found' });
+    }
+
+    const promoCode = existing[0].values[0][1];
+    const isActive = existing[0].values[0][2];
+
+    if (!isActive) {
+      return res.status(400).json({ error: 'Promo code is already deactivated' });
+    }
+
+    db.run('UPDATE promo_codes SET is_active = 0 WHERE id = ?', [promoId]);
+    saveDatabaseAfterWrite();
+
+    logger.info(`[Admin] Promo code deactivated: ${promoCode} by user ${req.user.id}`);
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, created_at) VALUES (?, 'promo_code_deactivated', 'promo_code', ?, datetime('now'))",
+      [req.user.id, promoId]
+    );
+    saveDatabaseAfterWrite();
+
+    res.json({ message: 'Promo code deactivated successfully', promo_id: promoId, code: promoCode });
+  } catch (error) {
+    logger.error('Admin deactivate promo error: ' + error.message);
+    res.status(500).json({ error: 'Failed to deactivate promo code' });
   }
 });
 
