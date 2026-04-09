@@ -185,6 +185,21 @@ function tokenize(text) {
     .filter(w => w.length > 2 && !STOP_WORDS.has(w));
 }
 
+function lexicalOverlapScore(queryTokens, candidateText) {
+  if (!queryTokens || queryTokens.length === 0 || !candidateText) return 0;
+
+  const querySet = new Set(queryTokens);
+  const candidateSet = new Set(tokenize(candidateText));
+  if (candidateSet.size === 0) return 0;
+
+  let overlap = 0;
+  for (const token of querySet) {
+    if (candidateSet.has(token)) overlap++;
+  }
+
+  return overlap / querySet.size;
+}
+
 function hashToken(token) {
   let hash = 2166136261;
   for (let i = 0; i < token.length; i++) {
@@ -365,6 +380,7 @@ const INDEX_SOURCES = [
   {
     type: 'api_route',
     description: 'Backend API route definitions',
+    files: ['src/backend/src/index.js'],
     dirs: ['src/backend/src/routes'],
     extensions: ['.js'],
     maxDepth: 1
@@ -576,7 +592,7 @@ function flattenKeys(obj, prefix) {
  */
 function extractRouteInfo(content, relativePath) {
   const routes = [];
-  const routeRegex = /router\.(get|post|put|delete|patch)\s*\(\s*['"`]([^'"`]+)['"`]/gi;
+  const routeRegex = /(?:router|app)\.(get|post|put|delete|patch)\s*\(\s*['"`]([^'"`]+)['"`]/gi;
   let match;
   while ((match = routeRegex.exec(content)) !== null) {
     routes.push(`${match[1].toUpperCase()} ${match[2]}`);
@@ -861,6 +877,7 @@ async function search(query, limit) {
   const db = getDatabase();
   const allChunks = db.exec("SELECT id, chunk_text, embedding, source_file, source_type, embedding_type FROM assistant_knowledge");
   if (!allChunks.length || !allChunks[0].values) return [];
+  const queryTokens = tokenize(query);
 
   // Determine what embedding types exist in the DB
   const hasAIEmbeddings = allChunks[0].values.some(row => getEmbeddingType(row[2]) === 'ai');
@@ -885,29 +902,36 @@ async function search(query, limit) {
     const chunkEmbedding = deserializeEmbedding(row[2]);
     if (!chunkEmbedding) continue;
 
-    let similarity = 0;
+    let semanticSimilarity = 0;
     let threshold = TFIDF_SIMILARITY_THRESHOLD;
 
     if (chunkEmbType === 'ai' && queryAIEmbedding) {
       // AI vs AI comparison (best quality, cross-language)
-      similarity = cosineSimilarity(queryAIEmbedding, chunkEmbedding);
+      semanticSimilarity = cosineSimilarity(queryAIEmbedding, chunkEmbedding);
       threshold = AI_SIMILARITY_THRESHOLD;
     } else if (chunkEmbType !== 'ai' && queryTfidfEmbedding) {
       // TF-IDF vs TF-IDF comparison
-      similarity = cosineSimilarity(queryTfidfEmbedding, chunkEmbedding);
+      semanticSimilarity = cosineSimilarity(queryTfidfEmbedding, chunkEmbedding);
       threshold = TFIDF_SIMILARITY_THRESHOLD;
     } else {
       // Mismatched embedding types - skip (can't compare AI with TF-IDF)
       continue;
     }
 
-    if (similarity > threshold) {
+    const lexicalScore = lexicalOverlapScore(queryTokens, row[1]);
+    const semanticPass = semanticSimilarity > threshold;
+    const lexicalPass = lexicalScore >= 0.2;
+    const rankScore = semanticSimilarity + (lexicalScore * 0.5);
+
+    if (semanticPass || lexicalPass) {
       results.push({
         id: row[0],
         chunk_text: row[1],
         source_file: row[3],
         source_type: row[4],
-        similarity: similarity
+        similarity: rankScore,
+        semantic_similarity: semanticSimilarity,
+        lexical_score: lexicalScore
       });
     }
   }
