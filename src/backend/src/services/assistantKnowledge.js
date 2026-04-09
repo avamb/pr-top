@@ -200,6 +200,52 @@ function lexicalOverlapScore(queryTokens, candidateText) {
   return overlap / querySet.size;
 }
 
+function expandQueryTokens(tokens) {
+  const expanded = new Set(tokens || []);
+  const aliases = {
+    referral: ['ref', 'invite', 'link'],
+    invite: ['invitation', 'code', 'client', 'link'],
+    colleague: ['colleagues', 'coworker', 'therapist', 'therapists'],
+    therapist: ['therapists', 'colleague', 'colleagues'],
+    link: ['url', 'referral', 'invite'],
+    коллег: ['коллеги', 'терапевт', 'терапевты'],
+    терапевт: ['терапевты', 'коллега', 'коллеги'],
+    реферал: ['рефераль', 'ссылка', 'ссылки'],
+    рефераль: ['реферал', 'ссылка', 'ссылки'],
+    ссылк: ['ссылка', 'ссылки', 'link', 'url'],
+    приглас: ['приглашение', 'invite', 'code', 'link']
+  };
+
+  for (const token of tokens || []) {
+    for (const [stem, related] of Object.entries(aliases)) {
+      if (token.includes(stem)) {
+        for (const alias of related) expanded.add(alias);
+      }
+    }
+  }
+
+  return Array.from(expanded);
+}
+
+function getSourceTypeScoreBonus(sourceType) {
+  const bonuses = {
+    api_route: 0.3,
+    ui_component: 0.2,
+    documentation: 0.12,
+    config: 0.08,
+    i18n: 0.04,
+    service: 0
+  };
+  return bonuses[sourceType] || 0;
+}
+
+function getSourceFileScoreAdjustment(sourceFile) {
+  const normalized = String(sourceFile || '').replace(/\\/g, '/');
+  if (normalized.endsWith('/assistantPrompt.js')) return -0.8;
+  if (normalized.endsWith('/assistantKnowledge.js')) return -0.15;
+  return 0;
+}
+
 function hashToken(token) {
   let hash = 2166136261;
   for (let i = 0; i < token.length; i++) {
@@ -427,6 +473,10 @@ const INDEX_SOURCES = [
   }
 ];
 
+const EXCLUDED_SOURCE_FILES = new Set([
+  'src/backend/src/services/assistantPrompt.js'
+]);
+
 /**
  * Recursively find files in a directory (READ-ONLY).
  */
@@ -595,7 +645,21 @@ function extractRouteInfo(content, relativePath) {
   const routeRegex = /(?:router|app)\.(get|post|put|delete|patch)\s*\(\s*['"`]([^'"`]+)['"`]/gi;
   let match;
   while ((match = routeRegex.exec(content)) !== null) {
-    routes.push(`${match[1].toUpperCase()} ${match[2]}`);
+    const method = match[1].toUpperCase();
+    const routePath = match[2];
+    const lineStart = content.lastIndexOf('\n', match.index);
+    const contextStart = Math.max(0, lineStart - 300);
+    const preContext = content.substring(contextStart, match.index);
+    const commentMatches = preContext.match(/(?:\/\/[^\n]+|\/\*[\s\S]*?\*\/)\s*$/);
+    if (commentMatches && commentMatches[0]) {
+      const comment = commentMatches[0]
+        .replace(/\/\*+|\*\/|\/\/|\*/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      routes.push(`${method} ${routePath} - ${comment}`);
+    } else {
+      routes.push(`${method} ${routePath}`);
+    }
   }
   if (routes.length === 0) return null;
   return `API Routes in ${relativePath}:\n${routes.join('\n')}`;
@@ -646,7 +710,10 @@ function discoverFiles() {
       for (const f of source.files) {
         const fullPath = path.join(PROJECT_ROOT, f);
         if (fs.existsSync(fullPath)) {
-          files.push({ path: fullPath, type: source.type });
+          const relativePath = path.relative(PROJECT_ROOT, fullPath).replace(/\\/g, '/');
+          if (!EXCLUDED_SOURCE_FILES.has(relativePath)) {
+            files.push({ path: fullPath, type: source.type });
+          }
         }
       }
     }
@@ -655,7 +722,10 @@ function discoverFiles() {
         const fullDir = path.join(PROJECT_ROOT, dir);
         const found = findFiles(fullDir, source.extensions, source.maxDepth);
         for (const f of found) {
-          files.push({ path: f, type: source.type });
+          const relativePath = path.relative(PROJECT_ROOT, f).replace(/\\/g, '/');
+          if (!EXCLUDED_SOURCE_FILES.has(relativePath)) {
+            files.push({ path: f, type: source.type });
+          }
         }
       }
     }
@@ -877,7 +947,7 @@ async function search(query, limit) {
   const db = getDatabase();
   const allChunks = db.exec("SELECT id, chunk_text, embedding, source_file, source_type, embedding_type FROM assistant_knowledge");
   if (!allChunks.length || !allChunks[0].values) return [];
-  const queryTokens = tokenize(query);
+  const queryTokens = expandQueryTokens(tokenize(query));
 
   // Determine what embedding types exist in the DB
   const hasAIEmbeddings = allChunks[0].values.some(row => getEmbeddingType(row[2]) === 'ai');
@@ -919,9 +989,10 @@ async function search(query, limit) {
     }
 
     const lexicalScore = lexicalOverlapScore(queryTokens, row[1]);
+    const sourceBonus = getSourceTypeScoreBonus(row[4]) + getSourceFileScoreAdjustment(row[3]);
     const semanticPass = semanticSimilarity > threshold;
     const lexicalPass = lexicalScore >= 0.2;
-    const rankScore = semanticSimilarity + (lexicalScore * 0.5);
+    const rankScore = semanticSimilarity + (lexicalScore * 0.5) + sourceBonus;
 
     if (semanticPass || lexicalPass) {
       results.push({
@@ -931,7 +1002,8 @@ async function search(query, limit) {
         source_type: row[4],
         similarity: rankScore,
         semantic_similarity: semanticSimilarity,
-        lexical_score: lexicalScore
+        lexical_score: lexicalScore,
+        source_bonus: sourceBonus
       });
     }
   }

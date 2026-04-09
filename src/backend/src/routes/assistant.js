@@ -109,6 +109,16 @@ function saveChatExchange(db, therapistId, activeChatId, messages, sanitized, as
   return chatId;
 }
 
+function getNoKnowledgeReply(language) {
+  const replies = {
+    en: 'I could not find this in the current PR-TOP knowledge base. I do not want to guess. Please check the Guide section or contact your administrator if you need confirmation about this feature.',
+    ru: 'Я не нашёл подтверждения по этому вопросу в текущей базе знаний PR-TOP. Не хочу угадывать. Лучше проверьте раздел «Руководство» или уточните у администратора платформы.',
+    es: 'No encontré confirmación sobre esto en la base de conocimientos actual de PR-TOP. No quiero adivinar. Revise la sección Guía o contacte a su administrador.',
+    uk: 'Я не знайшов підтвердження з цього питання в поточній базі знань PR-TOP. Не хочу вгадувати. Перевірте розділ «Довідник» або зверніться до адміністратора платформи.'
+  };
+  return replies[language] || replies.en;
+}
+
 // === Feedback Prompt Tracking ===
 // Update the last_prompted_at timestamp for a therapist after feedback prompt was included
 function updateFeedbackPromptTracking(db, therapistId) {
@@ -332,6 +342,31 @@ router.post('/chat', async (req, res) => {
       }
     } catch (ragError) {
       logger.warn('[Assistant] RAG search error: ' + ragError.message);
+    }
+
+    if (!hasRagContext) {
+      assistantReply = getNoKnowledgeReply(detectedLanguage);
+      messages.push({ role: 'assistant', content: assistantReply, timestamp: new Date().toISOString() });
+      const conversationId = req.body._conversation_id || null;
+      const savedChatId = saveChatExchange(db, req.user.id, activeChatId, messages, sanitized, assistantReply, false, page_context, detectedLanguage, conversationId);
+
+      if (useSSE) {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.write(`data: ${JSON.stringify({ type: 'chunk', text: assistantReply })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'done', chat_id: savedChatId, language: detectedLanguage, cached: false, has_rag_context: false, messages: messages })}\n\n`);
+        return res.end();
+      }
+
+      return res.json({
+        chat_id: savedChatId,
+        response: assistantReply,
+        language: detectedLanguage,
+        cached: false,
+        has_rag_context: false,
+        messages: messages
+      });
     }
 
     // === Proactive Feedback Prompt Check ===
