@@ -346,6 +346,17 @@ const PROJECT_ROOT = fs.existsSync(path.join(DOCKER_PROJECT_ROOT, 'src'))
   ? DOCKER_PROJECT_ROOT
   : LOCAL_PROJECT_ROOT;
 
+function getProjectRootDiagnostics() {
+  return {
+    project_root: PROJECT_ROOT,
+    docker_root_available: fs.existsSync(path.join(DOCKER_PROJECT_ROOT, 'src')),
+    frontend_available: fs.existsSync(path.join(PROJECT_ROOT, 'src', 'frontend')),
+    backend_available: fs.existsSync(path.join(PROJECT_ROOT, 'src', 'backend')),
+    bot_available: fs.existsSync(path.join(PROJECT_ROOT, 'src', 'bot')),
+    docs_available: fs.existsSync(path.join(PROJECT_ROOT, 'docs'))
+  };
+}
+
 /**
  * File categories to index with glob-like patterns.
  * All operations are READ-ONLY.
@@ -654,9 +665,19 @@ async function reindex() {
   currentEmbeddingType = embeddingType;
 
   logger.info(`[AssistantKB] Starting knowledge base re-index (embedding: ${embeddingType})...`);
+  logger.info('[AssistantKB] Project root diagnostics: ' + JSON.stringify(getProjectRootDiagnostics()));
 
   const files = discoverFiles();
   logger.info(`[AssistantKB] Discovered ${files.length} files to index`);
+  if (files.length > 0) {
+    const byType = {};
+    for (const file of files) {
+      byType[file.type] = (byType[file.type] || 0) + 1;
+    }
+    logger.info('[AssistantKB] Files discovered by type: ' + JSON.stringify(byType));
+  } else {
+    logger.warn('[AssistantKB] No files discovered for indexing. Check deployment packaging and project root mounts/snapshot.');
+  }
 
   // Track which source files we process (for stale entry removal)
   const processedFiles = new Set();

@@ -2,8 +2,8 @@ services:
   # === Backend API ===
   backend:
     build:
-      context: ./src/backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: src/backend/Dockerfile
     restart: unless-stopped
     env_file:
       - .env
@@ -37,12 +37,6 @@ services:
       - backend-data:/app/data
       - backend-uploads:/app/data/sessions
       - backend-backups:/app/backups
-      # Read-only mounts of project source for assistant knowledge base indexing
-      - ./src:/app/project-root/src:ro
-      - ./docs:/app/project-root/docs:ro
-      - ./docker-compose.yml:/app/project-root/docker-compose.yml:ro
-      - ./README.md:/app/project-root/README.md:ro
-      - ./.env.example:/app/project-root/.env.example:ro
     expose:
       - "3001"
     healthcheck:

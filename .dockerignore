@@ -1,0 +1,14 @@
+.git
+.env
+.autoforge
+.claude
+.playwright
+.playwright-cli
+.vite
+node_modules
+**/node_modules
+*.log
+backups
+src/backend/data
+src/backend/backups
+src/frontend/dist
