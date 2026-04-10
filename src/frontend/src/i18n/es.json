@@ -130,11 +130,11 @@
   "landing": {
     "heroTitle1": "Mantén tu práctica",
     "heroTitle2": "en lo más alto",
-    "heroDesc": "PR-TOP es un asistente de práctica para psicólogos y terapeutas — diseñado para reducir la rutina, apoyar la continuidad entre sesiones y mantener la atención humana.",
+    "heroDesc": "PR-TOP es un asistente de práctica para psicólogos, terapeutas y coaches — diseñado para reducir la rutina, apoyar la continuidad entre sesiones y mantener la atención humana.",
     "startTrial": "Prueba gratuita",
     "learnMore": "Cómo funciona",
     "featuresTitle": "Funciones que trabajan para usted",
-    "featuresDesc": "Cada función está diseñada en torno al flujo de trabajo real de los profesionales de salud mental: menos rutina, más continuidad y protección de sus límites personales.",
+    "featuresDesc": "Cada función está diseñada en torno al flujo de trabajo real de los profesionales de salud mental y coaches: menos rutina, más continuidad y protección de sus límites personales.",
     "pricingTitle": "Precios simples y transparentes",
     "pricingDesc": "Comienza con una prueba gratuita. Amplía a medida que crece tu práctica.",
     "mostPopular": "Más popular",
@@ -144,7 +144,7 @@
     "footerProduct": "Producto",
     "footerSecurity": "Seguridad",
     "footerContact": "Contacto",
-    "footerDesc": "PR-TOP — asistente de práctica para psicólogos y terapeutas. Menos rutina, más continuidad entre sesiones.",
+    "footerDesc": "PR-TOP — asistente de práctica para psicólogos, terapeutas y coaches. Menos rutina, más continuidad entre sesiones.",
     "features": "Funciones",
     "pricing": "Precios",
     "signUp": "Registrarse",
@@ -179,7 +179,7 @@
     "faqQ4": "¿Hay funciones de recordatorios y mensajes para clientes?",
     "faqA4": "Sí. Puede crear seguimientos, recordatorios de sesiones y mensajes de apoyo — de forma rápida y cómoda. Su enfoque se mantiene en la terapia, no en la administración.",
     "faqQ5": "¿A quién le será más útil el servicio?",
-    "faqA5": "A profesionales que llevan historiales de clientes, asignan tareas y quieren mantener contacto entre sesiones. Cuantos más clientes tenga — más tiempo y energía le ahorra el servicio."
+    "faqA5": "A psicólogos, terapeutas y coaches que llevan historiales de clientes, asignan tareas y quieren mantener contacto entre sesiones. Cuantos más clientes tenga — más tiempo y energía le ahorra el servicio."
   },
   "auth": {
     "loginTitle": "Iniciar sesión",
@@ -538,7 +538,7 @@
     "noInstructions": "No hay instrucciones disponibles",
     "close": "Cerrar",
     "libraryTab": "Ejemplos",
-    "libraryTabHint": "Ejemplos predefinidos — úsalos como plantillas o asígnalos directamente",
+    "libraryTabHint": "Ejemplos predefinidos para psicólogos y terapeutas — úsalos como plantillas o asígnalos directamente. Los coaches pueden crear sus propios ejercicios en la pestaña Mis ejercicios.",
     "myExercises": "Mis ejercicios",
     "myBadge": "Mío",
     "createExercise": "Crear ejercicio",
