@@ -1572,6 +1572,10 @@ if (!token || token === 'your-telegram-bot-token') {
     }
   });
 
+  bot.on('polling_error', (error) => {
+    console.error('Polling error:', error.code, error.message);
+  });
+
   console.log('PR-TOP Telegram Bot is running.');
 }
 
