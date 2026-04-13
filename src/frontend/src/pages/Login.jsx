@@ -9,7 +9,7 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t, i18n } = useTranslation();
-  const csrfToken = useCsrfToken();
+  const { csrfToken, isLoading: csrfLoading } = useCsrfToken();
   const redirectTo = location.state?.from || null;
   const accessDenied = location.state?.accessDenied || false;
   const sessionExpiredMessage = location.state?.message || null;
@@ -188,10 +188,10 @@ export default function Login() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || csrfLoading}
               className="w-full py-2 px-4 bg-primary text-white font-medium rounded-md hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {loading && <LoadingSpinner size={16} className="mr-2" />}
+              {(loading || csrfLoading) && <LoadingSpinner size={16} className="mr-2" />}
               {loading ? t('auth.signingIn') : t('auth.signIn')}
             </button>
           </form>

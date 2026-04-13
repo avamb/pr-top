@@ -252,7 +252,7 @@ function ViewerRegistrationCTA({ t, onRegister, csrfToken, sessionUUID, language
  */
 export default function PublicAssistantChatPanel() {
   const { t, i18n } = useTranslation();
-  const csrfToken = useCsrfToken();
+  const { csrfToken } = useCsrfToken();
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const [inputText, setInputText] = useState('');

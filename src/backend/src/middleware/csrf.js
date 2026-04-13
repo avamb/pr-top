@@ -72,6 +72,12 @@ function csrfProtection(req, res, next) {
     return next();
   }
 
+  // Fully public anonymous endpoints — no session/auth to protect, CSRF provides no value
+  const publicPaths = ['/api/assistant/public-chat', '/api/auth/register-lead'];
+  if (publicPaths.includes(req.originalUrl.split('?')[0]) || publicPaths.includes(req.path)) {
+    return next();
+  }
+
   // Dev endpoints are exempt (only available in development mode)
   if (req.path.startsWith('/api/dev/') || req.originalUrl.startsWith('/api/dev/')) {
     return next();

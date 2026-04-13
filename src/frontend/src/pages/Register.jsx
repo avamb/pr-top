@@ -9,7 +9,7 @@ import LanguageSwitcher from '../components/LanguageSwitcher';
 export default function Register() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const csrfToken = useCsrfToken();
+  const { csrfToken, isLoading: csrfLoading } = useCsrfToken();
   const [searchParams] = useSearchParams();
 
   // Redirect if already authenticated (prevents back-button resubmit)
@@ -236,10 +236,10 @@ export default function Register() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || csrfLoading}
               className="w-full py-2 px-4 bg-primary text-white font-medium rounded-md hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {loading && <LoadingSpinner size={16} className="mr-2" />}
+              {(loading || csrfLoading) && <LoadingSpinner size={16} className="mr-2" />}
               {loading ? t('auth.creatingAccount') : t('auth.createAccount')}
             </button>
           </form>
