@@ -41,10 +41,10 @@ services:
       - "3001"
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
-      interval: 30s
+      interval: 15s
       timeout: 10s
-      retries: 3
-      start_period: 15s
+      retries: 5
+      start_period: 10s
 
   # === Frontend SPA ===
   frontend:
@@ -58,7 +58,7 @@ services:
       - "80"
     depends_on:
       backend:
-        condition: service_healthy
+        condition: service_started
 
   # === Telegram Bot ===
   bot:
@@ -74,7 +74,7 @@ services:
       - BOT_USERNAME=${BOT_USERNAME:-}
     depends_on:
       backend:
-        condition: service_healthy
+        condition: service_started
 
   # === Umami Web Analytics ===
   umami:
