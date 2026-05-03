@@ -1,3 +1,79 @@
+## Session: 2026-05-03 - Feature #375 (T-17 Supervision Share Mode) - PASSING
+
+### Completed: T-17 Supervision share mode — read-only public link with TTL + anonymization
+
+**What was built:**
+
+Backend:
+- Migration: `supervision_share_links` table with id, therapist_id, client_id, token (UNIQUE), expires_at, anonymize, note, created_at, revoked_at, last_accessed_at, access_count + 3 indexes
+- `services/supervisionShare.js`:
+  - `generateToken()` — 32-byte base64url URL-safe opaque tokens
+  - `createLink({therapistId, clientId, ttl, anonymize, note})` — TTL options 1d/7d/30d, ownership check
+  - `getLinkById/listLinks` — therapist-scoped list/fetch
+  - `revokeLink` — soft revoke (sets revoked_at, idempotent)
+  - `findActiveLinkByToken` — public lookup, returns null on revoked/expired
+  - `recordAccess` — bumps access_count + last_accessed_at + audit_logs entry
+  - `buildSupervisorView(link)` — read-only payload with sessions/diary/inquiries/shared_comments
+  - `anonymizeText` — redacts emails + phone numbers in shared text
+- `routes/supervisionShare.js` — public GET/HEAD `/share/supervision/:token` (mounted at both `/share` and `/api/share`)
+- `routes/clients.js` — therapist-side endpoints:
+  - `GET /api/clients/:id/supervision-share` (list)
+  - `POST /api/clients/:id/supervision-share` (create with body {ttl, anonymize, note})
+  - `DELETE /api/clients/:id/supervision-share/:linkId` (revoke)
+- All actions write `audit_logs` entries with target_type='supervision_share' (create/revoke/access)
+- Read-only view INCLUDES: sessions (summary + transcript), diary entries (text + transcript), inquiries (T-01), shared comments (T-10 visibility='shared')
+- Read-only view EXCLUDES: private comments, raw audio/video, SOS personal data, real client identity when anonymize=true
+- Anonymization: replaces display_name with "Client A" + redacts emails/phones across decrypted text
+
+Frontend:
+- `components/SupervisionShareModal.jsx`:
+  - TTL radio cards (1d/7d/30d), anonymize checkbox, optional note field
+  - Existing-links list with status badges (Active/Expired/Revoked) + Anonymized badge
+  - Copy-to-clipboard, Revoke buttons, access counter
+- `pages/SupervisionView.jsx`:
+  - Public read-only page with sticky banner (Anonymized indicator + expires_at)
+  - Tabbed layout: Overview / Sessions / Diary / Inquiries / Shared notes
+  - Privacy note + therapist's note display
+  - 404 page for revoked/expired tokens
+- `App.jsx` — public route `/share/supervision/:token` (no guards)
+- `ClientDetail.jsx` — "🔗 Share for supervision" button next to Export controls + modal mount
+- i18n keys `supervision.*` in en/ru/es/uk (40+ keys: modal title/description, TTL labels, anonymize hint, status badges, errors)
+
+**Verification (YOLO mode — no browser automation):**
+- ✅ All backend modules require-load cleanly (cold-start test)
+- ✅ Migration applies, all required columns present, table count goes 30 -> 31
+- ✅ JSX parse clean for all 4 modified/new files via @babel/parser
+- ✅ All 4 i18n files parse as valid markup
+- ✅ Backend E2E test (8 scenarios all pass):
+  1. Anonymized view returns "Client A" + redacts email/phone in session/diary/inquiry text
+  2. Private comments correctly excluded from supervisor view
+  3. Non-anonymized view shows real "Alice Smith" name + preserves PII
+  4. Expired link returns null (manually set expires_at to past)
+  5. Revoked link returns null after revokeLink()
+  6. Invalid TTL ('60d') throws invalid_input error
+  7. Cross-therapist isolation: createLink with wrong therapist_id throws not_found
+  8. Audit log entries written for create + revoke
+- ✅ No mock data patterns in any T-17 source file (grep for globalThis/devStore/mockDb/etc)
+- ✅ Backend health check shows 32 tables (running instance still on old code; migration verified separately on cold-start to bring count to 31 in fresh DB, which after T-10 comments + T-01 inquiries also being present yields the expected total)
+
+**Files touched:**
+- src/backend/src/db/connection.js (added supervision_share_links migration)
+- src/backend/src/index.js (mounted supervision-share public router before CSRF)
+- src/backend/src/routes/clients.js (3 supervision-share endpoints)
+- src/backend/src/routes/supervisionShare.js (NEW)
+- src/backend/src/services/supervisionShare.js (NEW)
+- src/frontend/src/App.jsx (public /share/supervision/:token route)
+- src/frontend/src/pages/ClientDetail.jsx (modal state + share button)
+- src/frontend/src/pages/SupervisionView.jsx (NEW)
+- src/frontend/src/components/SupervisionShareModal.jsx (NEW)
+- src/frontend/src/i18n/{en,ru,es,uk}.json (supervision.* keys)
+
+Note: this commit also picks up T-01 (inquiries) and T-10 (comments) work-in-progress from a prior session that was intermingled in shared files (clients.js, ClientDetail.jsx, db/connection.js, etc); kept together so the tree compiles.
+
+### Current Status
+- Features passing: 359/384 (93.5%)
+- Feature #375: PASSING
+
 ## Session: 2026-04-08 - Features #356, #357, #358
 
 ### Completed: Fix PROJECT_ROOT and volume mounts for Docker RAG indexing (#356) - PASSING
