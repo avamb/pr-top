@@ -342,7 +342,16 @@
     "referralCopy": "Copiar al portapapeles",
     "referralCopied": "¡Copiado!",
     "referralLoading": "Cargando enlace de referido...",
-    "referralError": "No se pudo cargar el enlace de referido"
+    "referralError": "No se pudo cargar el enlace de referido",
+    "reminders": {
+      "title": "Recordatorios entre sesiones",
+      "desc": "Enviar avisos automáticos por Telegram a los clientes que no han escrito en su diario durante varios días.",
+      "enableLabel": "Enviar recordatorios de diario a clientes inactivos",
+      "hintNew": "Desactivado por defecto. Algunos enfoques terapéuticos (p. ej., el psicoanálisis) evitan deliberadamente el contacto entre sesiones.",
+      "hintExisting": "Cuando está activado, cada cliente sigue este valor predeterminado a menos que lo anules en su perfil.",
+      "saved": "Preferencia de recordatorios guardada.",
+      "save": "Guardar preferencia de recordatorios"
+    }
   },
   "clientList": {
     "title": "Clientes",
@@ -433,6 +442,15 @@
     "joined": "Registrado",
     "phone": "Teléfono",
     "telegram": "Telegram",
+    "remindersLabel": "Recordatorios",
+    "remindersInherit": "Por defecto ({{state}})",
+    "remindersOn": "Activados",
+    "remindersOff": "Desactivados",
+    "remindersOverrideOn": "Forzar activado",
+    "remindersOverrideOff": "Forzar desactivado",
+    "remindersHint": "Anular el valor predeterminado para este cliente.",
+    "remindersSaved": "Preferencia de recordatorios actualizada.",
+    "remindersSaveFailed": "No se pudo actualizar la preferencia de recordatorios.",
     "unifiedTimeline": "Cronología unificada ({{count}})",
     "filterByDate": "Filtrar por fecha:",
     "to": "hasta",

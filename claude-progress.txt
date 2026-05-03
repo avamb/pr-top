@@ -1,3 +1,119 @@
+## Session: 2026-05-04 - Feature #374 (T-16 Optional reminders) - PASSING
+
+### Completed: T-16 — Optional between-session reminders (off by default for new therapists)
+
+**Why this feature exists:**
+During the Alexey interview (alexey_*_2026-04-*, lines 745-758) the
+psychoanalyst flagged that PR-TOP's diary-reminder push to clients between
+sessions actively conflicts with his clinical method — psychoanalysis
+deliberately avoids contact between sessions. Reminders therefore must be
+opt-in, both per-therapist (a master default) and per-client (override),
+with backward compatibility so existing therapists who already use the
+feature do not silently lose it.
+
+**What was built (backend):**
+- `src/backend/src/db/connection.js`: idempotent migration adds two columns
+  to the existing `users` table:
+    - `reminders_enabled_default INTEGER DEFAULT 0` — therapist master toggle.
+      New therapists start with reminders OFF.
+    - `reminders_enabled INTEGER DEFAULT NULL` — nullable per-client override.
+      NULL = inherit therapist default; 0 = force off; 1 = force on.
+  Backward-compat backfill runs only on the very first migration pass
+  (guarded by `_addedRemindersDefaultColumn` flag): every existing
+  therapist row is set to `reminders_enabled_default = 1` so reminders
+  keep working for therapists who were already in the system. Live DB
+  inspection confirms 933/933 existing therapists were backfilled to 1.
+
+- `src/backend/src/services/scheduler.js`: `runDiaryReminder()` now joins
+  `users` to itself (client → therapist) and filters with the effective
+  flag rule:
+    - `client.reminders_enabled = 1`           → remind
+    - `client.reminders_enabled = 0`           → skip
+    - `client.reminders_enabled IS NULL` AND
+      `therapist.reminders_enabled_default = 1`→ remind, else skip
+  Functional truth-table test (3 therapists × 3 client overrides each =
+  9 cases) passed all 9 expected outcomes against the live prtop.db.
+
+- `src/backend/src/routes/settings.js`:
+    - `GET /api/settings/profile` now selects and returns
+      `reminders_enabled_default` as a boolean.
+    - `PUT /api/settings/profile` accepts `reminders_enabled_default`
+      (boolean, 0, or 1) and persists 0/1 to the column. Validation
+      rejects non-boolean/0/1 values with 400.
+
+- `src/backend/src/routes/clients.js`:
+    - `GET /api/clients/:id` selects and exposes `reminders_enabled` as a
+      tri-state (`true`/`false`/`null`).
+    - New `PUT /api/clients/:id` route — therapist updates per-client
+      preferences; currently only `reminders_enabled` is editable.
+      Accepts `true`, `false`, or `null` (clear override). Verifies
+      ownership (`therapist_id = req.user.id` AND `role='client'`)
+      before update; returns 404 otherwise. Audit-friendly: writes
+      a structured `info` log line.
+
+**What was built (frontend):**
+- `src/frontend/src/pages/Settings.jsx`:
+    - New "Between-Session Reminders" card (visible to therapists +
+      superadmins only) with a `ToggleSwitch`, contextual hint text
+      that swaps based on the on/off state, and its own save button.
+      `data-testid="reminders-section"` and `reminders-save-btn` for
+      downstream e2e.
+    - On load, `fetchProfile` hydrates `remindersEnabledDefault` from
+      `data.profile.reminders_enabled_default`. `handleSaveReminders`
+      PUTs only that field so it does not collide with the other two
+      profile forms (personal info + preferences) on the same page.
+    - 401 handling, abort controller, success toast — all match the
+      existing escalation/profile patterns.
+
+- `src/frontend/src/pages/ClientDetail.jsx`:
+    - New per-client reminder override row below the metadata strip:
+      a 3-state `<select>` (Default / Force on / Force off) with
+      `data-testid="client-reminders-control"` and `client-reminders-select`.
+      Save is debounced via `remindersSaving` state and writes
+      `PUT /api/clients/:id { reminders_enabled }`. Server response
+      replaces `client` state so the UI reflects the persisted value.
+    - Inline status text shows the saved/failed message and auto-clears
+      after 3 s.
+
+**What was built (i18n):**
+- `settings.reminders.*` keys added to en/ru/es/uk: `title`, `desc`,
+  `enableLabel`, `hintNew`, `hintExisting`, `saved`, `save`.
+- `clientDetail.reminders*` keys (label, inherit/on/off/overrideOn/
+  overrideOff, hint, saved, saveFailed) added to all four locales.
+  All four JSON files parse via `JSON.parse` smoke test.
+
+**Verification this session:**
+- `node -c` clean for `src/backend/src/db/connection.js`,
+  `src/backend/src/routes/settings.js`,
+  `src/backend/src/routes/clients.js`, and
+  `src/backend/src/services/scheduler.js`.
+- esbuild JSX compile (target=es2020, jsx=automatic) of
+  `src/frontend/src/pages/Settings.jsx` and
+  `src/frontend/src/pages/ClientDetail.jsx`: OK.
+- All 4 i18n JSON files parse without errors.
+- Backend cleanly restarted on port 3001 — `/api/health` returned
+  `{status:"ok",database:"connected",tableCount:33}`.
+- Live DB inspection (sql.js read of data/prtop.db):
+    - PRAGMA table_info(users) reports `reminders_enabled_default` and
+      `reminders_enabled`.
+    - 933/933 existing therapists have `reminders_enabled_default = 1`.
+    - 81/81 existing clients have `reminders_enabled = NULL` (inherit).
+- Functional scheduler test (truth table over 9 client/therapist
+  combinations) — PASS for all 9 cases. Test data cleaned up; residual
+  count = 0.
+- Live route probes: `GET /api/settings/profile` (no auth) → 401;
+  `GET /api/clients/1` (no auth) → 401; `PUT /api/clients/1` (no auth)
+  → 403 (CSRF gate, matches existing PUT routes).
+- Mock data grep: zero hits for `globalThis|devStore|dev-store|mockDb|
+  mockData|fakeData|sampleData|dummyData|MOCK` in any of the changed
+  backend files. Frontend Settings.jsx clean. ClientDetail.jsx grep
+  for `reminders_enabled` only finds the new code (no mock fallback).
+
+### Current Status
+- Feature #374: PASSING (T-16 Optional reminders, off by default for
+  new therapists, with per-therapist + per-client opt-in and full
+  backward compatibility).
+
 ## Session: 2026-05-03 - Feature #375 (T-17 Supervision Share Mode) - PASSING
 
 ### Completed: T-17 Supervision share mode — read-only public link with TTL + anonymization

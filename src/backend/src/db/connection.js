@@ -404,6 +404,41 @@ function applySchema(db) {
     logger.warn('is_template backfill skipped: ' + e.message);
   }
 
+  // T-16: Optional between-session reminders (off by default for new therapists)
+  // Interview: alexey_*_2026-04-* lines 745-758 — psychoanalysis does not use
+  // between-session reminders. Reminders are now per-therapist + per-client opt-in.
+  // - therapists.reminders_enabled_default: master toggle for the therapist (default 0)
+  //   New therapists start with reminders OFF.
+  // - clients.reminders_enabled: nullable per-client override.
+  //   NULL = inherit therapist's default; 0 = force off; 1 = force on.
+  // Backward compat: existing therapists (created before this migration) get 1
+  //   so their already-running diary reminders keep working.
+  let _addedRemindersDefaultColumn = false;
+  try {
+    db.run('ALTER TABLE users ADD COLUMN reminders_enabled_default INTEGER DEFAULT 0');
+    logger.info('Added reminders_enabled_default column to users');
+    _addedRemindersDefaultColumn = true;
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE users ADD COLUMN reminders_enabled INTEGER DEFAULT NULL');
+    logger.info('Added reminders_enabled column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  // Backward-compat backfill: only run on the very first migration pass so we
+  // do not retroactively re-enable a therapist who has explicitly turned the
+  // toggle off. Once the column exists, the application owns the value.
+  if (_addedRemindersDefaultColumn) {
+    try {
+      db.run("UPDATE users SET reminders_enabled_default = 1 WHERE role = 'therapist'");
+      logger.info('Backfilled reminders_enabled_default=1 for existing therapists');
+    } catch (e) {
+      logger.warn('reminders_enabled_default backfill skipped: ' + e.message);
+    }
+  }
+
   // Backfill Ukrainian translations for existing seed exercises
   try {
     const ukCheck = db.exec("SELECT COUNT(*) FROM exercises WHERE title_uk IS NOT NULL AND is_custom = 0");

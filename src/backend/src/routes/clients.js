@@ -174,7 +174,7 @@ router.get('/:id', (req, res) => {
 
     // Verify client belongs to this therapist
     const clientResult = db.exec(
-      "SELECT id, telegram_id, email, consent_therapist_access, language, created_at, updated_at, first_name, last_name, phone, telegram_username FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      "SELECT id, telegram_id, email, consent_therapist_access, language, created_at, updated_at, first_name, last_name, phone, telegram_username, reminders_enabled FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
       [clientId, therapistId]
     );
 
@@ -183,6 +183,11 @@ router.get('/:id', (req, res) => {
     }
 
     const row = clientResult[0].values[0];
+    // T-16: reminders_enabled is a tri-state (NULL = inherit, 0 = off, 1 = on)
+    let remindersEnabled = null;
+    if (row[11] === 1) remindersEnabled = true;
+    else if (row[11] === 0) remindersEnabled = false;
+
     res.json({
       client: {
         id: row[0],
@@ -195,12 +200,97 @@ router.get('/:id', (req, res) => {
         first_name: row[7] || '',
         last_name: row[8] || '',
         phone: row[9] || '',
-        telegram_username: row[10] || ''
+        telegram_username: row[10] || '',
+        reminders_enabled: remindersEnabled
       }
     });
   } catch (error) {
     logger.error('Get client detail error: ' + error.message);
     res.status(500).json({ error: 'Failed to fetch client details' });
+  }
+});
+
+// PUT /api/clients/:id - Update client-level preferences (T-16: reminders override).
+// Tri-state for reminders_enabled:
+//   true  -> force reminders ON for this client (overrides therapist default)
+//   false -> force reminders OFF for this client (overrides therapist default)
+//   null  -> clear override, fall back to therapist's reminders_enabled_default
+router.put('/:id', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+    const { reminders_enabled } = req.body || {};
+
+    // Verify ownership before any update
+    const ownership = db.exec(
+      "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [clientId, therapistId]
+    );
+    if (ownership.length === 0 || ownership[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    }
+
+    const updates = [];
+    const params = [];
+
+    if (reminders_enabled !== undefined) {
+      let value;
+      if (reminders_enabled === null) {
+        value = null;
+      } else if (reminders_enabled === true || reminders_enabled === 1) {
+        value = 1;
+      } else if (reminders_enabled === false || reminders_enabled === 0) {
+        value = 0;
+      } else {
+        return res.status(400).json({ error: 'reminders_enabled must be true, false, or null' });
+      }
+      updates.push('reminders_enabled = ?');
+      params.push(value);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    updates.push("updated_at = datetime('now')");
+    params.push(clientId);
+
+    db.run(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);
+    saveDatabaseAfterWrite();
+
+    // Return the updated client (same shape as GET /:id)
+    const refreshed = db.exec(
+      "SELECT id, telegram_id, email, consent_therapist_access, language, created_at, updated_at, first_name, last_name, phone, telegram_username, reminders_enabled FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [clientId, therapistId]
+    );
+    const row = refreshed[0].values[0];
+    let remindersEnabled = null;
+    if (row[11] === 1) remindersEnabled = true;
+    else if (row[11] === 0) remindersEnabled = false;
+
+    logger.info(`Client preferences updated by therapist ${therapistId} for client ${clientId}: reminders_enabled=${remindersEnabled}`);
+
+    res.json({
+      message: 'Client updated successfully',
+      client: {
+        id: row[0],
+        telegram_id: row[1],
+        email: row[2],
+        consent_therapist_access: !!row[3],
+        language: row[4],
+        created_at: row[5],
+        updated_at: row[6],
+        first_name: row[7] || '',
+        last_name: row[8] || '',
+        phone: row[9] || '',
+        telegram_username: row[10] || '',
+        reminders_enabled: remindersEnabled
+      }
+    });
+  } catch (error) {
+    logger.error('Update client error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update client' });
   }
 });
 

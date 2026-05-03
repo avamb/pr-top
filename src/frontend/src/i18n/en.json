@@ -358,7 +358,16 @@
     "referralCopy": "Copy to Clipboard",
     "referralCopied": "Copied!",
     "referralLoading": "Loading referral link...",
-    "referralError": "Could not load referral link"
+    "referralError": "Could not load referral link",
+    "reminders": {
+      "title": "Between-Session Reminders",
+      "desc": "Send automatic Telegram nudges to clients who haven't written in their diary for several days.",
+      "enableLabel": "Send diary reminders to inactive clients",
+      "hintNew": "Off by default. Some therapeutic approaches (e.g. psychoanalysis) intentionally avoid between-session contact.",
+      "hintExisting": "When on, each client follows this default unless you override it on their profile.",
+      "saved": "Reminder preference saved.",
+      "save": "Save Reminder Preference"
+    }
   },
   "clientList": {
     "title": "Clients",
@@ -449,6 +458,15 @@
     "joined": "Joined",
     "phone": "Phone",
     "telegram": "Telegram",
+    "remindersLabel": "Reminders",
+    "remindersInherit": "Default ({{state}})",
+    "remindersOn": "On",
+    "remindersOff": "Off",
+    "remindersOverrideOn": "Force on",
+    "remindersOverrideOff": "Force off",
+    "remindersHint": "Override the default for this client.",
+    "remindersSaved": "Reminder preference updated.",
+    "remindersSaveFailed": "Failed to update reminder preference.",
     "unifiedTimeline": "Unified Timeline ({{count}})",
     "filterByDate": "Filter by date:",
     "to": "to",

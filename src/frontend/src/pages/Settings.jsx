@@ -123,6 +123,11 @@ export default function Settings() {
   const [referralLoading, setReferralLoading] = useState(false);
   const [referralError, setReferralError] = useState('');
   const [referralCopied, setReferralCopied] = useState(false);
+  // T-16: per-therapist default for between-session reminders (off by default
+  // for new therapists, on for existing ones via DB backfill)
+  const [remindersEnabledDefault, setRemindersEnabledDefault] = useState(false);
+  const [savingReminders, setSavingReminders] = useState(false);
+  const [remindersSuccess, setRemindersSuccess] = useState(null);
 
   const abortControllerRef = React.useRef(null);
 
@@ -208,6 +213,7 @@ export default function Settings() {
         setPhone(data.profile.phone || '');
         setTelegramUsername(data.profile.telegram_username || '');
         setOtherInfo(data.profile.other_info || '');
+        setRemindersEnabledDefault(!!data.profile.reminders_enabled_default);
         // Sync i18n language with profile
         const lang = data.profile.language || 'en';
         if (i18n.language !== lang) {
@@ -371,6 +377,47 @@ export default function Settings() {
 
   function updateEscalation(key, value) {
     setEscalation(prev => ({ ...prev, [key]: value }));
+  }
+
+  // T-16: persist therapist default for between-session reminders
+  async function handleSaveReminders(e) {
+    e.preventDefault();
+    if (savingReminders) return;
+    setSavingReminders(true);
+    setError(null);
+    setRemindersSuccess(null);
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/settings/profile`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ reminders_enabled_default: remindersEnabledDefault })
+      });
+
+      if (res.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/login');
+        return;
+      }
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to update reminders preference');
+      }
+
+      const data = await res.json();
+      setProfile(data.profile);
+      setRemindersEnabledDefault(!!data.profile.reminders_enabled_default);
+      setRemindersSuccess(t('settings.reminders.saved'));
+      setTimeout(() => setRemindersSuccess(null), 3000);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingReminders(false);
+    }
   }
 
   return (
@@ -617,6 +664,45 @@ export default function Settings() {
                     </button>
                   </div>
                 ) : null}
+              </div>
+            )}
+
+            {/* T-16: Between-session Reminders Section */}
+            {(profile.role === 'therapist' || profile.role === 'superadmin') && (
+              <div className="bg-white rounded-lg shadow-md p-8 mb-6" data-testid="reminders-section">
+                <h3 className="text-lg font-semibold text-stone-700 mb-2">{t('settings.reminders.title')}</h3>
+                <p className="text-sm text-stone-500 mb-4">{t('settings.reminders.desc')}</p>
+
+                {remindersSuccess && (
+                  <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+                    {remindersSuccess}
+                  </div>
+                )}
+
+                <form onSubmit={handleSaveReminders}>
+                  <ToggleSwitch
+                    id="reminders_enabled_default"
+                    label={t('settings.reminders.enableLabel')}
+                    checked={remindersEnabledDefault}
+                    onChange={(v) => setRemindersEnabledDefault(v)}
+                  />
+                  <p className="text-xs text-stone-400 mt-2 italic">
+                    {remindersEnabledDefault
+                      ? t('settings.reminders.hintExisting')
+                      : t('settings.reminders.hintNew')}
+                  </p>
+                  <div className="pt-4">
+                    <button
+                      type="submit"
+                      disabled={savingReminders}
+                      data-testid="reminders-save-btn"
+                      className="px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                    >
+                      {savingReminders && <LoadingSpinner size={16} className="mr-2" />}
+                      {savingReminders ? t('settings.saving') : t('settings.reminders.save')}
+                    </button>
+                  </div>
+                </form>
               </div>
             )}
 

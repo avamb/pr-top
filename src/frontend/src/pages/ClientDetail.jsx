@@ -294,6 +294,9 @@ function ClientDetail() {
   const [inquiryActionLoading, setInquiryActionLoading] = useState(null);
   // T-17 Supervision share modal
   const [showSupervisionShare, setShowSupervisionShare] = useState(false);
+  // T-16: per-client reminders override (null = inherit, true = on, false = off)
+  const [remindersSaving, setRemindersSaving] = useState(false);
+  const [remindersMsg, setRemindersMsg] = useState('');
   const { on: onWsEvent } = useWebSocket();
   const token = localStorage.getItem('token');
 
@@ -1131,6 +1134,38 @@ function ClientDetail() {
     setSessionUploadError('');
   }
 
+  // T-16: persist per-client reminders override
+  // value: true = force on, false = force off, null = inherit therapist default
+  async function handleSaveRemindersOverride(value) {
+    if (remindersSaving) return;
+    setRemindersSaving(true);
+    setRemindersMsg('');
+    try {
+      const res = await fetch(`${API}/clients/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ reminders_enabled: value })
+      });
+      if (!res.ok) {
+        setRemindersMsg(t('clientDetail.remindersSaveFailed'));
+        return;
+      }
+      const data = await res.json();
+      if (data && data.client) {
+        setClient(data.client);
+      }
+      setRemindersMsg(t('clientDetail.remindersSaved'));
+      setTimeout(() => setRemindersMsg(''), 3000);
+    } catch (e) {
+      setRemindersMsg(t('clientDetail.remindersSaveFailed'));
+    } finally {
+      setRemindersSaving(false);
+    }
+  }
+
   async function handleExport() {
     if (exportLoading) return;
     setExportLoading(true);
@@ -1381,6 +1416,34 @@ function ClientDetail() {
               <span>{t('clientDetail.language')}: {(client.language || 'en').toUpperCase()}</span>
               <span>{t('clientDetail.consent')}: {client.consent_therapist_access ? t('clientDetail.consentGranted') : t('clientDetail.consentNotGranted')}</span>
               <span>{t('clientDetail.joined')}: {formatUserDateOnly(client.created_at)}</span>
+            </div>
+            {/* T-16: Per-client reminders override */}
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm" data-testid="client-reminders-control">
+              <label htmlFor="client-reminders-select" className="text-stone-600">
+                {t('clientDetail.remindersLabel')}:
+              </label>
+              <select
+                id="client-reminders-select"
+                data-testid="client-reminders-select"
+                disabled={remindersSaving}
+                value={client.reminders_enabled === true ? 'on' : client.reminders_enabled === false ? 'off' : 'inherit'}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  const next = v === 'on' ? true : v === 'off' ? false : null;
+                  handleSaveRemindersOverride(next);
+                }}
+                className="px-2 py-1 border border-stone-300 rounded text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50"
+              >
+                <option value="inherit">{t('clientDetail.remindersInherit', { state: '—' })}</option>
+                <option value="on">{t('clientDetail.remindersOverrideOn')}</option>
+                <option value="off">{t('clientDetail.remindersOverrideOff')}</option>
+              </select>
+              <span className="text-xs text-stone-400 italic">{t('clientDetail.remindersHint')}</span>
+              {remindersMsg && (
+                <span className={`text-xs ${remindersMsg === t('clientDetail.remindersSaved') ? 'text-green-600' : 'text-amber-600'}`}>
+                  {remindersMsg}
+                </span>
+              )}
             </div>
             {/* Export All Data */}
             <div className="mt-3 flex flex-wrap items-center gap-2">

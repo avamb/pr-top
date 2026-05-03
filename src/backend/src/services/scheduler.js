@@ -261,12 +261,21 @@ function runDiaryReminder() {
     const db = getDatabase();
     const cutoff = new Date(Date.now() - DIARY_REMINDER_INACTIVE_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
-    // Find clients with no recent diary entries who have Telegram
+    // Find clients with no recent diary entries who have Telegram.
+    // T-16: Reminders are opt-in per-therapist (reminders_enabled_default) with
+    // an optional per-client override (reminders_enabled). The effective flag is:
+    //   client.reminders_enabled IS NOT NULL  -> use client value (force on/off)
+    //   client.reminders_enabled IS NULL      -> inherit therapist's default
     const inactive = db.exec(
       `SELECT u.id, u.telegram_id, u.language
        FROM users u
+       JOIN users t ON t.id = u.therapist_id AND t.role = 'therapist'
        WHERE u.role = 'client' AND u.telegram_id IS NOT NULL
        AND u.therapist_id IS NOT NULL AND u.blocked_at IS NULL
+       AND (
+         (u.reminders_enabled IS NOT NULL AND u.reminders_enabled = 1)
+         OR (u.reminders_enabled IS NULL AND COALESCE(t.reminders_enabled_default, 0) = 1)
+       )
        AND NOT EXISTS (
          SELECT 1 FROM diary_entries d WHERE d.client_id = u.id AND d.created_at > ?
        )`,

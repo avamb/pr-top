@@ -24,7 +24,7 @@ router.get('/profile', authenticate, (req, res) => {
   try {
     const db = getDatabase();
     const result = db.exec(
-      'SELECT id, email, role, language, timezone, created_at, escalation_preferences, first_name, last_name, phone, telegram_username, other_info FROM users WHERE id = ?',
+      'SELECT id, email, role, language, timezone, created_at, escalation_preferences, first_name, last_name, phone, telegram_username, other_info, reminders_enabled_default FROM users WHERE id = ?',
       [req.user.id]
     );
 
@@ -55,7 +55,10 @@ router.get('/profile', authenticate, (req, res) => {
         last_name: user[8] || '',
         phone: user[9] || '',
         telegram_username: user[10] || '',
-        other_info: user[11] || ''
+        other_info: user[11] || '',
+        // T-16: Optional reminders toggle (per-therapist default).
+        // Stored as INTEGER 0/1; expose to clients as a boolean.
+        reminders_enabled_default: user[12] === 1 || user[12] === true
       }
     });
   } catch (error) {
@@ -67,7 +70,7 @@ router.get('/profile', authenticate, (req, res) => {
 // PUT /api/settings/profile - Update user profile settings
 router.put('/profile', authenticate, (req, res) => {
   try {
-    const { language, timezone, first_name, last_name, phone, telegram_username, other_info } = req.body;
+    const { language, timezone, first_name, last_name, phone, telegram_username, other_info, reminders_enabled_default } = req.body;
     const db = getDatabase();
 
     // Validate language
@@ -134,6 +137,17 @@ router.put('/profile', authenticate, (req, res) => {
       params.push(typeof other_info === 'string' ? other_info.trim() : '');
     }
 
+    // T-16: Optional reminders default (boolean) — only meaningful for therapists,
+    // but we accept and persist for any role since the column lives on users.
+    if (reminders_enabled_default !== undefined) {
+      if (typeof reminders_enabled_default !== 'boolean'
+          && reminders_enabled_default !== 0 && reminders_enabled_default !== 1) {
+        return res.status(400).json({ error: 'reminders_enabled_default must be a boolean' });
+      }
+      updates.push('reminders_enabled_default = ?');
+      params.push(reminders_enabled_default ? 1 : 0);
+    }
+
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No valid fields to update' });
     }
@@ -147,7 +161,7 @@ router.put('/profile', authenticate, (req, res) => {
 
     // Return updated profile
     const result = db.exec(
-      'SELECT id, email, role, language, timezone, created_at, escalation_preferences, first_name, last_name, phone, telegram_username, other_info FROM users WHERE id = ?',
+      'SELECT id, email, role, language, timezone, created_at, escalation_preferences, first_name, last_name, phone, telegram_username, other_info, reminders_enabled_default FROM users WHERE id = ?',
       [req.user.id]
     );
 
@@ -175,7 +189,8 @@ router.put('/profile', authenticate, (req, res) => {
         last_name: user[8] || '',
         phone: user[9] || '',
         telegram_username: user[10] || '',
-        other_info: user[11] || ''
+        other_info: user[11] || '',
+        reminders_enabled_default: user[12] === 1 || user[12] === true
       }
     });
   } catch (error) {
