@@ -7,6 +7,8 @@ const { checkClientLimit, getClientCount, getClientLimit } = require('../utils/p
 const { encrypt, decrypt } = require('../services/encryption');
 const { verifyClientConsent } = require('../utils/consentCheck');
 const telegramNotify = require('../utils/telegramNotify');
+const inquiriesService = require('../services/inquiries');
+const supervisionShare = require('../services/supervisionShare');
 
 const router = express.Router();
 
@@ -2176,6 +2178,300 @@ router.post('/import-bulk', (req, res, next) => {
       res.status(500).json({ error: 'Import failed. Please try again.' });
     }
   });
+});
+
+// =====================================================================
+// INQUIRIES (T-01) - therapist-tracked client work threads
+// =====================================================================
+
+// GET /api/clients/:id/inquiries - list inquiries for a client
+// Optional filter: ?status=active|paused|closed
+router.get('/:id/inquiries', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+    const status = req.query.status || null;
+
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'list_inquiries');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+
+    const inquiries = inquiriesService.listInquiries(therapistId, clientId, { status });
+    res.json({ inquiries, total: inquiries.length });
+  } catch (error) {
+    logger.error('List inquiries error: ' + error.message);
+    res.status(500).json({ error: 'Failed to list inquiries' });
+  }
+});
+
+// GET /api/clients/:id/inquiries/:inquiryId - get a single inquiry
+router.get('/:id/inquiries/:inquiryId', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+    const inquiryId = parseInt(req.params.inquiryId, 10);
+
+    if (!Number.isFinite(inquiryId) || inquiryId <= 0) {
+      return res.status(400).json({ error: 'Invalid inquiry id' });
+    }
+
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'view_inquiry');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+
+    const inquiry = inquiriesService.getInquiry(therapistId, clientId, inquiryId);
+    if (!inquiry) {
+      return res.status(404).json({ error: 'Inquiry not found' });
+    }
+    res.json(inquiry);
+  } catch (error) {
+    logger.error('Get inquiry error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch inquiry' });
+  }
+});
+
+// POST /api/clients/:id/inquiries - create a new inquiry
+router.post('/:id/inquiries', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+    const { title, description, status } = req.body || {};
+
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'create_inquiry');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+
+    const inquiry = inquiriesService.createInquiry({
+      therapistId,
+      clientId: parseInt(clientId, 10),
+      title,
+      description,
+      status: status || 'active',
+    });
+
+    logger.info(`Therapist ${therapistId} created inquiry ${inquiry.id} for client ${clientId}`);
+    res.status(201).json(inquiry);
+  } catch (error) {
+    if (error.code === 'invalid_input') {
+      return res.status(400).json({ error: error.message });
+    }
+    logger.error('Create inquiry error: ' + error.message);
+    res.status(500).json({ error: 'Failed to create inquiry' });
+  }
+});
+
+// PUT /api/clients/:id/inquiries/:inquiryId - update an inquiry
+router.put('/:id/inquiries/:inquiryId', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+    const inquiryId = parseInt(req.params.inquiryId, 10);
+    const { title, description, status } = req.body || {};
+
+    if (!Number.isFinite(inquiryId) || inquiryId <= 0) {
+      return res.status(400).json({ error: 'Invalid inquiry id' });
+    }
+
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'update_inquiry');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+
+    const inquiry = inquiriesService.updateInquiry({
+      therapistId,
+      clientId: parseInt(clientId, 10),
+      inquiryId,
+      title,
+      description,
+      status,
+    });
+
+    if (!inquiry) {
+      return res.status(404).json({ error: 'Inquiry not found' });
+    }
+
+    logger.info(`Therapist ${therapistId} updated inquiry ${inquiryId} for client ${clientId}`);
+    res.json(inquiry);
+  } catch (error) {
+    if (error.code === 'invalid_input') {
+      return res.status(400).json({ error: error.message });
+    }
+    logger.error('Update inquiry error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update inquiry' });
+  }
+});
+
+// POST /api/clients/:id/inquiries/:inquiryId/close - close an inquiry
+router.post('/:id/inquiries/:inquiryId/close', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+    const inquiryId = parseInt(req.params.inquiryId, 10);
+
+    if (!Number.isFinite(inquiryId) || inquiryId <= 0) {
+      return res.status(400).json({ error: 'Invalid inquiry id' });
+    }
+
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'close_inquiry');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+
+    const inquiry = inquiriesService.closeInquiry(therapistId, parseInt(clientId, 10), inquiryId);
+    if (!inquiry) {
+      return res.status(404).json({ error: 'Inquiry not found' });
+    }
+
+    logger.info(`Therapist ${therapistId} closed inquiry ${inquiryId} for client ${clientId}`);
+    res.json(inquiry);
+  } catch (error) {
+    if (error.code === 'invalid_input') {
+      return res.status(400).json({ error: error.message });
+    }
+    logger.error('Close inquiry error: ' + error.message);
+    res.status(500).json({ error: 'Failed to close inquiry' });
+  }
+});
+
+// DELETE /api/clients/:id/inquiries/:inquiryId - permanently delete an inquiry
+router.delete('/:id/inquiries/:inquiryId', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+    const inquiryId = parseInt(req.params.inquiryId, 10);
+
+    if (!Number.isFinite(inquiryId) || inquiryId <= 0) {
+      return res.status(400).json({ error: 'Invalid inquiry id' });
+    }
+
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'delete_inquiry');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+
+    const ok = inquiriesService.deleteInquiry(therapistId, parseInt(clientId, 10), inquiryId);
+    if (!ok) {
+      return res.status(404).json({ error: 'Inquiry not found' });
+    }
+
+    logger.info(`Therapist ${therapistId} deleted inquiry ${inquiryId} for client ${clientId}`);
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Delete inquiry error: ' + error.message);
+    res.status(500).json({ error: 'Failed to delete inquiry' });
+  }
+});
+
+// =====================================================================
+// SUPERVISION SHARE LINKS (T-17) - read-only client history for supervisor
+// =====================================================================
+
+function publicBaseUrl(req) {
+  return (
+    process.env.FRONTEND_URL ||
+    process.env.PUBLIC_URL ||
+    `${req.protocol}://${req.get('host')}`
+  );
+}
+
+// GET /api/clients/:id/supervision-share - list all share links for this client
+router.get('/:id/supervision-share', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(clientId) || clientId <= 0) {
+      return res.status(400).json({ error: 'Invalid client id' });
+    }
+
+    // Verify client belongs to this therapist
+    const db = getDatabase();
+    const ownerCheck = db.exec(
+      "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [clientId, therapistId]
+    );
+    if (ownerCheck.length === 0 || ownerCheck[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    }
+
+    const rows = supervisionShare.listLinks(therapistId, clientId);
+    const baseUrl = publicBaseUrl(req);
+    res.json({ links: rows.map((r) => supervisionShare.toApiLink(r, baseUrl)) });
+  } catch (error) {
+    logger.error('List supervision share links error: ' + error.message);
+    res.status(500).json({ error: 'Failed to list share links' });
+  }
+});
+
+// POST /api/clients/:id/supervision-share - create a new share link
+// Body: { ttl: '1d'|'7d'|'30d', anonymize: boolean, note?: string }
+router.post('/:id/supervision-share', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(clientId) || clientId <= 0) {
+      return res.status(400).json({ error: 'Invalid client id' });
+    }
+
+    const ttl = (req.body && req.body.ttl) || '7d';
+    const anonymize = req.body && Object.prototype.hasOwnProperty.call(req.body, 'anonymize')
+      ? !!req.body.anonymize
+      : true;
+    const note = req.body && typeof req.body.note === 'string' ? req.body.note.trim() : '';
+
+    const link = supervisionShare.createLink({
+      therapistId,
+      clientId,
+      ttl,
+      anonymize,
+      note,
+    });
+
+    logger.info(`Therapist ${therapistId} created supervision share for client ${clientId} (ttl=${ttl}, anonymize=${anonymize})`);
+    res.status(201).json({ link: supervisionShare.toApiLink(link, publicBaseUrl(req)) });
+  } catch (error) {
+    if (error.code === 'invalid_input') {
+      return res.status(400).json({ error: error.message });
+    }
+    if (error.code === 'not_found') {
+      return res.status(404).json({ error: error.message });
+    }
+    logger.error('Create supervision share error: ' + error.message);
+    res.status(500).json({ error: 'Failed to create share link' });
+  }
+});
+
+// DELETE /api/clients/:id/supervision-share/:linkId - revoke (soft delete)
+router.delete('/:id/supervision-share/:linkId', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = parseInt(req.params.id, 10);
+    const linkId = parseInt(req.params.linkId, 10);
+    if (!Number.isFinite(clientId) || clientId <= 0) {
+      return res.status(400).json({ error: 'Invalid client id' });
+    }
+    if (!Number.isFinite(linkId) || linkId <= 0) {
+      return res.status(400).json({ error: 'Invalid link id' });
+    }
+
+    const link = supervisionShare.getLinkById(therapistId, linkId);
+    if (!link || link.client_id !== clientId) {
+      return res.status(404).json({ error: 'Share link not found' });
+    }
+
+    const ok = supervisionShare.revokeLink(therapistId, linkId);
+    if (!ok) {
+      return res.status(404).json({ error: 'Share link not found' });
+    }
+
+    logger.info(`Therapist ${therapistId} revoked supervision share link ${linkId}`);
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Revoke supervision share error: ' + error.message);
+    res.status(500).json({ error: 'Failed to revoke share link' });
+  }
 });
 
 module.exports = router;

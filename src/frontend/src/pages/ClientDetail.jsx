@@ -7,6 +7,8 @@ import useWebSocket from '../hooks/useWebSocket';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { formatUserDate, formatUserDateOnly, getUserTimezone } from '../utils/formatDate';
 import AudioPlayer from '../components/AudioPlayer';
+import CommentsPanel from '../components/CommentsPanel';
+import SupervisionShareModal from '../components/SupervisionShareModal';
 
 const API = '/api';
 
@@ -212,7 +214,36 @@ function ClientDetail() {
   const [sessionUploadProgress, setSessionUploadProgress] = useState(0);
   const [sessionUploadMsg, setSessionUploadMsg] = useState('');
   const [sessionUploadError, setSessionUploadError] = useState('');
+  const [sessionDragActive, setSessionDragActive] = useState(false);
   const sessionFileInputRef = useRef(null);
+
+  // Accepted media formats for session upload (mp3, m4a, wav, mp4, webm, ogg)
+  const SESSION_UPLOAD_MAX_BYTES = 100 * 1024 * 1024; // 100MB
+  const SESSION_UPLOAD_ACCEPT = 'audio/*,video/*,.mp3,.m4a,.wav,.mp4,.webm,.ogg';
+
+  // Validate file type/size before accepting upload
+  function validateSessionFile(file) {
+    if (!file) return { valid: false, error: 'No file selected' };
+    if (file.size > SESSION_UPLOAD_MAX_BYTES) {
+      return {
+        valid: false,
+        error: t('session.upload.tooLarge', 'File too large. Maximum size is 100MB.') +
+          ` (${(file.size / (1024 * 1024)).toFixed(1)}MB)`
+      };
+    }
+    const name = (file.name || '').toLowerCase();
+    const allowedExt = ['.mp3', '.m4a', '.wav', '.mp4', '.webm', '.ogg', '.aac', '.flac', '.mov', '.mkv'];
+    const hasAllowedExt = allowedExt.some(ext => name.endsWith(ext));
+    const isAudio = (file.type || '').startsWith('audio/');
+    const isVideo = (file.type || '').startsWith('video/');
+    if (!isAudio && !isVideo && !hasAllowedExt) {
+      return {
+        valid: false,
+        error: t('session.upload.invalidType', 'Unsupported file type. Use mp3, m4a, wav, mp4, webm, or ogg.')
+      };
+    }
+    return { valid: true };
+  }
   const [exercises, setExercises] = useState([]);
   const [exercisesTotal, setExercisesTotal] = useState(0);
   const [exercisesLoading, setExercisesLoading] = useState(false);
@@ -242,6 +273,22 @@ function ClientDetail() {
   const [sosLoading, setSosLoading] = useState(false);
   const [sosActionLoading, setSosActionLoading] = useState(null);
   const [sosMsg, setSosMsg] = useState('');
+  // Inquiries state (T-01)
+  const [inquiries, setInquiries] = useState([]);
+  const [inquiriesTotal, setInquiriesTotal] = useState(0);
+  const [inquiriesLoading, setInquiriesLoading] = useState(false);
+  const [inquiriesError, setInquiriesError] = useState('');
+  const [inquiryStatusFilter, setInquiryStatusFilter] = useState('');
+  const [showInquiryForm, setShowInquiryForm] = useState(false);
+  const [inquiryFormTitle, setInquiryFormTitle] = useState('');
+  const [inquiryFormDescription, setInquiryFormDescription] = useState('');
+  const [inquirySaving, setInquirySaving] = useState(false);
+  const [editingInquiryId, setEditingInquiryId] = useState(null);
+  const [editingInquiryTitle, setEditingInquiryTitle] = useState('');
+  const [editingInquiryDescription, setEditingInquiryDescription] = useState('');
+  const [inquiryActionLoading, setInquiryActionLoading] = useState(null);
+  // T-17 Supervision share modal
+  const [showSupervisionShare, setShowSupervisionShare] = useState(false);
   const { on: onWsEvent } = useWebSocket();
   const token = localStorage.getItem('token');
 
@@ -285,6 +332,13 @@ function ClientDetail() {
       setSessionsTotal(0);
       setExercises([]);
       setExercisesTotal(0);
+      setInquiries([]);
+      setInquiriesTotal(0);
+      setInquiryStatusFilter('');
+      setShowInquiryForm(false);
+      setInquiryFormTitle('');
+      setInquiryFormDescription('');
+      setEditingInquiryId(null);
       setNewNoteContent('');
       setContext(null);
       setContextForm({ anamnesis: '', current_goals: '', contraindications: '', ai_instructions: '' });
@@ -335,6 +389,154 @@ function ClientDetail() {
     }
   }, [id, token]);
 
+  // Inquiries fetch function (T-01)
+  const fetchInquiries = useCallback(async (signal, statusOverride) => {
+    setInquiriesLoading(true);
+    setInquiriesError('');
+    try {
+      const status = statusOverride !== undefined ? statusOverride : inquiryStatusFilter;
+      const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+      const res = await fetch(`${API}/clients/${id}/inquiries${qs}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal
+      });
+      if (signal && signal.aborted) return;
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setInquiriesError(data.error || t('inquiry.errorLoad'));
+        return;
+      }
+      const data = await res.json();
+      if (signal && signal.aborted) return;
+      setInquiries(data.inquiries || []);
+      setInquiriesTotal(data.total || 0);
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        setInquiriesError(e.message);
+      }
+    } finally {
+      setInquiriesLoading(false);
+    }
+  }, [id, token, inquiryStatusFilter, t]);
+
+  async function handleCreateInquiry(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!inquiryFormTitle.trim() || inquirySaving) return;
+    setInquirySaving(true);
+    setInquiriesError('');
+    try {
+      const res = await fetch(`${API}/clients/${id}/inquiries`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          title: inquiryFormTitle.trim(),
+          description: inquiryFormDescription.trim()
+        })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || t('inquiry.errorSave'));
+      }
+      setInquiryFormTitle('');
+      setInquiryFormDescription('');
+      setShowInquiryForm(false);
+      await fetchInquiries();
+    } catch (err) {
+      setInquiriesError(err.message);
+    } finally {
+      setInquirySaving(false);
+    }
+  }
+
+  function startEditInquiry(inquiry) {
+    setEditingInquiryId(inquiry.id);
+    setEditingInquiryTitle(inquiry.title);
+    setEditingInquiryDescription(inquiry.description || '');
+  }
+
+  function cancelEditInquiry() {
+    setEditingInquiryId(null);
+    setEditingInquiryTitle('');
+    setEditingInquiryDescription('');
+  }
+
+  async function handleSaveInquiryEdit(inquiryId) {
+    if (!editingInquiryTitle.trim() || inquiryActionLoading === inquiryId) return;
+    setInquiryActionLoading(inquiryId);
+    setInquiriesError('');
+    try {
+      const res = await fetch(`${API}/clients/${id}/inquiries/${inquiryId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          title: editingInquiryTitle.trim(),
+          description: editingInquiryDescription.trim()
+        })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || t('inquiry.errorSave'));
+      }
+      cancelEditInquiry();
+      await fetchInquiries();
+    } catch (err) {
+      setInquiriesError(err.message);
+    } finally {
+      setInquiryActionLoading(null);
+    }
+  }
+
+  async function handleChangeInquiryStatus(inquiryId, newStatus) {
+    setInquiryActionLoading(inquiryId);
+    setInquiriesError('');
+    try {
+      const res = await fetch(`${API}/clients/${id}/inquiries/${inquiryId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || t('inquiry.errorSave'));
+      }
+      await fetchInquiries();
+    } catch (err) {
+      setInquiriesError(err.message);
+    } finally {
+      setInquiryActionLoading(null);
+    }
+  }
+
+  async function handleDeleteInquiry(inquiryId) {
+    if (!window.confirm(t('inquiry.confirmDelete'))) return;
+    setInquiryActionLoading(inquiryId);
+    setInquiriesError('');
+    try {
+      const res = await fetch(`${API}/clients/${id}/inquiries/${inquiryId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok && res.status !== 404) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to delete inquiry');
+      }
+      await fetchInquiries();
+    } catch (err) {
+      setInquiriesError(err.message);
+    } finally {
+      setInquiryActionLoading(null);
+    }
+  }
+
   // Load client and all sub-resources when client ID changes
   useEffect(() => {
     if (!token) {
@@ -364,6 +566,7 @@ function ClientDetail() {
         fetchSessions(controller.signal);
         fetchExercises(controller.signal);
         fetchSos(controller.signal);
+        fetchInquiries(controller.signal);
       }
     });
 
@@ -393,6 +596,13 @@ function ClientDetail() {
     });
     return unsubscribe;
   }, [onWsEvent, id, fetchSos]);
+
+  // Re-fetch inquiries when status filter changes (after initial load)
+  useEffect(() => {
+    if (!token || !isValidId) return;
+    fetchInquiries();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inquiryStatusFilter]);
 
   async function fetchClient(signal) {
     try {
@@ -863,12 +1073,48 @@ function ClientDetail() {
         fetchSessions();
       }, 8000);
 
+      // Redirect to the new session detail page so the user sees transcription status
+      if (result && result.id) {
+        setTimeout(() => {
+          navigate(`/sessions/${result.id}`);
+        }, 800);
+      }
+
     } catch (e) {
       setSessionUploadError(e.message);
     } finally {
       setSessionUploading(false);
       setSessionUploadProgress(0);
     }
+  }
+
+  // Drag-and-drop handlers for session upload dropzone
+  function handleSessionDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!sessionUploading) setSessionDragActive(true);
+  }
+  function handleSessionDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setSessionDragActive(false);
+  }
+  function handleSessionDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setSessionDragActive(false);
+    if (sessionUploading) return;
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!file) return;
+    const v = validateSessionFile(file);
+    if (!v.valid) {
+      setSessionUploadError(v.error);
+      setSessionUploadFile(null);
+      return;
+    }
+    setSessionUploadFile(file);
+    setSessionUploadMsg('');
+    setSessionUploadError('');
   }
 
   async function handleExport() {
@@ -1140,6 +1386,15 @@ function ClientDetail() {
                 <span>📥</span>
                 {exportLoading ? t('clientDetail.exportDownloading', 'Exporting...') : t('clientDetail.exportAllData', 'Export All Data')}
               </button>
+              <button
+                type="button"
+                onClick={() => setShowSupervisionShare(true)}
+                className="px-3 py-1.5 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700 flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1"
+                title={t('supervision.openModalHint', 'Generate a read-only share link for a supervisor')}
+              >
+                <span>🔗</span>
+                {t('supervision.openModalBtn', 'Share for supervision')}
+              </button>
               {exportMsg && (
                 <span className={`text-sm ${exportMsg.includes(t('clientDetail.exportSuccess', 'success')) || exportMsg === t('clientDetail.exportSuccess') ? 'text-green-600' : 'text-amber-600'}`}>
                   {exportMsg}
@@ -1147,6 +1402,17 @@ function ClientDetail() {
               )}
             </div>
           </div>
+        )}
+
+        {/* T-17 Supervision share modal */}
+        {client && (
+          <SupervisionShareModal
+            open={showSupervisionShare}
+            onClose={() => setShowSupervisionShare(false)}
+            clientId={client.id}
+            clientLabel={[client.first_name, client.last_name].filter(Boolean).join(' ') || client.email || client.telegram_id || `#${client.id}`}
+            token={token}
+          />
         )}
 
         {/* Tab Navigation */}
@@ -1168,6 +1434,10 @@ function ClientDetail() {
             className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'sessions' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >🎧 {t('clientDetail.sessionsTab')} ({sessionsTotal})</button>
           <button
+            onClick={() => setActiveTab('inquiries')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'inquiries' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+          >🎯 {t('clientDetail.inquiriesTab')} ({inquiriesTotal})</button>
+          <button
             onClick={() => setActiveTab('exercises')}
             className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'exercises' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >💪 {t('clientDetail.exercisesTab')} ({exercisesTotal})</button>
@@ -1175,6 +1445,10 @@ function ClientDetail() {
             onClick={() => setActiveTab('context')}
             className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'context' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
           >🧠 {t('clientDetail.contextTab')}</button>
+          <button
+            onClick={() => setActiveTab('comments')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'comments' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+          >💬 {t('comments.title')}</button>
           <button
             onClick={() => setActiveTab('sos')}
             className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'sos' ? 'bg-red-600 text-white' : sosEvents.some(e => e.status !== 'resolved') ? 'bg-red-50 text-red-700 border border-red-300 animate-pulse' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
@@ -1850,18 +2124,26 @@ function ClientDetail() {
               <button
                 onClick={() => sessionFileInputRef.current && sessionFileInputRef.current.click()}
                 disabled={sessionUploading}
+                data-testid="session-new-button"
                 className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                <span>🎙️</span> {t('clientDetail.uploadSession', 'Upload Session Recording')}
+                <span>🎙️</span> {t('session.upload.newSession', '+ New Session')}
               </button>
               <input
                 ref={sessionFileInputRef}
                 type="file"
-                accept="audio/*,video/*,.webm,.mp3,.mp4,.wav,.ogg,.m4a"
+                accept={SESSION_UPLOAD_ACCEPT}
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files[0];
                   if (file) {
+                    const v = validateSessionFile(file);
+                    if (!v.valid) {
+                      setSessionUploadError(v.error);
+                      setSessionUploadFile(null);
+                      e.target.value = '';
+                      return;
+                    }
                     setSessionUploadFile(file);
                     setSessionUploadMsg('');
                     setSessionUploadError('');
@@ -1870,7 +2152,48 @@ function ClientDetail() {
               />
             </div>
 
-            {/* Upload area */}
+            {/* Always-visible Dropzone (drag-n-drop + click-to-select) */}
+            {!sessionUploading && !sessionUploadFile && (
+              <div
+                data-testid="session-dropzone"
+                role="button"
+                tabIndex={0}
+                onClick={() => sessionFileInputRef.current && sessionFileInputRef.current.click()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    sessionFileInputRef.current && sessionFileInputRef.current.click();
+                  }
+                }}
+                onDragOver={handleSessionDragOver}
+                onDragEnter={handleSessionDragOver}
+                onDragLeave={handleSessionDragLeave}
+                onDrop={handleSessionDrop}
+                className={`mb-4 border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                  sessionDragActive
+                    ? 'border-teal-500 bg-teal-50'
+                    : 'border-stone-300 bg-stone-50 hover:border-teal-400 hover:bg-teal-50'
+                }`}
+              >
+                <div className="text-4xl mb-2">🎙️</div>
+                <p className="text-sm font-medium text-stone-700 mb-1">
+                  {sessionDragActive
+                    ? t('session.upload.dropHere', 'Drop the file here to upload')
+                    : t('session.upload.dragDrop', 'Drag & drop a session recording here')}
+                </p>
+                <p className="text-xs text-stone-500 mb-3">
+                  {t('session.upload.clickToBrowse', 'or click to browse')}
+                </p>
+                <p className="text-xs text-stone-400">
+                  {t('session.upload.acceptedFormats', 'Supported: mp3, m4a, wav, mp4, webm, ogg')}
+                </p>
+                <p className="text-xs text-stone-400">
+                  {t('session.upload.sizeLimit', 'Max size: 100MB')}
+                </p>
+              </div>
+            )}
+
+            {/* Selected file (ready to upload) */}
             {sessionUploadFile && !sessionUploading && (
               <div className="mb-4 border-2 border-dashed border-teal-300 rounded-lg p-4 bg-teal-50">
                 <div className="flex items-center justify-between">
@@ -1884,6 +2207,7 @@ function ClientDetail() {
                   <div className="flex gap-2">
                     <button
                       onClick={handleSessionUpload}
+                      data-testid="session-upload-confirm"
                       className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
                     >
                       {t('clientDetail.uploadBtn', 'Upload & Process')}
@@ -1901,12 +2225,12 @@ function ClientDetail() {
 
             {/* Upload progress */}
             {sessionUploading && (
-              <div className="mb-4 border border-blue-200 rounded-lg p-4 bg-blue-50">
+              <div className="mb-4 border border-blue-200 rounded-lg p-4 bg-blue-50" data-testid="session-upload-progress">
                 <div className="flex items-center gap-3 mb-2">
                   <LoadingSpinner size={20} />
                   <span className="text-sm font-medium text-blue-800">
                     {sessionUploadProgress < 100
-                      ? t('clientDetail.uploading', 'Uploading...') + ` ${sessionUploadProgress}%`
+                      ? t('session.upload.progress', 'Uploading...') + ` ${sessionUploadProgress}%`
                       : t('clientDetail.processing', 'Processing...')}
                   </span>
                 </div>
@@ -1928,16 +2252,18 @@ function ClientDetail() {
 
             {/* Upload error message */}
             {sessionUploadError && (
-              <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm flex items-center justify-between">
+              <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm flex items-center justify-between" data-testid="session-upload-error">
                 <div className="flex items-center gap-2">
                   <span>❌</span> {sessionUploadError}
                 </div>
-                <button
-                  onClick={() => { setSessionUploadError(''); handleSessionUpload(); }}
-                  className="text-red-600 hover:text-red-800 text-sm font-medium underline"
-                >
-                  {t('retry', 'Retry')}
-                </button>
+                {sessionUploadFile && (
+                  <button
+                    onClick={() => { setSessionUploadError(''); handleSessionUpload(); }}
+                    className="text-red-600 hover:text-red-800 text-sm font-medium underline"
+                  >
+                    {t('retry', 'Retry')}
+                  </button>
+                )}
               </div>
             )}
 
@@ -2278,6 +2604,257 @@ function ClientDetail() {
             </div>
           )}
         </div>}
+
+        {/* Inquiries Tab (T-01) */}
+        {activeTab === 'inquiries' && (
+          <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6" data-testid="inquiries-tab">
+            <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+              <h3 className="text-lg font-bold text-stone-800">🎯 {t('clientDetail.inquiriesTab')} ({inquiriesTotal})</h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Status filter */}
+                <select
+                  value={inquiryStatusFilter}
+                  onChange={(e) => setInquiryStatusFilter(e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  data-testid="inquiry-status-filter"
+                >
+                  <option value="">{t('inquiry.filterAll')}</option>
+                  <option value="active">{t('inquiry.status.active')}</option>
+                  <option value="paused">{t('inquiry.status.paused')}</option>
+                  <option value="closed">{t('inquiry.status.closed')}</option>
+                </select>
+                {!showInquiryForm && (
+                  <button
+                    onClick={() => setShowInquiryForm(true)}
+                    className="px-3 py-1.5 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700"
+                    data-testid="inquiry-create-btn"
+                  >
+                    + {t('inquiry.create')}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {inquiriesError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700" data-testid="inquiry-error">
+                {inquiriesError}
+              </div>
+            )}
+
+            {/* Create form */}
+            {showInquiryForm && (
+              <form onSubmit={handleCreateInquiry} className="mb-6 p-4 border border-stone-200 rounded-lg bg-stone-50" data-testid="inquiry-create-form">
+                <div className="mb-3">
+                  <label className="block text-sm font-medium text-stone-700 mb-1">{t('inquiry.title')} *</label>
+                  <input
+                    type="text"
+                    value={inquiryFormTitle}
+                    onChange={(e) => setInquiryFormTitle(e.target.value)}
+                    placeholder={t('inquiry.titlePlaceholder')}
+                    maxLength={200}
+                    required
+                    autoFocus
+                    className="w-full px-3 py-2 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    data-testid="inquiry-title-input"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="block text-sm font-medium text-stone-700 mb-1">{t('inquiry.description')}</label>
+                  <textarea
+                    value={inquiryFormDescription}
+                    onChange={(e) => setInquiryFormDescription(e.target.value)}
+                    placeholder={t('inquiry.descriptionPlaceholder')}
+                    maxLength={5000}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 resize-y"
+                    data-testid="inquiry-description-input"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={inquirySaving || !inquiryFormTitle.trim()}
+                    className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
+                    data-testid="inquiry-submit-btn"
+                  >
+                    {inquirySaving ? '...' : t('inquiry.createSubmit')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowInquiryForm(false);
+                      setInquiryFormTitle('');
+                      setInquiryFormDescription('');
+                      setInquiriesError('');
+                    }}
+                    className="px-4 py-2 bg-white text-stone-600 rounded-lg text-sm font-medium hover:bg-stone-100 border border-stone-200"
+                  >
+                    {t('inquiry.cancel')}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* List */}
+            {inquiriesLoading ? (
+              <div className="text-center py-8 text-stone-500">{t('inquiry.loading')}</div>
+            ) : inquiries.length === 0 ? (
+              <div className="text-center py-12" data-testid="inquiry-empty-state">
+                <div className="text-4xl mb-3">🎯</div>
+                <p className="text-stone-500">{t('inquiry.empty')}</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {inquiries.map((inquiry) => {
+                  const statusBadge = {
+                    active: { color: 'bg-green-100 text-green-700 border-green-200', label: t('inquiry.status.active') },
+                    paused: { color: 'bg-amber-100 text-amber-700 border-amber-200', label: t('inquiry.status.paused') },
+                    closed: { color: 'bg-stone-100 text-stone-600 border-stone-200', label: t('inquiry.status.closed') },
+                  }[inquiry.status] || { color: 'bg-stone-100 text-stone-600 border-stone-200', label: inquiry.status };
+
+                  const isEditing = editingInquiryId === inquiry.id;
+
+                  return (
+                    <div
+                      key={inquiry.id}
+                      className={`border rounded-lg p-4 ${inquiry.status === 'closed' ? 'border-stone-200 bg-stone-50' : 'border-stone-200 bg-white'}`}
+                      data-testid={`inquiry-item-${inquiry.id}`}
+                    >
+                      {isEditing ? (
+                        <div>
+                          <input
+                            type="text"
+                            value={editingInquiryTitle}
+                            onChange={(e) => setEditingInquiryTitle(e.target.value)}
+                            maxLength={200}
+                            className="w-full px-3 py-2 mb-2 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            data-testid={`inquiry-edit-title-${inquiry.id}`}
+                          />
+                          <textarea
+                            value={editingInquiryDescription}
+                            onChange={(e) => setEditingInquiryDescription(e.target.value)}
+                            maxLength={5000}
+                            rows={3}
+                            className="w-full px-3 py-2 mb-2 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 resize-y"
+                            data-testid={`inquiry-edit-description-${inquiry.id}`}
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleSaveInquiryEdit(inquiry.id)}
+                              disabled={inquiryActionLoading === inquiry.id || !editingInquiryTitle.trim()}
+                              className="px-3 py-1.5 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
+                            >
+                              {inquiryActionLoading === inquiry.id ? '...' : t('inquiry.save')}
+                            </button>
+                            <button
+                              onClick={cancelEditInquiry}
+                              className="px-3 py-1.5 bg-white text-stone-600 rounded-lg text-sm font-medium hover:bg-stone-100 border border-stone-200"
+                            >
+                              {t('inquiry.cancel')}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-start justify-between gap-3 flex-wrap">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap mb-1">
+                                <h4 className="text-base font-semibold text-stone-800 break-words">{inquiry.title}</h4>
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${statusBadge.color}`} data-testid={`inquiry-status-badge-${inquiry.id}`}>
+                                  {statusBadge.label}
+                                </span>
+                              </div>
+                              {inquiry.description && (
+                                <p className="text-sm text-stone-600 whitespace-pre-wrap mt-1">{inquiry.description}</p>
+                              )}
+                              <div className="text-xs text-stone-400 mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                                <span>{t('inquiry.openedAt')}: {formatUserDateOnly(inquiry.opened_at)}</span>
+                                {inquiry.closed_at && (
+                                  <span>{t('inquiry.closedAt')}: {formatUserDateOnly(inquiry.closed_at)}</span>
+                                )}
+                                <span>{t('inquiry.updatedAt')}: {formatUserDate(inquiry.updated_at)}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            <button
+                              onClick={() => startEditInquiry(inquiry)}
+                              disabled={inquiryActionLoading === inquiry.id}
+                              className="px-3 py-1 bg-stone-50 text-stone-700 rounded text-xs font-medium hover:bg-stone-100 border border-stone-200 disabled:opacity-50"
+                              data-testid={`inquiry-edit-btn-${inquiry.id}`}
+                            >
+                              ✏️ {t('inquiry.edit')}
+                            </button>
+                            {inquiry.status !== 'closed' && (
+                              <button
+                                onClick={() => handleChangeInquiryStatus(inquiry.id, 'closed')}
+                                disabled={inquiryActionLoading === inquiry.id}
+                                className="px-3 py-1 bg-amber-50 text-amber-700 rounded text-xs font-medium hover:bg-amber-100 border border-amber-200 disabled:opacity-50"
+                                data-testid={`inquiry-close-btn-${inquiry.id}`}
+                              >
+                                {inquiryActionLoading === inquiry.id ? '...' : t('inquiry.close')}
+                              </button>
+                            )}
+                            {inquiry.status === 'closed' && (
+                              <button
+                                onClick={() => handleChangeInquiryStatus(inquiry.id, 'active')}
+                                disabled={inquiryActionLoading === inquiry.id}
+                                className="px-3 py-1 bg-green-50 text-green-700 rounded text-xs font-medium hover:bg-green-100 border border-green-200 disabled:opacity-50"
+                                data-testid={`inquiry-reopen-btn-${inquiry.id}`}
+                              >
+                                {t('inquiry.reopen')}
+                              </button>
+                            )}
+                            {inquiry.status === 'active' && (
+                              <button
+                                onClick={() => handleChangeInquiryStatus(inquiry.id, 'paused')}
+                                disabled={inquiryActionLoading === inquiry.id}
+                                className="px-3 py-1 bg-stone-50 text-stone-700 rounded text-xs font-medium hover:bg-stone-100 border border-stone-200 disabled:opacity-50"
+                              >
+                                ⏸ {t('inquiry.status.paused')}
+                              </button>
+                            )}
+                            {inquiry.status === 'paused' && (
+                              <button
+                                onClick={() => handleChangeInquiryStatus(inquiry.id, 'active')}
+                                disabled={inquiryActionLoading === inquiry.id}
+                                className="px-3 py-1 bg-green-50 text-green-700 rounded text-xs font-medium hover:bg-green-100 border border-green-200 disabled:opacity-50"
+                              >
+                                ▶ {t('inquiry.status.active')}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDeleteInquiry(inquiry.id)}
+                              disabled={inquiryActionLoading === inquiry.id}
+                              className="px-3 py-1 bg-red-50 text-red-700 rounded text-xs font-medium hover:bg-red-100 border border-red-200 disabled:opacity-50"
+                              data-testid={`inquiry-delete-btn-${inquiry.id}`}
+                            >
+                              🗑 {t('inquiry.delete')}
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Comments Tab (T-10 dual-comment) */}
+        {activeTab === 'comments' && (() => {
+          let storedUser = {};
+          try { storedUser = JSON.parse(localStorage.getItem('user') || '{}'); } catch { /* noop */ }
+          return (
+            <CommentsPanel
+              entityType="client"
+              entityId={Number(id)}
+              userRole={storedUser.role || 'therapist'}
+              currentUserId={storedUser.id}
+            />
+          );
+        })()}
 
         {/* SOS History Tab */}
         {activeTab === 'sos' && (

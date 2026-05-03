@@ -940,6 +940,104 @@ function applySchema(db) {
     logger.warn('Viewer role migration skipped: ' + e.message);
   }
 
+  // Create inquiries table — therapist-tracked client requests/work threads.
+  // A client can have multiple parallel/sequential inquiries (e.g. "less reactive
+  // with family", "stop procrastinating"). Sessions can be linked to inquiries.
+  // title/description encrypted at app layer (Class A). Metadata is Class B.
+  db.run(`CREATE TABLE IF NOT EXISTS inquiries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL REFERENCES users(id),
+    therapist_id INTEGER NOT NULL REFERENCES users(id),
+    title_encrypted TEXT NOT NULL,
+    description_encrypted TEXT,
+    encryption_key_id INTEGER REFERENCES encryption_keys(id),
+    payload_version INTEGER DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'paused', 'closed')),
+    opened_at TEXT DEFAULT (datetime('now')),
+    closed_at TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_inquiries_client ON inquiries(client_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_inquiries_therapist ON inquiries(therapist_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_inquiries_status ON inquiries(status)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_inquiries_therapist_client ON inquiries(therapist_id, client_id)');
+
+  // T-10: Polymorphic comments table — dual-comment model (private + shared).
+  // Replaces the single-purpose therapist_notes table with a generalized model
+  // that can attach comments to ANY entity (client, session, assignment, report,
+  // exercise_completion, inquiry). Each comment has a visibility flag:
+  //   - 'private' = only visible to the author
+  //   - 'shared'  = visible to both therapist and client
+  // content_encrypted is Class A (AES at app layer). All other fields are Class B.
+  db.run(`CREATE TABLE IF NOT EXISTS comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_type TEXT NOT NULL CHECK(entity_type IN ('client', 'session', 'assignment', 'assignment_report', 'exercise_completion', 'inquiry')),
+    entity_id INTEGER NOT NULL,
+    author_id INTEGER NOT NULL REFERENCES users(id),
+    author_role TEXT NOT NULL CHECK(author_role IN ('therapist', 'client', 'superadmin')),
+    visibility TEXT NOT NULL DEFAULT 'private' CHECK(visibility IN ('private', 'shared')),
+    content_encrypted TEXT NOT NULL,
+    encryption_key_id INTEGER REFERENCES encryption_keys(id),
+    payload_version INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_comments_entity ON comments(entity_type, entity_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_comments_author ON comments(author_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_comments_visibility ON comments(visibility)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_comments_entity_visibility ON comments(entity_type, entity_id, visibility)');
+
+  // T-10: One-time migration of existing therapist_notes -> comments.
+  // Each existing note becomes a private comment by the therapist on the client entity.
+  // Idempotent: only runs if therapist_notes has data and we haven't migrated yet.
+  try {
+    const migCheck = db.exec(
+      "SELECT COUNT(*) FROM comments WHERE entity_type = 'client' AND author_role = 'therapist' AND visibility = 'private'"
+    );
+    const alreadyMigrated = migCheck.length > 0 ? migCheck[0].values[0][0] : 0;
+    const notesCheck = db.exec("SELECT COUNT(*) FROM therapist_notes");
+    const noteCount = notesCheck.length > 0 ? notesCheck[0].values[0][0] : 0;
+    if (noteCount > 0 && alreadyMigrated === 0) {
+      logger.info(`T-10 migration: copying ${noteCount} therapist_notes -> comments`);
+      db.run(`
+        INSERT INTO comments (
+          entity_type, entity_id, author_id, author_role, visibility,
+          content_encrypted, encryption_key_id, payload_version, created_at, updated_at
+        )
+        SELECT
+          'client', client_id, therapist_id, 'therapist', 'private',
+          note_encrypted, encryption_key_id, COALESCE(payload_version, 1), created_at, updated_at
+        FROM therapist_notes
+      `);
+      logger.info('T-10 migration: therapist_notes -> comments complete');
+    }
+  } catch (e) {
+    logger.warn('T-10 comments migration skipped: ' + e.message);
+  }
+
+  // T-17: Supervision share links — therapist generates a read-only public
+  // share link to show client history to a supervisor without sharing a password.
+  // Link has TTL (1d/7d/30d), optional anonymization, can be revoked at any time.
+  // The token is the only secret - it's checked against this table to authenticate
+  // supervisor access on /share/supervision/:token (no auth/cookies/csrf).
+  db.run(`CREATE TABLE IF NOT EXISTS supervision_share_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    therapist_id INTEGER NOT NULL REFERENCES users(id),
+    client_id INTEGER NOT NULL REFERENCES users(id),
+    token TEXT NOT NULL UNIQUE,
+    expires_at TEXT NOT NULL,
+    anonymize INTEGER NOT NULL DEFAULT 1,
+    note TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    revoked_at TEXT,
+    last_accessed_at TEXT,
+    access_count INTEGER NOT NULL DEFAULT 0
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_supervision_share_links_token ON supervision_share_links(token)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_supervision_share_links_therapist ON supervision_share_links(therapist_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_supervision_share_links_client ON supervision_share_links(client_id)');
+
   // Seed default superadmin account if not exists
   seedSuperadmin(db);
 
