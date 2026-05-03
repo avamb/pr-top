@@ -71,6 +71,18 @@ router.post('/', authenticate, requireRole('therapist', 'superadmin'), upload.si
   try {
     const therapistId = req.user.id;
     const clientId = req.body.client_id;
+    // Optional metadata coming from the New Session admin form (T-07).
+    // - scheduled_at maps to the existing sessions.scheduled_at column (meeting_date, T-02 compatible)
+    // - title is a short free-form label for the session
+    // - inquiry_id (T-01) optionally links the session to a client inquiry/work thread
+    const rawScheduledAt = typeof req.body.scheduled_at === 'string' ? req.body.scheduled_at.trim() : '';
+    const rawTitle = typeof req.body.title === 'string' ? req.body.title.trim() : '';
+    const rawInquiryId = req.body.inquiry_id;
+    const scheduledAt = rawScheduledAt ? rawScheduledAt : null;
+    const title = rawTitle ? rawTitle.slice(0, 200) : null;
+    const inquiryId = rawInquiryId !== undefined && rawInquiryId !== null && rawInquiryId !== ''
+      ? parseInt(rawInquiryId, 10)
+      : null;
 
     if (!clientId) {
       // Clean up uploaded file if validation fails
@@ -82,6 +94,13 @@ router.post('/', authenticate, requireRole('therapist', 'superadmin'), upload.si
 
     if (!req.file) {
       return res.status(400).json({ error: 'Audio file is required' });
+    }
+
+    if (inquiryId !== null && (Number.isNaN(inquiryId) || inquiryId <= 0)) {
+      if (req.file) {
+        fs.unlinkSync(req.file.path);
+      }
+      return res.status(400).json({ error: 'inquiry_id must be a positive integer' });
     }
 
     const db = getDatabase();
@@ -113,17 +132,29 @@ router.post('/', authenticate, requireRole('therapist', 'superadmin'), upload.si
       return res.status(403).json({ error: 'Client not found or not linked to you' });
     }
 
+    // If an inquiry_id was provided, verify it belongs to this therapist+client pair.
+    if (inquiryId !== null) {
+      const inquiryCheck = db.exec(
+        'SELECT id FROM inquiries WHERE id = ? AND therapist_id = ? AND client_id = ?',
+        [inquiryId, therapistId, clientId]
+      );
+      if (inquiryCheck.length === 0 || inquiryCheck[0].values.length === 0) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: 'inquiry_id not found for this client' });
+      }
+    }
+
     // Encrypt the uploaded audio file on disk
     const { encryptedPath, keyVersion, keyId } = encryptFileOnDisk(req.file.path);
 
     // Store relative path as audio_ref (opaque ID based)
     const audioRef = path.basename(encryptedPath);
 
-    // Create session record in database
+    // Create session record in database (T-07: include optional title/scheduled_at/inquiry_id)
     db.run(
-      `INSERT INTO sessions (therapist_id, client_id, audio_ref, encryption_key_id, payload_version, status)
-       VALUES (?, ?, ?, ?, ?, 'pending')`,
-      [therapistId, clientId, audioRef, keyId, keyVersion]
+      `INSERT INTO sessions (therapist_id, client_id, audio_ref, encryption_key_id, payload_version, status, scheduled_at, title, inquiry_id)
+       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+      [therapistId, clientId, audioRef, keyId, keyVersion, scheduledAt, title, inquiryId]
     );
 
     // Get the created session ID
@@ -156,6 +187,9 @@ router.post('/', authenticate, requireRole('therapist', 'superadmin'), upload.si
       therapist_id: therapistId,
       client_id: parseInt(clientId),
       audio_ref: audioRef,
+      scheduled_at: scheduledAt,
+      title: title,
+      inquiry_id: inquiryId,
       status: 'pending',
       created_at: new Date().toISOString()
     });
@@ -177,7 +211,8 @@ router.get('/:id', authenticate, requireRole('therapist', 'superadmin'), async (
 
     const result = db.exec(
       `SELECT id, therapist_id, client_id, audio_ref, transcript_encrypted, summary_encrypted,
-              encryption_key_id, payload_version, status, scheduled_at, created_at, updated_at
+              encryption_key_id, payload_version, status, scheduled_at, created_at, updated_at,
+              title, inquiry_id
        FROM sessions WHERE id = ?`,
       [sessionId]
     );
@@ -211,7 +246,9 @@ router.get('/:id', authenticate, requireRole('therapist', 'superadmin'), async (
       status: row[8],
       scheduled_at: row[9],
       created_at: row[10],
-      updated_at: row[11]
+      updated_at: row[11],
+      title: row[12] || null,
+      inquiry_id: row[13] || null
     };
 
     // Decrypt transcript if present

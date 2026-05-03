@@ -1016,6 +1016,28 @@ function applySchema(db) {
     logger.warn('T-10 comments migration skipped: ' + e.message);
   }
 
+  // T-07: Optional metadata for sessions uploaded via the admin web UI.
+  // - title: free-form short label shown next to the session in the timeline
+  // - inquiry_id: optional link to an inquiry (T-01) so the recording attaches to a thread
+  // scheduled_at already exists on the sessions table and is reused as meeting_date.
+  try {
+    db.run('ALTER TABLE sessions ADD COLUMN title TEXT');
+    logger.info('Added title column to sessions');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE sessions ADD COLUMN inquiry_id INTEGER REFERENCES inquiries(id)');
+    logger.info('Added inquiry_id column to sessions');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('CREATE INDEX IF NOT EXISTS idx_sessions_inquiry ON sessions(inquiry_id)');
+  } catch (e) {
+    // Index already exists, ignore
+  }
+
   // T-17: Supervision share links — therapist generates a read-only public
   // share link to show client history to a supervisor without sharing a password.
   // Link has TTL (1d/7d/30d), optional anonymization, can be revoked at any time.

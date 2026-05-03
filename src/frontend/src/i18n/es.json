@@ -406,7 +406,12 @@
       "tooLarge": "Archivo demasiado grande. Máximo 100 MB.",
       "invalidType": "Tipo de archivo no compatible. Usa mp3, m4a, wav, mp4, webm u ogg.",
       "success": "¡Sesión subida! Transcripción en curso...",
-      "redirecting": "Abriendo sesión..."
+      "redirecting": "Abriendo sesión...",
+      "meetingDate": "Fecha del encuentro",
+      "titleLabel": "Título (opcional)",
+      "titlePlaceholder": "p. ej. Seguimiento de la ansiedad",
+      "inquiryLabel": "Consulta (opcional)",
+      "inquiryNone": "— Sin consulta —"
     }
   },
   "clientDetail": {

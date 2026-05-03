@@ -422,7 +422,12 @@
       "tooLarge": "File too large. Maximum size is 100MB.",
       "invalidType": "Unsupported file type. Use mp3, m4a, wav, mp4, webm, or ogg.",
       "success": "Session uploaded! Transcription in progress...",
-      "redirecting": "Opening session..."
+      "redirecting": "Opening session...",
+      "meetingDate": "Meeting date",
+      "titleLabel": "Title (optional)",
+      "titlePlaceholder": "e.g. Follow-up about anxiety",
+      "inquiryLabel": "Inquiry (optional)",
+      "inquiryNone": "— No inquiry —"
     }
   },
   "clientDetail": {

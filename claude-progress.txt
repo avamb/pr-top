@@ -2634,3 +2634,80 @@ Already fully implemented as part of #292. UI has:
 
 ### Current Status
 - Feature #359: PASSING
+
+## Session: 2026-05-03 - Feature #365 (T-07 Audio upload via admin) - PASSING
+
+### Completed: T-07 Bug — make audio upload accessible from the web admin
+
+**Why this feature exists:**
+During the Alexey interview the therapist could not find a way to upload an
+audio file from the web dashboard — only the Telegram bot path worked. This
+fix turns the existing dropzone into a real "New Session" form, complete with
+the metadata fields the spec calls out (meeting_date / optional title /
+inquiry dropdown). It is a UI-wrapper task — no new endpoint was created.
+
+**What was built (backend):**
+- `src/backend/src/db/connection.js`: idempotent migration that adds two
+  columns to the existing `sessions` table:
+    - `title TEXT` — short free-form session label
+    - `inquiry_id INTEGER REFERENCES inquiries(id)` — optional T-01 link
+  Plus `idx_sessions_inquiry` index for the new column. The existing
+  `scheduled_at` column is reused as `meeting_date` (T-02-compatible).
+- `src/backend/src/routes/sessions.js`: extended `POST /api/sessions` to
+  accept three optional multipart fields (`scheduled_at`, `title`,
+  `inquiry_id`). Inputs are trimmed/validated; `inquiry_id` must parse as
+  a positive integer AND must belong to the same therapist+client (returns
+  400 otherwise). The existing client-ownership check, multer 100MB limit,
+  on-disk encryption flow, and async transcription trigger are unchanged
+  ("reuse existing endpoint, only UI wrapper"). The endpoint already lived
+  behind `authenticate + requireRole('therapist', 'superadmin')`, which is
+  exactly the admin/web flow Alexey needs.
+- `GET /api/sessions/:id` now also returns `title` and `inquiry_id` so the
+  detail page can show them once SessionDetail picks them up.
+- 201 response body now echoes back `scheduled_at`, `title`, `inquiry_id`
+  for the frontend to render immediately after upload.
+
+**What was built (frontend):**
+- `src/frontend/src/pages/ClientDetail.jsx`:
+    - Three new state vars: `sessionMeetingDate`, `sessionTitle`,
+      `sessionInquiryId`. Reset after a successful upload.
+    - `handleSessionUpload()` appends them to the `FormData` only when
+      non-empty so the request stays minimal when the user skips the form.
+    - New 3-column responsive metadata form rendered above the dropzone:
+        - meeting_date `<input type="date">` (capped at today)
+        - title `<input>` (200-char cap, placeholder)
+        - inquiry `<select>` populated from `inquiries` (already fetched on
+          page load via #359), filtered to non-`closed` items
+    - All three controls carry `data-testid` attributes:
+      `session-meeting-date`, `session-title`, `session-inquiry`,
+      plus a wrapper `session-meta-form` for downstream e2e.
+    - Existing dropzone (drag-n-drop + click-to-select), progress bar,
+      success/error banners, and post-upload redirect to /sessions/:id are
+      preserved — they were the bulk of what users saw missing.
+
+**What was built (i18n):**
+- New `session.upload.*` keys added to `en/ru/es/uk`:
+  `meetingDate`, `titleLabel`, `titlePlaceholder`, `inquiryLabel`,
+  `inquiryNone`. All four locales parse via `JSON.parse` smoke test.
+
+**Verification this session:**
+- `node -c` clean for `src/backend/src/routes/sessions.js` and
+  `src/backend/src/db/connection.js`.
+- All 4 i18n JSON files parse without errors.
+- Backend restarted cleanly on port 3001 (`/api/health` returned
+  `{status:"ok",database:"connected",tableCount:33}`).
+- Migration verified live: PRAGMA table_info(sessions) now reports
+  columns 0..13 including `12 title TEXT` and `13 inquiry_id INTEGER`.
+- Frontend Vite HMR picked up `ClientDetail.jsx` and all four locale
+  files with no compile errors (`.frontend.log` shows clean
+  `hmr update` / `page reload` events).
+- POST /api/sessions endpoint live-probed: returns
+  `{"error":"CSRF token missing"}` for unauth/no-CSRF requests,
+  confirming both routing and security gates are intact.
+- Mock data grep: zero hits for `globalThis|devStore|mockDb|mockData|
+  fakeData|dummyData|MOCK` in routes/sessions.js or ClientDetail.jsx.
+- Persistence: all writes flow through `db.run` + `saveDatabaseAfterWrite()`
+  to `prtop.db` (no in-memory state).
+
+### Current Status
+- Feature #365: PASSING (T-07 audio upload via admin web UI)

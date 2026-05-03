@@ -215,6 +215,11 @@ function ClientDetail() {
   const [sessionUploadMsg, setSessionUploadMsg] = useState('');
   const [sessionUploadError, setSessionUploadError] = useState('');
   const [sessionDragActive, setSessionDragActive] = useState(false);
+  // T-07: Optional metadata sent alongside the audio upload.
+  // meetingDate -> scheduled_at (T-02 compatible), title -> sessions.title, inquiryId -> sessions.inquiry_id (T-01).
+  const [sessionMeetingDate, setSessionMeetingDate] = useState('');
+  const [sessionTitle, setSessionTitle] = useState('');
+  const [sessionInquiryId, setSessionInquiryId] = useState('');
   const sessionFileInputRef = useRef(null);
 
   // Accepted media formats for session upload (mp3, m4a, wav, mp4, webm, ogg)
@@ -1021,6 +1026,11 @@ function ClientDetail() {
       const formData = new FormData();
       formData.append('audio', sessionUploadFile);
       formData.append('client_id', id);
+      // T-07: optional metadata from the New Session form. Only send if present so
+      // the backend keeps treating these as truly optional.
+      if (sessionMeetingDate) formData.append('scheduled_at', sessionMeetingDate);
+      if (sessionTitle.trim()) formData.append('title', sessionTitle.trim());
+      if (sessionInquiryId) formData.append('inquiry_id', sessionInquiryId);
 
       // Use XMLHttpRequest for progress tracking
       const result = await new Promise((resolve, reject) => {
@@ -1061,6 +1071,10 @@ function ClientDetail() {
 
       setSessionUploadMsg(t('clientDetail.uploadSuccess', 'Session uploaded successfully! Transcription in progress...'));
       setSessionUploadFile(null);
+      // Reset optional metadata fields (T-07)
+      setSessionMeetingDate('');
+      setSessionTitle('');
+      setSessionInquiryId('');
       if (sessionFileInputRef.current) sessionFileInputRef.current.value = '';
 
       // Refresh sessions list after a short delay to let transcription start
@@ -2151,6 +2165,62 @@ function ClientDetail() {
                 }}
               />
             </div>
+
+            {/* Optional metadata form (T-07) — meeting_date, title, inquiry dropdown.
+                Hidden during upload progress so users see the progress bar clearly.
+                Active inquiries (T-01) populate the dropdown automatically. */}
+            {!sessionUploading && (
+              <div data-testid="session-meta-form" className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-stone-600 mb-1" htmlFor="session-meeting-date">
+                    {t('session.upload.meetingDate', 'Meeting date')}
+                  </label>
+                  <input
+                    id="session-meeting-date"
+                    data-testid="session-meeting-date"
+                    type="date"
+                    value={sessionMeetingDate}
+                    onChange={(e) => setSessionMeetingDate(e.target.value)}
+                    max={new Date().toISOString().split('T')[0]}
+                    className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-stone-600 mb-1" htmlFor="session-title">
+                    {t('session.upload.titleLabel', 'Title (optional)')}
+                  </label>
+                  <input
+                    id="session-title"
+                    data-testid="session-title"
+                    type="text"
+                    value={sessionTitle}
+                    onChange={(e) => setSessionTitle(e.target.value)}
+                    maxLength={200}
+                    placeholder={t('session.upload.titlePlaceholder', 'e.g. Follow-up about anxiety')}
+                    className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-stone-600 mb-1" htmlFor="session-inquiry">
+                    {t('session.upload.inquiryLabel', 'Inquiry (optional)')}
+                  </label>
+                  <select
+                    id="session-inquiry"
+                    data-testid="session-inquiry"
+                    value={sessionInquiryId}
+                    onChange={(e) => setSessionInquiryId(e.target.value)}
+                    className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  >
+                    <option value="">{t('session.upload.inquiryNone', '— No inquiry —')}</option>
+                    {inquiries
+                      .filter(inq => inq.status !== 'closed')
+                      .map(inq => (
+                        <option key={inq.id} value={inq.id}>{inq.title}</option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+            )}
 
             {/* Always-visible Dropzone (drag-n-drop + click-to-select) */}
             {!sessionUploading && !sessionUploadFile && (
