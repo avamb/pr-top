@@ -383,6 +383,27 @@ function applySchema(db) {
     // Column already exists, ignore
   }
 
+  // T-13: Add is_template column to exercises table (migration)
+  // Marks pre-seeded library exercises as "templates / examples of formatting"
+  // so the UI can show a "Template/Пример" badge and avoid presenting them as
+  // PR-TOP-authored exercises (interview: misha_drozd_2026-04-19, lines 410-484).
+  try {
+    db.run('ALTER TABLE exercises ADD COLUMN is_template INTEGER DEFAULT 0');
+    logger.info('Added is_template column to exercises');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  // Backfill is_template: every seeded (is_custom=0) row is a template,
+  // custom exercises (is_custom=1) authored by therapists are not templates.
+  // Idempotent — only updates rows whose is_template does not already match.
+  try {
+    db.run('UPDATE exercises SET is_template = 1 WHERE is_custom = 0 AND (is_template IS NULL OR is_template != 1)');
+    db.run('UPDATE exercises SET is_template = 0 WHERE is_custom = 1 AND (is_template IS NULL OR is_template != 0)');
+  } catch (e) {
+    logger.warn('is_template backfill skipped: ' + e.message);
+  }
+
   // Backfill Ukrainian translations for existing seed exercises
   try {
     const ukCheck = db.exec("SELECT COUNT(*) FROM exercises WHERE title_uk IS NOT NULL AND is_custom = 0");

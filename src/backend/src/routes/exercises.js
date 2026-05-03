@@ -142,7 +142,10 @@ function seedDefaultExercises(db) {
       instructions_uk: '1. Визнайте: "Зараз мені важко"\n2. Нагадайте: "Всі люди переживають труднощі"\n3. Покладіть руку на серце\n4. Скажіть: "Нехай я буду добрим до себе"\n5. Дихайте спокійно 1 хвилину' },
   ];
 
-  const stmt = "INSERT INTO exercises (category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, therapist_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)";
+  // T-13: seeded exercises are templates (is_template=1) — not PR-TOP-authored
+  // exercises. Custom exercises created by therapists are stored with
+  // is_custom=1, is_template=0 elsewhere in this file.
+  const stmt = "INSERT INTO exercises (category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, NULL)";
 
   for (const ex of exercises) {
     db.run(stmt, [
@@ -171,19 +174,19 @@ router.get('/', requireAuth, (req, res) => {
     if (filter === 'my') {
       // Return only therapist's own custom exercises
       if (category) {
-        query = "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, therapist_id, created_at, updated_at FROM exercises WHERE therapist_id = ? AND is_custom = 1 AND category = ? ORDER BY category, id";
+        query = "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, updated_at FROM exercises WHERE therapist_id = ? AND is_custom = 1 AND category = ? ORDER BY category, id";
         params = [req.user.id, category];
       } else {
-        query = "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, therapist_id, created_at, updated_at FROM exercises WHERE therapist_id = ? AND is_custom = 1 ORDER BY category, id";
+        query = "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, updated_at FROM exercises WHERE therapist_id = ? AND is_custom = 1 ORDER BY category, id";
         params = [req.user.id];
       }
     } else if (category) {
       // Filter by category: system exercises + own custom exercises
-      query = "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, therapist_id, created_at, updated_at FROM exercises WHERE category = ? AND (is_custom = 0 OR therapist_id = ?) ORDER BY category, id";
+      query = "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, updated_at FROM exercises WHERE category = ? AND (is_custom = 0 OR therapist_id = ?) ORDER BY category, id";
       params = [category, req.user.id];
     } else {
       // Default: all system exercises + own custom exercises
-      query = "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, therapist_id, created_at, updated_at FROM exercises WHERE is_custom = 0 OR therapist_id = ? ORDER BY category, id";
+      query = "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, updated_at FROM exercises WHERE is_custom = 0 OR therapist_id = ? ORDER BY category, id";
       params = [req.user.id];
     }
 
@@ -253,7 +256,7 @@ router.get('/categories', requireAuth, (req, res) => {
 router.get('/:id', requireAuth, (req, res) => {
   try {
     const db = getDatabase();
-    const results = db.exec("SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, therapist_id, created_at FROM exercises WHERE id = ?", [req.params.id]);
+    const results = db.exec("SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at FROM exercises WHERE id = ?", [req.params.id]);
 
     if (!results.length || !results[0].values.length) {
       return res.status(404).json({ error: 'Exercise not found' });
@@ -318,9 +321,10 @@ router.post('/', requireAuth, (req, res) => {
       return res.status(403).json({ error: 'Only therapists can create exercises' });
     }
 
+    // T-13: custom therapist exercises are NOT templates — is_template=0
     db.run(
-      `INSERT INTO exercises (category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, therapist_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, datetime('now'), datetime('now'))`,
+      `INSERT INTO exercises (category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, datetime('now'), datetime('now'))`,
       [
         category,
         title_ru || null, title_en || null, title_es || null, title_uk || null,
@@ -346,7 +350,7 @@ router.post('/', requireAuth, (req, res) => {
 
     // Return the created exercise
     const results = db.exec(
-      "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, therapist_id, created_at, updated_at FROM exercises WHERE id = ?",
+      "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, updated_at FROM exercises WHERE id = ?",
       [exerciseId]
     );
     const columns = results[0].columns;
@@ -438,7 +442,7 @@ router.put('/:id', requireAuth, (req, res) => {
 
     // Return updated exercise
     const updated = db.exec(
-      "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, therapist_id, created_at, updated_at FROM exercises WHERE id = ?",
+      "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, updated_at FROM exercises WHERE id = ?",
       [exerciseId]
     );
     const columns = updated[0].columns;

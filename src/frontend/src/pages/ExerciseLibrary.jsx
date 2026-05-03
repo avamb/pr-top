@@ -38,17 +38,56 @@ function getLocalizedField(exercise, field, lang) {
   return exercise[`${field}_${lang}`] || exercise[field] || exercise[`${field}_en`] || '';
 }
 
+// T-13: shared template badge (top-right). Renders only for seeded library
+// exercises (is_template=1). Has hover/click tooltip explaining that the
+// exercise is just an example of formatting and the therapist is encouraged
+// to create their own. Falls back to is_custom===0 if a row predates the
+// is_template column (defensive — backend backfill handles this server-side).
+function TemplateBadge({ t }) {
+  const [showTooltip, setShowTooltip] = useState(false);
+  return (
+    <div
+      className="absolute top-2 right-2 z-10"
+      onClick={e => { e.stopPropagation(); setShowTooltip(v => !v); }}
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+      data-testid="template-badge"
+    >
+      <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded-full font-medium border border-amber-200 cursor-help select-none uppercase tracking-wide">
+        {t('exercise.templateBadge')}
+      </span>
+      {showTooltip && (
+        <div
+          className="absolute right-0 top-full mt-1 w-56 bg-stone-800 text-white text-xs rounded-lg p-2 shadow-lg z-20"
+          data-testid="template-tooltip"
+        >
+          {t('exercise.templateTooltip')}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function isTemplateExercise(exercise) {
+  if (exercise.is_template === 1) return true;
+  if (exercise.is_template === 0) return false;
+  // Defensive fallback: rows fetched before the is_template column existed.
+  return exercise.is_custom === 0;
+}
+
 function ExerciseCard({ exercise, onClick, lang, t, onEdit, onDelete, showActions }) {
   const title = getLocalizedField(exercise, 'title', lang);
   const description = getLocalizedField(exercise, 'description', lang);
+  const isTemplate = isTemplateExercise(exercise);
   return (
     <div
       className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer relative"
       onClick={onClick}
     >
+      {isTemplate && <TemplateBadge t={t} />}
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+          <div className={`flex items-center gap-2 mb-1 ${isTemplate ? 'pr-16' : ''}`}>
             <h3 className="font-semibold text-text text-base truncate">{title}</h3>
             {exercise.is_custom === 1 && (
               <span className="text-xs px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded-full font-medium shrink-0">
@@ -93,13 +132,20 @@ function ExerciseModal({ exercise, onClose, t, lang }) {
   const title = getLocalizedField(exercise, 'title', lang);
   const description = getLocalizedField(exercise, 'description', lang);
   const instructions = getLocalizedField(exercise, 'instructions', lang);
+  const isTemplate = isTemplateExercise(exercise);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6"
+        className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 relative"
         onClick={e => e.stopPropagation()}
       >
+        {/* T-13: Template badge in top-right of detail view (offset from close button) */}
+        {isTemplate && (
+          <div className="absolute top-4 right-12">
+            <TemplateBadge t={t} />
+          </div>
+        )}
         <div className="flex justify-between items-start mb-4">
           <div>
             <div className="flex items-center gap-2 mb-2">
@@ -112,7 +158,7 @@ function ExerciseModal({ exercise, onClose, t, lang }) {
                 </span>
               )}
             </div>
-            <h2 className="text-xl font-bold text-text">{title}</h2>
+            <h2 className={`text-xl font-bold text-text ${isTemplate ? 'pr-12' : ''}`}>{title}</h2>
           </div>
           <button
             onClick={onClose}
@@ -122,6 +168,13 @@ function ExerciseModal({ exercise, onClose, t, lang }) {
             &times;
           </button>
         </div>
+
+        {/* T-13: Inline notice that this is a formatting example, not a PR-TOP-authored exercise */}
+        {isTemplate && (
+          <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm" data-testid="template-notice">
+            {t('exercise.templateTooltip')}
+          </div>
+        )}
 
         <div className="mb-4">
           <h3 className="text-sm font-semibold text-secondary uppercase tracking-wide mb-1">{t('exerciseLibrary.description')}</h3>

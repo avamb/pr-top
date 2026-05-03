@@ -2711,3 +2711,86 @@ inquiry dropdown). It is a UI-wrapper task — no new endpoint was created.
 
 ### Current Status
 - Feature #365: PASSING (T-07 audio upload via admin web UI)
+
+## Session: 2026-05-03 - Feature #371 (T-13 Template/Пример badge) - PASSING
+
+### Completed: T-13 — "Пример/Template" label on library exercises
+
+**Why this feature exists:**
+During the Misha Drozd interview (docs/new_fichas/customer-development-meetings/
+misha_drozd_2026-04-19.md, lines 410-484), the therapist warned that weak/
+generic seed exercises (e.g. "Cognitive Reframing") risk discrediting PR-TOP
+because psychologists assume the platform itself is endorsing them as
+exercises. The fix is to relabel each seeded card as a *formatting example*,
+not a PR-TOP-authored exercise, while leaving the therapist's own custom
+exercises untouched.
+
+**What was built (backend):**
+- `src/backend/src/db/connection.js`: idempotent migration adds the
+  `is_template INTEGER DEFAULT 0` column to the existing `exercises` table.
+  Plus a one-shot backfill that keeps `is_template` aligned with `is_custom`:
+    - is_custom=0 (seeded) -> is_template=1
+    - is_custom=1 (custom) -> is_template=0
+  The backfill uses guarded UPDATEs (`is_template IS NULL OR is_template != ?`)
+  so it stays idempotent across restarts.
+- `src/backend/src/routes/exercises.js`:
+    - `seedDefaultExercises` INSERT now sets `is_template=1` on every seeded
+      row (alongside the existing is_custom=0).
+    - The custom-exercise POST INSERT now sets `is_template=0` (alongside
+      is_custom=1) so therapist-authored exercises are clearly NOT templates.
+    - All four SELECT queries (list, list-by-category, list-my, GET /:id)
+      now project `is_template` so the frontend can render the badge without
+      another round trip.
+
+**What was built (frontend):**
+- `src/frontend/src/pages/ExerciseLibrary.jsx`:
+    - New `TemplateBadge` component — absolutely positioned in the top-right
+      of the card (and detail modal). Hover OR click toggles a tooltip that
+      explains: "This is a formatting example. You can use it or create your
+      own exercise in My Exercises." `data-testid="template-badge"` and
+      `data-testid="template-tooltip"` for downstream e2e.
+    - New `isTemplateExercise()` helper: returns true when `is_template===1`,
+      false when `is_template===0`, and falls back to `is_custom===0` for
+      pre-migration rows (defensive — backend backfill already covers this
+      server-side).
+    - `ExerciseCard`: renders `<TemplateBadge>` only when isTemplateExercise
+      is true. Adds `pr-16` to the title row so the badge does not overlap
+      long titles.
+    - `ExerciseModal`: renders the same `<TemplateBadge>` in the detail
+      header AND adds an inline amber "this is a formatting example" notice
+      above the description (`data-testid="template-notice"`) — the most
+      visible spot for the therapist who actually opens the card.
+    - Custom therapist exercises (is_template=0) show NO template badge —
+      they keep the existing teal "My" pill instead.
+
+**What was built (i18n):**
+- New top-level `exercise.*` namespace per the spec:
+    - `exercise.templateBadge`: en="Template", ru="Пример", es="Plantilla",
+      uk="Приклад"
+    - `exercise.templateTooltip`: full sentence in en/ru/es/uk explaining the
+      card is a formatting example and pointing the therapist to "My
+      Exercises" to author their own.
+
+**Verification this session:**
+- `node -c` clean for `src/backend/src/db/connection.js` and
+  `src/backend/src/routes/exercises.js`.
+- esbuild JSX compile (target=es2020, jsx=automatic) of
+  `src/frontend/src/pages/ExerciseLibrary.jsx`: OK, 0 warnings.
+- All 4 i18n JSON files parse and contain `exercise.templateBadge` /
+  `exercise.templateTooltip`.
+- Backend cleanly restarted on port 3001 — `/api/health` returned
+  `{status:"ok",database:"connected",tableCount:33}`. Startup log line
+  confirmed: `info: Added is_template column to exercises`.
+- Live DB inspection (sql.js read of data/prtop.db):
+    - PRAGMA table_info(exercises) now reports `is_template` column.
+    - 16 rows with (is_template=1, is_custom=0) — the seeded library.
+    - 2 rows with (is_template=0, is_custom=1) — therapist custom exercises.
+    - Backfill is correct on both sides.
+- Live route probe: `GET /api/exercises` (no auth) -> 401 (security gate
+  intact).
+- Mock data grep: zero hits for globalThis|devStore|mockDb|mockData|fakeData|
+  sampleData|dummyData|MOCK in either file.
+- No errors in `.backend.log` after restart.
+
+### Current Status
+- Feature #371: PASSING (T-13 Template/Пример badge on library exercises)

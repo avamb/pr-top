@@ -1,5 +1,9 @@
 {
   "brand": "PR-TOP",
+  "exercise": {
+    "templateBadge": "Plantilla",
+    "templateTooltip": "Este es un ejemplo de formato. Puedes usarlo o crear tu propio ejercicio en Mis Ejercicios."
+  },
   "nav": {
     "dashboard": "Panel",
     "clients": "Clientes",
