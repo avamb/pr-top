@@ -2588,3 +2588,49 @@ Already fully implemented as part of #292. UI has:
 ### Current Status
 - Features passing: 338/339 (99.7%)
 - Feature #339: PASSING
+
+## Session: 2026-05-03 - Feature #359
+
+### Completed: T-01 Inquiry entity (ClientRequest) (#359) - PASSING
+
+**What was verified (already implemented across prior sessions):**
+- DB migration: `inquiries` table created in `src/backend/src/db/connection.js` (lines 943-964)
+  - Columns: id, client_id FK, therapist_id FK, title_encrypted (Class A), description_encrypted (Class A),
+    encryption_key_id, payload_version, status (active|paused|closed), opened_at, closed_at, created_at, updated_at
+  - Indexes: client, therapist, status, (therapist, client)
+- Service: `src/backend/src/services/inquiries.js` provides listInquiries / getInquiry / createInquiry /
+  updateInquiry / closeInquiry / deleteInquiry. Title and description are encrypted via `encrypt`/`decrypt`
+  helpers (Class A). All write operations append to `audit_logs` with target_type='inquiry'.
+- API routes: `src/backend/src/routes/clients.js` mounts the full surface under `/api/clients/:id/inquiries[*]`:
+  - GET `/`, GET `/:inquiryId`, POST `/`, PUT `/:inquiryId`, POST `/:inquiryId/close`, DELETE `/:inquiryId`.
+  - Every route runs `verifyClientConsent(therapistId, clientId, <action>)` and returns 403 on consent denial.
+- i18n: `inquiry.*` keys present in all four locales (en/ru/es/uk) including title, description, create,
+  createSubmit, edit/save/cancel, close/reopen/delete, confirmDelete, empty, loading, opened/closed/updatedAt,
+  filterAll, errorLoad/errorSave, status.{active,paused,closed}.
+- Frontend: `src/frontend/src/pages/ClientDetail.jsx` adds an "Inquiries" tab with create form, status filter,
+  inline edit, status transitions (active <-> paused, close, reopen), delete with confirm, and empty/loading/error
+  states. All buttons carry data-testids for downstream e2e.
+
+**Verification this session:**
+- Backend health: `curl http://localhost:3001/api/health` -> `{status:"ok",database:"connected",tableCount:32,...}`.
+- Backend logs show only routine `saveDatabase: skipping (no dirty changes)` debug lines - no errors/warnings.
+- Syntax check: `node -c` clean for inquiries.js, clients.js, db/connection.js.
+- i18n JSON: all 4 locale files parse and contain every required `inquiry.*` key.
+- Live route probe: `GET /api/clients/119/inquiries` (no auth) -> 401 (proper authentication gate).
+- End-to-end smoke test (direct service calls against live DB):
+  - createInquiry -> id+title+status returned, audit row appended
+  - listInquiries returns the new inquiry (decrypted title)
+  - getInquiry decrypts title/description correctly
+  - updateInquiry changes title/desc/status (active->paused) and bumps updated_at
+  - closeInquiry sets closed_at to current timestamp; status='closed'
+  - Reopen via updateInquiry({status:'active'}) clears closed_at to NULL
+  - Cross-therapist scope: another therapist cannot fetch the inquiry (returns null)
+  - Filter status=closed correctly excludes our active inquiry
+  - deleteInquiry returns true and subsequent getInquiry returns null
+- Mock data grep: no globalThis/devStore/mockDb patterns in src/backend/src/services/inquiries.js
+  or src/backend/src/routes/clients.js (inquiries section).
+- Persistence: data is stored in `prtop.db` via better-sqlite3 / sql.js with `saveDatabaseAfterWrite()`
+  after every CUD operation.
+
+### Current Status
+- Feature #359: PASSING
