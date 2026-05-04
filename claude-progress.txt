@@ -3043,3 +3043,116 @@ exercises untouched.
 
 ### Current Status
 - Feature #371: PASSING (T-13 Template/Пример badge on library exercises)
+
+## Session: 2026-05-04 - Feature #368 (T-10 Dual-comment model private + shared) - PASSING
+
+### Completed: T-10 — Dual-comment model (private + shared) verification
+
+**Why this feature exists:**
+Per the Misha Drozd interview (docs/new_fichas/customer-development-meetings/
+misha_drozd_2026-04-19.md, lines 374-396), every entity in the platform
+(client, session, assignment, assignment_report, exercise_completion,
+inquiry) needs to support TWO kinds of comments per author:
+  - private — visible ONLY to the author (the therapist's working notes)
+  - shared  — visible to BOTH the therapist and the client (the
+              "between us" channel that replaces the messy WhatsApp/IG
+              back-and-forth therapists currently juggle).
+Defaults: therapist authors -> private, client authors -> shared. Authors
+can toggle the visibility of their own comment after the fact. The legacy
+single-purpose `therapist_notes` table is migrated into the new
+polymorphic `comments` table as private therapist comments on the client
+entity (no historical data lost). Comment content is Class A (AES at the
+app layer); metadata is Class B.
+
+**What was verified (already implemented across prior sessions; this
+session validated the wiring end-to-end and marked the feature passing):**
+
+- DB migration in `src/backend/src/db/connection.js` (lines 1022-1073):
+    - Polymorphic `comments` table: id, entity_type CHECK enum, entity_id,
+      author_id FK users, author_role CHECK enum (therapist/client/superadmin),
+      visibility CHECK enum (private/shared), content_encrypted (Class A),
+      encryption_key_id FK, payload_version, created_at, updated_at.
+    - Indexes: (entity_type,entity_id), author_id, visibility, and the
+      composite (entity_type,entity_id,visibility) for fast filtering.
+    - Idempotent one-shot migration of `therapist_notes` -> `comments` as
+      `entity_type='client', author_role='therapist', visibility='private'`,
+      preserving created_at/updated_at and reusing the existing
+      encryption_key_id + payload_version. Live DB confirms the migration
+      ran (12 rows in `therapist_notes`, 12 matching rows in `comments`).
+- Service `src/backend/src/services/comments.js`:
+    - `resolveEntityOwner` resolves (therapist_id, client_id) for client,
+      session, inquiry, exercise_completion. assignment / assignment_report
+      flagged `deferred` for routes that already validate ownership
+      themselves.
+    - `checkEntityAccess` enforces: therapist must own the client tied to
+      the entity; client must be the same client tied to the entity;
+      superadmin sees everything. 400/403/404 statuses.
+    - `canSeeComment` enforces: author always sees own; shared visible to
+      counter-party of same entity; private NEVER visible to anyone but
+      the author; superadmin sees everything.
+    - `createComment` defaults visibility (therapist->private, client->
+      shared), validates content (1-50000 chars), encrypts via Class A
+      `encrypt()`, returns decrypted comment with authoritative timestamps.
+    - `patchComment` only allows the author (or superadmin) to modify;
+      supports content update (re-encrypted) and/or visibility toggle.
+    - `deleteComment` only the author (or superadmin) may delete.
+- Routes `src/backend/src/routes/comments.js` mounted at `/api/comments`
+  (verified line 201 of `src/backend/src/index.js`):
+    - GET    /            (filter by entity_type+entity_id)
+    - POST   /            (create with optional visibility)
+    - PATCH  /:id         (update content and/or visibility)
+    - DELETE /:id         (author/superadmin only)
+  All routes wrap `authenticate` middleware.
+- Frontend `src/frontend/src/components/CommentsPanel.jsx`:
+    - Two tabs: "For me" (private own) and "For client"/"For therapist"
+      (shared, label depends on viewer role).
+    - Create form per active tab — visibility derived from active tab.
+    - Inline edit, visibility toggle (therapist UI), and delete with
+      confirm. data-testids: comments-panel, comment-input, comment-save,
+      comment-list, comment-{id} with data-visibility attribute.
+    - Loading / empty / error states wired to i18n.
+    - Mounted in `src/frontend/src/pages/ClientDetail.jsx` line 2983 as a
+      Comments tab on the client detail page (entity_type='client').
+- i18n: `comments.*` namespace fully populated in en/ru/es/uk including
+  visibility.{toggle,makePrivate,makeShared,private,shared}, tabForMe,
+  tabForClient, tabForTherapist, addPrivate, addShared, placeholderPrivate,
+  placeholderShared, save/saving, edit/delete/cancel, confirmDelete,
+  loading, emptyForYou/Client/Therapist, errorLoad/Save/Delete,
+  you, byTherapist, byClient — verified by a 124-key check across all
+  four locale files.
+
+**Live verification this session:**
+- `node -c` clean for db/connection.js, services/comments.js,
+  routes/comments.js.
+- esbuild JSX compile (target=es2020, jsx=automatic) of
+  `CommentsPanel.jsx`: OK, 0 warnings.
+- All 4 i18n locale files parse and contain every required `comments.*`
+  key — 124 checks, 0 missing.
+- Backend health: `curl /api/health` -> 200
+  `{status:"ok",database:"connected",tableCount:33}`.
+- Live route auth gate: `GET /api/comments?entity_type=client&entity_id=119`
+  (no auth) -> `{"error":"No token provided"}` (401-equivalent).
+- End-to-end smoke test (direct service calls against live `prtop.db`):
+  - therapist default create -> visibility=private
+  - therapist explicit -> visibility=shared
+  - client default create -> visibility=shared
+  - client explicit -> visibility=private
+  - therapist list returns own private + own shared + client shared, NOT
+    client private
+  - client list returns therapist shared + own shared + own private, NOT
+    therapist private
+  - therapist toggle private->shared makes the comment visible to the
+    client on next list
+  - cross-therapist isolation: a different therapist gets 403 on list
+  - non-author patch attempt -> 403
+  - delete cleanup OK; therapist_notes -> comments migration count is
+    correct (12/12)
+- Mock data grep on services/comments.js, routes/comments.js,
+  components/CommentsPanel.jsx: zero hits for globalThis|devStore|
+  dev-store|mockDb|mockData|fakeData|sampleData|dummyData|testData|MOCK.
+- Persistence: all writes flow through `db.run` + `saveDatabaseAfterWrite()`
+  to `prtop.db` (sql.js); no in-memory shortcuts.
+
+### Current Status
+- Feature #368: PASSING (T-10 dual-comment model — private + shared,
+  polymorphic table over 6 entity types, therapist_notes migrated)
