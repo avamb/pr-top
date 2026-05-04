@@ -425,6 +425,30 @@
       "titlePlaceholder": "p. ej. Seguimiento de la ansiedad",
       "inquiryLabel": "Consulta (opcional)",
       "inquiryNone": "— Sin consulta —"
+    },
+    "postNotes": {
+      "title": "Notas posteriores a la sesión",
+      "therapistOnlyBadge": "Solo terapeuta",
+      "privacyHint": "Solo tú lo ves. El cliente nunca verá este campo.",
+      "helperText": "Notas rápidas para la próxima vez: qué retomar, observar o preguntar. La IA las reflejará en el resumen.",
+      "placeholder": "En qué centrarse la próxima sesión…",
+      "recordStart": "Voz",
+      "recordStop": "Parar",
+      "save": "Guardar notas",
+      "saving": "Guardando…",
+      "regenerateSummary": "Regenerar resumen",
+      "regenerating": "Regenerando…",
+      "needTranscript": "Disponible cuando exista la transcripción.",
+      "statusRecording": "Grabando…",
+      "statusTranscribing": "Transcribiendo…",
+      "statusResummarizing": "Regenerando resumen…",
+      "statusSaved": "Guardado",
+      "errorSave": "No se pudieron guardar las notas.",
+      "errorTranscribe": "No se pudo transcribir la nota de voz.",
+      "errorResummarize": "No se pudo regenerar el resumen.",
+      "errorMic": "No se pudo acceder al micrófono.",
+      "errorNoMic": "Tu navegador no permite grabar voz.",
+      "errorEmptyRecording": "La grabación quedó vacía, inténtalo otra vez."
     }
   },
   "clientDetail": {

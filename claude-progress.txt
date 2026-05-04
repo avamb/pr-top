@@ -1,3 +1,136 @@
+## Session: 2026-05-04 - Feature #373 (T-15 Post-session therapist notes) - PASSING
+
+### Completed: T-15 — Post-session therapist notes ("на что обратить внимание в следующий раз")
+
+**Why this feature exists:**
+During the Alexey customer-development interview (docs/new_fichas/customer-
+development-meetings/alexey_*_2026-04-*, pages 73-92) the therapist asked
+for a quick "what to focus on next time" capture immediately after a
+session. Today the only place to put such notes is the client's general
+therapist-notes module — too coarse, and not tied to the specific session
+or fed back into the AI summarizer. T-15 adds a per-session, therapist-only
+field that the AI later treats as additional context when (re)generating a
+summary, and that the therapist can fill via voice or keyboard.
+
+**What was built (backend):**
+- `src/backend/src/db/connection.js`: idempotent migration appends two
+  columns to the existing `sessions` table:
+    - `post_session_notes_encrypted TEXT` — Class A, AES-GCM encrypted
+      "what to focus on next session" note. Nullable.
+    - `post_session_notes_audio_path TEXT` — reserved for an optional
+      opaque ref to the original audio if we ever want to keep it. Nullable.
+  Both `ALTER TABLE` calls are wrapped in try/catch so re-running the
+  migration is a no-op once the columns exist.
+- `src/backend/src/routes/sessions.js`:
+    - `GET /api/sessions/:id` now also selects and decrypts
+      `post_session_notes_encrypted` and returns it as `post_session_notes`
+      on the response. The route was already gated to therapist+superadmin,
+      so clients can never see this field. Decryption failures degrade
+      gracefully (`post_session_notes_error: 'Decryption failed'`).
+    - **NEW** `PATCH /api/sessions/:id` — therapist-only. Accepts
+      `{ post_session_notes: string|null }`. Trims, caps at 10 000 chars,
+      encrypts via the standard `encrypt()` helper, and stores in the
+      `post_session_notes_encrypted` column. Empty string clears the
+      field. All writes append an `audit_logs` row with action
+      `session_update_post_notes`. Auth gates: authenticate +
+      requireRole('therapist','superadmin') + verifyClientConsent +
+      ownership check (therapist must own the session).
+    - **NEW** `POST /api/sessions/:id/transcribe-voice-note` — therapist-only.
+      Accepts a multipart `audio` blob (browser MediaRecorder), runs it
+      through `transcribeAudioBuffer`, returns `{ transcript }` and never
+      persists the audio (the temp file is unlinked in a `finally`). Same
+      auth gates as PATCH. Audit log row uses action
+      `session_voice_note_transcribed`.
+- `src/backend/src/services/transcription.js`: new `transcribeAudioBuffer`
+  helper that calls `callTranscriptionAPI` directly when Whisper is
+  configured, and otherwise returns a deterministic dev-mode placeholder
+  ("Pay attention next session: client mentioned sleep was better, …")
+  so the voice→text wiring can be verified end-to-end without an external
+  Whisper key. Exported alongside the existing `transcribeAudio`.
+- `src/backend/src/services/summarization.js`:
+    - `processSessionSummary` now also selects the
+      `post_session_notes_encrypted` column and decrypts it into
+      `context.post_session_notes` (with a `try/catch` so a corrupt blob
+      degrades gracefully).
+    - `buildSystemPrompt` adds a dedicated `### Post-Session Therapist
+      Notes (focus for next session)` section to the AI prompt and
+      explicitly instructs the model to "reflect these focus areas in the
+      Follow-up Areas section". The dev-mode `generateDevSummary` also
+      surfaces the notes so the wiring is visible in dev runs.
+
+**What was built (frontend):**
+- `src/frontend/src/pages/SessionDetail.jsx`:
+    - New "Post-session notes" section on the session detail page,
+      rendered ABOVE the existing summary card (so the therapist can
+      capture focus items first, then re-generate the summary).
+    - Visible-only-to-therapist styling: amber "Therapist only" badge in
+      the section header, plus a privacy hint sentence under the title.
+    - Multi-line textarea (rows=6, 10 000-char cap matches backend),
+      `data-testid="post-session-notes-textarea"`.
+    - Voice button: "🎙 Voice" → records via `MediaRecorder`, sends the
+      blob to `/api/sessions/:id/transcribe-voice-note`, appends the
+      returned transcript to the textarea (preserves prior text). Stop
+      button replaces it during recording. Browser-mime negotiation tries
+      webm-opus → webm → ogg-opus → mp4. Mic stream is always cleaned up,
+      including on component unmount.
+    - "Save notes" button calls `PATCH /api/sessions/:id`, only enabled
+      when the textarea has unsaved changes.
+    - "Re-generate summary" button calls the existing `POST
+      /api/sessions/:id/summarize` (it now reads the saved notes from
+      the row and passes them to the AI). Disabled until a transcript
+      exists, with a tooltip explaining why.
+    - Status row: live indicator for recording / transcribing /
+      re-summarizing / saved, all carrying `data-testid` for downstream
+      e2e. Errors render as red text with `data-testid="post-session-notes-error"`.
+    - All copy comes from `t('session.postNotes.*')` — never hard-coded.
+
+**What was built (i18n):**
+- New `session.postNotes.*` namespace in all four locales (en/ru/es/uk),
+  22 keys per locale: title, therapistOnlyBadge, privacyHint, helperText,
+  placeholder, recordStart/recordStop, save/saving, regenerateSummary/
+  regenerating, needTranscript, statusRecording/Transcribing/
+  Resummarizing/Saved, errorSave/Transcribe/Resummarize/Mic/NoMic/
+  EmptyRecording. Each locale is hand-translated; en/ru match the
+  Alexey-interview phrasing ("На что обратить внимание в следующий раз").
+
+**Verification this session:**
+- `node -c` clean for sessions.js, summarization.js, transcription.js,
+  connection.js.
+- esbuild JSX compile of `SessionDetail.jsx` (target=es2020,
+  jsx=automatic): OK.
+- All four i18n JSON files parse and each contains 22 `postNotes` keys
+  (validated via tmp script).
+- Backend restarted on port 3001 — `/api/health` returned
+  `{status:"ok",database:"connected",tableCount:33,...}`. Migration
+  applied: startup log shows `Added post_session_notes_audio_path
+  column to sessions`.
+- Live PRAGMA table_info(sessions): 16 columns, including
+  `post_session_notes_encrypted` and `post_session_notes_audio_path`.
+- Live route probes:
+    - `PATCH /api/sessions/1` (no auth/CSRF) → CSRF token missing (401).
+    - `POST /api/sessions/1/transcribe-voice-note` (no auth/CSRF)
+      → CSRF token missing (401).
+    - `GET /api/sessions/1` (no auth) → "No token provided" (401).
+- End-to-end smoke test against the live DB (direct service calls):
+    - Picked existing transcribed session id=5.
+    - `encrypt()` + UPDATE saved a unique `RESTART_TEST_T15_<ts>` note
+      into `post_session_notes_encrypted`.
+    - SELECT + `decrypt()` returned the exact plaintext (round-trip OK).
+    - summarization.js source includes `post_session_notes` and the new
+      "Post-Session Therapist Notes" prompt section.
+    - Test data cleaned up by setting the column back to NULL.
+- Mock data grep: zero hits for globalThis/devStore/mockDb/mockData/
+  fakeData/sampleData/dummyData/STUB/MOCK in routes/sessions.js,
+  services/summarization.js, services/transcription.js, or
+  pages/SessionDetail.jsx.
+- Persistence: writes flow through `db.run` + `saveDatabaseAfterWrite()`
+  to `prtop.db` (no in-memory state). Encryption packed-blob format
+  (`version:iv:authTag:ciphertext`) makes the column self-describing,
+  so prior transcript/summary blobs in the same row remain decryptable.
+
+### Current Status
+- Feature #373: PASSING (T-15 Post-session therapist notes — voice + text)
+
 ## Session: 2026-05-04 - Feature #374 (T-16 Optional reminders) - PASSING
 
 ### Completed: T-16 — Optional between-session reminders (off by default for new therapists)

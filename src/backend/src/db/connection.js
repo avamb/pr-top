@@ -1094,6 +1094,28 @@ function applySchema(db) {
     // Index already exists, ignore
   }
 
+  // T-15: Post-session therapist notes ("На что обратить внимание в следующий раз").
+  // After a session, the therapist can quickly type or dictate quick notes about
+  // what to focus on next session. The notes are Class A encrypted (sensitive
+  // therapist observations) and never shown to the client. The AI summarizer
+  // receives this field as additional context when (re)generating a summary.
+  // - post_session_notes_encrypted: Class A encrypted text (nullable)
+  // - post_session_notes_audio_path: optional opaque ref if the notes were
+  //   captured via voice and the raw audio was kept (currently we only persist
+  //   the transcript; this column reserves the option to attach the audio file).
+  try {
+    db.run('ALTER TABLE sessions ADD COLUMN post_session_notes_encrypted TEXT');
+    logger.info('Added post_session_notes_encrypted column to sessions');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE sessions ADD COLUMN post_session_notes_audio_path TEXT');
+    logger.info('Added post_session_notes_audio_path column to sessions');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
   // T-17: Supervision share links — therapist generates a read-only public
   // share link to show client history to a supervisor without sharing a password.
   // Link has TTL (1d/7d/30d), optional anonymization, can be revoked at any time.

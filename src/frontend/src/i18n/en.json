@@ -441,6 +441,30 @@
       "titlePlaceholder": "e.g. Follow-up about anxiety",
       "inquiryLabel": "Inquiry (optional)",
       "inquiryNone": "— No inquiry —"
+    },
+    "postNotes": {
+      "title": "Post-session notes",
+      "therapistOnlyBadge": "Therapist only",
+      "privacyHint": "Visible only to you. The client never sees this field.",
+      "helperText": "Quick notes for next time — what to revisit, watch for, or ask about. The AI summarizer will reflect these as focus areas.",
+      "placeholder": "What to focus on next session…",
+      "recordStart": "Voice",
+      "recordStop": "Stop",
+      "save": "Save notes",
+      "saving": "Saving…",
+      "regenerateSummary": "Re-generate summary",
+      "regenerating": "Re-generating…",
+      "needTranscript": "Available after a transcript is generated.",
+      "statusRecording": "Recording…",
+      "statusTranscribing": "Transcribing…",
+      "statusResummarizing": "Re-generating summary…",
+      "statusSaved": "Saved",
+      "errorSave": "Failed to save post-session notes.",
+      "errorTranscribe": "Failed to transcribe voice note.",
+      "errorResummarize": "Failed to re-generate summary.",
+      "errorMic": "Could not access the microphone.",
+      "errorNoMic": "Voice recording is not supported in this browser.",
+      "errorEmptyRecording": "The recording was empty — try again."
     }
   },
   "clientDetail": {

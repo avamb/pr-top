@@ -322,8 +322,43 @@ async function processSessionTranscription(sessionId) {
   }
 }
 
+/**
+ * Transcribe a raw audio buffer (bypasses the on-disk encrypted-file flow).
+ * Used for short ad-hoc voice inputs (e.g. T-15 post-session voice notes)
+ * where we don't want to persist the audio — only the resulting transcript.
+ *
+ * In dev mode this returns a deterministic placeholder so the UI flow still
+ * works without a Whisper key configured.
+ *
+ * @param {Buffer} audioBuffer - Raw audio bytes (e.g. webm/ogg from MediaRecorder)
+ * @returns {Promise<{text: string, usage: {model: string, inputTokens: number, outputTokens: number}}>}
+ */
+async function transcribeAudioBuffer(audioBuffer) {
+  if (isConfigured()) {
+    return await callTranscriptionAPI(audioBuffer);
+  }
+  // Dev fallback — produce a deterministic, recognisable transcript so the
+  // therapist can verify the voice -> text wiring without external services.
+  const sizeKB = Math.round(audioBuffer.length / 1024);
+  const text =
+    `[DEV MODE voice transcript ~${sizeKB}KB] ` +
+    `Pay attention next session: client mentioned sleep was better, ` +
+    `revisit anxiety triggers around work, and follow up on the ` +
+    `breathing exercise homework.`;
+  const model = process.env.TRANSCRIPTION_MODEL || 'whisper-1';
+  return {
+    text,
+    usage: {
+      model,
+      inputTokens: Math.ceil(audioBuffer.length / 100),
+      outputTokens: Math.ceil(text.length / 4)
+    }
+  };
+}
+
 module.exports = {
   transcribeAudio,
+  transcribeAudioBuffer,
   processSessionTranscription,
   isConfigured
 };

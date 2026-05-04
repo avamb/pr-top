@@ -162,7 +162,21 @@ function generateDevSummary(transcript, options = {}) {
     `  - Continue monitoring the topics discussed`,
     `  - Review effectiveness of current therapeutic approach`,
     `  - Consider adjusting exercise assignments based on client feedback`,
-    ``,
+    ``
+  );
+
+  // T-15: surface the therapist's own post-session focus notes in the summary
+  // so the dev pipeline visibly reflects them (the production AI prompt also
+  // injects them via buildSystemPrompt).
+  if (options.post_session_notes) {
+    summaryParts.push(
+      `Therapist Post-Session Notes (focus for next session):`,
+      `  ${options.post_session_notes}`,
+      ``
+    );
+  }
+
+  summaryParts.push(
     `Note: This summary is a supportive tool for session preparation.`,
     `It reflects observed themes and client-reported experiences only.`
   );
@@ -313,7 +327,7 @@ function buildSystemPrompt(options = {}) {
   ];
 
   // Add client context if available
-  if (options.anamnesis || options.goals || options.contraindications || options.ai_instructions) {
+  if (options.anamnesis || options.goals || options.contraindications || options.ai_instructions || options.post_session_notes) {
     parts.push(`## Client Context (provided by therapist)`);
 
     if (options.anamnesis) {
@@ -327,6 +341,18 @@ function buildSystemPrompt(options = {}) {
     }
     if (options.ai_instructions) {
       parts.push(`### Therapist Instructions for AI`, options.ai_instructions, ``);
+    }
+    // T-15: post-session therapist notes — focus areas the therapist wants to
+    // emphasize when reviewing this specific session. Surface them as their own
+    // section so the model can reflect them in the "Follow-up Areas" output.
+    if (options.post_session_notes) {
+      parts.push(
+        `### Post-Session Therapist Notes (focus for next session)`,
+        options.post_session_notes,
+        ``,
+        `Reflect these focus areas explicitly in the "Follow-up Areas" section of the summary.`,
+        ``
+      );
     }
 
     parts.push(`Use this context to provide more relevant and tailored observations in the summary.`, ``);
@@ -346,9 +372,10 @@ async function processSessionSummary(sessionId) {
   const db = getDatabase();
 
   try {
-    // Get session details
+    // Get session details (include T-15 post_session_notes so the AI can take
+    // the therapist's "next-time focus" into account when summarizing).
     const result = db.exec(
-      'SELECT id, therapist_id, client_id, transcript_encrypted, summary_encrypted FROM sessions WHERE id = ?',
+      'SELECT id, therapist_id, client_id, transcript_encrypted, summary_encrypted, post_session_notes_encrypted FROM sessions WHERE id = ?',
       [sessionId]
     );
 
@@ -356,7 +383,7 @@ async function processSessionSummary(sessionId) {
       throw new Error(`Session ${sessionId} not found`);
     }
 
-    const [id, therapistId, clientId, transcriptEncrypted, existingSummary] = result[0].values[0];
+    const [id, therapistId, clientId, transcriptEncrypted, existingSummary, postNotesEncrypted] = result[0].values[0];
 
     if (!transcriptEncrypted) {
       throw new Error(`Session ${sessionId} has no transcript to summarize`);
@@ -386,6 +413,16 @@ async function processSessionSummary(sessionId) {
         if (ctxResult[0].values[0][3]) context.ai_instructions = decrypt(ctxResult[0].values[0][3]);
       } catch (e) {
         logger.warn(`Could not decrypt client context for summary: ${e.message}`);
+      }
+    }
+
+    // T-15: include post-session therapist notes ("на что обратить внимание в
+    // следующий раз") in the summary context so the AI emphasizes those points.
+    if (postNotesEncrypted) {
+      try {
+        context.post_session_notes = decrypt(postNotesEncrypted);
+      } catch (e) {
+        logger.warn(`Could not decrypt post_session_notes for session ${sessionId}: ${e.message}`);
       }
     }
 

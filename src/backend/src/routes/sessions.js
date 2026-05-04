@@ -8,7 +8,7 @@ const crypto = require('crypto');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { encrypt, decrypt } = require('../services/encryption');
-const { processSessionTranscription } = require('../services/transcription');
+const { processSessionTranscription, transcribeAudio, isConfigured: isTranscriptionConfigured } = require('../services/transcription');
 const { processSessionSummary } = require('../services/summarization');
 const { checkSessionLimit } = require('../utils/planLimits');
 const { logger } = require('../utils/logger');
@@ -212,7 +212,7 @@ router.get('/:id', authenticate, requireRole('therapist', 'superadmin'), async (
     const result = db.exec(
       `SELECT id, therapist_id, client_id, audio_ref, transcript_encrypted, summary_encrypted,
               encryption_key_id, payload_version, status, scheduled_at, created_at, updated_at,
-              title, inquiry_id
+              title, inquiry_id, post_session_notes_encrypted
        FROM sessions WHERE id = ?`,
       [sessionId]
     );
@@ -248,7 +248,8 @@ router.get('/:id', authenticate, requireRole('therapist', 'superadmin'), async (
       created_at: row[10],
       updated_at: row[11],
       title: row[12] || null,
-      inquiry_id: row[13] || null
+      inquiry_id: row[13] || null,
+      post_session_notes: null
     };
 
     // Decrypt transcript if present
@@ -268,6 +269,19 @@ router.get('/:id', authenticate, requireRole('therapist', 'superadmin'), async (
       } catch (e) {
         session.summary = null;
         session.summary_error = 'Decryption failed';
+      }
+    }
+
+    // Decrypt post-session therapist notes (T-15) — therapist-only field, never
+    // exposed to client surfaces. The role gate above already restricts /api/sessions
+    // to therapist + superadmin, so any client calling this endpoint never reaches
+    // here in the first place.
+    if (row[14]) {
+      try {
+        session.post_session_notes = decrypt(row[14]);
+      } catch (e) {
+        session.post_session_notes = null;
+        session.post_session_notes_error = 'Decryption failed';
       }
     }
 
@@ -453,6 +467,146 @@ router.get('/:id/transcript', authenticate, requireRole('therapist', 'superadmin
   } catch (error) {
     logger.error('Get transcript error: ' + error.message);
     res.status(500).json({ error: 'Failed to retrieve transcript' });
+  }
+});
+
+// PATCH /api/sessions/:id - Update therapist-only fields on a session.
+// T-15: post_session_notes — short note ("на что обратить внимание в следующий раз").
+// The note is Class A encrypted on save and never returned to clients (the route
+// is already gated to therapist/superadmin). Other PATCHable fields can be added
+// here in the future without changing the API surface.
+router.patch('/:id', authenticate, requireRole('therapist', 'superadmin'), async (req, res) => {
+  try {
+    const db = getDatabase();
+    const sessionId = req.params.id;
+
+    const result = db.exec(
+      'SELECT id, therapist_id, client_id FROM sessions WHERE id = ?',
+      [sessionId]
+    );
+    if (result.length === 0 || result[0].values.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    const row = result[0].values[0];
+
+    if (req.user.role !== 'superadmin' && row[1] !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (req.user.role !== 'superadmin' && row[2]) {
+      const consentCheck = verifyClientConsent(req.user.id, row[2], 'session_update');
+      if (!consentCheck.allowed) {
+        return res.status(consentCheck.status).json({ error: consentCheck.error });
+      }
+    }
+
+    // Only post_session_notes is supported right now. Accept null / empty
+    // string to clear the field. Anything else is rejected as a bad request.
+    const hasPostNotes = Object.prototype.hasOwnProperty.call(req.body || {}, 'post_session_notes');
+    if (!hasPostNotes) {
+      return res.status(400).json({ error: 'No supported fields to update. Pass post_session_notes.' });
+    }
+    const raw = req.body.post_session_notes;
+    if (raw !== null && typeof raw !== 'string') {
+      return res.status(400).json({ error: 'post_session_notes must be a string or null' });
+    }
+    // Trim and cap at 10k chars — far above any real-world voice note.
+    const value = raw === null ? '' : raw.toString().trim();
+    const capped = value.slice(0, 10000);
+
+    if (capped === '') {
+      // Clear the field
+      db.run(
+        "UPDATE sessions SET post_session_notes_encrypted = NULL, updated_at = datetime('now') WHERE id = ?",
+        [sessionId]
+      );
+    } else {
+      const { encrypted, keyVersion, keyId } = encrypt(capped);
+      db.run(
+        `UPDATE sessions
+         SET post_session_notes_encrypted = ?, encryption_key_id = ?, payload_version = ?,
+             updated_at = datetime('now')
+         WHERE id = ?`,
+        [encrypted, keyId, keyVersion, sessionId]
+      );
+    }
+
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'session_update_post_notes', 'session', ?, ?, datetime('now'))",
+      [req.user.id, sessionId, JSON.stringify({ length: capped.length, cleared: capped.length === 0 })]
+    );
+    saveDatabaseAfterWrite();
+
+    res.json({ success: true, session_id: parseInt(sessionId), post_session_notes: capped || null });
+  } catch (error) {
+    logger.error('Patch session error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update session' });
+  }
+});
+
+// POST /api/sessions/:id/transcribe-voice-note - T-15: short ad-hoc voice note
+// for the post-session notes field. Accepts a small audio blob (multipart),
+// runs it through the transcription service, and returns the resulting text
+// WITHOUT persisting the audio. The therapist then decides whether to commit
+// the text to post_session_notes via PATCH.
+router.post('/:id/transcribe-voice-note', authenticate, requireRole('therapist', 'superadmin'), upload.single('audio'), async (req, res) => {
+  try {
+    const db = getDatabase();
+    const sessionId = req.params.id;
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'Audio file is required' });
+    }
+
+    const result = db.exec(
+      'SELECT id, therapist_id, client_id FROM sessions WHERE id = ?',
+      [sessionId]
+    );
+    if (result.length === 0 || result[0].values.length === 0) {
+      // Clean up uploaded temp file
+      try { fs.unlinkSync(req.file.path); } catch (_) {}
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    const row = result[0].values[0];
+
+    if (req.user.role !== 'superadmin' && row[1] !== req.user.id) {
+      try { fs.unlinkSync(req.file.path); } catch (_) {}
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (req.user.role !== 'superadmin' && row[2]) {
+      const consentCheck = verifyClientConsent(req.user.id, row[2], 'session_voice_note');
+      if (!consentCheck.allowed) {
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+        return res.status(consentCheck.status).json({ error: consentCheck.error });
+      }
+    }
+
+    // Read raw audio and transcribe. We never encrypt or persist this audio —
+    // it is processed once and the temp file is unlinked.
+    let transcript = '';
+    try {
+      const audioBuffer = fs.readFileSync(req.file.path);
+      const { transcribeAudioBuffer } = require('../services/transcription');
+      const result = await transcribeAudioBuffer(audioBuffer);
+      transcript = (result && result.text) ? result.text : '';
+    } finally {
+      try { fs.unlinkSync(req.file.path); } catch (_) {}
+    }
+
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'session_voice_note_transcribed', 'session', ?, ?, datetime('now'))",
+      [req.user.id, sessionId, JSON.stringify({ length: transcript.length })]
+    );
+    saveDatabaseAfterWrite();
+
+    res.json({ session_id: parseInt(sessionId), transcript });
+  } catch (error) {
+    if (req.file && fs.existsSync(req.file.path)) {
+      try { fs.unlinkSync(req.file.path); } catch (_) {}
+    }
+    logger.error('Voice note transcription error: ' + error.message);
+    res.status(500).json({ error: 'Failed to transcribe voice note' });
   }
 });
 
