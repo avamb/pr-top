@@ -33,6 +33,42 @@ function SessionDetail() {
   const audioChunksRef = useRef([]);
   const mediaStreamRef = useRef(null);
 
+  // T-19: Single-track speaker selection state.
+  // When recording_mode='single_track' and status='awaiting_speaker_selection',
+  // the therapist must pick which detected speaker is their own voice. We use
+  // a hidden <audio> element to play the 10-second preview window for each
+  // speaker, then POST /select-speaker once they confirm.
+  // The audio is fetched as a Blob (same approach as AudioPlayer) because the
+  // <audio> element can't carry an Authorization header on its src URL.
+  const previewAudioRef = useRef(null);
+  const previewBlobUrlRef = useRef(null);
+  const previewLoadingRef = useRef(false);
+  const previewTimeUpdateRef = useRef(null);
+  const [previewPlayingLabel, setPreviewPlayingLabel] = useState('');
+  const [selectingSpeaker, setSelectingSpeaker] = useState('');
+  const [speakerSelectError, setSpeakerSelectError] = useState('');
+
+  // Release the blob URL when the component unmounts so we don't leak memory.
+  useEffect(() => {
+    return () => {
+      if (previewBlobUrlRef.current) {
+        try { URL.revokeObjectURL(previewBlobUrlRef.current); } catch (_) {}
+        previewBlobUrlRef.current = null;
+      }
+    };
+  }, []);
+  // Auto-poll while diarization or transcription is running so the UI advances
+  // to the next state without the user having to refresh.
+  useEffect(() => {
+    if (!session) return;
+    const transientStatuses = ['diarizing', 'transcribing', 'pending'];
+    if (transientStatuses.includes(session.status)) {
+      const t = setTimeout(() => fetchSession(), 4000);
+      return () => clearTimeout(t);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session && session.status]);
+
   useEffect(() => {
     if (!token) {
       navigate('/login');
@@ -245,9 +281,141 @@ function SessionDetail() {
       case 'complete': return 'bg-green-100 text-green-800';
       case 'transcribing': return 'bg-blue-100 text-blue-800';
       case 'pending': return 'bg-amber-100 text-amber-800';
+      case 'diarizing': return 'bg-indigo-100 text-indigo-800';
+      case 'awaiting_speaker_selection': return 'bg-amber-100 text-amber-800';
+      case 'diarization_failed':
+      case 'transcription_failed': return 'bg-rose-100 text-rose-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
+
+  // T-19 helpers: play the preview window for a single speaker, stop on end.
+  // We fetch the decrypted audio once as a blob (same trick AudioPlayer uses
+  // because <audio src> can't carry the Bearer header) and seek to the preview
+  // start. A timeupdate listener stops playback once we cross the end boundary.
+  async function ensurePreviewBlob() {
+    if (previewBlobUrlRef.current) return previewBlobUrlRef.current;
+    if (previewLoadingRef.current) {
+      // Spin until loaded
+      while (previewLoadingRef.current) {
+        await new Promise(r => setTimeout(r, 50));
+      }
+      return previewBlobUrlRef.current;
+    }
+    previewLoadingRef.current = true;
+    try {
+      const res = await fetch(`${API}/sessions/${id}/stream`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || t('session.upload.singleTrack.noPreviewAvailable'));
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      previewBlobUrlRef.current = url;
+      return url;
+    } finally {
+      previewLoadingRef.current = false;
+    }
+  }
+
+  async function handlePreviewSpeaker(label, startSec, endSec) {
+    setSpeakerSelectError('');
+    const audio = previewAudioRef.current;
+    if (!audio) return;
+    // Toggle off if the same speaker's preview is currently playing
+    if (previewPlayingLabel === label) {
+      try { audio.pause(); } catch (_) {}
+      setPreviewPlayingLabel('');
+      return;
+    }
+    // Tear down any previous preview window listener
+    try { audio.pause(); } catch (_) {}
+    if (previewTimeUpdateRef.current) {
+      audio.removeEventListener('timeupdate', previewTimeUpdateRef.current);
+      previewTimeUpdateRef.current = null;
+    }
+
+    let url;
+    try {
+      url = await ensurePreviewBlob();
+    } catch (err) {
+      setSpeakerSelectError(err.message);
+      return;
+    }
+    if (audio.src !== url) {
+      audio.src = url;
+      // Wait for metadata before seeking — currentTime can't be set until then.
+      await new Promise((resolve, reject) => {
+        const onLoaded = () => { audio.removeEventListener('error', onErr); resolve(); };
+        const onErr = () => { audio.removeEventListener('loadedmetadata', onLoaded); reject(new Error('audio_load_failed')); };
+        audio.addEventListener('loadedmetadata', onLoaded, { once: true });
+        audio.addEventListener('error', onErr, { once: true });
+        try { audio.load(); } catch (_) {}
+      }).catch(() => {});
+    }
+
+    try { audio.currentTime = Number(startSec) || 0; } catch (_) {}
+
+    const stopAt = Number(endSec) || ((Number(startSec) || 0) + 10);
+    const onTime = () => {
+      if (audio.currentTime >= stopAt) {
+        try { audio.pause(); } catch (_) {}
+        setPreviewPlayingLabel('');
+        audio.removeEventListener('timeupdate', onTime);
+        previewTimeUpdateRef.current = null;
+      }
+    };
+    audio.addEventListener('timeupdate', onTime);
+    previewTimeUpdateRef.current = onTime;
+    const onEnded = () => setPreviewPlayingLabel('');
+    audio.addEventListener('ended', onEnded, { once: true });
+
+    try {
+      await audio.play();
+      setPreviewPlayingLabel(label);
+    } catch (err) {
+      setSpeakerSelectError(err.message || t('session.upload.singleTrack.noPreviewAvailable'));
+      setPreviewPlayingLabel('');
+    }
+  }
+
+  async function handleSelectSpeaker(label) {
+    if (selectingSpeaker) return;
+    setSelectingSpeaker(label);
+    setSpeakerSelectError('');
+    try {
+      const audio = previewAudioRef.current;
+      if (audio) {
+        try { audio.pause(); } catch (_) {}
+      }
+      setPreviewPlayingLabel('');
+      const res = await fetch(`${API}/sessions/${id}/select-speaker`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ speaker_label: label })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || t('session.upload.singleTrack.selectError'));
+      }
+      // Re-fetch so the page reflects the new status (transcribing).
+      await fetchSession();
+    } catch (err) {
+      setSpeakerSelectError(err.message);
+    } finally {
+      setSelectingSpeaker('');
+    }
+  }
+
+  function speakerNumberFromLabel(label) {
+    const m = /^speaker_(\d+)$/.exec(label || '');
+    return m ? (parseInt(m[1], 10) + 1) : '?';
+  }
 
   return (
     <div>
@@ -279,6 +447,15 @@ function SessionDetail() {
               <span className={`text-xs px-3 py-1 rounded-full font-medium ${statusBadge(session.status)}`}>
                 {session.status}
               </span>
+              {session.recording_mode === 'single_track' && (
+                <span
+                  data-testid="session-single-track-badge"
+                  className="text-xs px-3 py-1 rounded-full font-medium bg-amber-100 text-amber-800"
+                  title={t('session.upload.singleTrack.hint')}
+                >
+                  🎙️ {t('session.upload.singleTrack.badge', 'Single-track')}
+                </span>
+              )}
             </div>
 
             <div className="flex gap-4 mb-6 text-sm text-stone-500">
@@ -296,6 +473,138 @@ function SessionDetail() {
                 <p className="text-stone-400">{t('sessionDetail.noAudioRecording')}</p>
               )}
             </div>
+
+            {/* T-19: Single-track speaker selection panel.
+                Visible only while we're waiting for the therapist to confirm
+                their voice. Once they pick, the panel disappears and the
+                regular transcript / summary sections take over. */}
+            {session.recording_mode === 'single_track' && session.status === 'diarizing' && (
+              <div
+                data-testid="single-track-diarizing"
+                className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-6 flex items-center gap-3"
+              >
+                <span className="inline-block w-3 h-3 rounded-full bg-indigo-500 animate-pulse"></span>
+                <span className="text-sm text-indigo-900">
+                  {t('session.upload.singleTrack.diarizing', 'Detecting speakers in the recording…')}
+                </span>
+              </div>
+            )}
+
+            {session.recording_mode === 'single_track' && session.status === 'diarization_failed' && (
+              <div
+                data-testid="single-track-diarization-failed"
+                className="bg-rose-50 border border-rose-200 rounded-lg p-4 mb-6 text-sm text-rose-800"
+              >
+                {t('session.upload.singleTrack.diarizationFailed')}
+              </div>
+            )}
+
+            {session.recording_mode === 'single_track' &&
+             session.status === 'awaiting_speaker_selection' &&
+             Array.isArray(session.speakers) && session.speakers.length > 0 && (
+              <section
+                data-testid="single-track-speaker-picker"
+                className="bg-white rounded-lg shadow-sm border border-amber-300 p-6 mb-6"
+              >
+                <h3 className="text-lg font-semibold text-stone-800">
+                  {t('session.upload.singleTrack.awaitingSelection', 'Pick your voice')}
+                </h3>
+                <p className="text-sm text-stone-600 mt-1 mb-4">
+                  {t('session.upload.singleTrack.awaitingSelectionHint')}
+                </p>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {session.speakers.map((sp) => {
+                    const startSec = Math.max(0, Math.round(Number(sp.preview_start_sec) || 0));
+                    const endSec = Math.max(
+                      startSec + 1,
+                      Math.round(Number(sp.preview_end_sec) || (startSec + 10))
+                    );
+                    const isPlaying = previewPlayingLabel === sp.label;
+                    const isSelecting = selectingSpeaker === sp.label;
+                    const num = speakerNumberFromLabel(sp.label);
+                    return (
+                      <div
+                        key={sp.label}
+                        data-testid={`speaker-card-${sp.label}`}
+                        className="border border-stone-200 rounded-lg p-4 bg-stone-50"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-semibold text-stone-800">
+                            {t('session.upload.singleTrack.speakerLabel', { n: num, defaultValue: 'Speaker {{n}}' })}
+                          </span>
+                          <span className="text-xs text-stone-500" data-testid={`speaker-preview-window-${sp.label}`}>
+                            {t('session.upload.singleTrack.previewWindow', { start: startSec, end: endSec })}
+                          </span>
+                        </div>
+                        {typeof sp.total_sec === 'number' && (
+                          <div className="text-xs text-stone-500 mb-3">
+                            {t('session.upload.singleTrack.totalSpoken', { seconds: Math.round(sp.total_sec) })}
+                          </div>
+                        )}
+                        <div className="flex gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            data-testid={`speaker-preview-btn-${sp.label}`}
+                            onClick={() => handlePreviewSpeaker(sp.label, startSec, endSec)}
+                            className={`px-3 py-2 rounded-lg text-sm font-medium ${
+                              isPlaying
+                                ? 'bg-stone-700 text-white hover:bg-stone-800'
+                                : 'bg-white border border-stone-300 text-stone-700 hover:bg-stone-100'
+                            }`}
+                          >
+                            {isPlaying
+                              ? t('session.upload.singleTrack.stopPreview', '⏹ Stop')
+                              : t('session.upload.singleTrack.playPreview', '▶ Play preview')}
+                          </button>
+                          <button
+                            type="button"
+                            data-testid={`speaker-select-btn-${sp.label}`}
+                            onClick={() => handleSelectSpeaker(sp.label)}
+                            disabled={!!selectingSpeaker}
+                            className="px-3 py-2 rounded-lg text-sm font-medium bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50"
+                          >
+                            {isSelecting
+                              ? t('session.upload.singleTrack.selecting', 'Confirming…')
+                              : t('session.upload.singleTrack.selectThisVoice', 'This is my voice')}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {speakerSelectError && (
+                  <p
+                    data-testid="single-track-select-error"
+                    className="text-rose-600 text-sm mt-3"
+                  >{speakerSelectError}</p>
+                )}
+
+                {/* Hidden audio element used by handlePreviewSpeaker.
+                    We don't show the controls — the preview is gated to the
+                    10-sec window via timeupdate. */}
+                <audio
+                  ref={previewAudioRef}
+                  data-testid="speaker-preview-audio"
+                  className="hidden"
+                  preload="none"
+                />
+              </section>
+            )}
+
+            {session.recording_mode === 'single_track' && session.selected_speaker_label && (
+              <div
+                data-testid="single-track-selected-banner"
+                className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-6 text-sm text-emerald-900 flex items-center gap-2"
+              >
+                <span>✓</span>
+                <span>
+                  {t('session.upload.singleTrack.selectedThisVoice', 'Selected as your voice')}
+                  : <strong>{t('session.upload.singleTrack.speakerLabel', { n: speakerNumberFromLabel(session.selected_speaker_label) })}</strong>
+                </span>
+              </div>
+            )}
 
             {/* Transcript Section */}
             <div className="bg-white rounded-lg shadow-sm border border-stone-200 p-6 mb-6">

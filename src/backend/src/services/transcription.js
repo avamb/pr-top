@@ -223,9 +223,11 @@ async function processSessionTranscription(sessionId) {
     );
     saveDatabaseAfterWrite();
 
-    // Get session details
+    // Get session details — include T-19 single-track fields so we know
+    // whether the transcript needs to be filtered to a single speaker.
     const result = db.exec(
-      'SELECT id, therapist_id, client_id, audio_ref FROM sessions WHERE id = ?',
+      `SELECT id, therapist_id, client_id, audio_ref, recording_mode, selected_speaker_label
+       FROM sessions WHERE id = ?`,
       [sessionId]
     );
 
@@ -233,16 +235,42 @@ async function processSessionTranscription(sessionId) {
       throw new Error(`Session ${sessionId} not found`);
     }
 
-    const [id, therapistId, clientId, audioRef] = result[0].values[0];
+    const rowVals = result[0].values[0];
+    const [id, therapistId, clientId, audioRef] = rowVals;
+    const recordingMode = rowVals[4] || 'mixed';
+    const selectedSpeakerLabel = rowVals[5] || null;
 
     if (!audioRef) {
       throw new Error(`Session ${sessionId} has no audio file`);
     }
 
     // Transcribe the audio
-    logger.info(`Starting transcription for session ${sessionId}...`);
+    logger.info(
+      `Starting transcription for session ${sessionId}` +
+      (recordingMode === 'single_track' ? ` (single_track speaker=${selectedSpeakerLabel})` : '')
+    );
     const transcriptionResult = await transcribeAudio(audioRef);
-    const transcript = transcriptionResult.text;
+    let transcript = transcriptionResult.text;
+
+    // T-19: When the session was uploaded as single_track and the therapist
+    // has selected their voice, keep only that speaker's lines. In production
+    // with a real diarization provider, the audio itself should be resliced
+    // before transcription; in dev mode we filter the placeholder transcript
+    // by the "Therapist:"/"Client:" prefix so the rest of the pipeline (vector
+    // embeddings, summary, search) only sees the chosen speaker's content.
+    if (recordingMode === 'single_track' && selectedSpeakerLabel) {
+      try {
+        const { filterTranscriptToSpeaker } = require('./diarization');
+        const before = transcript.length;
+        transcript = filterTranscriptToSpeaker(transcript, selectedSpeakerLabel);
+        logger.info(
+          `Single-track filter applied to session ${sessionId}: ` +
+          `${before} -> ${transcript.length} chars (speaker=${selectedSpeakerLabel})`
+        );
+      } catch (e) {
+        logger.warn(`Single-track filter failed for session ${sessionId}: ${e.message} — using full transcript`);
+      }
+    }
 
     // Log AI usage for transcription
     if (transcriptionResult.usage) {

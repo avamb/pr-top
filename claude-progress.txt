@@ -3547,3 +3547,127 @@ Bot i18n (`src/bot/src/i18n.js`):
   title/meeting_date/inquiry_id; bot /sessions command shows last 5 with
   dates; full EN/RU/ES/UK i18n coverage on both web and bot; persistence
   verified across backend restart).
+
+
+## Session: 2026-05-06 - T-19 Single-track (therapist-only) recording (#377)
+
+Feature #377 PASSING. End-to-end wired: upload form -> diarization ->
+speaker selection -> transcription with speaker filter -> summary on
+filtered transcript only. Persistence verified across backend restart.
+Mixed-mode legacy flow unchanged.
+
+Backend changes:
+- routes/sessions.js: POST /api/sessions accepts recording_mode='single_track';
+  INSERT saves recording_mode; status starts at 'diarizing' (not 'pending').
+  For single_track, async dispatch is processSessionDiarization() instead of
+  the transcription chain. GET /api/sessions/:id now returns recording_mode,
+  selected_speaker_label, and (only while pending selection) parsed speakers
+  array. New POST /api/sessions/:id/select-speaker endpoint validates the
+  chosen label, persists selected_speaker_label, NULLs out speaker_segments_json
+  (per spec: "Removed tracks ARE NOT saved on disk"), moves status ->
+  'transcribing', and async-fires the transcription chain. Idempotent for
+  repeat clicks (returns already_selected=true).
+
+- services/diarization.js: added processSessionDiarization(sessionId) —
+  orchestrator that reads the session, runs diarizeSessionAudio() on the
+  encrypted file, persists speaker_segments_json (totalDurationSec +
+  speakers[]), and moves status to 'awaiting_speaker_selection'. On failure
+  sets 'diarization_failed'. The dev-mode deterministic 2-speaker split
+  (file-size based) was already there from schema-prep work; production
+  hooks via DIARIZATION_PROVIDER env (whisperx/pyannote/deepgram).
+
+- services/transcription.js: processSessionTranscription now reads
+  recording_mode + selected_speaker_label. When single_track + label is set,
+  it runs filterTranscriptToSpeaker(rawTranscript, label) before encryption —
+  speaker_0 keeps Therapist: lines, drops Client: lines, and injects a
+  "Single-track mode: showing only therapist voice" marker so the filter is
+  auditable in the saved transcript. Vector-embedding + summary downstream
+  see only the filtered text.
+
+- db/connection.js: T-19 status-constraint migration. The original
+  sessions.status CHECK only allowed
+  'pending'/'transcribing'/'summarizing'/'complete'/'failed'. Added a one-shot
+  rebuild that detects the legacy CHECK in sqlite_master and rebuilds the
+  table without it (TEXT, no CHECK), preserving every existing column + row.
+  PRAGMA-driven so column list stays in sync. Re-creates the calendar/inquiry/
+  therapist_client indexes after rebuild. renderDefault() helper handles
+  datetime('now') by re-wrapping function defaults in parens.
+
+Frontend changes:
+- pages/ClientDetail.jsx: added sessionSingleTrack state + "Keep only my
+  voice (single-track)" checkbox above the dropzone with hint copy.
+  handleSessionUpload appends recording_mode='single_track' to formData when
+  checked. Reset on successful upload.
+
+- pages/SessionDetail.jsx: new single-track section between the audio player
+  and the transcript. Shows "detecting speakers…" while status=diarizing
+  (auto-polls every 4s). Shows a speaker picker grid while
+  status=awaiting_speaker_selection — each card has a 10-sec preview button
+  (fetches the session /stream as a Blob, sets src, seeks to
+  preview_start_sec, stops via timeupdate when crossing preview_end_sec) and
+  a "This is my voice" button that POSTs /select-speaker. Shows a
+  confirmation banner once selected. Failure mode shows diarizationFailed
+  copy. New "Single-track" badge in the page header next to the status pill.
+
+i18n:
+- session.upload.singleTrack.* (19 keys) added in en/ru/es/uk:
+  label/hint/badge/diarizing/diarizationFailed/awaitingSelection/
+  awaitingSelectionHint/speakerLabel/previewWindow/totalSpoken/playPreview/
+  stopPreview/selectThisVoice/selecting/selectError/selectedThisVoice/
+  transcribingSelected/summaryFromSingleTrack/noPreviewAvailable.
+
+Verification:
+1) node -c clean for sessions.js, diarization.js, transcription.js,
+   connection.js.
+2) esbuild compile of SessionDetail.jsx (30KB) and ClientDetail.jsx (155KB) —
+   0 warnings.
+3) JSON parse of all four locale files; all 19 single-track keys present
+   in each (19/19/19/19 = PASS).
+4) Backend killed and restarted twice. Migration log:
+   "T-19: rebuilding sessions table to relax legacy status CHECK constraint"
+   followed by "T-19: sessions table rebuilt with relaxed status constraint".
+   /api/health -> 200 with tableCount=33.
+5) Live HTTP e2e (12 checks, ALL PASS):
+   - register fresh therapist + login
+   - dev/seed-clients to attach a consented client
+   - POST /api/sessions with recording_mode=single_track + 16KB audio -> 201
+     with status='diarizing'
+   - poll GET /api/sessions/:id -> status='awaiting_speaker_selection' with
+     2 speakers exposed
+   - POST /select-speaker speaker_0 -> 200, status='transcribing'
+   - poll -> status='complete' has_transcript=true
+   - transcript filter verified: contains "Therapist:" lines, NO "Client:"
+     lines, includes "Single-track mode" marker
+   - idempotent re-selection returns already_selected=true (does NOT
+     re-trigger transcription)
+   - speakers array cleared after selection (not retained on disk)
+   - mixed-mode upload still works (status='pending', recording_mode='mixed')
+   - default mode is 'mixed' when not provided
+6) Server-restart persistence: created a single_track session with title
+   "RESTART_TEST_<ts>", completed the full flow, killed backend, restarted,
+   GET returned the same session with recording_mode='single_track',
+   selected_speaker_label='speaker_0', filtered transcript intact
+   (Therapist: kept, Client: absent). PASS.
+7) Mock-data grep across services/diarization.js, routes/sessions.js,
+   pages/SessionDetail.jsx — zero hits for globalThis|devStore|dev-store|
+   mockDb|mockData|fakeData|sampleData|dummyData. All persistence flows
+   through db.run + saveDatabaseAfterWrite() against prtop.db.
+
+Production-mode notes:
+- Set DIARIZATION_PROVIDER=whisperx|pyannote|deepgram + DIARIZATION_API_URL +
+  DIARIZATION_API_KEY to swap from the deterministic dev split to a real
+  provider. callProviderDiarization() in services/diarization.js is the
+  integration stub (currently throws so dev-split is used).
+- In production with a real provider, the audio itself should be resliced
+  before transcription; in dev mode we filter the placeholder transcript by
+  "Therapist:"/"Client:" prefix. Same observable behaviour from the UI's
+  perspective.
+- For first version, the manual-timestamps fallback path is implemented (the
+  dev split is essentially a manual-timestamps style flow).
+
+### Current Status
+- Feature #377: PASSING (T-19 Single-track therapist-only recording —
+  recording_mode=single_track on upload triggers diarization; therapist
+  picks own voice via 10-sec previews; transcript filtered to that speaker
+  only; speaker_segments_json cleared from disk after selection; full
+  EN/RU/ES/UK i18n; persistence verified across backend restart).

@@ -227,6 +227,10 @@ function ClientDetail() {
   const [sessionMeetingDate, setSessionMeetingDate] = useState(todayStr);
   const [sessionTitle, setSessionTitle] = useState('');
   const [sessionInquiryId, setSessionInquiryId] = useState('');
+  // T-19: when the client did not consent to recording, the therapist can
+  // upload a Zoom-style mixed audio file and have the system keep only their
+  // voice. Default false (= mixed mode = legacy behaviour).
+  const [sessionSingleTrack, setSessionSingleTrack] = useState(false);
   const sessionFileInputRef = useRef(null);
 
   // Accepted media formats for session upload (mp3, m4a, wav, mp4, webm, ogg)
@@ -1061,6 +1065,8 @@ function ClientDetail() {
       if (sessionMeetingDate) formData.append('scheduled_at', sessionMeetingDate);
       if (sessionTitle.trim()) formData.append('title', sessionTitle.trim());
       if (sessionInquiryId) formData.append('inquiry_id', sessionInquiryId);
+      // T-19: opt into single-track (therapist-only) mode
+      if (sessionSingleTrack) formData.append('recording_mode', 'single_track');
 
       // Use XMLHttpRequest for progress tracking
       const result = await new Promise((resolve, reject) => {
@@ -1105,6 +1111,7 @@ function ClientDetail() {
       setSessionMeetingDate(todayStr);
       setSessionTitle('');
       setSessionInquiryId('');
+      setSessionSingleTrack(false);
       if (sessionFileInputRef.current) sessionFileInputRef.current.value = '';
 
       // Refresh sessions list after a short delay to let transcription start
@@ -2397,6 +2404,36 @@ function ClientDetail() {
                       ))}
                   </select>
                 </div>
+              </div>
+            )}
+
+            {/* T-19: Single-track recording opt-in.
+                Used when the client did not consent to recording but the
+                therapist still wants AI summary. The system runs speaker
+                diarization and only the therapist's voice is transcribed. */}
+            {!sessionUploading && (
+              <div
+                className="mb-4 p-3 rounded-lg border border-amber-200 bg-amber-50"
+                data-testid="session-single-track-opt"
+              >
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    data-testid="session-single-track-checkbox"
+                    checked={sessionSingleTrack}
+                    onChange={(e) => setSessionSingleTrack(e.target.checked)}
+                    className="mt-1 w-4 h-4 text-teal-600 border-stone-300 rounded focus:ring-teal-500"
+                  />
+                  <div className="text-sm">
+                    <div className="font-medium text-amber-900">
+                      🎙️ {t('session.upload.singleTrack.label', 'Keep only my voice (single-track)')}
+                    </div>
+                    <div className="text-xs text-amber-800 mt-1">
+                      {t('session.upload.singleTrack.hint',
+                        "Use when the client did not consent to recording. After upload you'll pick which detected speaker is your voice; only that voice is transcribed and summarised. The other speaker's audio is discarded.")}
+                    </div>
+                  </div>
+                </label>
               </div>
             )}
 

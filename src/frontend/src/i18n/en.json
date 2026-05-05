@@ -477,7 +477,28 @@
       "titleLabel": "Title (optional)",
       "titlePlaceholder": "e.g. Follow-up about anxiety",
       "inquiryLabel": "Inquiry (optional)",
-      "inquiryNone": "— No inquiry —"
+      "inquiryNone": "— No inquiry —",
+      "singleTrack": {
+        "label": "Keep only my voice (single-track)",
+        "hint": "Use when the client did not consent to recording. After upload you'll pick which detected speaker is your voice; only that voice is transcribed and summarised. The other speaker's audio is discarded.",
+        "badge": "Single-track",
+        "diarizing": "Detecting speakers in the recording…",
+        "diarizationFailed": "Speaker detection failed. You can re-upload or contact support.",
+        "awaitingSelection": "Pick your voice",
+        "awaitingSelectionHint": "Listen to a 10-second preview of each detected speaker, then confirm which one is you. The other speaker's audio will be dropped from transcription.",
+        "speakerLabel": "Speaker {{n}}",
+        "previewWindow": "{{start}}s – {{end}}s",
+        "totalSpoken": "≈ {{seconds}}s of speech",
+        "playPreview": "▶ Play preview",
+        "stopPreview": "⏹ Stop",
+        "selectThisVoice": "This is my voice",
+        "selecting": "Confirming…",
+        "selectError": "Could not confirm speaker selection.",
+        "selectedThisVoice": "Selected as your voice",
+        "transcribingSelected": "Transcribing your voice only…",
+        "summaryFromSingleTrack": "Summary generated from your voice only.",
+        "noPreviewAvailable": "No preview window available."
+      }
     },
     "calendar": {
       "title": "Session calendar",

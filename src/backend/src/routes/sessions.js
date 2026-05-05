@@ -10,6 +10,7 @@ const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { encrypt, decrypt } = require('../services/encryption');
 const { processSessionTranscription, transcribeAudio, isConfigured: isTranscriptionConfigured } = require('../services/transcription');
 const { processSessionSummary } = require('../services/summarization');
+const { processSessionDiarization } = require('../services/diarization');
 const { checkSessionLimit } = require('../utils/planLimits');
 const { logger } = require('../utils/logger');
 const { verifyClientConsent } = require('../utils/consentCheck');
@@ -84,6 +85,17 @@ router.post('/', authenticate, requireRole('therapist', 'superadmin'), upload.si
       ? parseInt(rawInquiryId, 10)
       : null;
 
+    // T-19: Single-track recording mode. When the client did not consent to
+    // being recorded but the therapist still wants AI summary, the upload is
+    // marked recording_mode='single_track'. The system then runs speaker
+    // diarization and waits for the therapist to confirm which detected
+    // speaker is their own voice; only that track is transcribed/summarised.
+    // Default 'mixed' preserves the original behaviour for consented sessions.
+    const rawRecordingMode = typeof req.body.recording_mode === 'string'
+      ? req.body.recording_mode.trim().toLowerCase()
+      : 'mixed';
+    const recordingMode = rawRecordingMode === 'single_track' ? 'single_track' : 'mixed';
+
     if (!clientId) {
       // Clean up uploaded file if validation fails
       if (req.file) {
@@ -150,37 +162,57 @@ router.post('/', authenticate, requireRole('therapist', 'superadmin'), upload.si
     // Store relative path as audio_ref (opaque ID based)
     const audioRef = path.basename(encryptedPath);
 
-    // Create session record in database (T-07: include optional title/scheduled_at/inquiry_id)
+    // Create session record in database (T-07: optional title/scheduled_at/inquiry_id; T-19: recording_mode)
+    // For single_track mode, status starts as 'diarizing' so the UI can show a
+    // distinct waiting state ("detecting speakers…") until the therapist picks
+    // their voice. The mixed flow keeps the legacy 'pending' status.
+    const initialStatus = recordingMode === 'single_track' ? 'diarizing' : 'pending';
     db.run(
-      `INSERT INTO sessions (therapist_id, client_id, audio_ref, encryption_key_id, payload_version, status, scheduled_at, title, inquiry_id)
-       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
-      [therapistId, clientId, audioRef, keyId, keyVersion, scheduledAt, title, inquiryId]
+      `INSERT INTO sessions (therapist_id, client_id, audio_ref, encryption_key_id, payload_version, status, scheduled_at, title, inquiry_id, recording_mode)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [therapistId, clientId, audioRef, keyId, keyVersion, initialStatus, scheduledAt, title, inquiryId, recordingMode]
     );
 
     // Get the created session ID
     const result = db.exec('SELECT last_insert_rowid()');
     const sessionId = result[0].values[0][0];
 
-    // Create audit log entry
+    // Create audit log entry — mode included so we can audit who used single-track
     db.run(
-      "INSERT INTO audit_logs (actor_id, action, target_type, target_id) VALUES (?, 'session_audio_upload', 'session', ?)",
-      [therapistId, sessionId]
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'session_audio_upload', 'session', ?, ?, datetime('now'))",
+      [therapistId, sessionId, JSON.stringify({ recording_mode: recordingMode })]
     );
 
     saveDatabaseAfterWrite();
 
-    logger.info(`Session audio uploaded: session_id=${sessionId}, therapist=${therapistId}, client=${clientId}`);
+    logger.info(`Session audio uploaded: session_id=${sessionId}, therapist=${therapistId}, client=${clientId}, mode=${recordingMode}`);
 
-    // Trigger transcription asynchronously (don't block the response)
-    processSessionTranscription(sessionId).then(result => {
-      if (result.success) {
-        logger.info(`Auto-transcription completed for session ${sessionId}`);
-      } else {
-        logger.warn(`Auto-transcription failed for session ${sessionId}: ${result.error}`);
-      }
-    }).catch(err => {
-      logger.error(`Auto-transcription error for session ${sessionId}: ${err.message}`);
-    });
+    // Trigger downstream processing asynchronously (don't block the response).
+    // - mixed:        run transcription → summary chain (legacy behaviour)
+    // - single_track: run diarization first; the therapist must then call
+    //                 POST /api/sessions/:id/select-speaker, which kicks off
+    //                 transcription with the chosen speaker filter.
+    if (recordingMode === 'single_track') {
+      processSessionDiarization(sessionId).then(r => {
+        if (r && r.success) {
+          logger.info(`Diarization completed for session ${sessionId} (${r.speakerCount} speakers detected)`);
+        } else {
+          logger.warn(`Diarization failed for session ${sessionId}: ${r && r.error}`);
+        }
+      }).catch(err => {
+        logger.error(`Diarization error for session ${sessionId}: ${err.message}`);
+      });
+    } else {
+      processSessionTranscription(sessionId).then(result => {
+        if (result.success) {
+          logger.info(`Auto-transcription completed for session ${sessionId}`);
+        } else {
+          logger.warn(`Auto-transcription failed for session ${sessionId}: ${result.error}`);
+        }
+      }).catch(err => {
+        logger.error(`Auto-transcription error for session ${sessionId}: ${err.message}`);
+      });
+    }
 
     res.status(201).json({
       id: sessionId,
@@ -190,7 +222,8 @@ router.post('/', authenticate, requireRole('therapist', 'superadmin'), upload.si
       scheduled_at: scheduledAt,
       title: title,
       inquiry_id: inquiryId,
-      status: 'pending',
+      recording_mode: recordingMode,
+      status: initialStatus,
       created_at: new Date().toISOString()
     });
   } catch (error) {
@@ -212,7 +245,8 @@ router.get('/:id', authenticate, requireRole('therapist', 'superadmin'), async (
     const result = db.exec(
       `SELECT id, therapist_id, client_id, audio_ref, transcript_encrypted, summary_encrypted,
               encryption_key_id, payload_version, status, scheduled_at, created_at, updated_at,
-              title, inquiry_id, post_session_notes_encrypted
+              title, inquiry_id, post_session_notes_encrypted,
+              recording_mode, selected_speaker_label, speaker_segments_json
        FROM sessions WHERE id = ?`,
       [sessionId]
     );
@@ -253,8 +287,33 @@ router.get('/:id', authenticate, requireRole('therapist', 'superadmin'), async (
       updated_at: row[11],
       title: row[12] || null,
       inquiry_id: row[13] != null ? row[13] : null,
-      post_session_notes: null
+      post_session_notes: null,
+      // T-19: single-track recording fields. `speakers` is only populated while
+      // the session is awaiting speaker-selection (status='awaiting_speaker_selection').
+      // Once the therapist picks a speaker we clear `speaker_segments_json` so
+      // the other-speaker timing data is not retained on disk.
+      recording_mode: row[15] || 'mixed',
+      selected_speaker_label: row[16] || null,
+      speakers: null
     };
+
+    // Parse speaker_segments_json into a typed array for the UI. We only expose
+    // it while the therapist still needs to choose a speaker. After selection
+    // the column is cleared, so older completed sessions never leak speaker data.
+    if (row[17]) {
+      try {
+        const parsed = JSON.parse(row[17]);
+        if (parsed && Array.isArray(parsed.speakers)) {
+          session.speakers = parsed.speakers;
+          session.audio_total_duration_sec = parsed.totalDurationSec || null;
+        } else if (Array.isArray(parsed)) {
+          // Tolerate the bare-array variant in case an earlier worker wrote it that way.
+          session.speakers = parsed;
+        }
+      } catch (e) {
+        logger.warn(`Failed to parse speaker_segments_json for session ${sessionId}: ${e.message}`);
+      }
+    }
 
     // Decrypt transcript if present
     if (row[4]) {
@@ -733,6 +792,125 @@ router.post('/:id/transcribe-voice-note', authenticate, requireRole('therapist',
     }
     logger.error('Voice note transcription error: ' + error.message);
     res.status(500).json({ error: 'Failed to transcribe voice note' });
+  }
+});
+
+// POST /api/sessions/:id/select-speaker - T-19 single-track flow.
+// After diarization, the therapist confirms which detected speaker is their
+// own voice (via the audio-preview UI). Only the selected speaker's transcript
+// is generated; the other speakers' segment metadata is cleared from disk so
+// the unselected tracks are NOT retained.
+router.post('/:id/select-speaker', authenticate, requireRole('therapist', 'superadmin'), async (req, res) => {
+  try {
+    const db = getDatabase();
+    const sessionId = req.params.id;
+
+    const speakerLabel = typeof req.body.speaker_label === 'string'
+      ? req.body.speaker_label.trim()
+      : '';
+    if (!/^speaker_\d+$/.test(speakerLabel)) {
+      return res.status(400).json({ error: 'speaker_label must be like "speaker_0"' });
+    }
+
+    const result = db.exec(
+      `SELECT id, therapist_id, client_id, status, recording_mode,
+              selected_speaker_label, speaker_segments_json
+       FROM sessions WHERE id = ?`,
+      [sessionId]
+    );
+    if (result.length === 0 || result[0].values.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    const row = result[0].values[0];
+    const [, therapistId, clientId, status, recordingMode, alreadySelected, segmentsJson] = row;
+
+    if (req.user.role !== 'superadmin' && therapistId !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    if (req.user.role !== 'superadmin' && clientId) {
+      const consentCheck = verifyClientConsent(req.user.id, clientId, 'session_select_speaker');
+      if (!consentCheck.allowed) {
+        return res.status(consentCheck.status).json({ error: consentCheck.error });
+      }
+    }
+
+    if (recordingMode !== 'single_track') {
+      return res.status(400).json({ error: 'Speaker selection only applies to single_track recordings' });
+    }
+
+    // Idempotent: if a speaker has already been chosen, just acknowledge it.
+    // Don't re-trigger transcription on a second click.
+    if (alreadySelected) {
+      return res.json({
+        success: true,
+        session_id: parseInt(sessionId),
+        selected_speaker_label: alreadySelected,
+        status,
+        already_selected: true
+      });
+    }
+
+    if (!segmentsJson) {
+      return res.status(400).json({
+        error: 'Speaker segments not available. Diarization may still be running or has failed.'
+      });
+    }
+
+    let parsedSegments = null;
+    try {
+      parsedSegments = JSON.parse(segmentsJson);
+    } catch (_) {
+      return res.status(500).json({ error: 'Stored speaker segments are corrupt' });
+    }
+
+    const speakers = (parsedSegments && Array.isArray(parsedSegments.speakers))
+      ? parsedSegments.speakers
+      : (Array.isArray(parsedSegments) ? parsedSegments : []);
+    const matched = speakers.find(s => s && s.label === speakerLabel);
+    if (!matched) {
+      return res.status(400).json({ error: `speaker_label '${speakerLabel}' not found in detected speakers` });
+    }
+
+    // Persist the selection AND clear speaker_segments_json so the other-speaker
+    // timing data is not retained on disk. Move status to 'transcribing' so the
+    // UI shows the right spinner while the transcription chain runs.
+    db.run(
+      `UPDATE sessions
+       SET selected_speaker_label = ?, speaker_segments_json = NULL,
+           status = 'transcribing', updated_at = datetime('now')
+       WHERE id = ?`,
+      [speakerLabel, sessionId]
+    );
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'session_speaker_selected', 'session', ?, ?, datetime('now'))",
+      [req.user.id, sessionId, JSON.stringify({ speaker_label: speakerLabel })]
+    );
+    saveDatabaseAfterWrite();
+
+    logger.info(`Session ${sessionId}: therapist ${req.user.id} selected ${speakerLabel}; kicking off transcription`);
+
+    // Fire transcription asynchronously. The transcription service inspects
+    // selected_speaker_label and runs filterTranscriptToSpeaker before
+    // encrypting, so only the chosen speaker's text reaches the DB.
+    processSessionTranscription(parseInt(sessionId)).then(r => {
+      if (r && r.success) {
+        logger.info(`Single-track transcription complete for session ${sessionId}`);
+      } else {
+        logger.warn(`Single-track transcription failed for session ${sessionId}: ${r && r.error}`);
+      }
+    }).catch(err => {
+      logger.error(`Single-track transcription error for session ${sessionId}: ${err.message}`);
+    });
+
+    res.json({
+      success: true,
+      session_id: parseInt(sessionId),
+      selected_speaker_label: speakerLabel,
+      status: 'transcribing'
+    });
+  } catch (error) {
+    logger.error('Select speaker error: ' + error.message);
+    res.status(500).json({ error: 'Failed to select speaker' });
   }
 });
 

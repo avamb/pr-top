@@ -461,7 +461,28 @@
       "titleLabel": "Título (opcional)",
       "titlePlaceholder": "p. ej. Seguimiento de la ansiedad",
       "inquiryLabel": "Consulta (opcional)",
-      "inquiryNone": "— Sin consulta —"
+      "inquiryNone": "— Sin consulta —",
+      "singleTrack": {
+        "label": "Conservar solo mi voz (una pista)",
+        "hint": "Úsalo cuando el cliente no haya dado consentimiento para grabar. Tras la carga elegirás cuál de las voces detectadas es la tuya; solo esa voz se transcribirá y resumirá. El audio del otro hablante se descarta.",
+        "badge": "Solo terapeuta",
+        "diarizing": "Detectando hablantes en la grabación…",
+        "diarizationFailed": "Falló la detección de hablantes. Vuelve a subir el archivo o contacta con soporte.",
+        "awaitingSelection": "Elige tu voz",
+        "awaitingSelectionHint": "Escucha una vista previa de 10 segundos de cada hablante detectado y confirma cuál eres tú. El audio del otro hablante se descartará de la transcripción.",
+        "speakerLabel": "Hablante {{n}}",
+        "previewWindow": "{{start}} s – {{end}} s",
+        "totalSpoken": "≈ {{seconds}} s de habla",
+        "playPreview": "▶ Reproducir",
+        "stopPreview": "⏹ Detener",
+        "selectThisVoice": "Esta es mi voz",
+        "selecting": "Confirmando…",
+        "selectError": "No se pudo confirmar la selección de hablante.",
+        "selectedThisVoice": "Seleccionado como tu voz",
+        "transcribingSelected": "Transcribiendo solo tu voz…",
+        "summaryFromSingleTrack": "Resumen generado solo a partir de tu voz.",
+        "noPreviewAvailable": "Vista previa no disponible."
+      }
     },
     "calendar": {
       "title": "Calendario de sesiones",

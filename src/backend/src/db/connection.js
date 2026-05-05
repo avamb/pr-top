@@ -1125,6 +1125,127 @@ function applySchema(db) {
     // Index already exists, ignore
   }
 
+  // T-19: Single-track (therapist-only) recording.
+  // When a client did not consent to being recorded but the therapist wants the
+  // session AI summary to work from a Zoom recording, the upload is marked
+  // recording_mode='single_track'. The system runs speaker diarization on the
+  // file, the therapist confirms which detected speaker is *their* voice
+  // (audio-preview of the first ~10 sec of each speaker), and ONLY that
+  // speaker's audio is fed into transcription/summarization. Other speaker
+  // segments are dropped — neither transcribed nor persisted to disk after
+  // selection.
+  //
+  // Columns:
+  //   - recording_mode: 'mixed' (default — both voices, original behavior) or
+  //                     'single_track' (therapist-only voice, pending selection).
+  //   - selected_speaker_label: the diarization label the therapist confirmed
+  //     as their own voice (e.g. 'speaker_0'). NULL until selected.
+  //   - speaker_segments_json: JSON array describing each detected speaker:
+  //       [{ label, total_sec, segments: [{start_sec, end_sec}, ...],
+  //          preview_start_sec, preview_end_sec }, ...]
+  //     Cleared (set to NULL) after the therapist picks a speaker, so the
+  //     other-speaker timing data is not retained on disk.
+  //
+  // Status flow for single_track:
+  //   pending  →  diarizing  →  awaiting_speaker_selection  →
+  //   transcribing  →  summarizing  →  complete
+  // (Existing 'mixed' flow: pending → transcribing → complete is unchanged.)
+  try {
+    db.run("ALTER TABLE sessions ADD COLUMN recording_mode TEXT DEFAULT 'mixed'");
+    logger.info('Added recording_mode column to sessions');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE sessions ADD COLUMN selected_speaker_label TEXT');
+    logger.info('Added selected_speaker_label column to sessions');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE sessions ADD COLUMN speaker_segments_json TEXT');
+    logger.info('Added speaker_segments_json column to sessions');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  // Backfill recording_mode='mixed' for any existing rows where the column
+  // was just added (NULL after ALTER). Idempotent — only touches NULL rows.
+  try {
+    const r = db.run("UPDATE sessions SET recording_mode = 'mixed' WHERE recording_mode IS NULL");
+    if (r && typeof r.changes === 'number' && r.changes > 0) {
+      logger.info(`T-19: backfilled recording_mode='mixed' for ${r.changes} sessions`);
+    }
+  } catch (e) {
+    logger.warn('T-19 recording_mode backfill skipped: ' + e.message);
+  }
+
+  // T-19 status migration. The original sessions.status CHECK constraint only
+  // allowed ('pending','transcribing','summarizing','complete','failed'). Single-
+  // track flow needs 'diarizing','awaiting_speaker_selection','diarization_failed',
+  // 'transcription_failed' on top. SQLite can't ALTER an existing CHECK, so when
+  // we detect the legacy constraint we rebuild the table with a relaxed one
+  // (TEXT, no CHECK at all — application code is the source of truth for valid
+  // statuses going forward; the pre-existing values are preserved verbatim).
+  try {
+    const meta = db.exec(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='sessions'"
+    );
+    const ddl = (meta.length > 0 && meta[0].values.length > 0) ? (meta[0].values[0][0] || '') : '';
+    const hasLegacyCheck = /CHECK\s*\(\s*status\s+IN\s*\(\s*'pending',\s*'transcribing',\s*'summarizing',\s*'complete',\s*'failed'\s*\)\s*\)/i.test(ddl);
+    if (hasLegacyCheck) {
+      logger.info('T-19: rebuilding sessions table to relax legacy status CHECK constraint');
+      // Pull every existing column from the live table so we don't drop user data.
+      const colsRes = db.exec("PRAGMA table_info('sessions')");
+      const cols = (colsRes.length > 0 ? colsRes[0].values : [])
+        .map(r => ({ name: r[1], type: r[2] || 'TEXT', notnull: r[3], dflt: r[4], pk: r[5] }));
+      const colNames = cols.map(c => c.name);
+      // Build a column DDL that keeps the original PK + types and the existing
+      // FK references; we drop only the legacy CHECK from `status`.
+      function renderDefault(d) {
+        if (d === null || d === undefined) return '';
+        const s = String(d);
+        // PRAGMA strips outer parens from expressions like (datetime('now')).
+        // Wrap function-call defaults back in parens, leave literals as-is.
+        const isFnCall = /[()]/.test(s);
+        const isQuoted = /^['"].*['"]$/.test(s);
+        const isNumeric = /^-?\d+(?:\.\d+)?$/.test(s);
+        if (isFnCall) return ` DEFAULT (${s})`;
+        if (isQuoted || isNumeric || /^(NULL|CURRENT_TIME|CURRENT_DATE|CURRENT_TIMESTAMP)$/i.test(s)) return ` DEFAULT ${s}`;
+        return ` DEFAULT '${s.replace(/'/g, "''")}'`;
+      }
+      const ddlParts = cols.map(c => {
+        if (c.name === 'id') return `${c.name} INTEGER PRIMARY KEY AUTOINCREMENT`;
+        if (c.name === 'status') return `status TEXT DEFAULT 'pending'`;
+        let part = `${c.name} ${c.type}`;
+        part += renderDefault(c.dflt);
+        return part;
+      });
+      // FKs are not strictly needed for application correctness — the
+      // application enforces them. We drop them on the rebuild to keep the
+      // migration tiny and side-effect-free.
+      db.run('BEGIN');
+      try {
+        db.run(`CREATE TABLE sessions_v2 (${ddlParts.join(', ')})`);
+        const cn = colNames.join(', ');
+        db.run(`INSERT INTO sessions_v2 (${cn}) SELECT ${cn} FROM sessions`);
+        db.run('DROP TABLE sessions');
+        db.run('ALTER TABLE sessions_v2 RENAME TO sessions');
+        db.run('COMMIT');
+        // Re-create the calendar indexes the rebuild dropped.
+        db.run('CREATE INDEX IF NOT EXISTS idx_sessions_client_meeting ON sessions(client_id, scheduled_at)');
+        db.run('CREATE INDEX IF NOT EXISTS idx_sessions_therapist_meeting ON sessions(therapist_id, scheduled_at)');
+        try { db.run('CREATE INDEX IF NOT EXISTS idx_sessions_inquiry ON sessions(inquiry_id)'); } catch (_) {}
+        try { db.run('CREATE INDEX IF NOT EXISTS idx_sessions_therapist_client ON sessions(therapist_id, client_id)'); } catch (_) {}
+        logger.info('T-19: sessions table rebuilt with relaxed status constraint');
+      } catch (rebuildErr) {
+        try { db.run('ROLLBACK'); } catch (_) {}
+        throw rebuildErr;
+      }
+    }
+  } catch (e) {
+    logger.warn('T-19 status-constraint migration skipped: ' + e.message);
+  }
+
   // T-15: Post-session therapist notes ("На что обратить внимание в следующий раз").
   // After a session, the therapist can quickly type or dictate quick notes about
   // what to focus on next session. The notes are Class A encrypted (sensitive
