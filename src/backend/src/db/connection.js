@@ -1094,6 +1094,37 @@ function applySchema(db) {
     // Index already exists, ignore
   }
 
+  // T-02: Session date-based ID + calendar.
+  // Sessions are identified by meeting date (not by topic). The existing
+  // `scheduled_at` column on the sessions table is reused as the canonical
+  // meeting_date — it represents when the actual session took place
+  // (entered by the therapist), distinct from `created_at` which records
+  // when the audio was uploaded. For sessions that pre-date T-02 and don't
+  // yet have scheduled_at filled in, we backfill scheduled_at = created_at
+  // (one-shot; idempotent via the WHERE clause). We also add an index on
+  // (client_id, scheduled_at) for the calendar widget which scans by date
+  // for a single client.
+  try {
+    const t02Backfill = db.run(
+      "UPDATE sessions SET scheduled_at = created_at WHERE scheduled_at IS NULL OR scheduled_at = ''"
+    );
+    if (t02Backfill && typeof t02Backfill.changes === 'number' && t02Backfill.changes > 0) {
+      logger.info(`T-02: backfilled scheduled_at = created_at for ${t02Backfill.changes} sessions`);
+    }
+  } catch (e) {
+    logger.warn('T-02 scheduled_at backfill skipped: ' + e.message);
+  }
+  try {
+    db.run('CREATE INDEX IF NOT EXISTS idx_sessions_client_meeting ON sessions(client_id, scheduled_at)');
+  } catch (e) {
+    // Index already exists, ignore
+  }
+  try {
+    db.run('CREATE INDEX IF NOT EXISTS idx_sessions_therapist_meeting ON sessions(therapist_id, scheduled_at)');
+  } catch (e) {
+    // Index already exists, ignore
+  }
+
   // T-15: Post-session therapist notes ("На что обратить внимание в следующий раз").
   // After a session, the therapist can quickly type or dictate quick notes about
   // what to focus on next session. The notes are Class A encrypted (sensitive

@@ -56,6 +56,10 @@ Connect clients with one link — simple and secure.
     historyHeader: '📖 *Your Recent Diary Entries:*',
     historyEmpty: '📖 You have no diary entries yet.\n\nSend a text or voice message to start your diary!',
     historyFailed: 'Failed to load diary history. Please try again.',
+    // /sessions command (T-02) — last 5 sessions with meeting dates
+    sessionsHeader: '🎧 *Your recent sessions:*',
+    sessionsEmpty: '🎧 You have no sessions recorded yet.\n\nYour therapist will upload session recordings after your meetings.',
+    sessionsFailed: 'Failed to load session history. Please try again.',
     // /disconnect command
     disconnectConfirm: '⚠️ *Are you sure you want to disconnect?*\n\nThis will:\n• Revoke your therapist\'s access to your data\n• Remove your therapist connection\n\nYou can reconnect later with a new invite code.',
     disconnectYes: '✅ Yes, disconnect',
@@ -204,6 +208,10 @@ Connect clients with one link — simple and secure.
     historyHeader: '📖 *Ваши последние записи дневника:*',
     historyEmpty: '📖 У вас пока нет записей в дневнике.\n\nОтправьте текстовое или голосовое сообщение, чтобы начать вести дневник!',
     historyFailed: 'Не удалось загрузить историю дневника. Попробуйте снова.',
+    // /sessions (T-02)
+    sessionsHeader: '🎧 *Ваши последние сессии:*',
+    sessionsEmpty: '🎧 У вас пока нет записанных сессий.\n\nТерапевт загрузит записи после встреч.',
+    sessionsFailed: 'Не удалось загрузить историю сессий. Попробуйте снова.',
     // /disconnect
     disconnectConfirm: '⚠️ *Вы уверены, что хотите отключиться?*\n\nЭто:\n• Отзовёт доступ терапевта к вашим данным\n• Удалит связь с терапевтом\n\nВы сможете подключиться снова с новым кодом приглашения.',
     disconnectYes: '✅ Да, отключиться',
@@ -352,6 +360,10 @@ Conecta clientes con un enlace — simple y seguro.
     historyHeader: '📖 *Tus entradas recientes del diario:*',
     historyEmpty: '📖 Aún no tienes entradas en el diario.\n\n¡Envía un mensaje de texto o voz para comenzar tu diario!',
     historyFailed: 'No se pudo cargar el historial del diario. Inténtalo de nuevo.',
+    // /sessions (T-02)
+    sessionsHeader: '🎧 *Tus sesiones recientes:*',
+    sessionsEmpty: '🎧 Aún no tienes sesiones registradas.\n\nTu terapeuta cargará las grabaciones después de los encuentros.',
+    sessionsFailed: 'No se pudo cargar el historial de sesiones. Inténtalo de nuevo.',
     // /disconnect
     disconnectConfirm: '⚠️ *¿Estás seguro de que quieres desconectarte?*\n\nEsto:\n• Revocará el acceso de tu terapeuta a tus datos\n• Eliminará tu conexión con el terapeuta\n\nPodrás reconectarte más tarde con un nuevo código de invitación.',
     disconnectYes: '✅ Sí, desconectar',
@@ -500,6 +512,10 @@ Conecta clientes con un enlace — simple y seguro.
     historyHeader: '📖 *Ваші останні записи щоденника:*',
     historyEmpty: '📖 У вас поки немає записів у щоденнику.\n\nНадішліть текстове або голосове повідомлення, щоб почати вести щоденник!',
     historyFailed: 'Не вдалося завантажити історію щоденника. Спробуйте знову.',
+    // /sessions (T-02)
+    sessionsHeader: '🎧 *Ваші останні сесії:*',
+    sessionsEmpty: '🎧 У вас поки немає записаних сесій.\n\nТерапевт завантажить записи після зустрічей.',
+    sessionsFailed: 'Не вдалося завантажити історію сесій. Спробуйте знову.',
     // /disconnect
     disconnectConfirm: '⚠️ *Ви впевнені, що хочете від\'єднатися?*\n\nЦе:\n• Відкличе доступ терапевта до ваших даних\n• Видалить зв\'язок з терапевтом\n\nВи зможете під\'єднатися знову з новим кодом запрошення.',
     disconnectYes: '✅ Так, від\'єднатися',

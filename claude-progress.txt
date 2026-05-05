@@ -3303,3 +3303,247 @@ block so the JSON structure mirrors EN/RU exactly.
   full EN/RU/ES/UK i18n coverage, persistence verified across backend
   restart).
 
+
+
+## Session: 2026-05-05 - Feature #360 (T-02 Session date-based ID + calendar) - PASSING
+
+### Completed: T-02 — Sessions identified by meeting_date + calendar widget on client page
+
+**Why this feature exists:**
+Per the Misha Drozd interview (docs/new_fichas/customer-development-meetings/
+misha_drozd_2026-04-19.md, lines 46-86), a therapist navigating a client's
+file should think in dates ("the session on April 15"), not in topic
+strings. Sessions are the unit of clinical work, and the calendar metaphor
+("точки на датах встреч") is what therapists already know from their
+paper diaries. T-02 makes meeting_date the canonical identifier of a
+session — distinct from the upload time (created_at) — and surfaces the
+calendar widget directly on the client detail page, with click-through to
+the session page. T-02 also closes the loop with T-01: every session may
+optionally belong to an inquiry, and the calendar/list can be filtered to
+a single inquiry thread.
+
+**State at start of this session:**
+A large portion of T-02 was already partially built across earlier
+sessions for adjacent features (T-01, T-07, T-15):
+  - sessions.title and sessions.inquiry_id columns existed (added by T-07)
+  - sessions.scheduled_at existed and was being treated as meeting_date
+  - POST /api/sessions accepted scheduled_at + title + inquiry_id
+  - ClientDetail.jsx already had a metadata form (date / title / inquiry)
+    above the dropzone (T-07)
+
+What was missing:
+  1. A live calendar widget on the client detail page, with dots on dates
+     that have at least one session, click-through to the session.
+  2. Inquiry filter on the sessions list (so a therapist working an
+     "anxiety" inquiry sees only those sessions).
+  3. ORDER BY meeting_date (not created_at) on both the list endpoint and
+     the bot endpoint.
+  4. PATCH support for meeting_date / title / inquiry_id on
+     /api/sessions/:id (only post_session_notes was supported).
+  5. /api/bot/sessions/:telegram_id endpoint and the corresponding
+     /sessions bot command (the spec requires "last 5 sessions with
+     dates").
+  6. T-02 specific i18n: session.calendar.* keys in en/ru/es/uk and bot
+     translations sessionsHeader/sessionsEmpty/sessionsFailed.
+
+**What was built this session (the gaps above):**
+
+Backend (`src/backend/src/db/connection.js`):
+  - T-02 idempotent migration block (lines ~1097-1124):
+      * Backfill UPDATE sessions SET scheduled_at = created_at WHERE
+        scheduled_at IS NULL OR scheduled_at = '' (only changes rows that
+        need it; logs the count when non-zero).
+      * CREATE INDEX IF NOT EXISTS idx_sessions_client_meeting
+        ON sessions(client_id, scheduled_at) — for the client-page
+        calendar query.
+      * CREATE INDEX IF NOT EXISTS idx_sessions_therapist_meeting
+        ON sessions(therapist_id, scheduled_at) — for the dashboard-wide
+        date scans the analytics tab will eventually use.
+
+Backend (`src/backend/src/routes/clients.js` GET /:id/sessions):
+  - Added inquiry_id query parameter (positive int, 'none', 'null', or
+    omitted). Bad values return 400.
+  - Selected columns now include title and inquiry_id, both projected onto
+    the JSON response.
+  - ORDER BY changed to COALESCE(scheduled_at, created_at) DESC,
+    created_at DESC — so the calendar lists in true meeting-date order.
+  - Each row exposes both `scheduled_at` (legacy) and `meeting_date` (new
+    canonical name) so old callers keep working.
+
+Backend (`src/backend/src/routes/sessions.js` PATCH /:id):
+  - Extended supported fields from {post_session_notes} to
+    {post_session_notes, title, meeting_date | scheduled_at, inquiry_id}.
+  - Each field validated upfront (no half-updates):
+      * title: ≤200 chars, null clears
+      * meeting_date: YYYY-MM-DD or full ISO 8601, null clears, anything
+        else 400
+      * inquiry_id: positive int that belongs to the same therapist+client
+        pair (cross-therapist / cross-client returns 400). null detaches.
+  - Each field updated independently with its own audit_log row
+    (session_update_title / session_update_meeting_date /
+    session_update_inquiry).
+  - Response re-reads the canonical row so the client sees whatever the
+    DB actually stored after the write.
+  - GET /api/sessions/:id now also returns title + inquiry_id +
+    meeting_date alias.
+
+Backend (`src/backend/src/routes/bot.js`):
+  - New GET /api/bot/sessions/:telegram_id endpoint behind botAuth.
+    Looks up client by telegram_id, returns the last N sessions ordered
+    by COALESCE(scheduled_at, created_at) DESC. Each row carries id,
+    meeting_date, title, status. Default limit = 5; max clamped to 25.
+    No transcript / summary leaks here — Class A material stays in the
+    therapist dashboard; the bot is a client-facing surface.
+  - 404 if telegram_id has no user, 403 if the user is not a client.
+
+Bot (`src/bot/src/index.js`):
+  - Registered /sessions in setMyCommands for clients.
+  - New handleSessions(chatId, telegramId, lang) function: calls the API,
+    formats meeting_date in the user's timezone using the right locale
+    (ru-RU / es-ES / uk-UA / en-US), prints "{i}. 🎧 {date} — {title}
+    _(status)_" — title and status omitted when absent.
+  - Wired onText(/\/sessions/) to handleSessions.
+
+Frontend (`src/frontend/package.json`):
+  - Added "react-day-picker": "^9.14.0" + "date-fns": "^4.1.0" deps.
+    Both already installed in node_modules.
+
+Frontend (`src/frontend/src/components/SessionCalendar.jsx`, new file):
+  - Reusable calendar component built on top of react-day-picker.
+  - Props: sessions, onSelectDate(date, sessionsForDate),
+    onUnselectedDateClick(date), locale.
+  - Computes a YYYY-MM-DD key per session (handles both 'YYYY-MM-DD'
+    and full ISO datetimes; treats naked datetimes as UTC to avoid
+    timezone-bucket drift).
+  - Renders DayPicker with a `hasSession` modifier — the parent page
+    paints the dot via .rdp-prtop-hasSession CSS.
+  - Locales mapped to date-fns: enUS / ru / es / uk.
+  - Sunday-start for English, Monday-start for everyone else.
+  - data-testid="session-calendar" on the wrapper.
+
+Frontend (`src/frontend/src/pages/ClientDetail.jsx`):
+  - Imports SessionCalendar.
+  - New state: `sessionsInquiryFilter` ('' | 'none' | <id>).
+  - sessionMeetingDate now defaults to today (todayStr) instead of '' so
+    the upload form is pre-filled per spec ("default = сегодня").
+  - fetchSessions() takes an opts override so changing the inquiry filter
+    doesn't race against React's stale state.
+  - useEffect re-fetches sessions on inquiryFilter change.
+  - New three-column section above the dropzone:
+      * Calendar panel (lg:col-span-2) with embedded CSS for the green
+        dot under .rdp-prtop-hasSession days.
+      * Inquiry filter dropdown (data-testid=sessions-inquiry-filter)
+        with options: All / No inquiry / each active inquiry.
+      * Clear-filter button + total count.
+  - Calendar onSelectDate navigates to /sessions/<latest id on that date>.
+  - Sessions list now renders meeting_date instead of created_at on the
+    right side, shows the title (when present) above the audio/transcript
+    flags, and shows an amber 📌 inquiry badge for sessions linked to an
+    inquiry (truncated to 24 chars). Each row carries data-testid
+    `session-row-<id>` plus data-meeting-date / data-inquiry-id attrs.
+
+i18n (`src/frontend/src/i18n/{en,ru,es,uk}.json`):
+  - Added session.calendar block (9 keys each) per locale:
+    title, legend, filterByInquiry, allInquiries, noInquiry, clearFilter,
+    totalCount, openSession, noSessionOnDate.
+  - Locale-appropriate translations:
+    en: "Session calendar / Days with sessions / Filter by inquiry / …"
+    ru: "Календарь сессий / Дни с сессиями / Фильтр по запросу / …"
+    es: "Calendario de sesiones / Días con sesiones / Filtrar por
+        consulta / …"
+    uk: "Календар сесій / Дні з сесіями / Фільтр за запитом / …"
+
+Bot i18n (`src/bot/src/i18n.js`):
+  - Added sessionsHeader / sessionsEmpty / sessionsFailed in en/ru/es/uk.
+  - en: "🎧 *Your recent sessions:*" / "🎧 You have no sessions
+        recorded yet." / "Failed to load session history…"
+  - ru / es / uk: locale-appropriate equivalents.
+
+**Verification this session:**
+
+1. `node -c` clean for db/connection.js, routes/sessions.js,
+   routes/clients.js, routes/bot.js, bot/i18n.js, bot/index.js.
+
+2. esbuild API compile (target=es2020, jsx=automatic) of the new
+   SessionCalendar.jsx (2869 chars, 0 warnings) and the modified
+   ClientDetail.jsx (153848 chars, 0 warnings).
+
+3. i18n key check (.tmp_check_calendar_i18n.js): all four locales have
+   the full session.calendar.* block (9 keys each) — PASS.
+
+4. Bot i18n check (.tmp_check_bot_i18n.js): all four locales have
+   sessionsHeader/sessionsEmpty/sessionsFailed — PASS.
+
+5. Backend killed and restarted cleanly. /api/health → 200
+   `{status:"ok",database:"connected",tableCount:33}`. T-02 backfill ran
+   silently (no rows needed updating — every existing session already
+   had scheduled_at populated by T-07). Indexes verified on disk via
+   PRAGMA index_list / sqlite_master:
+     idx_sessions_client_meeting (client_id, scheduled_at)
+     idx_sessions_therapist_meeting (therapist_id, scheduled_at)
+     idx_sessions_inquiry (inquiry_id) [pre-existing from T-07]
+     idx_sessions_therapist_client (therapist_id, client_id) [pre-existing]
+
+6. Direct SQL e2e (.tmp_e2e_t02_full.js) against the live prtop.db:
+   - Sort by COALESCE(scheduled_at, created_at) DESC orders three test
+     sessions correctly (apr30 > apr15 > apr1) → PASS.
+   - Filter inquiry_id=<id> narrows from 3 to 1 row → PASS.
+   - Filter inquiry_id IS NULL returns the 2 unattached sessions → PASS.
+   - PATCH-equivalent UPDATE applies title + scheduled_at + inquiry_id
+     atomically → PASS.
+   - Bot endpoint SQL returns sessions ordered by meeting_date DESC, the
+     first row being the just-PATCHed one → PASS.
+
+7. Live HTTP e2e (.tmp_e2e_t02_full_http.js) against the running backend:
+   - Registered a fresh therapist via /api/auth/register, logged in via
+     /api/auth/login, got a valid Bearer token.
+   - Seeded a synthetic client (consent=1) and 3 test sessions with
+     explicit meeting_dates, then restarted the backend so it would
+     re-read the disk DB.
+   - GET /api/clients/<id>/sessions → 200 with all 3 rows in
+     meeting_date DESC order. meeting_date / title / inquiry_id all
+     present → PASS (sort).
+   - GET ?inquiry_id=<id> → 200, total=1 → PASS.
+   - GET ?inquiry_id=none → 200, total=2, both sessions have
+     inquiry_id=null → PASS.
+   - GET ?inquiry_id=abc → 400 with helpful error → PASS.
+   - PATCH /api/sessions/<id> with {meeting_date:'2026-05-15',
+     title:'Renamed by T-02 test'} → 200, response echoes both
+     values → PASS.
+   - PATCH meeting_date='not-a-date' → 400 → PASS.
+   - PATCH inquiry_id=999999 (foreign) → 400 "inquiry_id not found
+     for this client" → PASS.
+   - GET /api/bot/sessions/<telegram_id> with x-bot-api-key → 200,
+     total=3, first row is the just-PATCHed session ordered by
+     meeting_date → PASS.
+   - GET /api/bot/sessions/nonexistent_tg → 404 → PASS.
+   ALL 9 HTTP CHECKS: PASS.
+
+8. Persistence test (.tmp_persist_t02.js): killed the backend (PID
+   42704), restarted (PID 24360), re-read prtop.db. All 3 test sessions
+   present including the renamed one with meeting_date=2026-05-15 and
+   title='Renamed by T-02 test'. PASS.
+
+9. Cleanup (.tmp_cleanup_t02.js): deleted the 3 test sessions, the test
+   inquiry, the test client, the test therapist. Backend restarted on
+   the cleaned DB and /api/health came back green.
+
+10. Mock data grep across all T-02 touched files (db/connection.js,
+    routes/sessions.js, routes/clients.js, routes/bot.js, bot/index.js,
+    bot/i18n.js, components/SessionCalendar.jsx,
+    pages/ClientDetail.jsx) — zero hits for globalThis|devStore|
+    dev-store|mockDb|mockData|fakeData|sampleData|dummyData|MOCK in any
+    of them (the only "MOCK" hit in src/bot/src/index.js is the existing
+    "Bot is in MOCK mode" startup-warning console.log on line 127, which
+    is unrelated to T-02 and not introduced by this work).
+
+11. All writes flow through `db.run` + `saveDatabaseAfterWrite()`
+    against prtop.db — no in-memory shortcuts.
+
+### Current Status
+- Feature #360: PASSING (T-02 Session date-based ID + calendar — meeting
+  date is canonical, indexed; calendar widget on client page with click
+  through; inquiry filter on sessions list; PATCH supports
+  title/meeting_date/inquiry_id; bot /sessions command shows last 5 with
+  dates; full EN/RU/ES/UK i18n coverage on both web and bot; persistence
+  verified across backend restart).

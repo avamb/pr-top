@@ -461,6 +461,17 @@
       "inquiryLabel": "Запит (необов'язково)",
       "inquiryNone": "— Без запиту —"
     },
+    "calendar": {
+      "title": "Календар сесій",
+      "legend": "Дні з сесіями",
+      "filterByInquiry": "Фільтр за запитом",
+      "allInquiries": "Усі запити",
+      "noInquiry": "Без запиту",
+      "clearFilter": "Скинути фільтр",
+      "totalCount": "{{count}} сесій",
+      "openSession": "Відкрити сесію",
+      "noSessionOnDate": "У цей день немає сесій"
+    },
     "postNotes": {
       "title": "Нотатки після сесії",
       "therapistOnlyBadge": "Тільки для терапевта",

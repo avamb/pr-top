@@ -9,6 +9,7 @@ import { formatUserDate, formatUserDateOnly, getUserTimezone } from '../utils/fo
 import AudioPlayer from '../components/AudioPlayer';
 import CommentsPanel from '../components/CommentsPanel';
 import SupervisionShareModal from '../components/SupervisionShareModal';
+import SessionCalendar from '../components/SessionCalendar';
 
 const API = '/api';
 
@@ -209,6 +210,9 @@ function ClientDetail() {
   const [sessions, setSessions] = useState([]);
   const [sessionsTotal, setSessionsTotal] = useState(0);
   const [sessionsLoading, setSessionsLoading] = useState(false);
+  // T-02: filter the Sessions tab by inquiry. '' = all sessions, 'none' =
+  // sessions with no inquiry, otherwise a positive integer (inquiry id).
+  const [sessionsInquiryFilter, setSessionsInquiryFilter] = useState('');
   const [sessionUploadFile, setSessionUploadFile] = useState(null);
   const [sessionUploading, setSessionUploading] = useState(false);
   const [sessionUploadProgress, setSessionUploadProgress] = useState(0);
@@ -217,7 +221,10 @@ function ClientDetail() {
   const [sessionDragActive, setSessionDragActive] = useState(false);
   // T-07: Optional metadata sent alongside the audio upload.
   // meetingDate -> scheduled_at (T-02 compatible), title -> sessions.title, inquiryId -> sessions.inquiry_id (T-01).
-  const [sessionMeetingDate, setSessionMeetingDate] = useState('');
+  // T-02: meeting_date defaults to today; therapist can change it before
+  // uploading the recording. Empty string is still allowed for backwards
+  // compatibility (the API will fall back to created_at on the backend).
+  const [sessionMeetingDate, setSessionMeetingDate] = useState(todayStr);
   const [sessionTitle, setSessionTitle] = useState('');
   const [sessionInquiryId, setSessionInquiryId] = useState('');
   const sessionFileInputRef = useRef(null);
@@ -612,6 +619,13 @@ function ClientDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inquiryStatusFilter]);
 
+  // T-02: re-fetch sessions when the inquiry filter changes (after initial load)
+  useEffect(() => {
+    if (!token || !isValidId) return;
+    fetchSessions(undefined, { inquiryFilter: sessionsInquiryFilter });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionsInquiryFilter]);
+
   async function fetchClient(signal) {
     try {
       const res = await fetch(`${API}/clients/${id}`, {
@@ -995,10 +1009,23 @@ function ClientDetail() {
     }
   }
 
-  async function fetchSessions(signal) {
+  async function fetchSessions(signal, opts = {}) {
     try {
       setSessionsLoading(true);
-      const res = await fetch(`${API}/clients/${id}/sessions`, {
+      // T-02: apply inquiry filter if one is active. We accept an explicit
+      // override so call sites that change the filter and re-fetch don't
+      // race against a stale React render of `sessionsInquiryFilter`.
+      const inquiryFilter = Object.prototype.hasOwnProperty.call(opts, 'inquiryFilter')
+        ? opts.inquiryFilter
+        : sessionsInquiryFilter;
+      const qs = new URLSearchParams();
+      if (inquiryFilter !== '' && inquiryFilter !== null && inquiryFilter !== undefined) {
+        qs.set('inquiry_id', String(inquiryFilter));
+      }
+      const url = qs.toString()
+        ? `${API}/clients/${id}/sessions?${qs.toString()}`
+        : `${API}/clients/${id}/sessions`;
+      const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` },
         signal
       });
@@ -1074,8 +1101,8 @@ function ClientDetail() {
 
       setSessionUploadMsg(t('clientDetail.uploadSuccess', 'Session uploaded successfully! Transcription in progress...'));
       setSessionUploadFile(null);
-      // Reset optional metadata fields (T-07)
-      setSessionMeetingDate('');
+      // Reset optional metadata fields (T-07 / T-02 — meeting_date defaults to today again)
+      setSessionMeetingDate(todayStr);
       setSessionTitle('');
       setSessionInquiryId('');
       if (sessionFileInputRef.current) sessionFileInputRef.current.value = '';
@@ -2229,6 +2256,94 @@ function ClientDetail() {
               />
             </div>
 
+            {/* T-02: calendar widget + inquiry filter.
+                The calendar shows a dot under every date with at least one
+                session for this client; clicking a dot navigates straight to
+                that session. The inquiry dropdown narrows the calendar +
+                list to a single inquiry thread. */}
+            <div className="mb-4 grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+              <div className="lg:col-span-2 border border-stone-200 rounded-lg p-3 bg-stone-50">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-stone-700">
+                    {t('session.calendar.title', 'Session calendar')}
+                  </span>
+                  <span className="text-xs text-stone-500" data-testid="session-calendar-legend">
+                    <span
+                      aria-hidden="true"
+                      className="inline-block w-2 h-2 rounded-full bg-teal-500 mr-1 align-middle"
+                    />
+                    {t('session.calendar.legend', 'Days with sessions')}
+                  </span>
+                </div>
+                {/* Inline CSS so the dot decoration travels with the page
+                    without a separate stylesheet. Uses .rdp-prtop-hasSession
+                    which the SessionCalendar component opts into. */}
+                <style>{`
+                  .rdp-prtop-wrap .rdp-day_button { position: relative; }
+                  .rdp-prtop-hasSession .rdp-day_button::after {
+                    content: '';
+                    position: absolute;
+                    left: 50%;
+                    bottom: 4px;
+                    transform: translateX(-50%);
+                    width: 6px;
+                    height: 6px;
+                    border-radius: 50%;
+                    background-color: #14b8a6;
+                  }
+                  .rdp-prtop-hasSession .rdp-day_button {
+                    font-weight: 600;
+                  }
+                `}</style>
+                <SessionCalendar
+                  sessions={sessions}
+                  locale={lang}
+                  onSelectDate={(date, matched) => {
+                    // Open the most recent session on that date (the list is
+                    // already sorted by meeting_date DESC, so the first one
+                    // sorted-by-id-DESC is fine here).
+                    if (matched && matched.length > 0) {
+                      const sorted = [...matched].sort((a, b) => (b.id || 0) - (a.id || 0));
+                      navigate(`/sessions/${sorted[0].id}`);
+                    }
+                  }}
+                />
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-stone-600 mb-1" htmlFor="sessions-inquiry-filter">
+                    {t('session.calendar.filterByInquiry', 'Filter by inquiry')}
+                  </label>
+                  <select
+                    id="sessions-inquiry-filter"
+                    data-testid="sessions-inquiry-filter"
+                    value={sessionsInquiryFilter}
+                    onChange={(e) => setSessionsInquiryFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  >
+                    <option value="">{t('session.calendar.allInquiries', 'All inquiries')}</option>
+                    <option value="none">{t('session.calendar.noInquiry', 'No inquiry')}</option>
+                    {inquiries.map(inq => (
+                      <option key={inq.id} value={inq.id}>{inq.title}</option>
+                    ))}
+                  </select>
+                </div>
+                {sessionsInquiryFilter !== '' && (
+                  <button
+                    type="button"
+                    onClick={() => setSessionsInquiryFilter('')}
+                    className="text-xs text-teal-700 hover:text-teal-800 underline"
+                    data-testid="sessions-inquiry-filter-clear"
+                  >
+                    {t('session.calendar.clearFilter', 'Clear inquiry filter')}
+                  </button>
+                )}
+                <p className="text-xs text-stone-500">
+                  {t('session.calendar.totalCount', { count: sessionsTotal, defaultValue: '{{count}} session(s)' })}
+                </p>
+              </div>
+            </div>
+
             {/* Optional metadata form (T-07) — meeting_date, title, inquiry dropdown.
                 Hidden during upload progress so users see the progress bar clearly.
                 Active inquiries (T-01) populate the dropdown automatically. */}
@@ -2413,41 +2528,73 @@ function ClientDetail() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {sessions.map(session => (
-                  <div key={session.id} className="border border-stone-200 rounded-lg p-4 hover:border-teal-300 transition-colors">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">🎧</span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                          session.status === 'complete' ? 'bg-green-100 text-green-800' :
-                          session.status === 'transcribing' ? 'bg-blue-100 text-blue-800' :
-                          (session.status === 'transcription_failed' || session.status === 'failed') ? 'bg-red-100 text-red-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {session.status}
+              <div className="space-y-4" data-testid="session-list">
+                {sessions.map(session => {
+                  // T-02: meeting_date is the canonical "session date" — show it
+                  // first, fall back to created_at if somehow missing. Title is
+                  // optional; when absent the row still renders cleanly.
+                  const meetingDate = session.meeting_date || session.scheduled_at || session.created_at;
+                  const linkedInquiry = session.inquiry_id
+                    ? inquiries.find(inq => inq.id === session.inquiry_id)
+                    : null;
+                  return (
+                    <div
+                      key={session.id}
+                      data-testid={`session-row-${session.id}`}
+                      data-meeting-date={meetingDate || ''}
+                      data-inquiry-id={session.inquiry_id || ''}
+                      className="border border-stone-200 rounded-lg p-4 hover:border-teal-300 transition-colors"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">🎧</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            session.status === 'complete' ? 'bg-green-100 text-green-800' :
+                            session.status === 'transcribing' ? 'bg-blue-100 text-blue-800' :
+                            (session.status === 'transcription_failed' || session.status === 'failed') ? 'bg-red-100 text-red-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {session.status}
+                          </span>
+                          {linkedInquiry && (
+                            <span
+                              data-testid={`session-row-${session.id}-inquiry-badge`}
+                              className="text-xs px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-800"
+                              title={linkedInquiry.title}
+                            >
+                              📌 {linkedInquiry.title.length > 24 ? linkedInquiry.title.slice(0, 24) + '…' : linkedInquiry.title}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs text-stone-500" data-testid={`session-row-${session.id}-meeting-date`}>
+                          {meetingDate ? formatUserDate(meetingDate) : '—'}
                         </span>
                       </div>
-                      <span className="text-xs text-stone-400">
-                        {formatUserDate(session.created_at)}
-                      </span>
-                    </div>
-                    <div className="flex gap-3 text-xs text-stone-500 mb-2">
-                      <span>{session.has_audio ? '🔊 Audio' : '❌ No audio'}</span>
-                      <span>{session.has_transcript ? '📄 Transcript' : '❌ No transcript'}</span>
-                      <span>{session.summary ? '📋 Summary' : '❌ No summary'}</span>
-                    </div>
-                    {session.summary && (
-                      <div className="p-3 bg-green-50 rounded-lg text-sm text-stone-700">
-                        <p className="whitespace-pre-wrap">{session.summary.length > 300 ? session.summary.substring(0, 300) + '...' : session.summary}</p>
+                      {session.title && (
+                        <p
+                          className="text-sm font-medium text-stone-800 mb-1"
+                          data-testid={`session-row-${session.id}-title`}
+                        >
+                          {session.title}
+                        </p>
+                      )}
+                      <div className="flex gap-3 text-xs text-stone-500 mb-2">
+                        <span>{session.has_audio ? '🔊 Audio' : '❌ No audio'}</span>
+                        <span>{session.has_transcript ? '📄 Transcript' : '❌ No transcript'}</span>
+                        <span>{session.summary ? '📋 Summary' : '❌ No summary'}</span>
                       </div>
-                    )}
-                    <button
-                      onClick={() => navigate(`/sessions/${session.id}`)}
-                      className="mt-2 text-sm text-teal-600 hover:text-teal-700 font-medium"
-                    >View Session Details &rarr;</button>
-                  </div>
-                ))}
+                      {session.summary && (
+                        <div className="p-3 bg-green-50 rounded-lg text-sm text-stone-700">
+                          <p className="whitespace-pre-wrap">{session.summary.length > 300 ? session.summary.substring(0, 300) + '...' : session.summary}</p>
+                        </div>
+                      )}
+                      <button
+                        onClick={() => navigate(`/sessions/${session.id}`)}
+                        className="mt-2 text-sm text-teal-600 hover:text-teal-700 font-medium"
+                      >{t('clientDetail.viewSessionDetails', 'View Session Details →')}</button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

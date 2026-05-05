@@ -158,6 +158,7 @@ if (!token || token === 'your-telegram-bot-token') {
       // Client commands (default for all private chats)
       await bot.setMyCommands([
         { command: 'exercises', description: 'My exercises' },
+        { command: 'sessions', description: 'My recent sessions' },
         { command: 'history', description: 'Diary history' },
         { command: 'sos', description: 'Emergency contact' },
         { command: 'profile', description: 'My profile' },
@@ -274,6 +275,59 @@ if (!token || token === 'your-telegram-bot-token') {
       bot.sendMessage(chatId, text);
     } catch (error) {
       const errorMsg = error.response?.data?.error || t(lang, 'historyFailed');
+      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+    }
+  }
+
+  // T-02: list the client's last 5 sessions by meeting_date.
+  async function handleSessions(chatId, telegramId, lang) {
+    try {
+      const result = await api.get(`/api/bot/sessions/${telegramId}?limit=5`);
+      const sessions = result.data && result.data.sessions ? result.data.sessions : [];
+
+      if (!sessions || sessions.length === 0) {
+        bot.sendMessage(chatId, t(lang, 'sessionsEmpty'));
+        return;
+      }
+
+      // Resolve user's timezone to format meeting_date sensibly.
+      let userTimezone = 'UTC';
+      try {
+        const userInfo = await checkExistingUser(telegramId);
+        if (userInfo && userInfo.timezone) userTimezone = userInfo.timezone;
+      } catch (_) { /* fallback to UTC */ }
+
+      const locale = lang === 'ru' ? 'ru-RU'
+                   : lang === 'es' ? 'es-ES'
+                   : lang === 'uk' ? 'uk-UA'
+                   : 'en-US';
+
+      let text = t(lang, 'sessionsHeader') + '\n\n';
+      sessions.forEach((s, i) => {
+        const rawDate = s.meeting_date || s.created_at;
+        // Treat naked datetimes as UTC (matches the DB convention used elsewhere).
+        const utcSafe = rawDate && typeof rawDate === 'string' && !rawDate.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(rawDate)
+          ? rawDate + 'Z'
+          : rawDate;
+        let dateStr = '—';
+        if (utcSafe) {
+          try {
+            dateStr = new Date(utcSafe).toLocaleDateString(locale, {
+              day: 'numeric', month: 'short', year: 'numeric',
+              timeZone: userTimezone
+            });
+          } catch (_) {
+            dateStr = String(rawDate || '—');
+          }
+        }
+        const titlePart = s.title ? ` — ${s.title}` : '';
+        const statusPart = s.status ? ` _(${s.status})_` : '';
+        text += `${i + 1}. 🎧 ${dateStr}${titlePart}${statusPart}\n`;
+      });
+
+      bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || t(lang, 'sessionsFailed');
       bot.sendMessage(chatId, `❌ ${errorMsg}`);
     }
   }
@@ -522,6 +576,17 @@ if (!token || token === 'your-telegram-bot-token') {
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
     await handleHistory(chatId, telegramId, lang);
+  });
+
+  // T-02: /sessions — client sees their last 5 sessions with meeting dates.
+  // Class A material (transcripts/summaries) is intentionally NOT exposed via
+  // the bot — only the meeting date, an optional therapist-assigned title,
+  // and the processing status are returned.
+  bot.onText(/\/sessions/, async (msg) => {
+    const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+    const lang = await getUserLang(telegramId);
+    await handleSessions(chatId, telegramId, lang);
   });
 
   // /exercises command - client views assigned exercises

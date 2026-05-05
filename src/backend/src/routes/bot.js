@@ -802,6 +802,64 @@ router.get('/diary/:telegram_id', botAuth, (req, res) => {
   }
 });
 
+// T-02: GET /api/bot/sessions/:telegram_id
+// Returns the client's last N sessions ordered by meeting_date (= sessions.scheduled_at)
+// for the bot /sessions command. Each row carries: id, meeting_date, title (if set),
+// status. Summaries / transcripts are intentionally NOT exposed via the bot — the
+// bot is a client-facing surface and Class A material stays in the dashboard.
+// Defaults: limit = 5, max = 25.
+router.get('/sessions/:telegram_id', botAuth, (req, res) => {
+  try {
+    const { telegram_id } = req.params;
+    const db = getDatabase();
+
+    // Look up the client by telegram_id and confirm role.
+    const clientResult = db.exec(
+      'SELECT id, role FROM users WHERE telegram_id = ?',
+      [String(telegram_id)]
+    );
+    if (clientResult.length === 0 || clientResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+    const clientRow = clientResult[0].values[0];
+    const clientId = clientRow[0];
+    const role = clientRow[1];
+    if (role !== 'client') {
+      return res.status(403).json({ error: 'Only clients can list sessions via the bot' });
+    }
+
+    const requestedLimit = parseInt(req.query.limit, 10);
+    const limit = Number.isInteger(requestedLimit) && requestedLimit > 0
+      ? Math.min(requestedLimit, 25)
+      : 5;
+
+    // Pull the client's most recent sessions by meeting_date (falling back to
+    // created_at when scheduled_at is somehow missing — defensive after the
+    // T-02 backfill).
+    const result = db.exec(
+      `SELECT id, status, scheduled_at, created_at, title
+         FROM sessions
+        WHERE client_id = ?
+        ORDER BY COALESCE(scheduled_at, created_at) DESC, created_at DESC
+        LIMIT ?`,
+      [clientId, limit]
+    );
+
+    const sessions = (result.length > 0 ? result[0].values : []).map(row => ({
+      id: row[0],
+      status: row[1],
+      meeting_date: row[2] || row[3],
+      created_at: row[3],
+      title: row[4] || null
+    }));
+
+    res.json({ sessions, total: sessions.length });
+  } catch (error) {
+    logger.error('Bot get sessions error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch sessions' });
+  }
+});
+
 // POST /api/bot/sos - Client triggers SOS alert
 router.post('/sos', botAuth, (req, res) => {
   try {

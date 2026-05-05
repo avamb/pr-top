@@ -463,6 +463,17 @@
       "inquiryLabel": "Consulta (opcional)",
       "inquiryNone": "— Sin consulta —"
     },
+    "calendar": {
+      "title": "Calendario de sesiones",
+      "legend": "Días con sesiones",
+      "filterByInquiry": "Filtrar por consulta",
+      "allInquiries": "Todas las consultas",
+      "noInquiry": "Sin consulta",
+      "clearFilter": "Limpiar filtro",
+      "totalCount": "{{count}} sesion(es)",
+      "openSession": "Abrir sesión",
+      "noSessionOnDate": "No hay sesiones en este día"
+    },
     "postNotes": {
       "title": "Notas posteriores a la sesión",
       "therapistOnlyBadge": "Solo terapeuta",

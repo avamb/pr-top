@@ -1216,6 +1216,10 @@ router.get('/:id/timeline', (req, res) => {
 });
 
 // GET /api/clients/:id/sessions - Get sessions for a client
+// T-02: includes title + inquiry_id, sorts by meeting_date (scheduled_at)
+// with created_at as the tiebreaker, and supports an optional inquiry_id
+// query parameter for filtering. Pass `inquiry_id=null` (literal string) or
+// `inquiry_id=none` to fetch only sessions with no inquiry attached.
 router.get('/:id/sessions', (req, res) => {
   try {
     const db = getDatabase();
@@ -1231,21 +1235,46 @@ router.get('/:id/sessions', (req, res) => {
       return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
-    // Get total count
+    // Optional inquiry filter (T-02 + T-01).
+    // - `inquiry_id=<positive int>` → only sessions linked to that inquiry
+    // - `inquiry_id=none` or `inquiry_id=null` → only sessions with no inquiry
+    // - omitted → all sessions
+    let inquiryClause = '';
+    const inquiryParams = [];
+    const rawInquiry = req.query.inquiry_id;
+    if (rawInquiry !== undefined && rawInquiry !== '') {
+      if (rawInquiry === 'none' || rawInquiry === 'null') {
+        inquiryClause = ' AND inquiry_id IS NULL';
+      } else {
+        const inqId = parseInt(rawInquiry, 10);
+        if (Number.isNaN(inqId) || inqId <= 0) {
+          return res.status(400).json({ error: 'inquiry_id must be a positive integer, "none", or "null"' });
+        }
+        inquiryClause = ' AND inquiry_id = ?';
+        inquiryParams.push(inqId);
+      }
+    }
+
+    // Get total count (respects the optional inquiry filter)
     const countResult = db.exec(
-      'SELECT COUNT(*) FROM sessions WHERE therapist_id = ? AND client_id = ?',
-      [therapistId, clientId]
+      `SELECT COUNT(*) FROM sessions WHERE therapist_id = ? AND client_id = ?${inquiryClause}`,
+      [therapistId, clientId, ...inquiryParams]
     );
     const total = countResult.length > 0 ? countResult[0].values[0][0] : 0;
 
-    // Get paginated sessions
+    // Get paginated sessions. Sort by COALESCE(scheduled_at, created_at)
+    // so that sessions without an explicit meeting_date still slot in by
+    // upload time (defensive — the T-02 backfill should mean every row has
+    // a non-null scheduled_at, but this guards against future inserts that
+    // forget the column).
     const result = db.exec(
-      `SELECT id, audio_ref, transcript_encrypted, summary_encrypted, status, scheduled_at, created_at, updated_at
+      `SELECT id, audio_ref, transcript_encrypted, summary_encrypted, status, scheduled_at, created_at, updated_at,
+              title, inquiry_id
        FROM sessions
-       WHERE therapist_id = ? AND client_id = ?
-       ORDER BY created_at DESC
+       WHERE therapist_id = ? AND client_id = ?${inquiryClause}
+       ORDER BY COALESCE(scheduled_at, created_at) DESC, created_at DESC
        LIMIT ? OFFSET ?`,
-      [therapistId, clientId, perPage, offset]
+      [therapistId, clientId, ...inquiryParams, perPage, offset]
     );
 
     const sessions = (result.length > 0 ? result[0].values : []).map(row => {
@@ -1259,15 +1288,18 @@ router.get('/:id/sessions', (req, res) => {
         summary: summary,
         status: row[4],
         scheduled_at: row[5],
+        meeting_date: row[5],
         created_at: row[6],
-        updated_at: row[7]
+        updated_at: row[7],
+        title: row[8] || null,
+        inquiry_id: row[9] != null ? row[9] : null
       };
     });
 
     // Audit log: reading client sessions (Class A - summaries)
     db.run(
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
-      [therapistId, 'read_sessions', 'client', clientId, JSON.stringify({ sessions_count: sessions.length, page })]
+      [therapistId, 'read_sessions', 'client', clientId, JSON.stringify({ sessions_count: sessions.length, page, inquiry_id: rawInquiry || null })]
     );
     saveDatabaseAfterWrite();
 

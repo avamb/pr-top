@@ -245,10 +245,14 @@ router.get('/:id', authenticate, requireRole('therapist', 'superadmin'), async (
       has_summary: !!row[5],
       status: row[8],
       scheduled_at: row[9],
+      // T-02: meeting_date is the canonical name for scheduled_at in the
+      // PR-TOP product. We expose both keys so older callers keep working
+      // and the new calendar widget can read meeting_date directly.
+      meeting_date: row[9],
       created_at: row[10],
       updated_at: row[11],
       title: row[12] || null,
-      inquiry_id: row[13] || null,
+      inquiry_id: row[13] != null ? row[13] : null,
       post_session_notes: null
     };
 
@@ -500,44 +504,166 @@ router.patch('/:id', authenticate, requireRole('therapist', 'superadmin'), async
       }
     }
 
-    // Only post_session_notes is supported right now. Accept null / empty
-    // string to clear the field. Anything else is rejected as a bad request.
-    const hasPostNotes = Object.prototype.hasOwnProperty.call(req.body || {}, 'post_session_notes');
-    if (!hasPostNotes) {
-      return res.status(400).json({ error: 'No supported fields to update. Pass post_session_notes.' });
-    }
-    const raw = req.body.post_session_notes;
-    if (raw !== null && typeof raw !== 'string') {
-      return res.status(400).json({ error: 'post_session_notes must be a string or null' });
-    }
-    // Trim and cap at 10k chars — far above any real-world voice note.
-    const value = raw === null ? '' : raw.toString().trim();
-    const capped = value.slice(0, 10000);
+    // Supported PATCH fields:
+    //   - post_session_notes (T-15) — Class A encrypted, string or null
+    //   - title              (T-02) — short label, string or null (≤200 chars)
+    //   - meeting_date /
+    //     scheduled_at       (T-02) — ISO date (YYYY-MM-DD) or full datetime
+    //                                 string, or null to clear
+    //   - inquiry_id         (T-02) — positive int (must belong to same
+    //                                 therapist+client) or null to detach
+    // At least one of those keys must be present.
+    const body = req.body || {};
+    const hasPostNotes  = Object.prototype.hasOwnProperty.call(body, 'post_session_notes');
+    const hasTitle      = Object.prototype.hasOwnProperty.call(body, 'title');
+    const hasMeeting    = Object.prototype.hasOwnProperty.call(body, 'meeting_date')
+                       || Object.prototype.hasOwnProperty.call(body, 'scheduled_at');
+    const hasInquiry    = Object.prototype.hasOwnProperty.call(body, 'inquiry_id');
 
-    if (capped === '') {
-      // Clear the field
-      db.run(
-        "UPDATE sessions SET post_session_notes_encrypted = NULL, updated_at = datetime('now') WHERE id = ?",
-        [sessionId]
-      );
-    } else {
-      const { encrypted, keyVersion, keyId } = encrypt(capped);
-      db.run(
-        `UPDATE sessions
-         SET post_session_notes_encrypted = ?, encryption_key_id = ?, payload_version = ?,
-             updated_at = datetime('now')
-         WHERE id = ?`,
-        [encrypted, keyId, keyVersion, sessionId]
-      );
+    if (!hasPostNotes && !hasTitle && !hasMeeting && !hasInquiry) {
+      return res.status(400).json({
+        error: 'No supported fields to update. Pass post_session_notes, title, meeting_date, or inquiry_id.'
+      });
     }
 
-    db.run(
-      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'session_update_post_notes', 'session', ?, ?, datetime('now'))",
-      [req.user.id, sessionId, JSON.stringify({ length: capped.length, cleared: capped.length === 0 })]
-    );
+    // ---- Validate each field upfront so we never half-update on bad input ----
+    let postNotesCapped = null;
+    if (hasPostNotes) {
+      const raw = body.post_session_notes;
+      if (raw !== null && typeof raw !== 'string') {
+        return res.status(400).json({ error: 'post_session_notes must be a string or null' });
+      }
+      const value = raw === null ? '' : raw.toString().trim();
+      postNotesCapped = value.slice(0, 10000);
+    }
+
+    let titleCapped = undefined;
+    if (hasTitle) {
+      const raw = body.title;
+      if (raw !== null && typeof raw !== 'string') {
+        return res.status(400).json({ error: 'title must be a string or null' });
+      }
+      const value = raw === null ? '' : raw.toString().trim();
+      titleCapped = value === '' ? null : value.slice(0, 200);
+    }
+
+    let meetingDateValue = undefined;
+    if (hasMeeting) {
+      const raw = Object.prototype.hasOwnProperty.call(body, 'meeting_date')
+        ? body.meeting_date
+        : body.scheduled_at;
+      if (raw === null || raw === '') {
+        meetingDateValue = null;
+      } else if (typeof raw !== 'string') {
+        return res.status(400).json({ error: 'meeting_date must be an ISO date string or null' });
+      } else {
+        const trimmed = raw.trim();
+        // Accept YYYY-MM-DD or full ISO timestamp; reject anything Date can't parse.
+        const isShortDate = /^\d{4}-\d{2}-\d{2}$/.test(trimmed);
+        const parsed = new Date(trimmed);
+        if (!isShortDate && Number.isNaN(parsed.getTime())) {
+          return res.status(400).json({ error: 'meeting_date must be a valid date (YYYY-MM-DD or ISO 8601)' });
+        }
+        meetingDateValue = trimmed;
+      }
+    }
+
+    let inquiryIdValue = undefined;
+    if (hasInquiry) {
+      const raw = body.inquiry_id;
+      if (raw === null || raw === '') {
+        inquiryIdValue = null;
+      } else {
+        const inqId = typeof raw === 'number' ? raw : parseInt(raw, 10);
+        if (!Number.isInteger(inqId) || inqId <= 0) {
+          return res.status(400).json({ error: 'inquiry_id must be a positive integer or null' });
+        }
+        // Must belong to the same therapist + client pair.
+        const inqCheck = db.exec(
+          'SELECT id FROM inquiries WHERE id = ? AND therapist_id = ? AND client_id = ?',
+          [inqId, row[1], row[2]]
+        );
+        if (inqCheck.length === 0 || inqCheck[0].values.length === 0) {
+          return res.status(400).json({ error: 'inquiry_id not found for this client' });
+        }
+        inquiryIdValue = inqId;
+      }
+    }
+
+    // ---- Apply updates ----
+    if (hasPostNotes) {
+      if (postNotesCapped === '') {
+        db.run(
+          "UPDATE sessions SET post_session_notes_encrypted = NULL, updated_at = datetime('now') WHERE id = ?",
+          [sessionId]
+        );
+      } else {
+        const { encrypted, keyVersion, keyId } = encrypt(postNotesCapped);
+        db.run(
+          `UPDATE sessions
+           SET post_session_notes_encrypted = ?, encryption_key_id = ?, payload_version = ?,
+               updated_at = datetime('now')
+           WHERE id = ?`,
+          [encrypted, keyId, keyVersion, sessionId]
+        );
+      }
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'session_update_post_notes', 'session', ?, ?, datetime('now'))",
+        [req.user.id, sessionId, JSON.stringify({ length: postNotesCapped.length, cleared: postNotesCapped.length === 0 })]
+      );
+    }
+
+    if (hasTitle) {
+      db.run(
+        "UPDATE sessions SET title = ?, updated_at = datetime('now') WHERE id = ?",
+        [titleCapped, sessionId]
+      );
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'session_update_title', 'session', ?, ?, datetime('now'))",
+        [req.user.id, sessionId, JSON.stringify({ length: titleCapped ? titleCapped.length : 0, cleared: titleCapped === null })]
+      );
+    }
+
+    if (hasMeeting) {
+      db.run(
+        "UPDATE sessions SET scheduled_at = ?, updated_at = datetime('now') WHERE id = ?",
+        [meetingDateValue, sessionId]
+      );
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'session_update_meeting_date', 'session', ?, ?, datetime('now'))",
+        [req.user.id, sessionId, JSON.stringify({ meeting_date: meetingDateValue })]
+      );
+    }
+
+    if (hasInquiry) {
+      db.run(
+        "UPDATE sessions SET inquiry_id = ?, updated_at = datetime('now') WHERE id = ?",
+        [inquiryIdValue, sessionId]
+      );
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'session_update_inquiry', 'session', ?, ?, datetime('now'))",
+        [req.user.id, sessionId, JSON.stringify({ inquiry_id: inquiryIdValue })]
+      );
+    }
+
     saveDatabaseAfterWrite();
 
-    res.json({ success: true, session_id: parseInt(sessionId), post_session_notes: capped || null });
+    // Re-read the canonical row so the response reflects exactly what is in the DB.
+    const after = db.exec(
+      'SELECT scheduled_at, title, inquiry_id FROM sessions WHERE id = ?',
+      [sessionId]
+    );
+    const afterRow = (after.length > 0 && after[0].values.length > 0) ? after[0].values[0] : [null, null, null];
+
+    res.json({
+      success: true,
+      session_id: parseInt(sessionId),
+      post_session_notes: hasPostNotes ? (postNotesCapped || null) : undefined,
+      title: afterRow[1] || null,
+      meeting_date: afterRow[0] || null,
+      scheduled_at: afterRow[0] || null,
+      inquiry_id: afterRow[2] != null ? afterRow[2] : null
+    });
   } catch (error) {
     logger.error('Patch session error: ' + error.message);
     res.status(500).json({ error: 'Failed to update session' });

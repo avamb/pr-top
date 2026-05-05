@@ -479,6 +479,17 @@
       "inquiryLabel": "Inquiry (optional)",
       "inquiryNone": "— No inquiry —"
     },
+    "calendar": {
+      "title": "Session calendar",
+      "legend": "Days with sessions",
+      "filterByInquiry": "Filter by inquiry",
+      "allInquiries": "All inquiries",
+      "noInquiry": "No inquiry",
+      "clearFilter": "Clear inquiry filter",
+      "totalCount": "{{count}} session(s)",
+      "openSession": "Open session",
+      "noSessionOnDate": "No session on this date"
+    },
     "postNotes": {
       "title": "Post-session notes",
       "therapistOnlyBadge": "Therapist only",

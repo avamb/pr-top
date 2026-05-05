@@ -461,6 +461,17 @@
       "inquiryLabel": "Запрос (необязательно)",
       "inquiryNone": "— Без запроса —"
     },
+    "calendar": {
+      "title": "Календарь сессий",
+      "legend": "Дни с сессиями",
+      "filterByInquiry": "Фильтр по запросу",
+      "allInquiries": "Все запросы",
+      "noInquiry": "Без запроса",
+      "clearFilter": "Сбросить фильтр",
+      "totalCount": "{{count}} сессий",
+      "openSession": "Открыть сессию",
+      "noSessionOnDate": "В этот день нет сессий"
+    },
     "postNotes": {
       "title": "Заметки после сессии",
       "therapistOnlyBadge": "Только для терапевта",
