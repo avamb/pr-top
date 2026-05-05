@@ -351,6 +351,43 @@
       "hintExisting": "Cuando está activado, cada cliente sigue este valor predeterminado a menos que lo anules en su perfil.",
       "saved": "Preferencia de recordatorios guardada.",
       "save": "Guardar preferencia de recordatorios"
+    },
+    "summary": {
+      "title": "Especialización del resumen",
+      "desc": "Adapta los resúmenes de sesión generados por la IA a tu modalidad terapéutica. Cada enfoque destaca cosas distintas, así que el resumen útil depende de cómo trabajas.",
+      "specializationLabel": "Preset de modalidad",
+      "customPromptLabel": "Prompt personalizado para el resumen (opcional)",
+      "customPromptHint": "Añade tus propias instrucciones para afinar el foco de la IA. Hasta 2000 caracteres.",
+      "customPromptPlaceholder": "p. ej. Destaca siempre las referencias a sueños y lapsus, aunque sean breves.",
+      "customPromptModeLabel": "¿Cómo debe usarse tu prompt personalizado?",
+      "modeAppendLabel": "Añadir al preset (recomendado)",
+      "modeAppendHint": "Tus notas se añaden encima del foco de modalidad del preset.",
+      "modeReplaceLabel": "Reemplazar el preset",
+      "modeReplaceHint": "Tu prompt personalizado sustituye por completo la guía de modalidad. Úsalo solo si quieres control total.",
+      "saved": "Configuración de resumen guardada.",
+      "save": "Guardar configuración de resumen",
+      "presets": {
+        "psychoanalysis": {
+          "label": "Psicoanálisis / orientado a la profundidad",
+          "description": "Resalta dinámicas inconscientes, transferencia, defensas, sueños, asociación libre y la propia alianza terapéutica."
+        },
+        "cbt": {
+          "label": "Terapia Cognitivo-Conductual (TCC)",
+          "description": "Destaca pensamientos automáticos, distorsiones, patrones conductuales, resultados de tareas y acciones concretas para la próxima sesión."
+        },
+        "nlp": {
+          "label": "PNL / estratégica / breve",
+          "description": "Sigue el encuadre del resultado, sistemas representacionales, reencuadres, anclas, cambios de estado y verificaciones ecológicas."
+        },
+        "gestalt": {
+          "label": "Gestalt",
+          "description": "Enfatiza la conciencia del aquí-y-ahora, señales corporales, perturbaciones del contacto, polaridades y asuntos inconclusos."
+        },
+        "generic": {
+          "label": "Genérico / integrativo (por defecto)",
+          "description": "Un resumen equilibrado y neutral en cuanto a modalidad: temas, observaciones, progreso y áreas de seguimiento."
+        }
+      }
     }
   },
   "clientList": {

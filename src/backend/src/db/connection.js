@@ -1138,6 +1138,66 @@ function applySchema(db) {
   db.run('CREATE INDEX IF NOT EXISTS idx_supervision_share_links_therapist ON supervision_share_links(therapist_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_supervision_share_links_client ON supervision_share_links(client_id)');
 
+  // T-08: Custom summary prompts per modality.
+  // Therapists work in different modalities (psychoanalysis, CBT, NLP, gestalt,
+  // generic). The summarization service picks a preset prompt fragment by id
+  // and optionally appends (or replaces with) a therapist-supplied custom prompt.
+  // - users.summary_specialization: one of psychoanalysis|cbt|nlp|gestalt|generic.
+  //   The actual enum is enforced in app code (services/ai/summary-presets.js)
+  //   rather than via SQL CHECK so the preset list can grow without migrations.
+  // - users.custom_summary_prompt_encrypted: Class A encrypted free-text prompt
+  //   (≤2000 chars). NULL = no custom prompt.
+  // - users.custom_summary_prompt_mode: 'append' (default) | 'replace'.
+  //   Controls whether the custom prompt is appended to the preset or replaces it.
+  // - users.custom_summary_prompt_key_id / payload_version: standard Class A
+  //   encryption metadata so the value can survive future key rotation.
+  // Backward compat: existing therapists are backfilled to 'generic' once.
+  let _addedSummarySpecializationColumn = false;
+  try {
+    db.run("ALTER TABLE users ADD COLUMN summary_specialization TEXT");
+    logger.info('Added summary_specialization column to users');
+    _addedSummarySpecializationColumn = true;
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE users ADD COLUMN custom_summary_prompt_encrypted TEXT');
+    logger.info('Added custom_summary_prompt_encrypted column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run("ALTER TABLE users ADD COLUMN custom_summary_prompt_mode TEXT DEFAULT 'append'");
+    logger.info('Added custom_summary_prompt_mode column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE users ADD COLUMN custom_summary_prompt_key_id INTEGER REFERENCES encryption_keys(id)');
+    logger.info('Added custom_summary_prompt_key_id column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE users ADD COLUMN custom_summary_prompt_payload_version INTEGER');
+    logger.info('Added custom_summary_prompt_payload_version column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  // Backfill: every existing therapist / superadmin without a specialization
+  // gets 'generic' so AI summarization keeps working post-migration. Idempotent
+  // — only updates rows that are currently NULL.
+  if (_addedSummarySpecializationColumn) {
+    try {
+      db.run(
+        "UPDATE users SET summary_specialization = 'generic' WHERE summary_specialization IS NULL AND role IN ('therapist', 'superadmin')"
+      );
+      logger.info("Backfilled summary_specialization='generic' for existing therapists / superadmins");
+    } catch (e) {
+      logger.warn('summary_specialization backfill skipped: ' + e.message);
+    }
+  }
+
   // Seed default superadmin account if not exists
   seedSuperadmin(db);
 

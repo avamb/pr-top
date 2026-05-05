@@ -3,6 +3,9 @@ const express = require('express');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { logger } = require('../utils/logger');
+const { encrypt, decrypt } = require('../services/encryption');
+// T-08: Modality-specific summarization presets and validation helpers.
+const summaryPresets = require('../services/ai/summary-presets');
 
 const router = express.Router();
 
@@ -290,6 +293,154 @@ router.put('/escalation', authenticate, (req, res) => {
   } catch (error) {
     logger.error('Update escalation prefs error: ' + error.message);
     res.status(500).json({ error: 'Failed to update escalation preferences' });
+  }
+});
+
+// =====================================================================
+// T-08: Custom summary prompts per modality
+// =====================================================================
+//
+// Therapists configure which modality preset (psychoanalysis / cbt / nlp /
+// gestalt / generic) drives their AI session summaries, and optionally
+// supply a custom prompt to fine-tune it. The custom prompt is Class A
+// (encrypted at app layer) — it can contain therapist working notes /
+// IP. Specialization itself is Class B (plaintext metadata).
+
+// GET /api/settings/summary - Therapist-only.
+// Returns: { summary: { specialization, custom_prompt, custom_prompt_mode },
+//            presets: [{id, description}] }
+router.get('/summary', authenticate, (req, res) => {
+  try {
+    const db = getDatabase();
+    const result = db.exec(
+      'SELECT summary_specialization, custom_summary_prompt_encrypted, custom_summary_prompt_mode FROM users WHERE id = ?',
+      [req.user.id]
+    );
+
+    if (result.length === 0 || result[0].values.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const [spec, customEnc, customMode] = result[0].values[0];
+
+    let customPrompt = '';
+    if (customEnc) {
+      try {
+        customPrompt = decrypt(customEnc);
+      } catch (e) {
+        logger.warn(`Could not decrypt custom_summary_prompt for user ${req.user.id}: ${e.message}`);
+        customPrompt = '';
+      }
+    }
+
+    res.json({
+      summary: {
+        specialization: spec || summaryPresets.DEFAULT_SPECIALIZATION,
+        custom_prompt: customPrompt,
+        custom_prompt_mode: customMode === 'replace' ? 'replace' : 'append'
+      },
+      presets: summaryPresets.listPresets(),
+      max_custom_prompt_length: summaryPresets.CUSTOM_PROMPT_MAX_LENGTH
+    });
+  } catch (error) {
+    logger.error('Get summary settings error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch summary settings' });
+  }
+});
+
+// PATCH /api/settings/summary - Therapist-only.
+// Body: { specialization?, custom_prompt?, custom_prompt_mode? }
+// - specialization must be one of psychoanalysis|cbt|nlp|gestalt|generic
+// - custom_prompt: string, 0..2000 chars; empty string clears the column
+// - custom_prompt_mode: 'append' | 'replace'
+router.patch('/summary', authenticate, (req, res) => {
+  try {
+    const { specialization, custom_prompt, custom_prompt_mode } = req.body || {};
+    const db = getDatabase();
+
+    const updates = [];
+    const params = [];
+
+    if (specialization !== undefined) {
+      if (!summaryPresets.isValidSpecialization(specialization)) {
+        return res.status(400).json({
+          error: `Invalid specialization. Must be one of: ${summaryPresets.VALID_SPECIALIZATIONS.join(', ')}`
+        });
+      }
+      updates.push('summary_specialization = ?');
+      params.push(specialization);
+    }
+
+    if (custom_prompt_mode !== undefined) {
+      if (custom_prompt_mode !== 'append' && custom_prompt_mode !== 'replace') {
+        return res.status(400).json({ error: "custom_prompt_mode must be 'append' or 'replace'" });
+      }
+      updates.push('custom_summary_prompt_mode = ?');
+      params.push(custom_prompt_mode);
+    }
+
+    if (custom_prompt !== undefined) {
+      if (typeof custom_prompt !== 'string') {
+        return res.status(400).json({ error: 'custom_prompt must be a string' });
+      }
+      const trimmed = custom_prompt.trim();
+      if (trimmed.length > summaryPresets.CUSTOM_PROMPT_MAX_LENGTH) {
+        return res.status(400).json({
+          error: `custom_prompt too long (max ${summaryPresets.CUSTOM_PROMPT_MAX_LENGTH} characters)`
+        });
+      }
+
+      if (trimmed.length === 0) {
+        // Clear the column entirely.
+        updates.push('custom_summary_prompt_encrypted = NULL');
+        updates.push('custom_summary_prompt_key_id = NULL');
+        updates.push('custom_summary_prompt_payload_version = NULL');
+      } else {
+        const { encrypted, keyVersion, keyId } = encrypt(trimmed);
+        updates.push('custom_summary_prompt_encrypted = ?');
+        params.push(encrypted);
+        updates.push('custom_summary_prompt_key_id = ?');
+        params.push(keyId);
+        updates.push('custom_summary_prompt_payload_version = ?');
+        params.push(keyVersion);
+      }
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    updates.push("updated_at = datetime('now')");
+    params.push(req.user.id);
+
+    const sql = `UPDATE users SET ${updates.join(', ')} WHERE id = ?`;
+    db.run(sql, params);
+    saveDatabaseAfterWrite();
+
+    // Return the freshly-saved settings (decrypted) so the UI can confirm.
+    const result = db.exec(
+      'SELECT summary_specialization, custom_summary_prompt_encrypted, custom_summary_prompt_mode FROM users WHERE id = ?',
+      [req.user.id]
+    );
+    const [spec, customEnc, customMode] = result[0].values[0];
+    let customPrompt = '';
+    if (customEnc) {
+      try { customPrompt = decrypt(customEnc); } catch (e) { customPrompt = ''; }
+    }
+
+    logger.info(`Summary settings updated for user id=${req.user.id}: specialization=${spec}, custom_len=${customPrompt.length}, mode=${customMode}`);
+
+    res.json({
+      message: 'Summary settings updated successfully',
+      summary: {
+        specialization: spec || summaryPresets.DEFAULT_SPECIALIZATION,
+        custom_prompt: customPrompt,
+        custom_prompt_mode: customMode === 'replace' ? 'replace' : 'append'
+      }
+    });
+  } catch (error) {
+    logger.error('Update summary settings error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update summary settings' });
   }
 });
 

@@ -3156,3 +3156,150 @@ session validated the wiring end-to-end and marked the feature passing):**
 ### Current Status
 - Feature #368: PASSING (T-10 dual-comment model — private + shared,
   polymorphic table over 6 entity types, therapist_notes migrated)
+
+## Session: 2026-05-05 - Feature #366 (T-08 Custom summary prompts per modality) - PASSING
+
+### Completed: T-08 — Modality-specific AI summary presets + custom prompt
+
+**Why this feature exists:**
+Per the alexey_*_2026-04-* interview (p.227-269), a psychoanalyst needs a
+fundamentally different session summary than a CBT or NLP practitioner. The
+psychodynamic therapist wants transference, defenses, dream material, and
+the alliance itself; the CBT therapist wants automatic thoughts, distortions,
+behavioral patterns and homework outcomes; the NLP / strategic worker wants
+outcome framing, representational systems and ecology checks; the gestalt
+therapist wants here-and-now awareness, contact-boundary disturbances and
+unfinished business. Without modality-specific framing every therapist gets
+the same neutral summary that nobody finds genuinely useful.
+
+T-08 lets each therapist pick one of 5 modality presets in Settings, plus an
+optional custom prompt that either appends to (default) or replaces the
+preset. Presets live in code (services/ai/summary-presets.js) — NOT in DB —
+so they evolve with the product. Custom prompt is Class A encrypted at the
+app layer because it can contain therapist working notes / IP.
+
+**State at start of this session:**
+The bulk of T-08 had already been built across earlier sessions:
+  - `src/backend/src/services/ai/summary-presets.js` — 5 presets
+    (psychoanalysis, cbt, nlp, gestalt, generic) with distinct system-prompt
+    fragments, `buildModalitySection({specialization, customPrompt,
+    customPromptMode})`, `isValidSpecialization`, `listPresets`,
+    `CUSTOM_PROMPT_MAX_LENGTH=2000`, `DEFAULT_SPECIALIZATION='generic'`.
+  - `src/backend/src/db/connection.js` (lines 1141-1199): idempotent
+    migrations adding `users.summary_specialization`,
+    `users.custom_summary_prompt_encrypted`,
+    `users.custom_summary_prompt_mode` (default 'append'),
+    `users.custom_summary_prompt_key_id`,
+    `users.custom_summary_prompt_payload_version`. One-shot backfill sets
+    every existing therapist + superadmin to 'generic'.
+  - `src/backend/src/routes/settings.js`: GET /api/settings/summary +
+    PATCH /api/settings/summary. PATCH validates specialization against
+    summaryPresets.VALID_SPECIALIZATIONS (400 on bad), enforces 2000-char
+    limit on custom_prompt (400 on oversize), validates mode is
+    'append'|'replace' (400 otherwise). Empty custom_prompt clears the
+    column trio. Non-empty values are encrypted via the standard Class A
+    `encrypt()` helper and stored with key_id + payload_version metadata.
+    GET decrypts and returns `{summary, presets, max_custom_prompt_length}`.
+  - `src/backend/src/services/summarization.js`: `processSessionSummary`
+    loads the therapist's specialization + decrypted custom prompt and
+    forwards them to `buildSystemPrompt`, which calls
+    `summaryPresets.buildModalitySection` and inserts the resulting
+    "## Modality Focus" section into the AI system prompt before the client
+    context block. Failures during preference load are non-fatal — fallback
+    to 'generic'.
+  - `src/frontend/src/pages/Settings.jsx`: full Summary Specialization
+    section (data-testid="summary-specialization-section") with
+    dropdown (`summary-specialization-select`) populated from
+    GET /api/settings/summary's `presets` array, live preset description
+    text, custom-prompt textarea with character counter and 2000-char cap,
+    radio toggle for append-vs-replace mode, save button with success
+    toast, fetched on mount via fetchSummarySettings(token).
+  - `src/frontend/src/i18n/en.json` + `ru.json`: full
+    `settings.summary.*` namespace including title, desc,
+    specializationLabel, customPromptLabel/Hint/Placeholder/ModeLabel,
+    modeAppend/ReplaceLabel/Hint, save/saved, and presets.<id>.label /
+    .description for all 5 modalities.
+
+**What was missing:**
+The two remaining locales — `es.json` (Spanish) and `uk.json` (Ukrainian) —
+had no `settings.summary` namespace at all. The product spec mandates
+EN/RU/ES/UK coverage across every UI string, so without these the Settings
+page would render the literal i18n key strings (e.g. "settings.summary.title")
+to Spanish- and Ukrainian-speaking therapists.
+
+**What was built this session:**
+- `src/frontend/src/i18n/es.json`: added the full `settings.summary` block
+  in Spanish (37 lines), including:
+    - 13 flat keys (title, desc, specializationLabel,
+      customPromptLabel/Hint/Placeholder/ModeLabel, modeAppend/ReplaceLabel
+      /Hint, save, saved)
+    - Nested `presets.{psychoanalysis,cbt,nlp,gestalt,generic}` each with
+      `label` + `description`. Translations use modality-appropriate
+      Spanish vocabulary (e.g. "Psicoanálisis / orientado a la profundidad",
+      "Terapia Cognitivo-Conductual (TCC)", "PNL / estratégica / breve",
+      "Gestalt", "Genérico / integrativo").
+- `src/frontend/src/i18n/uk.json`: added the matching block in Ukrainian
+  (37 lines), mirroring the Russian translation but with proper Ukrainian
+  forms (e.g. "Спеціалізація summary", "Психоаналіз / глибинна робота",
+  "Когнітивно-поведінкова терапія (КПТ)", "Гештальт", "Універсальний /
+  інтегративний").
+
+Both edits were inserted directly after the existing `settings.reminders`
+block so the JSON structure mirrors EN/RU exactly.
+
+**Verification this session:**
+- `node -c` clean for the four touched backend files (db/connection.js,
+  routes/settings.js, services/summarization.js,
+  services/ai/summary-presets.js).
+- All 4 i18n JSON files parse cleanly. A 4-locale × (13 flat keys + 5
+  preset entries × 2 sub-keys) check (.tmp_check_i18n_summary.js) reported
+  0 missing keys.
+- esbuild JSX compile (target=es2020, jsx=automatic) of Settings.jsx:
+  0 warnings, 0 errors.
+- Unit smoke test (.tmp_smoke_summary_presets.js) on the presets module:
+    * All 5 presets produce distinct modality sections (verified by
+      pairwise inequality check across all C(5,2)=10 pairs).
+    * Each section mentions the right modality name (Psychoanalytic, CBT,
+      NLP, Gestalt, Generic).
+    * Append mode: output contains both the preset's text AND the custom
+      prompt under the "### Therapist's additional summarization notes"
+      header.
+    * Replace mode: output contains the custom prompt but NOT the preset
+      text — verified specifically that "Cognitive Triangle" / "SUDS"
+      tokens are gone from a CBT replace.
+    * Unknown / null specialization falls back to the generic preset.
+    * Oversize custom prompt (2000+1500 chars) is clamped to exactly 2000
+      chars in the rendered section.
+    * `listPresets()` returns 5 entries each with id+description.
+- Backend was restarted to pick up the routes/settings.js /summary handler
+  (the running instance pre-dated it). Health check post-restart:
+  `{status:"ok",database:"connected",tableCount:33}`.
+- End-to-end live HTTP test (.tmp_e2e_summary_persistence.js) hitting
+  the running backend:
+    1. CSRF + login as superadmin succeeded; cookies + token captured.
+    2. PATCH /api/settings/summary with
+       `{specialization:'cbt', custom_prompt:'RESTART_TEST_<rand>',
+        custom_prompt_mode:'replace'}` → 200 with echoed values.
+    3. GET /api/settings/summary → 200; returned the same probe value
+       (decrypt round-trip works) and the full 5-preset list.
+    4. **Backend killed (PID 17536) and re-started (PID 18608); health
+       check came back up within ~2s.**
+    5. Re-login + GET /api/settings/summary → probe value still present
+       (specialization='cbt', custom_prompt='RESTART_TEST_<rand>'). This
+       confirms BOTH the plaintext spec column AND the
+       custom_summary_prompt_encrypted column survive a full process
+       restart — i.e. they persist to prtop.db and are decrypted on
+       subsequent reads.
+    6. Validation: PATCH with `specialization:'astrology'` → 400.
+    7. Validation: PATCH with `custom_prompt='X'.repeat(2001)` → 400.
+    8. Cleanup PATCH back to (generic, '', append) → 200.
+- Mock data grep on summary-presets.js, routes/settings.js,
+  Settings.jsx: zero hits for globalThis|devStore|dev-store|mockDb|
+  mockData|fakeData|sampleData|dummyData|testData|STUB|MOCK.
+
+### Current Status
+- Feature #366: PASSING (T-08 custom summary prompts per modality —
+  5 presets, optional Class A custom prompt, append/replace modes,
+  full EN/RU/ES/UK i18n coverage, persistence verified across backend
+  restart).
+

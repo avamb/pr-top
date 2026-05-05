@@ -129,6 +129,17 @@ export default function Settings() {
   const [savingReminders, setSavingReminders] = useState(false);
   const [remindersSuccess, setRemindersSuccess] = useState(null);
 
+  // T-08: Summary specialization (modality preset) + optional custom prompt.
+  // The dropdown options come from the backend (so adding a preset doesn't
+  // require an FE deploy); labels are i18n'd via settings.summary.presets.<id>.
+  const [summarySpec, setSummarySpec] = useState('generic');
+  const [summaryCustomPrompt, setSummaryCustomPrompt] = useState('');
+  const [summaryCustomMode, setSummaryCustomMode] = useState('append');
+  const [summaryPresets, setSummaryPresets] = useState([]);
+  const [summaryMaxLen, setSummaryMaxLen] = useState(2000);
+  const [savingSummary, setSavingSummary] = useState(false);
+  const [summarySuccess, setSummarySuccess] = useState(null);
+
   const abortControllerRef = React.useRef(null);
 
   useEffect(() => {
@@ -136,6 +147,7 @@ export default function Settings() {
     if (!token) { navigate('/login'); return; }
     fetchProfile(token);
     fetchReferralLink(token);
+    fetchSummarySettings(token);
 
     return () => {
       if (abortControllerRef.current) {
@@ -143,6 +155,79 @@ export default function Settings() {
       }
     };
   }, []);
+
+  // T-08: Pull current summary specialization + preset metadata from the API.
+  async function fetchSummarySettings(token) {
+    try {
+      const res = await fetch(`${API_URL}/settings/summary`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.status === 401) {
+        // Auth handled elsewhere; just bail.
+        return;
+      }
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data && data.summary) {
+        setSummarySpec(data.summary.specialization || 'generic');
+        setSummaryCustomPrompt(data.summary.custom_prompt || '');
+        setSummaryCustomMode(data.summary.custom_prompt_mode || 'append');
+      }
+      if (Array.isArray(data?.presets)) setSummaryPresets(data.presets);
+      if (typeof data?.max_custom_prompt_length === 'number') {
+        setSummaryMaxLen(data.max_custom_prompt_length);
+      }
+    } catch (e) {
+      // Non-fatal — leave defaults in place.
+    }
+  }
+
+  async function handleSaveSummary(e) {
+    e.preventDefault();
+    if (savingSummary) return;
+    setSavingSummary(true);
+    setError(null);
+    setSummarySuccess(null);
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/settings/summary`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          specialization: summarySpec,
+          custom_prompt: summaryCustomPrompt,
+          custom_prompt_mode: summaryCustomMode
+        })
+      });
+
+      if (res.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/login');
+        return;
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to update summary settings');
+      }
+
+      const data = await res.json();
+      if (data && data.summary) {
+        setSummarySpec(data.summary.specialization || 'generic');
+        setSummaryCustomPrompt(data.summary.custom_prompt || '');
+        setSummaryCustomMode(data.summary.custom_prompt_mode || 'append');
+      }
+      setSummarySuccess(t('settings.summary.saved'));
+      setTimeout(() => setSummarySuccess(null), 3000);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingSummary(false);
+    }
+  }
 
   async function fetchReferralLink(token) {
     setReferralLoading(true);
@@ -700,6 +785,131 @@ export default function Settings() {
                     >
                       {savingReminders && <LoadingSpinner size={16} className="mr-2" />}
                       {savingReminders ? t('settings.saving') : t('settings.reminders.save')}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* T-08: Summary Specialization Section */}
+            {(profile.role === 'therapist' || profile.role === 'superadmin') && (
+              <div className="bg-white rounded-lg shadow-md p-8 mb-6" data-testid="summary-specialization-section">
+                <h3 className="text-lg font-semibold text-stone-700 mb-2">{t('settings.summary.title')}</h3>
+                <p className="text-sm text-stone-500 mb-4">{t('settings.summary.desc')}</p>
+
+                {summarySuccess && (
+                  <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+                    {summarySuccess}
+                  </div>
+                )}
+
+                <form onSubmit={handleSaveSummary}>
+                  <div className="mb-4">
+                    <label htmlFor="summary_specialization" className="block text-sm font-medium text-stone-700 mb-2">
+                      {t('settings.summary.specializationLabel')}
+                    </label>
+                    <select
+                      id="summary_specialization"
+                      data-testid="summary-specialization-select"
+                      value={summarySpec}
+                      onChange={(e) => setSummarySpec(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-colors bg-white"
+                    >
+                      {/* Render presets returned by the API; fall back to a hard-coded list
+                          if the API call hasn't completed yet so the form is still usable. */}
+                      {(summaryPresets.length > 0
+                        ? summaryPresets
+                        : [
+                            { id: 'psychoanalysis' },
+                            { id: 'cbt' },
+                            { id: 'nlp' },
+                            { id: 'gestalt' },
+                            { id: 'generic' }
+                          ]
+                      ).map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {t(`settings.summary.presets.${p.id}.label`)}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-stone-400 mt-2 italic" data-testid="summary-preset-description">
+                      {t(`settings.summary.presets.${summarySpec}.description`)}
+                    </p>
+                  </div>
+
+                  <div className="mb-4">
+                    <label htmlFor="summary_custom_prompt" className="block text-sm font-medium text-stone-700 mb-2">
+                      {t('settings.summary.customPromptLabel')}
+                    </label>
+                    <p className="text-xs text-stone-500 mb-2">{t('settings.summary.customPromptHint')}</p>
+                    <textarea
+                      id="summary_custom_prompt"
+                      data-testid="summary-custom-prompt"
+                      value={summaryCustomPrompt}
+                      onChange={(e) => setSummaryCustomPrompt(e.target.value.slice(0, summaryMaxLen))}
+                      placeholder={t('settings.summary.customPromptPlaceholder')}
+                      maxLength={summaryMaxLen}
+                      rows={5}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-colors resize-y font-mono text-sm"
+                    />
+                    <p className="text-xs text-stone-400 mt-1">{summaryCustomPrompt.length}/{summaryMaxLen}</p>
+                  </div>
+
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-stone-700 mb-2">
+                      {t('settings.summary.customPromptModeLabel')}
+                    </label>
+                    <div className="space-y-2">
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="summary_custom_mode"
+                          value="append"
+                          data-testid="summary-mode-append"
+                          checked={summaryCustomMode === 'append'}
+                          onChange={() => setSummaryCustomMode('append')}
+                          className="mt-1"
+                        />
+                        <div>
+                          <div className="text-sm font-medium text-stone-700">
+                            {t('settings.summary.modeAppendLabel')}
+                          </div>
+                          <div className="text-xs text-stone-500">
+                            {t('settings.summary.modeAppendHint')}
+                          </div>
+                        </div>
+                      </label>
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="summary_custom_mode"
+                          value="replace"
+                          data-testid="summary-mode-replace"
+                          checked={summaryCustomMode === 'replace'}
+                          onChange={() => setSummaryCustomMode('replace')}
+                          className="mt-1"
+                        />
+                        <div>
+                          <div className="text-sm font-medium text-stone-700">
+                            {t('settings.summary.modeReplaceLabel')}
+                          </div>
+                          <div className="text-xs text-stone-500">
+                            {t('settings.summary.modeReplaceHint')}
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <button
+                      type="submit"
+                      disabled={savingSummary}
+                      data-testid="summary-save-btn"
+                      className="px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                    >
+                      {savingSummary && <LoadingSpinner size={16} className="mr-2" />}
+                      {savingSummary ? t('settings.saving') : t('settings.summary.save')}
                     </button>
                   </div>
                 </form>

@@ -11,6 +11,10 @@ const { encrypt, decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
 const { logUsage, calculateCost, checkSpendingLimit } = require('./aiUsageLogger');
 const aiProviders = require('./aiProviders');
+// T-08: Modality-specific summarization presets (psychoanalysis, cbt, nlp,
+// gestalt, generic). The therapist picks one in Settings; an optional
+// custom prompt is layered on top in append or replace mode.
+const summaryPresets = require('./ai/summary-presets');
 let vectorStoreService = null;
 function getVectorStoreService() {
   if (!vectorStoreService) {
@@ -307,6 +311,12 @@ async function callAIAPI(transcript, options = {}) {
 /**
  * Build the system prompt for session summarization.
  * Includes therapist-supportive instructions and client context.
+ *
+ * T-08: When `options.summary_specialization` is provided, a modality-specific
+ * focus section is appended (or replaced via `options.custom_summary_prompt_mode`)
+ * so each therapist sees a summary tailored to their working frame
+ * (psychoanalysis, CBT, NLP, gestalt, generic). `options.custom_summary_prompt`
+ * is layered on top of (or replaces) the preset fragment.
  */
 function buildSystemPrompt(options = {}) {
   const parts = [
@@ -325,6 +335,18 @@ function buildSystemPrompt(options = {}) {
     `- Structure the summary with clear sections: Key Themes, Session Observations, Client-Reported Progress, Follow-up Areas`,
     ``
   ];
+
+  // T-08: Append modality-specific focus section. The summary-presets module
+  // always returns a non-empty string (defaults to the 'generic' preset when
+  // no specialization is set), so the AI always gets explicit modality framing.
+  const modalitySection = summaryPresets.buildModalitySection({
+    specialization: options.summary_specialization,
+    customPrompt: options.custom_summary_prompt,
+    customPromptMode: options.custom_summary_prompt_mode
+  });
+  if (modalitySection) {
+    parts.push(modalitySection, '');
+  }
 
   // Add client context if available
   if (options.anamnesis || options.goals || options.contraindications || options.ai_instructions || options.post_session_notes) {
@@ -424,6 +446,31 @@ async function processSessionSummary(sessionId) {
       } catch (e) {
         logger.warn(`Could not decrypt post_session_notes for session ${sessionId}: ${e.message}`);
       }
+    }
+
+    // T-08: Load this therapist's modality preset + optional custom prompt so
+    // the AI's system prompt is tailored to their working frame
+    // (psychoanalysis / CBT / NLP / gestalt / generic). Failures here are
+    // non-fatal — the buildSystemPrompt fallback returns the generic preset.
+    try {
+      const therapistPrefs = db.exec(
+        'SELECT summary_specialization, custom_summary_prompt_encrypted, custom_summary_prompt_mode FROM users WHERE id = ?',
+        [therapistId]
+      );
+      if (therapistPrefs.length > 0 && therapistPrefs[0].values.length > 0) {
+        const [spec, customEnc, customMode] = therapistPrefs[0].values[0];
+        context.summary_specialization = spec || summaryPresets.DEFAULT_SPECIALIZATION;
+        context.custom_summary_prompt_mode = customMode === 'replace' ? 'replace' : 'append';
+        if (customEnc) {
+          try {
+            context.custom_summary_prompt = decrypt(customEnc);
+          } catch (e) {
+            logger.warn(`Could not decrypt custom_summary_prompt for therapist ${therapistId}: ${e.message}`);
+          }
+        }
+      }
+    } catch (e) {
+      logger.warn(`Could not load summary specialization for therapist ${therapistId}: ${e.message}`);
     }
 
     // Generate summary

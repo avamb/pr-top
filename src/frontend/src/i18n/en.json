@@ -367,6 +367,43 @@
       "hintExisting": "When on, each client follows this default unless you override it on their profile.",
       "saved": "Reminder preference saved.",
       "save": "Save Reminder Preference"
+    },
+    "summary": {
+      "title": "Summary Specialization",
+      "desc": "Tailor AI session summaries to your therapeutic modality. Different schools highlight different things, so the summary you actually find useful depends on how you work.",
+      "specializationLabel": "Modality preset",
+      "customPromptLabel": "Custom summarization prompt (optional)",
+      "customPromptHint": "Add your own instructions to refine the AI's focus. Up to 2000 characters.",
+      "customPromptPlaceholder": "e.g. Always highlight references to dreams and slips of the tongue, even when brief.",
+      "customPromptModeLabel": "How should your custom prompt be used?",
+      "modeAppendLabel": "Append to the preset (recommended)",
+      "modeAppendHint": "Your notes are added on top of the preset's modality focus.",
+      "modeReplaceLabel": "Replace the preset",
+      "modeReplaceHint": "Your custom prompt fully replaces the modality-specific guidance. Use this only if you want full control.",
+      "saved": "Summary settings saved.",
+      "save": "Save Summary Settings",
+      "presets": {
+        "psychoanalysis": {
+          "label": "Psychoanalysis / Depth-oriented",
+          "description": "Surfaces unconscious dynamics, transference, defenses, dreams, free-association material and the alliance itself."
+        },
+        "cbt": {
+          "label": "Cognitive-Behavioral Therapy (CBT)",
+          "description": "Highlights automatic thoughts, distortions, behavioral patterns, homework outcomes and concrete next-session tasks."
+        },
+        "nlp": {
+          "label": "NLP / Strategic / Brief",
+          "description": "Tracks outcome framing, representational systems, reframing moves, anchors, state changes and ecology checks."
+        },
+        "gestalt": {
+          "label": "Gestalt",
+          "description": "Emphasizes here-and-now awareness, body cues, contact-boundary disturbances, polarities and unfinished business."
+        },
+        "generic": {
+          "label": "Generic / Integrative (default)",
+          "description": "A balanced, modality-neutral summary — themes, observations, progress and follow-up areas."
+        }
+      }
     }
   },
   "clientList": {
