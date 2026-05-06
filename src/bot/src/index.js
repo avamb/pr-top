@@ -27,6 +27,20 @@ const api = axios.create({
 // Cache for user language preferences
 const userLangCache = {};
 
+// T-18: Extended consent disclaimer.
+// Bump CONSENT_TEXT_VERSION any time the disclaimer text changes — existing
+// connected clients whose stored consent_version is lower will be forced to
+// re-consent on their next bot interaction. Version 1 is the first version
+// of the extended (5-checkbox) consent flow; legacy single-Yes/No clients
+// are stored as version 0 and re-prompted automatically.
+const CONSENT_TEXT_VERSION = 1;
+const CONSENT_POINTS = ['storage', 'ai', 'supervision', 'revoke', 'encryption'];
+
+// In-memory state for the multi-checkbox consent flow.
+// Keyed by telegramId. Cleared on completion / cancel / timeout.
+//   { therapistId, therapistName, checked: { storage, ai, ... }, mode: 'connect' | 'reconsent', messageId }
+const pendingConsents = {};
+
 // Track active exercise sessions (telegramId -> deliveryId)
 const activeExercises = {};
 
@@ -178,6 +192,127 @@ if (!token || token === 'your-telegram-bot-token') {
 
   // === Extracted handler functions (shared by slash commands and keyboard buttons) ===
 
+  // T-18: Build the full consent disclaimer body shown before the 5 checkboxes.
+  // This is one Telegram message (Markdown). The body string is *also* hashed
+  // via SHA-256 so the audit log can store an integrity hash of exactly what
+  // the client agreed to (`consent_text_hash` column on users).
+  function buildConsentBodyText(lang, therapistName) {
+    const headerFn = t(lang, 'consentDisclaimerHeader');
+    const head = typeof headerFn === 'function' ? headerFn(therapistName, CONSENT_TEXT_VERSION) : headerFn;
+    const lines = [
+      head,
+      '',
+      t(lang, 'consentDisclaimerStorage'),
+      '',
+      t(lang, 'consentDisclaimerAi'),
+      '',
+      t(lang, 'consentDisclaimerSupervision'),
+      '',
+      t(lang, 'consentDisclaimerRevoke'),
+      '',
+      t(lang, 'consentDisclaimerEncryption'),
+      '',
+      t(lang, 'consentDisclaimerFooter')
+    ];
+    return lines.join('\n');
+  }
+
+  // T-18: Compute a stable sha256 hex digest of the disclaimer body (as
+  // shown to the user) for audit-trail forensics. Best-effort: failure is
+  // non-fatal — the bot just stores `null` in that case.
+  function computeConsentHash(text) {
+    try {
+      const crypto = require('crypto');
+      return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
+    } catch {
+      return null;
+    }
+  }
+
+  // T-18: Build the 5-checkbox + Continue/Cancel inline keyboard.
+  function buildConsentKeyboard(lang, therapistId, checked) {
+    const rows = CONSENT_POINTS.map(pt => {
+      const on = !!checked[pt];
+      const labelKey = 'consentCheckbox' + pt.charAt(0).toUpperCase() + pt.slice(1);
+      const text = (on ? '✅ ' : '⬜ ') + t(lang, labelKey);
+      return [{ text, callback_data: `consent_chk_${therapistId}_${pt}` }];
+    });
+    rows.push([{ text: t(lang, 'consentBtnContinue'), callback_data: `consent_continue_${therapistId}` }]);
+    rows.push([{ text: t(lang, 'consentBtnCancel'), callback_data: `consent_cancel_${therapistId}` }]);
+    return { inline_keyboard: rows };
+  }
+
+  // T-18: Send the disclaimer + checkbox keyboard. Tracks per-user state in
+  // `pendingConsents` so callback toggles can update the keyboard. `mode` is
+  // 'connect' for first-time consent (post /connect) or 'reconsent' for
+  // version-bump re-consent on existing connections.
+  async function sendConsentPrompt(chatId, telegramId, lang, therapistId, therapistName, mode) {
+    const checked = {};
+    CONSENT_POINTS.forEach(pt => { checked[pt] = false; });
+    pendingConsents[telegramId] = {
+      therapistId: parseInt(therapistId, 10),
+      therapistName,
+      checked,
+      mode: mode || 'connect',
+      lang
+    };
+    if (mode === 'reconsent') {
+      try { await bot.sendMessage(chatId, t(lang, 'consentReprompt'), { parse_mode: 'Markdown' }); } catch { /* ignore */ }
+    }
+    const body = buildConsentBodyText(lang, therapistName);
+    let sent;
+    try {
+      sent = await bot.sendMessage(chatId, body, {
+        parse_mode: 'Markdown',
+        reply_markup: buildConsentKeyboard(lang, therapistId, checked)
+      });
+    } catch (err) {
+      // Markdown parse fallback (in case a user-supplied therapist name has
+      // markdown-special characters — unlikely but be safe).
+      sent = await bot.sendMessage(chatId, body, {
+        reply_markup: buildConsentKeyboard(lang, therapistId, checked)
+      });
+    }
+    if (sent && sent.message_id) {
+      pendingConsents[telegramId].messageId = sent.message_id;
+      pendingConsents[telegramId].chatId = chatId;
+    }
+  }
+
+  // T-18: Returns true if the user is allowed to proceed (not a connected
+  // client OR consent_version is up-to-date). If the user is a connected
+  // client whose consent_version < CONSENT_TEXT_VERSION, this triggers the
+  // re-consent prompt and returns false. Callers should early-return when
+  // false. `user` is optional — if omitted, fetched via checkExistingUser.
+  async function requireConsentUpToDate(chatId, telegramId, lang, user) {
+    try {
+      let u = user;
+      if (!u) u = await checkExistingUser(telegramId);
+      if (!u) return true; // Not registered yet — let the normal flow handle it
+      if (u.role !== 'client') return true; // Therapists/superadmin not gated
+      if (!u.consent_therapist_access || !u.therapist_id) return true; // Unconnected client — nothing to gate
+      const v = (u.consent_version === undefined || u.consent_version === null) ? 0 : u.consent_version;
+      if (v >= CONSENT_TEXT_VERSION) return true;
+      // Need re-consent. If a re-consent prompt is already in flight, just
+      // remind the user to complete it instead of spamming a new copy.
+      if (pendingConsents[telegramId] && pendingConsents[telegramId].mode === 'reconsent') {
+        try { await bot.sendMessage(chatId, t(lang, 'consentBlockedText')); } catch { /* ignore */ }
+        return false;
+      }
+      // Look up therapist display name for the disclaimer header.
+      let therapistName = `Therapist #${u.therapist_id}`;
+      try {
+        const tres = await api.get(`/api/bot/therapist-display/${u.therapist_id}`);
+        if (tres.data && tres.data.display_name) therapistName = tres.data.display_name;
+      } catch { /* fallback to ID label */ }
+      await sendConsentPrompt(chatId, telegramId, lang, u.therapist_id, therapistName, 'reconsent');
+      return false;
+    } catch (err) {
+      console.error('requireConsentUpToDate error:', err.message);
+      return true; // Fail-open so the bot doesn't lock up on transient errors
+    }
+  }
+
   async function handleHelp(chatId, telegramId, lang) {
     try {
       const user = await checkExistingUser(telegramId);
@@ -219,6 +354,9 @@ if (!token || token === 'your-telegram-bot-token') {
 
   async function handleSos(chatId, telegramId, lang, sosMessage) {
     try {
+      // T-18: Re-consent gate. SOS creates new client data and triggers
+      // therapist notifications, so it must respect the latest consent text.
+      if (!(await requireConsentUpToDate(chatId, telegramId, lang))) return;
       await api.post('/api/bot/sos', {
         telegram_id: String(telegramId),
         message: sosMessage || undefined
@@ -429,26 +567,12 @@ if (!token || token === 'your-telegram-bot-token') {
         });
 
         const { therapist } = connectResult.data;
-        const foundTherapist = t(lang, 'foundTherapist');
 
         // Send deep link welcome (no "enter code" — client came via link)
         await bot.sendMessage(chatId, t(lang, 'deepLinkClientWelcome'));
 
-        // Show consent prompt (same as /connect flow)
-        await bot.sendMessage(chatId,
-          foundTherapist(therapist.display_name),
-          {
-            parse_mode: 'Markdown',
-            reply_markup: {
-              inline_keyboard: [
-                [
-                  { text: t(lang, 'consentYes'), callback_data: `consent_yes_${therapist.id}` },
-                  { text: t(lang, 'consentNo'), callback_data: `consent_no_${therapist.id}` }
-                ]
-              ]
-            }
-          }
-        );
+        // T-18: Show extended consent disclaimer + 5-checkbox flow.
+        await sendConsentPrompt(chatId, telegramId, lang, therapist.id, therapist.display_name, 'connect');
 
         // Show timezone confirmation for newly registered clients
         if (isNewRegistration) {
@@ -513,23 +637,9 @@ if (!token || token === 'your-telegram-bot-token') {
       });
 
       const { therapist } = connectResult.data;
-      const foundTherapist = t(lang, 'foundTherapist');
 
-      // Step 2: Show consent prompt
-      bot.sendMessage(chatId,
-        foundTherapist(therapist.display_name),
-        {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: t(lang, 'consentYes'), callback_data: `consent_yes_${therapist.id}` },
-                { text: t(lang, 'consentNo'), callback_data: `consent_no_${therapist.id}` }
-              ]
-            ]
-          }
-        }
-      );
+      // T-18: Step 2 — Show extended consent disclaimer + 5-checkbox flow.
+      await sendConsentPrompt(chatId, telegramId, lang, therapist.id, therapist.display_name, 'connect');
     } catch (error) {
       const errorMsg = error.response?.data?.error || t(lang, 'failedInviteCode');
       bot.sendMessage(chatId, `❌ ${errorMsg}`);
@@ -982,7 +1092,132 @@ if (!token || token === 'your-telegram-bot-token') {
       return;
     }
 
-    // Handle consent callbacks
+    // T-18: Handle multi-checkbox consent flow callbacks.
+    // - consent_chk_<tid>_<point>: toggle one of the 5 checkboxes
+    // - consent_continue_<tid>: submit consent if all 5 are ticked
+    // - consent_cancel_<tid>: cancel and clear pending state
+    if (data.startsWith('consent_chk_')) {
+      const lang = await getUserLang(telegramId);
+      // Parse: consent_chk_<therapistId>_<point>
+      const rest = data.slice('consent_chk_'.length);
+      const lastUnderscore = rest.lastIndexOf('_');
+      if (lastUnderscore < 0) {
+        bot.answerCallbackQuery(callbackQuery.id);
+        return;
+      }
+      const therapistId = rest.slice(0, lastUnderscore);
+      const point = rest.slice(lastUnderscore + 1);
+      if (!CONSENT_POINTS.includes(point)) {
+        bot.answerCallbackQuery(callbackQuery.id);
+        return;
+      }
+      const state = pendingConsents[telegramId];
+      if (!state || String(state.therapistId) !== String(therapistId)) {
+        // Stale callback from a previous prompt — silently ignore.
+        bot.answerCallbackQuery(callbackQuery.id);
+        return;
+      }
+      state.checked[point] = !state.checked[point];
+      try {
+        await bot.editMessageReplyMarkup(
+          buildConsentKeyboard(lang, therapistId, state.checked),
+          { chat_id: chatId, message_id: callbackQuery.message.message_id }
+        );
+      } catch (e) {
+        // Telegram returns "message is not modified" if same markup — ignore.
+      }
+      bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
+
+    if (data.startsWith('consent_continue_')) {
+      const lang = await getUserLang(telegramId);
+      const therapistId = data.slice('consent_continue_'.length);
+      const state = pendingConsents[telegramId];
+      if (!state || String(state.therapistId) !== String(therapistId)) {
+        bot.answerCallbackQuery(callbackQuery.id);
+        return;
+      }
+      const allChecked = CONSENT_POINTS.every(pt => !!state.checked[pt]);
+      if (!allChecked) {
+        bot.answerCallbackQuery(callbackQuery.id, { text: t(lang, 'consentNotAllChecked'), show_alert: true });
+        return;
+      }
+      const isReconsent = state.mode === 'reconsent';
+      const body = buildConsentBodyText(lang, state.therapistName);
+      const textHash = computeConsentHash(body);
+      try {
+        const result = await api.post('/api/bot/consent', {
+          telegram_id: String(telegramId),
+          therapist_id: parseInt(therapistId, 10),
+          consent: true,
+          consent_version: CONSENT_TEXT_VERSION,
+          consent_text_hash: textHash,
+          mode: isReconsent ? 'reconsent' : 'connect'
+        });
+        delete pendingConsents[telegramId];
+        // Strip the inline keyboard so the user can't double-click checkboxes.
+        try {
+          await bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
+            chat_id: chatId, message_id: callbackQuery.message.message_id
+          });
+        } catch { /* ignore */ }
+        if (isReconsent) {
+          bot.sendMessage(chatId, t(lang, 'consentReconfirmed'), {
+            reply_markup: getClientKeyboard(lang)
+          });
+        } else if (result.data && result.data.linked) {
+          bot.sendMessage(chatId, t(lang, 'connected'), {
+            reply_markup: getClientKeyboard(lang)
+          });
+        } else {
+          bot.sendMessage(chatId, t(lang, 'connectionCancelled'));
+        }
+      } catch (error) {
+        const errorMsg = error.response?.data?.error
+          || (isReconsent ? t(lang, 'consentReconsentFailed') : t(lang, 'failedConsent'));
+        bot.sendMessage(chatId, `❌ ${errorMsg}`);
+      }
+      bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
+
+    if (data.startsWith('consent_cancel_')) {
+      const lang = await getUserLang(telegramId);
+      const therapistId = data.slice('consent_cancel_'.length);
+      const state = pendingConsents[telegramId];
+      const isReconsent = state && state.mode === 'reconsent';
+      delete pendingConsents[telegramId];
+      // Record the decline in audit log via the existing endpoint.
+      try {
+        await api.post('/api/bot/consent', {
+          telegram_id: String(telegramId),
+          therapist_id: parseInt(therapistId, 10),
+          consent: false,
+          consent_version: CONSENT_TEXT_VERSION
+        });
+      } catch { /* best-effort */ }
+      try {
+        await bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
+          chat_id: chatId, message_id: callbackQuery.message.message_id
+        });
+      } catch { /* ignore */ }
+      bot.sendMessage(chatId, t(lang, 'connectionCancelled'));
+      // For re-consent, the user has effectively refused the new policy.
+      // We do NOT auto-disconnect — they can /disconnect manually if they
+      // want. But every subsequent action will keep prompting them via the
+      // requireConsentUpToDate gate until they agree or disconnect.
+      if (isReconsent) {
+        bot.sendMessage(chatId, t(lang, 'consentBlockedText'));
+      }
+      bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
+
+    // Backward-compat: legacy single-button consent callbacks (consent_yes_/
+    // consent_no_) from messages sent before the bot was upgraded to the
+    // T-18 multi-checkbox flow. New prompts use consent_chk_/consent_continue_/
+    // consent_cancel_.
     if (data.startsWith('consent_yes_') || data.startsWith('consent_no_')) {
       const consent = data.startsWith('consent_yes_');
       const therapistId = data.split('_').pop();
@@ -992,7 +1227,8 @@ if (!token || token === 'your-telegram-bot-token') {
         const result = await api.post('/api/bot/consent', {
           telegram_id: String(telegramId),
           therapist_id: parseInt(therapistId),
-          consent: consent
+          consent: consent,
+          consent_version: 0
         });
 
         if (consent && result.data.linked) {
@@ -1248,6 +1484,9 @@ if (!token || token === 'your-telegram-bot-token') {
         bot.sendMessage(chatId, t(lang, 'therapistVoiceText'));
         return;
       }
+      // T-18: Block diary intake if the client's consent version is outdated.
+      // requireConsentUpToDate() sends the re-consent prompt + returns false.
+      if (!(await requireConsentUpToDate(chatId, telegramId, lang, user))) return;
 
       // Get file info from Telegram
       const fileId = msg.voice.file_id;
@@ -1309,6 +1548,8 @@ if (!token || token === 'your-telegram-bot-token') {
         bot.sendMessage(chatId, t(lang, 'therapistVideoText'));
         return;
       }
+      // T-18: Re-consent gate.
+      if (!(await requireConsentUpToDate(chatId, telegramId, lang, user))) return;
 
       // Get file info from Telegram
       const fileId = msg.video.file_id;
@@ -1375,6 +1616,8 @@ if (!token || token === 'your-telegram-bot-token') {
         bot.sendMessage(chatId, t(lang, 'therapistVideoText'));
         return;
       }
+      // T-18: Re-consent gate.
+      if (!(await requireConsentUpToDate(chatId, telegramId, lang, user))) return;
 
       // Get file info from Telegram
       const fileId = msg.video_note.file_id;
@@ -1580,6 +1823,11 @@ if (!token || token === 'your-telegram-bot-token') {
         bot.sendMessage(chatId, t(lang, 'therapistFreeText'));
         return;
       }
+      // T-18: Re-consent gate. If the client's stored consent_version is
+      // below CONSENT_TEXT_VERSION, this sends the re-consent disclaimer
+      // and aborts the current text handling. Skipped for therapists by
+      // role check above and for unconnected clients by the helper itself.
+      if (!(await requireConsentUpToDate(chatId, telegramId, lang, user))) return;
 
       // Check if user has an active profile edit
       if (activeProfileEdits[telegramId]) {

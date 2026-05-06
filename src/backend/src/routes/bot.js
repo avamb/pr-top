@@ -159,7 +159,7 @@ router.get('/user/:telegram_id', botAuth, (req, res) => {
     const db = getDatabase();
 
     const result = db.exec(
-      'SELECT id, telegram_id, role, invite_code, language, consent_therapist_access, therapist_id, created_at, first_name, last_name, phone, telegram_username, email, timezone FROM users WHERE telegram_id = ?',
+      'SELECT id, telegram_id, role, invite_code, language, consent_therapist_access, therapist_id, created_at, first_name, last_name, phone, telegram_username, email, timezone, consent_version FROM users WHERE telegram_id = ?',
       [String(telegram_id)]
     );
 
@@ -198,6 +198,7 @@ router.get('/user/:telegram_id', botAuth, (req, res) => {
         telegram_username: user[11] || '',
         email: user[12] || '',
         timezone: user[13] || 'UTC',
+        consent_version: user[14] === null || user[14] === undefined ? 0 : user[14],
         escalation_preferences: escalationPrefs
       }
     });
@@ -372,10 +373,14 @@ router.post('/connect', botAuth, (req, res) => {
   }
 });
 
-// POST /api/bot/consent - Client gives consent and links to therapist
+// POST /api/bot/consent - Client gives consent and links to therapist.
+// T-18: optional consent_version + consent_text_hash are persisted so the bot
+// can detect when an existing client is on an older consent version and force
+// a re-consent prompt. Existing flow (no version) still works for backward
+// compatibility — defaults to version=0 / hash=null.
 router.post('/consent', botAuth, (req, res) => {
   try {
-    const { telegram_id, therapist_id, consent } = req.body;
+    const { telegram_id, therapist_id, consent, consent_version, consent_text_hash, mode } = req.body;
 
     if (!telegram_id || !therapist_id) {
       return res.status(400).json({ error: 'telegram_id and therapist_id are required' });
@@ -383,9 +388,11 @@ router.post('/consent', botAuth, (req, res) => {
 
     const db = getDatabase();
 
-    // Verify client
+    // Verify client (T-18: also load existing therapist_id + consent_therapist_access
+    // so re-consent (mode='reconsent') updates only the consent_version without
+    // re-running the client-limit check or audit-log churn).
     const clientResult = db.exec(
-      'SELECT id, role, therapist_id FROM users WHERE telegram_id = ?',
+      'SELECT id, role, therapist_id, consent_therapist_access FROM users WHERE telegram_id = ?',
       [String(telegram_id)]
     );
 
@@ -394,19 +401,67 @@ router.post('/consent', botAuth, (req, res) => {
     }
 
     const client = clientResult[0].values[0];
+    const clientId = client[0];
+    const existingTherapistId = client[2];
+    const existingConsent = !!client[3];
     if (client[1] !== 'client') {
       return res.status(400).json({ error: 'Only clients can give consent' });
+    }
+
+    // T-18: Sanitize optional version + hash inputs. Version must be a
+    // non-negative integer; default 0 if not provided. Hash must be a
+    // 64-char hex sha256 string; default null otherwise.
+    const versionNum = (consent_version === null || consent_version === undefined)
+      ? 0
+      : parseInt(consent_version, 10);
+    if (!Number.isFinite(versionNum) || versionNum < 0) {
+      return res.status(400).json({ error: 'consent_version must be a non-negative integer' });
+    }
+    let textHash = null;
+    if (typeof consent_text_hash === 'string' && /^[a-f0-9]{64}$/i.test(consent_text_hash)) {
+      textHash = consent_text_hash.toLowerCase();
     }
 
     if (consent === false) {
       // Record consent decline in audit log
       db.run(
         "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
-        [client[0], 'consent_declined', 'user', therapist_id, JSON.stringify({ client_id: client[0], therapist_id: parseInt(therapist_id), telegram_id: String(telegram_id) })]
+        [clientId, 'consent_declined', 'user', therapist_id, JSON.stringify({ client_id: clientId, therapist_id: parseInt(therapist_id), telegram_id: String(telegram_id), consent_version: versionNum })]
       );
       saveDatabaseAfterWrite();
-      logger.info(`Client ${client[0]} declined consent for therapist ${therapist_id}`);
+      logger.info(`Client ${clientId} declined consent for therapist ${therapist_id} (v${versionNum})`);
       return res.json({ message: 'Consent declined. No connection was made.', linked: false });
+    }
+
+    // T-18: Re-consent path — client is already linked to the same therapist
+    // and this is a version bump only (no new link to authorize). Skip the
+    // client-limit check (they're already counted), keep therapist_id intact,
+    // just store the new version + hash and audit-log it.
+    const isReconsent = mode === 'reconsent' &&
+      existingConsent &&
+      existingTherapistId !== null &&
+      existingTherapistId !== undefined &&
+      parseInt(existingTherapistId, 10) === parseInt(therapist_id, 10);
+
+    if (isReconsent) {
+      db.run(
+        "UPDATE users SET consent_version = ?, consent_text_hash = ?, updated_at = datetime('now') WHERE id = ?",
+        [versionNum, textHash, clientId]
+      );
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+        [clientId, 'consent_reconfirmed', 'user', therapist_id, JSON.stringify({ client_id: clientId, therapist_id: parseInt(therapist_id), telegram_id: String(telegram_id), consent_version: versionNum })]
+      );
+      saveDatabaseAfterWrite();
+      logger.info(`Client ${clientId} re-consented at version ${versionNum} for therapist ${therapist_id}`);
+      return res.json({
+        message: 'Consent reconfirmed at new version',
+        linked: true,
+        reconsent: true,
+        client_id: clientId,
+        therapist_id: parseInt(therapist_id),
+        consent_version: versionNum
+      });
     }
 
     // Check client limit before linking
@@ -422,31 +477,89 @@ router.post('/consent', botAuth, (req, res) => {
       });
     }
 
-    // Link client to therapist with consent
+    // Link client to therapist with consent (T-18: persist version + hash too)
     db.run(
-      "UPDATE users SET therapist_id = ?, consent_therapist_access = 1, updated_at = datetime('now') WHERE id = ?",
-      [therapist_id, client[0]]
+      "UPDATE users SET therapist_id = ?, consent_therapist_access = 1, consent_version = ?, consent_text_hash = ?, updated_at = datetime('now') WHERE id = ?",
+      [therapist_id, versionNum, textHash, clientId]
     );
 
     // Record consent grant in audit log
     db.run(
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
-      [client[0], 'consent_granted', 'user', therapist_id, JSON.stringify({ client_id: client[0], therapist_id: parseInt(therapist_id), telegram_id: String(telegram_id) })]
+      [clientId, 'consent_granted', 'user', therapist_id, JSON.stringify({ client_id: clientId, therapist_id: parseInt(therapist_id), telegram_id: String(telegram_id), consent_version: versionNum })]
     );
 
     saveDatabaseAfterWrite();
 
-    logger.info(`Client ${client[0]} consented and linked to therapist ${therapist_id}`);
+    logger.info(`Client ${clientId} consented and linked to therapist ${therapist_id} (v${versionNum})`);
 
     res.json({
       message: 'Successfully connected to therapist',
       linked: true,
-      client_id: client[0],
-      therapist_id: parseInt(therapist_id)
+      client_id: clientId,
+      therapist_id: parseInt(therapist_id),
+      consent_version: versionNum
     });
   } catch (error) {
     logger.error('Bot consent error: ' + error.message);
     res.status(500).json({ error: 'Consent processing failed: ' + error.message });
+  }
+});
+
+// GET /api/bot/therapist-display/:id - T-18: Returns the therapist's display
+// name (email or fallback) so the bot can render it in the re-consent header
+// without exposing other PII. Restricted to bot via botAuth.
+router.get('/therapist-display/:id', botAuth, (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({ error: 'invalid id' });
+    }
+    const db = getDatabase();
+    const r = db.exec("SELECT id, email FROM users WHERE id = ? AND role = 'therapist'", [id]);
+    if (r.length === 0 || r[0].values.length === 0) {
+      return res.status(404).json({ error: 'Therapist not found' });
+    }
+    const row = r[0].values[0];
+    res.json({ id: row[0], display_name: row[1] || `Therapist #${row[0]}` });
+  } catch (error) {
+    logger.error('Bot therapist-display error: ' + error.message);
+    res.status(500).json({ error: 'Failed: ' + error.message });
+  }
+});
+
+// GET /api/bot/consent-status/:telegram_id - T-18: Returns the client's
+// current consent version (or null if not a client). The bot uses this to
+// gate access — if consent_version < CONSENT_TEXT_VERSION on the bot side,
+// the bot prompts the user to re-consent before accepting any other input.
+router.get('/consent-status/:telegram_id', botAuth, (req, res) => {
+  try {
+    const { telegram_id } = req.params;
+    if (!telegram_id) {
+      return res.status(400).json({ error: 'telegram_id is required' });
+    }
+
+    const db = getDatabase();
+    const result = db.exec(
+      'SELECT id, role, therapist_id, consent_therapist_access, consent_version FROM users WHERE telegram_id = ?',
+      [String(telegram_id)]
+    );
+
+    if (result.length === 0 || result[0].values.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const row = result[0].values[0];
+    res.json({
+      user_id: row[0],
+      role: row[1],
+      therapist_id: row[2],
+      consent_therapist_access: !!row[3],
+      consent_version: row[4] === null || row[4] === undefined ? 0 : row[4]
+    });
+  } catch (error) {
+    logger.error('Bot consent-status error: ' + error.message);
+    res.status(500).json({ error: 'Failed to get consent status: ' + error.message });
   }
 });
 

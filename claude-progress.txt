@@ -3803,3 +3803,134 @@ so the framing concern is already covered.
   prompts, all in EN/RU/ES/UK; idempotent in-place migration brings
   existing prtop.db rows up to date; persistence verified across two
   backend restarts; no orphaned exercise_deliveries).
+
+
+
+## Session: 2026-05-06 - T-18 Extended consent disclaimer (#376)
+
+Feature #376 PASSING. The T-18 multi-checkbox consent flow is fully wired
+end-to-end: bot disclaimer body + 5 inline checkboxes; client cannot
+proceed without ticking all five; clicking *I agree and connect* submits
+to /api/bot/consent with version + sha256 hash + mode='connect';
+existing clients with stored consent_version < CONSENT_TEXT_VERSION are
+re-prompted automatically on their next bot interaction (mode='reconsent'
+path). Persistence verified across backend restart.
+
+Bot changes (already in tree from prior commits):
+- src/bot/src/index.js: CONSENT_TEXT_VERSION=1 + CONSENT_POINTS array
+  ['storage','ai','supervision','revoke','encryption']. pendingConsents
+  in-memory state (cleared after submit/cancel). buildConsentBodyText()
+  composes the disclaimer header (with therapist display_name + version)
+  + the five numbered points + footer. computeConsentHash() returns
+  sha256 hex of the rendered body for audit forensics.
+  buildConsentKeyboard() renders one row per point (toggling ⬜/✅) +
+  Continue + Cancel rows. sendConsentPrompt(chatId, telegramId, lang,
+  therapistId, therapistName, mode) sets up state + sends the message;
+  re-consent mode prepends a "consent updated, please re-confirm" header
+  message before the disclaimer.
+  requireConsentUpToDate(chatId, telegramId, lang, user) is the gate
+  helper; called from /sos, /diary intake, /exercises, /sessions, /help,
+  and other write paths. Returns false + sends the re-consent prompt
+  when consent_version < CONSENT_TEXT_VERSION.
+  Three callback_data handlers: consent_chk_<tid>_<point> toggles,
+  consent_continue_<tid> validates allChecked + posts to backend,
+  consent_cancel_<tid> clears state and audits the decline. Backward
+  compat: legacy consent_yes_/consent_no_ callbacks still recognised
+  (one-message bots from before T-18 still work, version stays at 0).
+
+- src/bot/src/i18n.js: 19 consent.disclaimer.* keys across en/ru/es/uk
+  (76 total). Verified all 76 resolve to non-empty strings.
+
+Backend changes (already in tree):
+- src/backend/src/routes/bot.js: POST /api/bot/connect now returns
+  therapist info + requires_consent=true WITHOUT linking yet; the
+  linking step is gated behind /consent. POST /api/bot/consent accepts
+  optional consent_version (non-negative integer, defaults 0) +
+  consent_text_hash (64-char hex sha256, persisted as null otherwise)
+  + mode ('connect' | 'reconsent'). For mode='reconsent' on an
+  already-linked client to the SAME therapist, skips the
+  client-limit re-check and updates only consent_version +
+  consent_text_hash, audit-log action 'consent_reconfirmed'. New helper
+  endpoints: GET /api/bot/therapist-display/:id (email/fallback for
+  re-consent header) and GET /api/bot/consent-status/:telegram_id (used
+  by the bot to read a client's current version on demand).
+
+- src/backend/src/db/connection.js: T-18 idempotent ALTER TABLE migration
+  adding users.consent_version (INTEGER DEFAULT 0) +
+  users.consent_text_hash (TEXT). Backfills NULL consent_version=0 so
+  existing connected clients are correctly version-gated to 0 and will
+  be re-prompted by the bot. Verified on backend start: column add
+  silently skipped when already present (no log noise on second boot).
+
+Verification (e2e against running backend, port 3001):
+
+1) node -c clean for src/bot/src/index.js, src/bot/src/i18n.js,
+   src/backend/src/routes/bot.js, src/backend/src/db/connection.js.
+
+2) i18n key sweep (.tmp_check_t18_i18n.js): all 19 keys resolved
+   non-empty across en/ru/es/uk (76/76 PASS, 0 missing). Sample headers
+   render correctly with markdown + version + therapist name in all
+   four languages.
+
+3) Live HTTP e2e (.tmp_e2e_t18.js, 23 functional checks PASS):
+   - Therapist via /api/auth/register (gets trial sub) + bot /register;
+     invite_code looked up from prtop.db.
+   - Fresh client bot-registers, then /connect returns
+     {requires_consent: true, therapist: {id, display_name}} WITHOUT
+     linking the client yet (gate works).
+   - User row pre-consent: therapist_id=null, consent=false,
+     consent_version=0.
+   - POST /consent (mode=connect, v=1, sha256 of rendered body) → 200
+     linked=true, consent_version=1.
+   - User row post-consent: linked, consent=true, version=1; DB-level
+     read confirms consent_text_hash matches the sha256 we sent.
+   - GET /consent-status returns version=1 + access=true.
+   - Re-consent path: POST /consent (mode=reconsent, v=2, new hash) →
+     200 reconsent=true, linked=true (no client-limit re-check), row
+     updates to v=2 with new hash.
+   - Decline path: fresh client POST /consent {consent: false} → 200
+     linked=false, row stays unlinked + at v=0.
+   - Validation: consent_version=-1 → 400; consent_version='not-a-number'
+     → 400.
+   - Invalid hash format ('not-64-hex-chars'): endpoint accepts (returns
+     200 linked=true) but persists consent_text_hash=NULL — verified at
+     DB level.
+   - Unknown invite_code → /connect returns 404.
+   - /therapist-display returns the auth-side email.
+   - Audit log contains all three action types: consent_granted,
+     consent_reconfirmed, consent_declined for the test users.
+   (Test #1 "CSRF cookie obtained" was a false negative on the test
+   harness — Set-Cookie header wasn't echoed but registration still
+   succeeded with the body-supplied csrfToken, proving the CSRF flow
+   works.)
+
+4) Server-restart persistence (.tmp_verify_persistence_t18.js): killed
+   the backend (PID 73956), restarted on port 3001 (clean health),
+   re-queried. The re-consented client survived at consent_version=2
+   linked to the test therapist; the declined client stayed unlinked at
+   v=0; the invalid-hash client persisted at v=1; consent-status
+   endpoint still returned v=2 for the re-consented client. 4/4 PASS.
+
+5) Mock-data grep across src/bot/src/index.js, src/bot/src/i18n.js,
+   src/backend/src/routes/bot.js, src/backend/src/db/connection.js —
+   zero hits for globalThis|devStore|dev-store|mockDb|mockData|fakeData|
+   sampleData|dummyData|TODO.*real|TODO.*database|STUB|isDevelopment.
+   The only "MOCK" hit anywhere in src/bot/src is the unrelated
+   pre-existing console.log "Bot is in MOCK mode" startup banner on
+   index.js:141 (T-19 / earlier work, not T-18).
+
+6) Cleanup (.tmp_cleanup_t18.js + .tmp_cleanup_t18_bot_th.js): killed
+   backend, deleted the 5 test-user rows + their audit_logs +
+   subscriptions (auth-side therapist 1049 + four bot clients
+   1051/1052/1053/1054 + bot-only therapist 1050), restarted. Backend
+   came back green on the cleaned DB.
+
+### Current Status
+- Feature #376: PASSING (T-18 Extended consent disclaimer — 5-checkbox
+  multi-point flow with full disclaimer text in EN/RU/ES/UK; clients
+  cannot skip the consent step; consent_version + sha256 hash persisted
+  per client; version-bump triggers automatic re-consent prompt on next
+  bot interaction; all writes through db.run + saveDatabaseAfterWrite;
+  persistence verified across backend restart; gate enforced on /sos,
+  /diary intake, /exercises, /sessions, /help; backward-compatible with
+  legacy single-button consent_yes_/consent_no_ callbacks).

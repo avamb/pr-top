@@ -1440,6 +1440,39 @@ function applySchema(db) {
     }
   }
 
+  // T-18: Extended consent disclaimer.
+  // - users.consent_version: integer tracking which version of the consent text
+  //   the client agreed to. 0 = legacy (pre-T-18, no extended disclaimer) or
+  //   has not consented yet. Each subsequent text update bumps the constant
+  //   CONSENT_TEXT_VERSION (in src/bot/src/index.js) so existing clients are
+  //   forced to re-consent before the next bot interaction.
+  // - users.consent_text_hash: optional sha256 hex of the disclaimer body the
+  //   client agreed to (kept for forensic/audit reference; not used for
+  //   gating). NULL for legacy rows.
+  // Backfill: existing connected clients (consent_therapist_access=1) get
+  // consent_version=0 explicitly so the bot's version-gate prompts them
+  // for re-consent on next interaction.
+  try {
+    db.run('ALTER TABLE users ADD COLUMN consent_version INTEGER DEFAULT 0');
+    logger.info('T-18: added consent_version column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE users ADD COLUMN consent_text_hash TEXT');
+    logger.info('T-18: added consent_text_hash column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  // Idempotent backfill: ensure NULL values become 0 (older rows that
+  // existed before the ALTER may have NULL despite the DEFAULT, depending
+  // on sql.js version).
+  try {
+    db.run("UPDATE users SET consent_version = 0 WHERE consent_version IS NULL");
+  } catch (e) {
+    // Best-effort
+  }
+
   // Seed default superadmin account if not exists
   seedSuperadmin(db);
 
