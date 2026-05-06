@@ -3671,3 +3671,135 @@ Production-mode notes:
   picks own voice via 10-sec previews; transcript filtered to that speaker
   only; speaker_segments_json cleared from disk after selection; full
   EN/RU/ES/UK i18n; persistence verified across backend restart).
+
+
+
+## Session: 2026-05-06 - T-14 Exercise library content cleanup (#372)
+
+Feature #372 PASSING. Marina's interview verdict (misha_drozd_2026-04-19,
+lines 410-533) drove three concrete content changes to the seeded
+exercise library; all 16 cards audited, 1 removed (Cognitive Reframing
+— "слишком общая штука, и она не рабочая"), 2 rewritten with citable
+CBT/protocol references, 13 left intact (Habit Tracking is the etalon).
+Existing prtop.db rows migrated in place via a new idempotent T-14
+cleanup pass in db/connection.js — fresh-DB seed and live-DB migration
+now produce identical content.
+
+### Changes
+
+**Backend src/backend/src/routes/exercises.js** (seed function for
+fresh DB installs):
+
+1. **Removed "Cognitive Reframing"** seed entry. Marina's reasoning:
+   in NLP/CBT "reframing" can refer to 100 different exercises, the
+   single card pretending to be "the" reframing exercise looked
+   amateurish, and the steps relied on the client inventing their own
+   alternative interpretations — therapy work that the client cannot
+   do alone between sessions.
+
+2. **Tightened "4-7-8 Breathing"** from 4 -> 6 concrete steps with
+   explicit setup (tongue position, posture) + frequency cue
+   ("once or twice per day") and Andrew Weil citation in the
+   description ("Breathing: The Master Key to Self-Healing").
+
+3. **Rewrote "Evidence Examination"** from 5 vague steps
+   ("Evaluate objectively / Formulate a balanced belief") -> 7
+   concrete dispute prompts (Beck, "Cognitive Therapy of Depression",
+   1979): write the belief in one sentence, rate belief 0-100%, list
+   3 supporting + 3 contradicting facts with date+place, "what would
+   you tell a friend" prompt, balanced "Sometimes X happens, but Y is
+   also true" template, re-rate.
+
+All three rewrites done synchronously in EN/RU/ES/UK.
+
+**Backend src/backend/src/db/connection.js** — new T-14 migration
+block (right before the Ukrainian translation backfill):
+
+- Idempotent in-place migration that detects OLD-content signatures and
+  applies the new content. Runs on every backend boot but the signature
+  checks (LIKE '%Repeat 3-4 cycles%' / LIKE '%Evaluate objectively%')
+  fail-fast on already-migrated DBs, so re-runs are no-ops.
+- For "Cognitive Reframing": deletes the row only when zero
+  exercise_deliveries reference it (FK safety). If deliveries exist, a
+  warn-level log line surfaces it for manual triage instead of breaking
+  existing assignments.
+- Filters all branches by is_custom = 0 so therapist-authored custom
+  exercises are never touched.
+- Wrapped in a single try/catch with logger.warn fallback so a partial
+  schema state (e.g. exercise_deliveries table missing) cannot crash
+  the whole boot.
+
+**No frontend changes needed** — T-13's TemplateBadge ("Пример" /
+"Template") already labels seeded cards as examples in the library and
+detail-modal UI per Marina's "нужно в каждом писать. Пример" feedback,
+so the framing concern is already covered.
+
+### Verification
+
+1. **Syntax:** node -c clean for src/backend/src/db/connection.js
+   and src/backend/src/routes/exercises.js. ExerciseLibrary.jsx
+   compiled via the esbuild Node API (jsx=automatic, target=es2020) —
+   31986 chars output, 0 warnings.
+
+2. **Migration applied to live prtop.db:** killed PID 56428, restarted,
+   .backend.log shows three T-14 log lines:
+     T-14: rewrote 4-7-8 Breathing with Andrew Weil protocol (6 concrete steps + frequency)
+     T-14: rewrote Evidence Examination with concrete dispute prompts (Beck 1979)
+     T-14: removed seeded Cognitive Reframing exercise (id=8) — too generic per Marina's review
+
+3. **Idempotency:** killed and restarted again — grep -c "T-14:"
+   .backend.log returns 0 on the second boot. Signature checks
+   correctly detect that the migration is already applied.
+
+4. **Direct SQL inspect (_t14_inspect.js):** post-migration DB shows
+   15 seeded templates (was 16; #8 Reframing gone). #3 (4-7-8
+   Breathing) now has the full 6-step Andrew Weil protocol; #9
+   (Evidence Examination) now has the full 7-step Beck 1979 dispute
+   prompts. Existing exercise_deliveries (#13/#14/#15) untouched.
+
+5. **Live HTTP e2e (_t14_e2e.js, 11 checks ALL PASS):**
+   - GET /api/csrf-token, POST /api/auth/register, POST /api/auth/login —
+     fresh therapist provisioned with CSRF + Bearer token.
+   - GET /api/exercises returns 15 total seeded templates (was 16).
+   - Cognitive Reframing removed: PASS.
+   - 4-7-8 Breathing: 6 steps, "Andrew Weil" cited in description,
+     "once or twice per day" frequency cue: PASS.
+   - Evidence Examination: 7 steps, "Beck 1979" cited, friend-prompt
+     ("what would I say to them") present: PASS.
+   - Habit Tracking (etalon) intact: PASS.
+   - All 4 locales (en/ru/es/uk) populated on rewritten cards: PASS.
+   - All seeded cards have is_template=1: PASS.
+   - Step-count audit: every one of the 15 seeded cards has 5+
+     numbered steps: PASS.
+   - "Think and invent" language scan (think and invent / come up with
+     / invent ways / imagine alternatives / be creative): zero
+     offenders: PASS.
+
+6. **Server-restart persistence test:** killed PID 44800, restarted,
+   queried DB: #3 and #9 still present with new content; #8 still
+   absent. T-14 migration log lines: 0 (idempotent). PASS.
+
+7. **Mock-data grep on T-14 touched files:** zero hits for
+   globalThis|devStore|dev-store|mockDb|mockData|fakeData|sampleData|
+   dummyData|TODO.*real|TODO.*database|STUB|MOCK in
+   db/connection.js (T-14 region) or routes/exercises.js.
+
+8. **Test data cleanup (_t14_cleanup.js):** removed the t14_*@test.local
+   therapist created during the e2e (id=1043). Backend restarted on
+   the cleaned DB and /api/health remained green.
+
+### Sources cited
+- Andrew Weil, "Breathing: The Master Key to Self-Healing" (4-7-8 protocol)
+- Aaron T. Beck, "Cognitive Therapy of Depression" (1979) — evidence
+  examination dispute prompts
+- Customer-development interview: misha_drozd_2026-04-19, lines 410-533
+  (lines 489-503 highlight "Habit Tracking" as the etalon — concrete
+  trigger, reward, streak, no "think and invent")
+
+### Current Status
+- Feature #372: PASSING (T-14 Exercise library content cleanup —
+  Cognitive Reframing removed, 4-7-8 Breathing tightened to Andrew Weil
+  protocol, Evidence Examination rewritten with Beck 1979 dispute
+  prompts, all in EN/RU/ES/UK; idempotent in-place migration brings
+  existing prtop.db rows up to date; persistence verified across two
+  backend restarts; no orphaned exercise_deliveries).

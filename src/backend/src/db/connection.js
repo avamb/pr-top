@@ -439,6 +439,96 @@ function applySchema(db) {
     }
   }
 
+  // T-14: Exercise library content cleanup (#372)
+  // Interview misha_drozd_2026-04-19 lines 410-533: Marina flagged "Cognitive
+  // Reframing" as too generic — "you could call 100 different exercises
+  // 'reframing'" — and the steps relied on "think and invent alternatives",
+  // which is therapy work the client cannot do alone. Etalon (good) is "Habit
+  // Tracking": concrete trigger/reward/streak. T-14 removes the bad card and
+  // tightens two more cards with citable, concrete protocols.
+  //
+  // For existing DBs: seedDefaultExercises() only runs on an empty exercises
+  // table, so we need an idempotent in-place migration to bring already-seeded
+  // rows up to date. Each branch detects the OLD content signature, only acts
+  // if it finds it, and is therefore safe to re-run on every backend boot.
+  try {
+    // Sub-step 1: tighten 4-7-8 Breathing per Andrew Weil's protocol.
+    // Detect old version by the trailing "Repeat 3-4 cycles" instruction.
+    const old478 = db.exec(
+      "SELECT id FROM exercises WHERE is_custom = 0 AND title_en = '4-7-8 Breathing' AND instructions_en LIKE '%Repeat 3-4 cycles%'"
+    );
+    if (old478.length && old478[0].values.length) {
+      db.run(
+        `UPDATE exercises SET
+           description_ru = ?, description_en = ?, description_es = ?, description_uk = ?,
+           instructions_ru = ?, instructions_en = ?, instructions_es = ?, instructions_uk = ?,
+           updated_at = datetime('now')
+         WHERE is_custom = 0 AND title_en = '4-7-8 Breathing'`,
+        [
+          'Техника дыхания для быстрого засыпания и успокоения (по Эндрю Вейлу)',
+          'Breathing pattern for quick relaxation and sleep aid (Andrew Weil protocol)',
+          'Patron de respiracion para relajacion rapida (protocolo de Andrew Weil)',
+          'Техніка дихання для швидкого засинання та заспокоєння (за Ендрю Вейлом)',
+          '1. Сядьте прямо, кончик языка прижмите к нёбу за верхними зубами\n2. Полностью выдохните через рот со звуком "хуу"\n3. Закройте рот, вдохните через нос на 4 счёта\n4. Задержите дыхание на 7 счётов\n5. Выдохните через рот со звуком "хуу" на 8 счётов\n6. Повторите цикл 4 раза; делайте 1-2 раза в день',
+          '1. Sit upright with back straight; rest tongue tip behind upper teeth\n2. Exhale fully through mouth, making a soft "whoosh" sound\n3. Close mouth; inhale silently through nose for 4 counts\n4. Hold breath for 7 counts\n5. Exhale through mouth (whoosh) for 8 counts\n6. Repeat the cycle 4 times; do once or twice per day',
+          '1. Sientese erguido; coloque la punta de la lengua detras de los dientes superiores\n2. Exhale completamente por la boca con un sonido suave "fff"\n3. Cierre la boca; inhale por la nariz durante 4 tiempos\n4. Mantenga la respiracion durante 7 tiempos\n5. Exhale por la boca (sonido "fff") durante 8 tiempos\n6. Repita el ciclo 4 veces; hagalo 1-2 veces al dia',
+          '1. Сядьте рівно, кінчик язика притисніть до піднебіння за верхніми зубами\n2. Повністю видихніть через рот зі звуком "хуу"\n3. Закрийте рот, вдихніть через ніс на 4 рахунки\n4. Затримайте дихання на 7 рахунків\n5. Видихніть через рот зі звуком "хуу" на 8 рахунків\n6. Повторіть цикл 4 рази; робіть 1-2 рази на день',
+        ]
+      );
+      logger.info('T-14: rewrote 4-7-8 Breathing with Andrew Weil protocol (6 concrete steps + frequency)');
+    }
+
+    // Sub-step 2: tighten Evidence Examination per Beck (1979) dispute prompts.
+    // Detect old version by the vague "Evaluate objectively" instruction.
+    const oldEvidence = db.exec(
+      "SELECT id FROM exercises WHERE is_custom = 0 AND title_en = 'Evidence Examination' AND instructions_en LIKE '%Evaluate objectively%'"
+    );
+    if (oldEvidence.length && oldEvidence[0].values.length) {
+      db.run(
+        `UPDATE exercises SET
+           description_ru = ?, description_en = ?, description_es = ?, description_uk = ?,
+           instructions_ru = ?, instructions_en = ?, instructions_es = ?, instructions_uk = ?,
+           updated_at = datetime('now')
+         WHERE is_custom = 0 AND title_en = 'Evidence Examination'`,
+        [
+          'Проверка негативного убеждения через структурированный сбор фактов и переоценку (КПТ, по А. Беку)',
+          'Test a negative belief with a structured fact-gathering worksheet and re-rating (CBT, Beck 1979)',
+          'Probar una creencia negativa con una hoja estructurada de hechos y reevaluacion (TCC, Beck 1979)',
+          'Перевірка негативного переконання через структурований збір фактів та переоцінку (КПТ, за А. Беком)',
+          '1. Запишите убеждение одним предложением (например, "Я всегда проваливаю всё")\n2. Оцените, насколько вы в это верите сейчас (0-100%)\n3. Запишите 3 факта ЗА это убеждение, с датой и местом\n4. Запишите 3 факта ПРОТИВ этого убеждения, с датой и местом\n5. Письменно ответьте: "Что бы я сказал другу с таким же убеждением?"\n6. Сформулируйте сбалансированное утверждение по шаблону "Иногда происходит X, но также верно Y"\n7. Снова оцените веру в исходное убеждение (0-100%)',
+          '1. Write the belief in one sentence (e.g., "I always fail at everything")\n2. Rate how much you believe it now (0-100%)\n3. List 3 facts that SUPPORT the belief, with date and place\n4. List 3 facts that CONTRADICT the belief, with date and place\n5. Answer in writing: "If a friend told me this belief, what would I say to them?"\n6. Write a balanced statement using the template "Sometimes X happens, but Y is also true"\n7. Re-rate how much you believe the original belief (0-100%)',
+          '1. Escriba la creencia en una oracion (por ej., "Siempre fracaso en todo")\n2. Califique cuanto la cree ahora (0-100%)\n3. Liste 3 hechos que APOYAN la creencia, con fecha y lugar\n4. Liste 3 hechos que CONTRADICEN la creencia, con fecha y lugar\n5. Responda por escrito: "Que le diria a un amigo con esta misma creencia?"\n6. Escriba una afirmacion equilibrada con la formula "A veces ocurre X, pero tambien es cierto que Y"\n7. Vuelva a calificar cuanto cree la afirmacion original (0-100%)',
+          '1. Запишіть переконання одним реченням (наприклад, "Я завжди все провалюю")\n2. Оцініть, наскільки ви в це вірите зараз (0-100%)\n3. Запишіть 3 факти ЗА це переконання, з датою та місцем\n4. Запишіть 3 факти ПРОТИ цього переконання, з датою та місцем\n5. Письмово дайте відповідь: "Що я сказав би другові з таким же переконанням?"\n6. Сформулюйте збалансоване твердження за шаблоном "Іноді трапляється X, але також правда, що Y"\n7. Знову оцініть віру у вихідне переконання (0-100%)',
+        ]
+      );
+      logger.info('T-14: rewrote Evidence Examination with concrete dispute prompts (Beck 1979)');
+    }
+
+    // Sub-step 3: remove Cognitive Reframing — Marina explicitly rejected it
+    // ("слишком общая штука, и она не рабочая"). Only delete if no deliveries
+    // reference it, otherwise existing client-facing assignments would be
+    // orphaned. If deliveries exist, log a warning so an admin can decide.
+    const reframingRows = db.exec(
+      "SELECT id FROM exercises WHERE is_custom = 0 AND title_en = 'Cognitive Reframing'"
+    );
+    if (reframingRows.length && reframingRows[0].values.length) {
+      const reframingId = reframingRows[0].values[0][0];
+      const deliveryCheck = db.exec(
+        "SELECT COUNT(*) FROM exercise_deliveries WHERE exercise_id = ?",
+        [reframingId]
+      );
+      const deliveryCount = deliveryCheck.length ? deliveryCheck[0].values[0][0] : 0;
+      if (deliveryCount === 0) {
+        db.run('DELETE FROM exercises WHERE id = ?', [reframingId]);
+        logger.info(`T-14: removed seeded Cognitive Reframing exercise (id=${reframingId}) — too generic per Marina's review`);
+      } else {
+        logger.warn(`T-14: kept Cognitive Reframing (id=${reframingId}) — has ${deliveryCount} delivery rows; manual cleanup needed before retiring`);
+      }
+    }
+  } catch (e) {
+    logger.warn('T-14 exercise content cleanup skipped: ' + e.message);
+  }
+
   // Backfill Ukrainian translations for existing seed exercises
   try {
     const ukCheck = db.exec("SELECT COUNT(*) FROM exercises WHERE title_uk IS NOT NULL AND is_custom = 0");
