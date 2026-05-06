@@ -1089,6 +1089,244 @@ router.get('/:id/stream', authenticate, requireRole('therapist', 'superadmin'), 
   }
 });
 
+// T-20: Auto-link audio by date/metadata.
+//
+// Bulk-upload helper used by the new "Bulk Upload" UI. The therapist drops
+// 3+ recordings at once; the browser sends file metadata (filename + the
+// File.lastModified timestamp) here. We parse a date out of each filename
+// (or fall back to the lastModified mtime), then look at the therapist's
+// existing session.scheduled_at slots (T-02) to suggest which client each
+// recording belongs to.
+//
+// Behaviour per file:
+//   - exactly one client with a same-day session  -> auto_match populated
+//   - multiple clients with same-day sessions     -> conflict=true (UI dropdown)
+//   - no client with a same-day session           -> needs_new_session=true
+//                                                    (UI offers the T-07 form)
+//
+// This endpoint never touches files on disk and never creates DB rows; it
+// only returns matching hints. The actual upload still goes through
+// POST /api/sessions for each file (which already enforces consent +
+// plan-limit + encryption). That keeps the audit/security model intact and
+// lets the UI run uploads in parallel with per-file progress bars.
+//
+// Request body: { files: [{ filename, last_modified_ms? }, ...] }   (max 20)
+// Response:     { matches: [{ filename, parsed_date, parsed_method,
+//                             candidates: [...], auto_match, conflict,
+//                             needs_new_session }, ...] }
+function parseDateFromFilename(filename) {
+  // Try a handful of common date patterns produced by Zoom, OBS, phone
+  // recorders, dictaphones, and macOS/Windows screen recorders.
+  // Returns { isoDate: 'YYYY-MM-DD', method } or null when nothing matched.
+  if (!filename || typeof filename !== 'string') return null;
+  const name = filename;
+
+  const patterns = [
+    // ISO-ish: 2026-04-19, 2026_04_19, 2026.04.19, 20260419
+    { re: /(20\d{2})[-_.]?(\d{2})[-_.]?(\d{2})/, order: 'YMD' },
+    // Zoom-style: Recording 2026-04-19 14_30_00 — already covered above.
+    // US-style: 04-19-2026, 04_19_2026, 04.19.2026
+    { re: /(\d{2})[-_.](\d{2})[-_.](20\d{2})/, order: 'MDY' },
+    // EU-style: 19-04-2026
+    { re: /(\d{2})[-_.](\d{2})[-_.](20\d{2})/, order: 'DMY' }
+  ];
+
+  for (const pat of patterns) {
+    const m = name.match(pat.re);
+    if (!m) continue;
+    let year, month, day;
+    if (pat.order === 'YMD') {
+      year = parseInt(m[1], 10);
+      month = parseInt(m[2], 10);
+      day = parseInt(m[3], 10);
+    } else if (pat.order === 'MDY') {
+      month = parseInt(m[1], 10);
+      day = parseInt(m[2], 10);
+      year = parseInt(m[3], 10);
+    } else {
+      day = parseInt(m[1], 10);
+      month = parseInt(m[2], 10);
+      year = parseInt(m[3], 10);
+    }
+    if (!year || !month || !day) continue;
+    if (month < 1 || month > 12 || day < 1 || day > 31) continue;
+    // Sanity: build a Date and verify components round-trip.
+    const dt = new Date(Date.UTC(year, month - 1, day));
+    if (
+      dt.getUTCFullYear() !== year ||
+      dt.getUTCMonth() !== month - 1 ||
+      dt.getUTCDate() !== day
+    ) {
+      continue;
+    }
+    const isoDate = `${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+    return { isoDate, method: 'filename' };
+  }
+  return null;
+}
+
+function isoDateFromMs(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${d.getUTCFullYear().toString().padStart(4, '0')}-${(d.getUTCMonth() + 1).toString().padStart(2, '0')}-${d.getUTCDate().toString().padStart(2, '0')}`;
+}
+
+function buildClientDisplayName(row) {
+  // row keys: first_name, last_name, email, telegram_username, telegram_id, id
+  const fn = (row.first_name || '').trim();
+  const ln = (row.last_name || '').trim();
+  const full = `${fn} ${ln}`.trim();
+  if (full) return full;
+  if (row.email) return row.email;
+  if (row.telegram_username) return `@${row.telegram_username}`;
+  if (row.telegram_id) return `tg:${row.telegram_id}`;
+  return `Client #${row.id}`;
+}
+
+router.post('/auto-match', authenticate, requireRole('therapist', 'superadmin'), (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const files = Array.isArray(req.body && req.body.files) ? req.body.files : null;
+    if (!files) {
+      return res.status(400).json({ error: 'files (array) is required' });
+    }
+    if (files.length === 0) {
+      return res.json({ matches: [] });
+    }
+    if (files.length > 20) {
+      return res.status(400).json({ error: 'Too many files (max 20 per call)' });
+    }
+
+    const db = getDatabase();
+
+    // Pre-load this therapist's connected, consenting clients once. We will
+    // use this map both to render display names and to enforce that the
+    // suggested candidates are in fact linked to this therapist.
+    const clientsRes = db.exec(
+      `SELECT id, email, first_name, last_name, telegram_username, telegram_id, language
+         FROM users
+        WHERE role = 'client' AND therapist_id = ? AND consent_therapist_access = 1`,
+      [therapistId]
+    );
+    const clientsById = new Map();
+    if (clientsRes.length > 0) {
+      for (const row of clientsRes[0].values) {
+        clientsById.set(row[0], {
+          id: row[0],
+          email: row[1],
+          first_name: row[2],
+          last_name: row[3],
+          telegram_username: row[4],
+          telegram_id: row[5],
+          language: row[6]
+        });
+      }
+    }
+
+    // Collect every distinct date we'll need to query, then load the matching
+    // sessions in a single SQL pass per date. (Worst case 20 dates -> 20 cheap
+    // queries; usually 1-3 distinct dates for a real bulk drop.)
+    const matches = [];
+    const sessionsByDate = new Map();
+    const queryForDate = (isoDate) => {
+      if (sessionsByDate.has(isoDate)) return sessionsByDate.get(isoDate);
+      const result = db.exec(
+        `SELECT s.id, s.client_id, s.scheduled_at, s.audio_ref, s.title
+           FROM sessions s
+          WHERE s.therapist_id = ? AND DATE(s.scheduled_at) = ?
+          ORDER BY s.id DESC`,
+        [therapistId, isoDate]
+      );
+      const rows = result.length > 0
+        ? result[0].values.map(r => ({
+            id: r[0],
+            client_id: r[1],
+            scheduled_at: r[2],
+            audio_ref: r[3],
+            title: r[4] || null
+          }))
+        : [];
+      sessionsByDate.set(isoDate, rows);
+      return rows;
+    };
+
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i] || {};
+      const filename = typeof f.filename === 'string' ? f.filename : '';
+      const lastModifiedMs = Number.isFinite(f.last_modified_ms) ? f.last_modified_ms : null;
+
+      // Parse a date out of the filename first; fall back to the file mtime.
+      let parsed = parseDateFromFilename(filename);
+      if (!parsed && lastModifiedMs !== null) {
+        const iso = isoDateFromMs(lastModifiedMs);
+        if (iso) parsed = { isoDate: iso, method: 'mtime' };
+      }
+
+      const matchEntry = {
+        file_index: i,
+        filename,
+        parsed_date: parsed ? parsed.isoDate : null,
+        parsed_method: parsed ? parsed.method : null,
+        candidates: [],
+        auto_match: null,
+        conflict: false,
+        needs_new_session: false
+      };
+
+      if (!parsed) {
+        // No date at all — therapist must pick a client + date manually.
+        matchEntry.needs_new_session = true;
+        matches.push(matchEntry);
+        continue;
+      }
+
+      const dateSessions = queryForDate(parsed.isoDate);
+      // Build per-client candidate list (one entry per distinct client_id).
+      const seenClient = new Map();
+      for (const sess of dateSessions) {
+        if (!clientsById.has(sess.client_id)) continue; // ignore disconnected clients
+        if (seenClient.has(sess.client_id)) continue;
+        const c = clientsById.get(sess.client_id);
+        seenClient.set(sess.client_id, true);
+        matchEntry.candidates.push({
+          client_id: c.id,
+          display_name: buildClientDisplayName(c),
+          existing_session_id: sess.audio_ref ? null : sess.id, // only suggest reusing slots that have no audio yet
+          existing_session_title: sess.title,
+          match_reason: 'session_on_date'
+        });
+      }
+
+      if (matchEntry.candidates.length === 1) {
+        matchEntry.auto_match = matchEntry.candidates[0];
+      } else if (matchEntry.candidates.length > 1) {
+        matchEntry.conflict = true;
+      } else {
+        matchEntry.needs_new_session = true;
+      }
+
+      matches.push(matchEntry);
+    }
+
+    // Audit: log the auto-match request (no Class A data leaves the server).
+    try {
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'session_auto_match', 'session', NULL, ?, datetime('now'))",
+        [therapistId, JSON.stringify({ file_count: files.length })]
+      );
+      saveDatabaseAfterWrite();
+    } catch (auditErr) {
+      logger.warn('T-20 auto-match audit log failed: ' + auditErr.message);
+    }
+
+    res.json({ matches });
+  } catch (error) {
+    logger.error('Auto-match error: ' + error.message);
+    res.status(500).json({ error: 'Failed to compute auto-match suggestions' });
+  }
+});
+
 // Handle multer errors
 router.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {

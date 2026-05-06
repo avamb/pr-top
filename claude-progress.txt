@@ -3934,3 +3934,217 @@ Verification (e2e against running backend, port 3001):
   persistence verified across backend restart; gate enforced on /sos,
   /diary intake, /exercises, /sessions, /help; backward-compatible with
   legacy single-button consent_yes_/consent_no_ callbacks).
+
+
+## Session: 2026-05-07 - T-20 Auto-link audio by date/metadata (#378)
+
+Feature #378 PASSING. The Sonnet 4.6 path was clear: a tiny, side-effect-
+free backend endpoint that returns matching hints, plus a dedicated bulk-
+upload page that uses it as a per-file pre-flight before re-using the
+existing single-file POST /api/sessions for the real upload (so consent +
+plan limit + AES file encryption stay unchanged).
+
+### Why this feature exists
+
+Customer development with Alexey (docs/new_fichas/customer-development-
+meetings/alexey_*_2026-04-* p.195-213) surfaced a recurring frustration:
+on a busy day a therapist may record 3-5 sessions, then later that
+evening drag a folder of files into the dashboard, only to have to set
+the client + meeting date for each one by hand. The patterns are
+predictable — recorder filenames almost always carry an ISO-ish date,
+and even when they don't (Zoom's "Recording 2026-04-19 14_30_00.mp4",
+phone recorders' "REC_20260419.m4a", iOS Voice Memos' clean
+"untitled.m4a"), the OS-level lastModified mtime is an excellent
+fallback. Combined with the calendar slots created by T-02
+(sessions.scheduled_at) and T-07 (the "New Session" form with
+meeting_date), we have everything we need to auto-suggest a client per
+file and let the therapist just say "yes, upload them all".
+
+### Backend
+
+src/backend/src/routes/sessions.js — new POST /api/sessions/auto-match,
+authenticated + therapist-only.
+
+Request:
+  { files: [{ filename, last_modified_ms? }, ...] }   (max 20 per call)
+
+Response:
+  { matches: [{
+      file_index, filename,
+      parsed_date, parsed_method,
+      candidates: [{ client_id, display_name, existing_session_id,
+                     existing_session_title, match_reason }],
+      auto_match | null,
+      conflict, needs_new_session
+  }] }
+
+Per-file logic:
+  - Parse a date out of the filename (ISO YMD, US MDY, EU DMY) — patterns
+    cover Zoom/OBS/dictaphones/macOS/Windows screen recorders. Fail-fast
+    on invalid month/day; round-trip through Date.UTC to reject things
+    like 2026-02-30.
+  - If the filename has nothing recognisable, fall back to the
+    File.lastModified mtime; result tagged parsed_method='mtime' so the
+    UI can hint that it used a softer signal.
+  - Look up the therapist's sessions by DATE(scheduled_at)=parsed_date,
+    join against the consenting-client list (consent_therapist_access=1
+    AND therapist_id=me) to drop disconnected clients.
+  - 1 unique candidate -> auto_match populated.
+  - 2+ unique candidates -> conflict=true (UI dropdown).
+  - 0 candidates -> needs_new_session=true (UI offers full client picker
+    + manual meeting_date, reuses the T-07 path).
+
+The endpoint never touches files on disk and never creates DB rows — it
+only returns hints. The actual upload still goes through the existing
+POST /api/sessions for each file (already audited, encrypted, plan-
+limit-checked, consent-gated). One audit_logs row per call with
+action='session_auto_match' for forensics.
+
+Validation hardening:
+  - non-array body -> 400
+  - empty array -> 200 with []
+  - >20 files -> 400 ("Too many files (max 20 per call)")
+  - missing/invalid Authorization -> 401
+  - non-therapist role -> 403
+
+### Frontend
+
+src/frontend/src/pages/BulkUpload.jsx — new dedicated /sessions/bulk
+route, mounted in src/frontend/src/App.jsx behind the existing
+GuardedLayout (AuthGuard + TherapistGuard + AppLayout).
+
+UI flow:
+  1. Drop zone (drag-and-drop + click-to-browse, multi-file <input>).
+     Per-file validation matches the existing single-upload (100MB cap,
+     mp3/m4a/wav/mp4/webm/ogg/aac/flac).
+  2. On drop, the page POSTs the file metadata to /sessions/auto-match
+     and splices the response back into the per-file row state.
+  3. Each row renders:
+       - filename + size + a status badge
+         (Auto-matched / Conflict / No match / Invalid / Uploading /
+         Uploaded / Error)
+       - parsed-date hint ("Date from filename: 2026-04-19" or "Date
+         from file timestamp: ...")
+       - <select> with two optgroups: "Same-day sessions" candidates
+         first, then "All clients" so the therapist can override.
+       - <input type="date"> meeting date (defaulted from parsed_date,
+         editable, max=today)
+       - <input> session title (optional, 200-char cap)
+       - per-file progress bar + Retry button on error
+  4. "Upload all ready (N)" button kicks off a sliding-window of
+     MAX_PARALLEL_UPLOADS=3 in-flight POST /api/sessions calls. Each
+     row's progress bar updates from xhr.upload.onprogress (real
+     XMLHttpRequest, same pattern as ClientDetail.jsx).
+  5. Status counters at the top (Ready / Conflict / Uploading / Done /
+     Errors). Done badge stays so the therapist can see what's already
+     persisted.
+
+src/frontend/src/pages/Dashboard.jsx — new card "Bulk session upload"
+right above the "Ask About a Client" card, single button -> /sessions/
+bulk. data-testid="dashboard-bulk-upload-link" so future regression
+tests can spot it.
+
+Pre-loads the consenting-client list once on mount via paginated
+GET /api/clients (per_page=100, up to 5 pages — covers any plan tier).
+Filters out non-consenting clients before populating dropdowns.
+
+### i18n
+
+session.upload.autoLink.* (37 keys per locale × en/ru/es/uk = 148):
+  pageTitle, pageDesc, backToDashboard,
+  dragDrop, dropHere, batchHint, tooManyFiles,
+  loadingClients, matching, autoMatchError,
+  networkError, timeout, empty,
+  uploadAll, uploadingAll, clearAll, removeFile, retry,
+  clientLabel, clientPick, candidatesGroup, allClientsGroup,
+  existingSession,
+  parsedFilename, parsedMtime, noDateParsed,
+  statusReady, statusConflict, statusUploading, statusDone,
+  statusErrored, statusInvalid, statusUploaded, statusError,
+  statusAutoMatched, statusConflictBadge, statusNoMatchBadge
+
+dashboard.bulkUpload, dashboard.bulkUploadHint, dashboard.bulkUploadCta
+in all four locales for the new dashboard card.
+
+All four locale files validated as parseable JSON post-edit; 37 autoLink
+keys present in every locale (verified via _t20_validate_locales.js).
+
+### Verification
+
+1) Compile sanity (_t20_compile_check.js):
+   - esbuild with jsx=automatic, target=es2020 on
+       src/frontend/src/pages/BulkUpload.jsx
+       src/frontend/src/App.jsx
+       src/frontend/src/pages/Dashboard.jsx
+     -> all OK, no warnings.
+   - node -c on src/backend/src/routes/sessions.js -> OK.
+
+2) Locale validation (_t20_validate_locales.js):
+   - JSON.parse on all four en/ru/es/uk files -> OK.
+   - dashboard.bulkUpload + session.upload.autoLink (37 keys each) ->
+     present in every locale.
+
+3) Live HTTP e2e (_t20_e2e.js, 5 functional checks PASS):
+   - Fresh therapist registered (id=1056).
+   - File parsing on three files:
+       'session_2026-04-19_alex.m4a' -> filename YMD = 2026-04-19, PASS
+       'recording-04-19-2026.mp3'    -> filename MDY = 2026-04-19, PASS
+       'untitled.wav' (lm=2026-04-20) -> mtime fallback = 2026-04-20, PASS
+   - Empty files array -> 200 with [], PASS.
+   - Non-array body -> 400, PASS.
+   - 21-file batch -> 400, PASS.
+   - Cookie-jar dropped + no Bearer -> 401, PASS.
+
+4) Live HTTP e2e seed-and-match (_t20_seed_and_match.js, 2 PASS):
+   - Killed backend, seeded two consenting clients (Alex + Bob) linked
+     to a fresh therapist (1057), plus 3 sessions:
+       Alex 2026-05-01 14:00 (sole candidate)
+       Alex 2026-05-02 10:00 (one of two)
+       Bob  2026-05-02 16:00 (one of two)
+   - Restarted backend (npm --prefix src/backend run dev).
+   - POST /sessions/auto-match for two filename-only files:
+       'recording_2026-05-01.mp3' -> auto_match.client_id=1058 (Alex
+         Test), existing_session_id=10, conflict=false,
+         needs_new_session=false. PASS.
+       'recording_2026-05-02.mp3' -> auto_match=null, conflict=true,
+         candidates=[{1059 Bob Test, sess 12}, {1058 Alex Test, sess
+         11}]. PASS.
+
+5) Server-restart persistence: implicit in (4) — the seeded sessions
+   survived the kill+restart and the auto-match endpoint correctly
+   re-read them from disk via sql.js after the backend was bounced.
+
+6) Mock-data grep across the touched files
+   (src/backend/src/routes/sessions.js, src/frontend/src/pages/
+   BulkUpload.jsx, src/frontend/src/pages/Dashboard.jsx) — zero hits
+   for globalThis|devStore|dev-store|mockDb|mockData|fakeData|sampleData
+   |dummyData. All persistence flows through db.exec + db.run +
+   saveDatabaseAfterWrite() against prtop.db.
+
+7) Cleanup (_t20_cleanup.js): killed backend, deleted the 3 test-user
+   rows from _t20_e2e.js (1055, 1056) + their audit_logs +
+   subscriptions; the seed-and-match script's own cleanup already
+   handled 1057/1058/1059. Verified via _t20_verify_clean.js — no
+   t20_*@test.local lingerers. Backend restarted cleanly on the cleaned
+   DB.
+
+### Files changed
+  src/backend/src/routes/sessions.js          (+244 lines, +1 endpoint)
+  src/frontend/src/pages/BulkUpload.jsx       (new file, ~520 lines)
+  src/frontend/src/App.jsx                    (+2 lines: import + route)
+  src/frontend/src/pages/Dashboard.jsx        (+19 lines: entry card)
+  src/frontend/src/i18n/en.json               (+44 lines)
+  src/frontend/src/i18n/ru.json               (+44 lines)
+  src/frontend/src/i18n/es.json               (+44 lines)
+  src/frontend/src/i18n/uk.json               (+44 lines)
+
+### Current Status
+- Feature #378: PASSING (T-20 Auto-link audio by date/metadata —
+  POST /api/sessions/auto-match returns per-file matching hints from
+  filename and lastModified mtime; new /sessions/bulk page with drag-
+  and-drop + per-file progress + auto-match dropdowns + conflict
+  resolution + create-new-session fallback; full EN/RU/ES/UK i18n
+  (148 new keys); auto_match + conflict + needs_new_session branches
+  all verified end-to-end; persistence verified across backend
+  restart; no mock data; existing audit/security model preserved by
+  reusing POST /api/sessions for the actual upload).

@@ -14,6 +14,7 @@ import ClientList from './pages/ClientList';
 import Subscription from './pages/Subscription';
 import ClientDetail from './pages/ClientDetail';
 import SessionDetail from './pages/SessionDetail';
+import BulkUpload from './pages/BulkUpload';
 import ExerciseLibrary from './pages/ExerciseLibrary';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
@@ -97,6 +98,7 @@ function App() {
         <Route path="/dashboard" element={<GuardedLayout><Dashboard /></GuardedLayout>} />
         <Route path="/clients" element={<GuardedLayout><ClientList /></GuardedLayout>} />
         <Route path="/clients/:id" element={<GuardedLayout><ClientDetail /></GuardedLayout>} />
+        <Route path="/sessions/bulk" element={<GuardedLayout><BulkUpload /></GuardedLayout>} />
         <Route path="/sessions/:id" element={<GuardedLayout><SessionDetail /></GuardedLayout>} />
         <Route path="/exercises" element={<GuardedLayout><ExerciseLibrary /></GuardedLayout>} />
         <Route path="/analytics" element={<GuardedLayout><Analytics /></GuardedLayout>} />

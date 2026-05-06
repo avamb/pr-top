@@ -486,6 +486,30 @@ export default function Dashboard() {
           </div>
         </section>
 
+        {/* Bulk upload entry point - T-20.
+            Lives next to "Ask about a client" so therapists who batch their
+            session uploads at end-of-week have a single click from the
+            dashboard. Auto-match logic lives in /sessions/bulk; this card
+            is just the entry point. */}
+        <section className="mt-6 bg-white rounded-lg shadow-md p-6">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-2xl">📁</span>
+            <h2 className="text-lg font-semibold text-primary">
+              {t('dashboard.bulkUpload', 'Bulk session upload')}
+            </h2>
+          </div>
+          <p className="text-sm text-secondary mb-3">
+            {t('dashboard.bulkUploadHint', 'Drop several recordings at once — we match each one to a session by date.')}
+          </p>
+          <button
+            onClick={() => navigate('/sessions/bulk')}
+            data-testid="dashboard-bulk-upload-link"
+            className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
+          >
+            {t('dashboard.bulkUploadCta', 'Open bulk upload')}
+          </button>
+        </section>
+
         {/* Ask about a client - NL query shortcut */}
         <section className="mt-6 bg-white rounded-lg shadow-md p-6">
           <div className="flex items-center gap-3 mb-3">
