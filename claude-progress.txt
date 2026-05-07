@@ -4280,3 +4280,110 @@ create,errorNeedIdentifier,errorNoteTooLong,errorAuth,errorGeneric} —
   telegram_id is NULL; full create-client modal with EN/RU/ES/UK i18n;
   Diary / Exercises / SOS tabs hidden in ClientDetail for solo clients;
   encrypted initial note persists across backend restart).
+
+
+## Session: T-24 Russia accessibility (Feature #382) — PASSING
+
+### Goal
+Research-first decision document on how to make pr-top.com reachable from
+Russia, where Cloudflare (the production CDN/edge) is RKN-blocked.
+Deliverable per the ticket: research spike across three variants
+(a) RU mirror, (b) origin-direct subdomain bypassing CF, (c) per-user
+SSH/SOCKS5 workaround; legal risk assessment; performance assessment;
+decision doc; phase-2 implementation plan; user-facing instructions for
+the (c) fallback.
+
+Source customer signal: Misha Drozd interview, 2026-04-19, lines 638-700
+of docs/new_fichas/customer-development-meetings/misha_drozd_2026-04-19.md.
+
+### Research summary
+
+(a) RU mirror — REJECTED. Triggers 152-FZ data localisation, FZ-374
+    (Yarovaya / SORM / FSB decryption keys), and GDPR Chapter V cross-
+    border transfer obligations to a non-adequate third country. Trades
+    "some RU users cannot reach us" for "we have an FSB key-escrow
+    obligation". Not defensible for a privacy-positioned therapy SaaS.
+
+(b) Origin-direct subdomain (e.g. ru.pr-top.com, grey-cloud A-record at
+    Hetzner origin, Traefik router, Let's Encrypt cert) — CHOSEN. ~1
+    engineering hour, zero application code change, zero new legal
+    exposure, fully reversible behind a single DNS record. Hetzner IPs
+    are reachable from RU as of 2026-04 to 2026-05. Performance loss
+    from removing CF caching is negligible (PR-TOP is dynamic, static
+    bundle under 250 kB). Fallback (b-tier): if a Hetzner /24 is later
+    TSPU-blocked, stand up a small VPS in a non-blocked European DC
+    (Hostkey FI / AEZA NL / FirstVDS) to terminate TLS and reverse-proxy
+    to EU origin.
+
+(c) Per-user SSH SOCKS5 (Misha's recipe: Termux + ssh -D 1080 + SOCKS5
+    in Telegram/browser) — DOCUMENTED AS FALLBACK. Doesn't scale (most
+    therapists won't run Termux), and a hosted Shadowsocks/Outline
+    endpoint would put us under FZ-276 anti-circumvention amendments
+    (March 2024). Documentation only, no hosted service.
+
+### Deliverables
+
+1. docs/decisions/0001-russia-accessibility.md (new file, 192 lines):
+   ADR with section 1 Context, section 2 Three-options analysis with
+   pros/cons/legal notes, section 3 Performance table (Moscow/SPb RTT,
+   TLS, bundle, TTI, API roundtrip), section 4 Compliance matrix
+   (152-FZ, GDPR Art.9, FZ-374, FZ-276, EU sanctions across all three
+   options), section 5 Decision (option b primary, option c fallback),
+   section 6 Phase-2 implementation plan with 12 acceptance criteria
+   (DNS, Traefik, TLS, CORS/cookies, CSP, RU ASN reachability check
+   across Rostelecom/MTS/Beeline/MegaFon/ER-Telecom/Yota, in-app CF
+   detection probe + banner, therapist-facing client-onboarding URL
+   toggle, bot deep links unchanged, one-line rollback, Umami
+   monitoring, b-fallback escalation), section 7 phase-2-fallback
+   already delivered, section 8 Risks and review triggers.
+
+2. docs/troubleshooting/russia-access.md (new file, 136 lines):
+   user-facing guide in English + Russian. Covers (1) try
+   https://ru.pr-top.com first, (2) browser proxy / WARP / Opera
+   built-in VPN, (3) use the bot for bot-capable workflows,
+   (4) full SSH SOCKS5 recipe (Termux on Android with F-Droid,
+   ssh -D 1080 on Windows/macOS/Linux, Telegram SOCKS5 settings,
+   Kiwi/Bromite for Android browser), (5) network switch.
+   Includes client-flow guidance and an escalation path
+   (support@pr-top.com with city/ISP/error) feeding the ADR section 8
+   review trigger.
+
+### Mapping to original feature acceptance steps
+
+  Step 1 (variants a/b/c spike)        section 2 of ADR
+  Step 2 (legal risk RU hosting)       section 4 + section 2(a) detail
+  Step 3 (performance without CF)      section 3 of ADR
+  Step 4 (decision + plan)             section 5 + section 6 of ADR
+  Step 5 (if a/b: phase-2 ticket)      section 6 of ADR (12-point AC
+                                        for the orchestrator to file
+                                        as a new infra ticket)
+  Step 6 (if c: user instructions)     docs/troubleshooting/
+                                        russia-access.md (EN + RU)
+
+### Verification
+
+This is a research-first feature; deliverable is documentation. No code
+changes, so lint / type-check / server-restart / mock-data-grep are not
+applicable. Both files are valid Markdown, render correctly, and
+cross-reference each other (ADR section 7 points to troubleshooting doc;
+troubleshooting doc points to ADR section 8 review trigger).
+
+### Files added
+  docs/decisions/0001-russia-accessibility.md     (new file, 192 lines)
+  docs/troubleshooting/russia-access.md           (new file, 136 lines)
+
+### Phase-2 follow-up
+
+A separate Infrastructure ticket should be filed by the orchestrator
+covering the 12-point Phase-2 acceptance criteria from ADR section 6.
+Out of scope for #382, which is research-only.
+
+### Current status
+- Feature #382: PASSING (T-24 Russia accessibility — decision doc adopts
+  option (b) origin-direct subdomain ru.pr-top.com bypassing Cloudflare,
+  with option (c) SSH SOCKS5 documented as power-user fallback;
+  rejected option (a) RU mirror on 152-FZ / FZ-374 / GDPR grounds;
+  performance and legal risk assessments included; 12-point Phase-2
+  implementation plan documented for follow-up infra ticket; bilingual
+  EN/RU user-facing troubleshooting guide delivered).
+- Stats: 373/384 features passing (97.1%).
