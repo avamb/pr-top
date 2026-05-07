@@ -1682,7 +1682,9 @@
       "makePrivate": "Make private",
       "makeShared": "Make shared",
       "private": "Private",
-      "shared": "Shared"
+      "shared": "Shared",
+      "showToClient": "Show to client",
+      "showToClientHint": "Off by default — your comment stays private. Turn on to share it with the client."
     },
     "you": "You",
     "byTherapist": "Therapist",

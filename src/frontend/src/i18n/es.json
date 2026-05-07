@@ -1666,7 +1666,9 @@
       "makePrivate": "Hacer privado",
       "makeShared": "Hacer compartido",
       "private": "Privado",
-      "shared": "Compartido"
+      "shared": "Compartido",
+      "showToClient": "Mostrar al cliente",
+      "showToClientHint": "Desactivado por defecto: el comentario permanece privado. Actívalo para compartirlo con el cliente."
     },
     "you": "Tú",
     "byTherapist": "Terapeuta",

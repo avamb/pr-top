@@ -4701,3 +4701,132 @@ verified the full end-to-end stack and marked the feature passing.
   with 403 tier_gate code intercepted by frontend; spending-limit
   check before embed cost; full EN/RU/ES/UK i18n).
 - Stats: 375/384 features passing (97.7%).
+
+
+## Session: T-11 Therapist comment default-hidden / UI toggle (Feature #369) — PASSING
+
+### Goal
+T-10 already enforces dual-visibility comments at the model layer
+(visibility ∈ {private, shared}, default 'private' for therapist authors,
+default 'shared' for clients). T-11 adds the *UI-side* validator: when a
+therapist drafts a comment, an explicit "Show to client" toggle (default
+OFF) is the single source of truth for visibility. AutoForge model:
+Sonnet 4.6 (toggle/preference). Depends on T-10 (#368, already passing).
+
+### Changes
+
+src/frontend/src/components/CommentsPanel.jsx
+  - New `showToClient` boolean state, default false. Therapist-only.
+  - `activeTab` initial value is now role-aware:
+      isClient -> 'shared'  (clients always write shared comments)
+      else     -> 'private' (therapists land on their private notes)
+  - handleCreate() derives visibility from the toggle for therapist
+    authors:  isClient ? 'shared' : showToClient ? 'shared' : 'private'.
+    Clients always create shared comments (existing behaviour preserved).
+  - After a successful create, the active tab is switched to where the
+    comment actually lives (private or shared) so the therapist isn't
+    confused by an "empty" view, and the toggle is reset to default-off
+    so the next comment also starts out private.
+  - Placeholder + submit button copy follow the toggle state for
+    therapists (`willBeShared`) instead of the active tab. This makes
+    the form copy match what the user is about to do, not what they're
+    looking at.
+  - New checkbox UI rendered inside the create form (therapist-only),
+    styled to match the existing teal palette. Includes a `title`
+    tooltip with the new `showToClientHint` string and an inline
+    indicator showing the current target visibility (Private/Shared)
+    next to the label so therapists can see at a glance whether the
+    comment will be visible to the client.
+  - Test hooks added: `data-testid="comment-show-to-client"` on the
+    checkbox, `data-will-be-shared` boolean on the submit button.
+
+src/frontend/src/i18n/{en,ru,es,uk}.json
+  - Added under `comments.visibility`:
+      showToClient (label) and showToClientHint (tooltip helper).
+  - en: "Show to client" / hint "Off by default — your comment stays
+        private. Turn on to share it with the client."
+  - ru: "Показать клиенту" / hint "По умолчанию выключено — комментарий
+        остаётся приватным. Включите, чтобы поделиться с клиентом."
+  - es: "Mostrar al cliente" / hint "Desactivado por defecto: el
+        comentario permanece privado. Actívalo para compartirlo con
+        el cliente."
+  - uk: "Показати клієнту" / hint "За замовчуванням вимкнено —
+        коментар залишається приватним. Увімкніть, щоб поділитися
+        з клієнтом."
+
+### Acceptance criteria mapped to deliverables
+
+  Step 1 (New therapist comment: visibility default = private)
+        -> handleCreate() returns 'private' when showToClient is false
+           (the default state). The backend already independently
+           defaults therapist authors to 'private' (T-10), so a
+           therapist creating a comment WITHOUT touching the toggle
+           gets a private comment by both UI default and server-side
+           default.
+  Step 2 (UI: "Show to client" checkbox/toggle in the comment form,
+          default off)
+        -> data-testid="comment-show-to-client" checkbox rendered for
+           therapist authors only, useState initial value `false`,
+           reset to `false` after every successful create.
+  Step 3 (Existing private tab for therapists -> default tab)
+        -> useState(isClient ? 'shared' : 'private') makes the private
+           tab the initial tab for therapists/superadmins; clients
+           still default to the shared tab where their counter-party
+           lives.
+  Step 4 (i18n key comments.visibility.showToClient in en/ru/es/uk)
+        -> Added in all four locale files. Plus a companion
+           showToClientHint tooltip copy in each locale.
+  Step 5 (UI smoke: comment without toggle -> client doesn't see;
+          with toggle -> sees)
+        -> Without toggle: handleCreate() POSTs visibility='private'.
+           Backend services/comments.js canSeeComment() returns false
+           for any user other than the author when visibility !==
+           'shared' (lines 157-171), so the client's GET /api/comments
+           response won't include the row.
+           With toggle on: handleCreate() POSTs visibility='shared'.
+           canSeeComment() returns true for the counter-party of the
+           same entity (therapist <-> client owner), so the client's
+           GET /api/comments will include the row, and the row will
+           land on the shared tab in the client's CommentsPanel
+           (filter on line 75).
+
+### Verification (YOLO mode)
+
+1. JSON parse on all four locale files passed; the new
+   `comments.visibility.showToClient` and
+   `comments.visibility.showToClientHint` keys are present in en/ru/es/uk.
+2. JSX parse via the project's bundled esbuild (jsx loader) on
+   CommentsPanel.jsx returned syntax OK. No new dependencies; all the
+   added markup uses existing Tailwind utility classes already loaded
+   by the project.
+3. node --check on src/backend/src/services/comments.js and
+   src/backend/src/routes/comments.js — clean (the backend layer
+   wasn't changed; the existing T-10 enforcement is what protects the
+   client-doesn't-see-private invariant from server-side bypass).
+4. Mock-data grep on the changed JSX file (globalThis|devStore|
+   dev-store|mockDb|mockData|fakeData|sampleData|dummyData|testData|
+   isDevelopment|isDev|STUB|TODO.*real|TODO.*database) — zero hits.
+5. Server restart persistence test is N/A — this feature is a UI-side
+   validator on top of the existing T-10 persistence layer (no new
+   tables, no new routes, no new in-memory stores).
+
+### Files added / changed this session
+
+  src/frontend/src/components/CommentsPanel.jsx        (modified, +~40 lines)
+  src/frontend/src/i18n/en.json                        (+2 keys)
+  src/frontend/src/i18n/ru.json                        (+2 keys)
+  src/frontend/src/i18n/es.json                        (+2 keys)
+  src/frontend/src/i18n/uk.json                        (+2 keys)
+
+### Current status
+- Feature #369: PASSING (T-11 — Therapist comment default-hidden via
+  UI toggle: explicit "Show to client" checkbox in the create form,
+  default OFF for therapists, derives visibility ('private' when off,
+  'shared' when on); private tab is the default for therapists,
+  shared tab is the default for clients; placeholder + submit-button
+  copy + post-create tab switch all follow the toggle state so the
+  therapist is never confused about where their comment landed; full
+  EN/RU/ES/UK i18n with companion hint tooltip; backend T-10
+  visibility enforcement is the server-side authority that prevents
+  client from seeing default-private comments).
+- Stats: 376/384 features passing (97.9%).

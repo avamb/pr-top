@@ -21,7 +21,12 @@ import LoadingSpinner from './LoadingSpinner';
  */
 function CommentsPanel({ entityType, entityId, userRole, currentUserId, className = '' }) {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState('private');
+  const isTherapist = userRole === 'therapist' || userRole === 'superadmin';
+  const isClient = userRole === 'client';
+  // T-11: therapists default to their own private tab (their notes are private
+  // by default — see also showToClient toggle below); clients land on the
+  // shared tab because their comments are always shared with the therapist.
+  const [activeTab, setActiveTab] = useState(isClient ? 'shared' : 'private');
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -30,9 +35,11 @@ function CommentsPanel({ entityType, entityId, userRole, currentUserId, classNam
   const [editingId, setEditingId] = useState(null);
   const [editingContent, setEditingContent] = useState('');
   const [actionId, setActionId] = useState(null);
-
-  const isTherapist = userRole === 'therapist' || userRole === 'superadmin';
-  const isClient = userRole === 'client';
+  // T-11: explicit "Show to client" toggle for therapist authors. Default OFF
+  // = comment is private to the therapist. When ON the comment is created
+  // with visibility='shared'. Clients never see this toggle (their comments
+  // are always shared with the therapist).
+  const [showToClient, setShowToClient] = useState(false);
 
   const fetchComments = useCallback(async () => {
     if (!entityType || !entityId) return;
@@ -75,7 +82,10 @@ function CommentsPanel({ entityType, entityId, userRole, currentUserId, classNam
     setSaving(true);
     setError('');
     try {
-      const visibility = activeTab; // 'private' or 'shared'
+      // T-11: For therapist authors the explicit "Show to client" toggle is
+      // the source of truth for visibility — default off ⇒ private. Clients
+      // always create shared comments (visible to their therapist).
+      const visibility = isClient ? 'shared' : showToClient ? 'shared' : 'private';
       const res = await fetchApi('/api/comments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -91,6 +101,14 @@ function CommentsPanel({ entityType, entityId, userRole, currentUserId, classNam
         throw new Error(data.error || t('comments.errorSave'));
       }
       setDraft('');
+      // After creating, surface the new comment in the tab where it actually
+      // lives so the therapist isn't confused by an "empty" view.
+      if (isTherapist && activeTab !== visibility) {
+        setActiveTab(visibility);
+      }
+      // Reset the toggle to default-off after a successful create so the next
+      // comment also defaults to private.
+      setShowToClient(false);
       await fetchComments();
     } catch (e) {
       setError(e.message || t('comments.errorSave'));
@@ -177,8 +195,13 @@ function CommentsPanel({ entityType, entityId, userRole, currentUserId, classNam
   }
 
   const sharedTabLabel = isClient ? t('comments.tabForTherapist') : t('comments.tabForClient');
-  const placeholder =
-    activeTab === 'private' ? t('comments.placeholderPrivate') : t('comments.placeholderShared');
+  // T-11: For therapists, the placeholder + submit-button copy follows the
+  // explicit "Show to client" toggle (off ⇒ private). Clients always write
+  // shared comments and don't see the toggle.
+  const willBeShared = isClient ? true : showToClient;
+  const placeholder = willBeShared
+    ? t('comments.placeholderShared')
+    : t('comments.placeholderPrivate');
   const emptyMessage =
     activeTab === 'private'
       ? t('comments.emptyForYou')
@@ -243,19 +266,44 @@ function CommentsPanel({ entityType, entityId, userRole, currentUserId, classNam
           rows={3}
           maxLength={50000}
         />
-        <div className="flex justify-end mt-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
+          {/* T-11: explicit "Show to client" toggle (therapists only,
+              default off). Off ⇒ private comment. */}
+          {isTherapist ? (
+            <label
+              className="inline-flex items-center gap-2 text-xs text-stone-600 cursor-pointer select-none"
+              title={t('comments.visibility.showToClientHint')}
+            >
+              <input
+                type="checkbox"
+                data-testid="comment-show-to-client"
+                checked={showToClient}
+                onChange={(e) => setShowToClient(e.target.checked)}
+                className="h-4 w-4 rounded border-stone-300 text-teal-600 focus:ring-teal-500"
+              />
+              <span>{t('comments.visibility.showToClient')}</span>
+              <span className="text-stone-400">
+                {showToClient
+                  ? `· ${t('comments.visibility.shared')}`
+                  : `· ${t('comments.visibility.private')}`}
+              </span>
+            </label>
+          ) : (
+            <span />
+          )}
           <button
             type="submit"
             data-testid="comment-save"
+            data-will-be-shared={willBeShared ? 'true' : 'false'}
             disabled={saving || !draft.trim()}
             className="inline-flex items-center px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving && <LoadingSpinner size={16} className="mr-2" />}
             {saving
               ? t('comments.saving')
-              : activeTab === 'private'
-              ? t('comments.addPrivate')
-              : t('comments.addShared')}
+              : willBeShared
+              ? t('comments.addShared')
+              : t('comments.addPrivate')}
           </button>
         </div>
       </form>
