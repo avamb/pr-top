@@ -391,6 +391,48 @@
       }
     }
   },
+  "kb": {
+    "title": "Base de conocimiento personal",
+    "desc": "Sube manuales, artículos y bibliografía de tu escuela de terapia. La IA usará pasajes semánticamente relevantes como contexto adicional al resumir sesiones y responder a tus consultas en lenguaje natural.",
+    "empty": "Aún no hay documentos. Suelta un archivo arriba para empezar.",
+    "loadError": "No se pudo cargar tu base de conocimiento.",
+    "delete": "Eliminar",
+    "deleteConfirm": "¿Eliminar «{{title}}» y todos sus embeddings? Esta acción no se puede deshacer.",
+    "deleteSuccess": "Documento eliminado de tu base de conocimiento.",
+    "uploadQueued": "Archivo aceptado. El procesamiento comienza en segundo plano: actualiza en unos segundos.",
+    "chunkCount": "{{count}} fragmentos",
+    "chunkCount_one": "{{count}} fragmento",
+    "chunkCount_other": "{{count}} fragmentos",
+    "processing": "Procesando en segundo plano…",
+    "stats": {
+      "documents": "Documentos",
+      "ready": "Listos",
+      "chunks": "Fragmentos indexados"
+    },
+    "status": {
+      "queued": "En cola",
+      "ingesting": "Procesando",
+      "ready": "Listo",
+      "failed": "Fallido"
+    },
+    "upload": {
+      "button": "Elegir archivo…",
+      "uploading": "Subiendo…",
+      "dropHint": "Arrastra un archivo aquí o haz clic para seleccionar.",
+      "formats": "PDF, DOCX, TXT, MD, EPUB",
+      "maxSize": "Hasta {{mb}} MB"
+    },
+    "tierGate": {
+      "heading": "Función de los planes Pro / Premium",
+      "message": "La base de conocimiento personal está disponible en los planes Pro y Premium. Mejora tu plan para subir material de referencia que la IA utilizará al resumir tus sesiones."
+    },
+    "errors": {
+      "tooLarge": "El archivo es demasiado grande. Tamaño máximo: {{mb}} MB.",
+      "uploadFailed": "No se pudo subir el documento.",
+      "deleteFailed": "No se pudo eliminar el documento.",
+      "spendingLimit": "Se alcanzó el límite de gasto de IA de la plataforma. Contacta con tu administrador antes de subir más material."
+    }
+  },
   "clientList": {
     "title": "Clientes",
     "totalClients": "{{count}} cliente(s) en total",

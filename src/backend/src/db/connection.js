@@ -1505,6 +1505,51 @@ function applySchema(db) {
     logger.warn('T-06 mode backfill skipped: ' + e.message);
   }
 
+  // T-09: Therapist personal knowledge base (RAG).
+  // Pro/Premium therapists upload their professional library (textbooks,
+  // articles, school-specific literature) and the AI uses semantic top-k
+  // chunks as additional context during session summarization and NL
+  // queries. Every chunk gets a vector_embeddings row with source_type='kb'.
+  // - therapist_knowledge_base: one row per uploaded document. Stores opaque
+  //   filesystem path (file lives on disk under data/kb/<opaque>.bin),
+  //   declared title, mime type, byte size, ingest status (queued / ingesting
+  //   / ready / failed), final chunk_count once ready, optional error text.
+  //   The original document is NOT encrypted at app layer because (a) it is
+  //   third-party reference material the therapist explicitly uploaded, and
+  //   (b) we never expose the raw file back to the bot or to clients. We only
+  //   stream it back to the same therapist for download/preview if needed.
+  // - therapist_knowledge_base_chunks: one row per text chunk used for
+  //   retrieval. content_text holds plaintext (so it can be ranked + reused as
+  //   AI context); access is therapist-scoped via the FK. Embeddings live in
+  //   the existing vector_embeddings table (source_type='kb', source_id=chunk id).
+  db.run(`CREATE TABLE IF NOT EXISTS therapist_knowledge_base (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    therapist_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    mime_type TEXT,
+    file_size INTEGER DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'queued',
+    chunk_count INTEGER DEFAULT 0,
+    error_message TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_kb_therapist ON therapist_knowledge_base(therapist_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_kb_status ON therapist_knowledge_base(status)');
+
+  db.run(`CREATE TABLE IF NOT EXISTS therapist_knowledge_base_chunks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kb_id INTEGER NOT NULL REFERENCES therapist_knowledge_base(id) ON DELETE CASCADE,
+    therapist_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    chunk_index INTEGER NOT NULL,
+    content_text TEXT NOT NULL,
+    token_count INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_kb_chunks_kb ON therapist_knowledge_base_chunks(kb_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_kb_chunks_therapist ON therapist_knowledge_base_chunks(therapist_id)');
+
   // Seed default superadmin account if not exists
   seedSuperadmin(db);
 

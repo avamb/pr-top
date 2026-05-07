@@ -6,6 +6,15 @@ const { getDatabase } = require('../db/connection');
 const { decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
 
+// T-09: lazily-required so a missing optional dep can't break NL query at boot.
+let _vectorStore = null;
+function getVectorStore() {
+  if (_vectorStore === null) {
+    try { _vectorStore = require('./vectorStore'); } catch (_) { _vectorStore = false; }
+  }
+  return _vectorStore || null;
+}
+
 /**
  * Tokenize text into normalized words (lowercased, stripped of punctuation)
  */
@@ -267,6 +276,54 @@ function executeNLQuery(therapistId, clientId, query, options = {}) {
         });
       }
     }
+  }
+
+  // T-09: surface top-k KB chunks alongside client data. The KB is therapist-
+  // wide (not client-scoped), so a match here means "your professional
+  // reference material discusses this" — useful when the therapist asks
+  // questions like "what does my school of thought say about X". KB chunks
+  // are added to the result list with a distinct type='kb' so the UI can
+  // visually separate them from client-scoped hits.
+  try {
+    const vs = getVectorStore();
+    if (vs && typeof vs.searchKb === 'function') {
+      const kbHits = vs.searchKb(query, therapistId, Math.min(5, limit), 0.05);
+      if (kbHits && kbHits.length > 0) {
+        const db2 = db;
+        for (const hit of kbHits) {
+          try {
+            const r = db2.exec(
+              `SELECT c.id, c.content_text, c.created_at, kb.title, kb.id as kb_id
+                 FROM therapist_knowledge_base_chunks c
+                 JOIN therapist_knowledge_base kb ON kb.id = c.kb_id
+                WHERE c.id = ? AND c.therapist_id = ?`,
+              [hit.source_id, therapistId]
+            );
+            if (r.length === 0 || r[0].values.length === 0) continue;
+            const [chunkId, contentText, createdAt, title, kbId] = r[0].values[0];
+            totalSearched++;
+            const relevance = calculateRelevance(queryTokens, expandedTokens, contentText);
+            // Even if relevance is small, the embedding similarity already
+            // surfaced this chunk; floor the score so it appears in results.
+            const effectiveRelevance = relevance > 0 ? relevance : (hit.similarity || 0.05) * 5;
+            const snippet = createSnippet(contentText, queryTokens, expandedTokens);
+            results.push({
+              type: 'kb',
+              id: chunkId,
+              kb_id: kbId,
+              kb_title: title,
+              content: snippet,
+              relevance: effectiveRelevance,
+              created_at: createdAt
+            });
+          } catch (e) {
+            logger.debug(`KB hit lookup failed for chunk ${hit.source_id}: ${e.message}`);
+          }
+        }
+      }
+    }
+  } catch (e) {
+    logger.warn(`KB search inside NL query failed: ${e.message}`);
   }
 
   // Sort by relevance (highest first) and limit

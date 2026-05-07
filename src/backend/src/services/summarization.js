@@ -23,6 +23,15 @@ function getVectorStoreService() {
   return vectorStoreService;
 }
 
+// T-09: lazy-load the KB service so a missing/optional dep can't crash boot.
+let kbIngestService = null;
+function getKbService() {
+  if (!kbIngestService) {
+    try { kbIngestService = require('./kbIngest'); } catch (_) { kbIngestService = null; }
+  }
+  return kbIngestService;
+}
+
 const AI_API_KEY = process.env.AI_API_KEY;
 const AI_API_URL = process.env.AI_API_URL || 'https://api.openai.com/v1';
 const AI_MODEL = process.env.AI_MODEL || 'gpt-4o-mini';
@@ -176,6 +185,16 @@ function generateDevSummary(transcript, options = {}) {
     summaryParts.push(
       `Therapist Post-Session Notes (focus for next session):`,
       `  ${options.post_session_notes}`,
+      ``
+    );
+  }
+
+  // T-09: surface KB retrieval hits in dev mode so the therapist can verify
+  // their uploaded library is actually being consulted.
+  if (options.kb_context && typeof options.kb_context === 'string' && options.kb_context.trim().length > 0) {
+    summaryParts.push(
+      `Knowledge Base Excerpts (from therapist's personal library):`,
+      options.kb_context.split('\n').slice(0, 6).join('\n'),
       ``
     );
   }
@@ -348,6 +367,14 @@ function buildSystemPrompt(options = {}) {
     parts.push(modalitySection, '');
   }
 
+  // T-09: Therapist personal knowledge base context (RAG). Injected before
+  // client context so the AI sees the modality terminology that drives the
+  // summary's language choices, then anchors them in the specific client's
+  // anamnesis/goals.
+  if (options.kb_context && typeof options.kb_context === 'string' && options.kb_context.trim().length > 0) {
+    parts.push(options.kb_context, '');
+  }
+
   // Add client context if available
   if (options.anamnesis || options.goals || options.contraindications || options.ai_instructions || options.post_session_notes) {
     parts.push(`## Client Context (provided by therapist)`);
@@ -471,6 +498,24 @@ async function processSessionSummary(sessionId) {
       }
     } catch (e) {
       logger.warn(`Could not load summary specialization for therapist ${therapistId}: ${e.message}`);
+    }
+
+    // T-09: enrich context with top-k chunks from the therapist's personal
+    // knowledge base (RAG). The KB is therapist-wide so we use the transcript
+    // itself as the retrieval query — that surfaces passages that share
+    // terminology with what was discussed in this session. Failures are
+    // non-fatal — the summary continues with no KB block.
+    try {
+      const kb = getKbService();
+      if (kb && typeof kb.getKbContextBlock === 'function') {
+        const kbBlock = kb.getKbContextBlock(therapistId, transcript, { limit: 5 });
+        if (kbBlock && kbBlock.length > 0) {
+          context.kb_context = kbBlock;
+          logger.info(`KB context attached to session ${sessionId} summary (${kbBlock.length} chars)`);
+        }
+      }
+    } catch (kbErr) {
+      logger.warn(`KB context retrieval failed for session ${sessionId}: ${kbErr.message}`);
     }
 
     // Generate summary

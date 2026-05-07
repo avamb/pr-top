@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import LoadingSpinner from '../components/LoadingSpinner';
+import KnowledgeBaseSection from '../components/KnowledgeBaseSection';
 import { formatUserDateOnly } from '../utils/formatDate';
 
 const API_URL = '/api';
@@ -914,6 +915,11 @@ export default function Settings() {
                   </div>
                 </form>
               </div>
+            )}
+
+            {/* T-09: Personal Knowledge Base (RAG) — therapist-only, tier-gated */}
+            {(profile.role === 'therapist' || profile.role === 'superadmin') && (
+              <KnowledgeBaseSection />
             )}
 
             {/* Escalation Preferences Section */}

@@ -407,6 +407,48 @@
       }
     }
   },
+  "kb": {
+    "title": "Personal Knowledge Base",
+    "desc": "Upload textbooks, articles, and reference material from your school of therapy. The AI will use semantically relevant excerpts as additional context when summarizing sessions and answering your queries.",
+    "empty": "No documents uploaded yet. Drop a file above to get started.",
+    "loadError": "Could not load your knowledge base.",
+    "delete": "Delete",
+    "deleteConfirm": "Delete \"{{title}}\" and all of its embeddings? This cannot be undone.",
+    "deleteSuccess": "Document removed from your knowledge base.",
+    "uploadQueued": "Upload accepted. Processing begins in the background — refresh in a few seconds.",
+    "chunkCount": "{{count}} chunks",
+    "chunkCount_one": "{{count}} chunk",
+    "chunkCount_other": "{{count}} chunks",
+    "processing": "Processing in background…",
+    "stats": {
+      "documents": "Documents",
+      "ready": "Ready",
+      "chunks": "Indexed chunks"
+    },
+    "status": {
+      "queued": "Queued",
+      "ingesting": "Processing",
+      "ready": "Ready",
+      "failed": "Failed"
+    },
+    "upload": {
+      "button": "Choose file…",
+      "uploading": "Uploading…",
+      "dropHint": "Drag and drop a file here, or click to choose.",
+      "formats": "PDF, DOCX, TXT, MD, EPUB",
+      "maxSize": "Up to {{mb}} MB"
+    },
+    "tierGate": {
+      "heading": "Pro / Premium feature",
+      "message": "The personal knowledge base is available on the Pro and Premium plans. Upgrade to upload reference material that the AI will use when summarizing your sessions."
+    },
+    "errors": {
+      "tooLarge": "File is too large. Maximum size is {{mb}} MB.",
+      "uploadFailed": "Could not upload the document.",
+      "deleteFailed": "Could not delete the document.",
+      "spendingLimit": "The platform-wide AI spending cap has been reached. Please contact your administrator before uploading more material."
+    }
+  },
   "clientList": {
     "title": "Clients",
     "totalClients": "{{count}} client(s) total",

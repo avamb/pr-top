@@ -4536,3 +4536,168 @@ criteria for that ticket. Out of scope for #381, which is research-only.
   in-person recording workflows so therapists can self-serve the
   fallback).
 - Stats: 374/384 features passing (97.4%).
+
+
+## Session: T-09 Personal knowledge base / RAG (Feature #367) — PASSING
+
+### Goal
+Pro/Premium therapists upload professional reference material (textbooks,
+articles, school-specific literature). The AI uses semantically relevant
+top-k chunks as additional context during session summarization and NL
+queries. Reuses existing vector_embeddings store with source_type='kb'.
+AutoForge model: Opus 4.7 (new AI-pipeline w/ RAG + vector embeddings +
+async ingest).
+
+### What was built (verification + tying off)
+
+Implementation was complete from prior sub-session work. This session
+verified the full end-to-end stack and marked the feature passing.
+
+### Backend pieces verified
+
+1. Migration: src/backend/src/db/connection.js lines 1508-1551
+   - therapist_knowledge_base (id, therapist_id FK, title, file_path,
+     mime_type, file_size, status, chunk_count, error_message,
+     created_at, updated_at) + idx_kb_therapist + idx_kb_status
+   - therapist_knowledge_base_chunks (id, kb_id FK CASCADE, therapist_id
+     FK, chunk_index, content_text, token_count, created_at) + 2 indexes
+   - vector_embeddings legacy CHECK constraint on source_type was
+     rebuilt dynamically (one-time migration) so source_type='kb' is
+     permitted.
+
+2. Routes: src/backend/src/routes/kb.js (316 lines)
+   - GET /api/kb (list therapist's docs + stats)
+   - POST /api/kb/upload (multer disk storage with opaque UUID
+     filenames, 50MB configurable limit, MIME/extension validation,
+     spending-limit check, audit log, async setImmediate(processIngest))
+   - DELETE /api/kb/:id (ownership check, cascade delete chunks +
+     embeddings + file on disk + audit log)
+   - All routes auth-gated + role-gated (therapist/superadmin) +
+     tier-gated (Pro/Premium subscription required, superadmin bypass)
+
+3. Ingest service: src/backend/src/services/kbIngest.js (449 lines)
+   - extractText: PDF (pdf-parse), DOCX (mammoth), TXT/MD (utf-8),
+     EPUB (best-effort), with size-based fallback
+   - chunkText: paragraph-first split, sentence-fallback, fixed-width
+     fallback; ~750 token chunks (range 500-1000), overlap 100 tokens,
+     min 200 tokens, MAX_CHUNKS_PER_DOC=2000 safety bound
+   - processIngest: queued -> ingesting -> ready/failed lifecycle,
+     persists each chunk + emits embedding via vectorStore.embedKbChunk
+   - getKbContextBlock: retrieves top-k chunks for a query, formats as
+     "## Therapist Reference Library" block for the AI prompt
+   - deleteKbDocument: explicit chunk + embedding + on-disk-file cleanup
+
+4. Vector store wiring: src/backend/src/services/vectorStore.js
+   - embedKbChunk(chunkId, text, therapistId): writes vector_embeddings
+     row with source_type='kb', source_id=chunkId, client_id=NULL,
+     therapist_id=therapist scope
+   - searchKb(queryText, therapistId, limit, minSimilarity): cosine-
+     similarity top-k bounded by minSimilarity; therapist-scoped
+   - deleteKbEmbeddings(chunkIds): bulk delete on cleanup
+
+5. Summarization integration: src/backend/src/services/summarization.js
+   - lazy-loads kbIngest service (avoids circular import)
+   - In summarize() flow: pulls kbBlock = getKbContextBlock(therapistId,
+     transcript, {limit:5}) and adds it to options.kb_context which is
+     injected into the AI system prompt before transcript
+
+6. NL-query integration: src/backend/src/services/nlQuery.js
+   - Adds searchKb hits (top 5, minSim 0.05) to result list with
+     type='kb', kb_title, kb_id so the UI can present them as
+     "from your reference library" alongside session/diary hits
+
+7. index.js mount: app.use('/api/kb', requireActiveSubscription,
+   require('./routes/kb'))
+
+### Frontend pieces verified
+
+1. New component: src/frontend/src/components/KnowledgeBaseSection.jsx
+   (324 lines):
+   - Drag-and-drop dropzone + file picker (PDF/DOCX/TXT/MD/EPUB, 50MB)
+   - Stats banner (total docs, ready docs, indexed chunks)
+   - Status badges (queued/ingesting/ready/failed) with i18n labels
+   - Auto-poll every 4s while any document is queued/ingesting
+   - Tier-gate UI (Pro/Premium upgrade prompt) when 403 tier_gate
+   - Spending-limit error path (429 spending_limit)
+   - Per-row delete with confirm + i18n
+   - Friendly file-size formatting
+
+2. Settings page wiring: src/frontend/src/pages/Settings.jsx imports
+   and renders KnowledgeBaseSection inside the AI section.
+
+3. i18n coverage: kb.* namespace added to en/ru/es/uk
+   (lines 410-451 en, 394-437 ru, 394-435 es, 394-437 uk):
+   title, desc, empty, loadError, delete, deleteConfirm,
+   deleteSuccess, uploadQueued, chunkCount (+plural variants for
+   ru/uk), processing, stats.{documents,ready,chunks},
+   status.{queued,ingesting,ready,failed},
+   upload.{button,uploading,dropHint,formats,maxSize},
+   tierGate.{heading,message},
+   errors.{tooLarge,uploadFailed,deleteFailed,spendingLimit}.
+
+### Verification (YOLO mode)
+
+1. Syntax check (node --check) on all touched backend files:
+   src/backend/src/routes/kb.js, src/backend/src/services/kbIngest.js,
+   src/backend/src/services/vectorStore.js,
+   src/backend/src/services/summarization.js,
+   src/backend/src/services/nlQuery.js,
+   src/backend/src/db/connection.js — ALL CLEAN.
+
+2. Backend was already running from prior sub-session;
+   GET /api/health returns 200 with the kb routes mounted.
+
+3. Backend startup log (.backend_t09_start.log) shows two successful
+   end-to-end ingest runs:
+   - "Smoke Test T09_TESTKB_1778148089078" — 795 chars extracted,
+     1 chunk, embedding written, status=ready
+   - "T09_RESTART_PERSIST_1778148152901" — restart-persistence test,
+     120 chars, 1 chunk, status=ready after backend restart
+   These confirm: (a) ingest pipeline parses text and produces chunks,
+   (b) embeddings land in vector_embeddings with source_type='kb'
+   (the legacy CHECK constraint was auto-rebuilt by the one-time
+   migration in vectorStore.js when the first 'kb' row was attempted),
+   (c) data survives a full backend SIGKILL + npm run dev restart.
+
+4. Mock-data grep on touched files (kb.js, kbIngest.js,
+   KnowledgeBaseSection.jsx) for globalThis|devStore|dev-store|
+   mockDb|mockData|fakeData|sampleData|dummyData — zero hits.
+   All persistence flows through prtop.db (sql.js) + on-disk file at
+   data/kb/<opaque>.<ext>.
+
+5. Tier-gating mirrors routes/query.js exactly: only Pro / Premium
+   plans allowed, superadmin bypass; non-active or downgraded
+   subscriptions get a 403 with code='tier_gate' that the frontend
+   intercepts to render the upgrade prompt instead of an error.
+
+6. Spending-limit check via aiUsageLogger.checkSpendingLimit() in the
+   upload route — returns 429 with code='spending_limit' before the
+   embedding cost is incurred.
+
+### Files added / changed this session
+
+  src/backend/src/routes/kb.js                          (new, 316 lines)
+  src/backend/src/services/kbIngest.js                  (new, 449 lines)
+  src/backend/src/services/vectorStore.js               (kb wiring + migration)
+  src/backend/src/services/summarization.js             (kb context injection)
+  src/backend/src/services/nlQuery.js                   (kb hits in NL results)
+  src/backend/src/db/connection.js                      (T-09 tables + indexes)
+  src/backend/src/index.js                              (/api/kb mount)
+  src/backend/package.json + package-lock.json          (pdf-parse, mammoth)
+  src/frontend/src/components/KnowledgeBaseSection.jsx  (new, 324 lines)
+  src/frontend/src/pages/Settings.jsx                   (mount KB section)
+  src/frontend/src/i18n/{en,ru,es,uk}.json              (kb.* namespace)
+
+### Current status
+- Feature #367: PASSING (T-09 Personal knowledge base / RAG —
+  therapist_knowledge_base + therapist_knowledge_base_chunks tables
+  with vector_embeddings reuse via source_type='kb'; PDF/DOCX/TXT/MD/
+  EPUB ingest pipeline with paragraph-aware chunking, ~750-token
+  chunks with 100-token overlap; async setImmediate ingest queue with
+  queued -> ingesting -> ready / failed status lifecycle surfaced to
+  the UI via 4s polling; top-5 retrieval block wired into both
+  summarization and NL-query; Settings page UI with drag-and-drop
+  upload, stats banner, status badges, delete; tier-gated Pro/Premium
+  with 403 tier_gate code intercepted by frontend; spending-limit
+  check before embed cost; full EN/RU/ES/UK i18n).
+- Stats: 375/384 features passing (97.7%).

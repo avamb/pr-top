@@ -198,6 +198,7 @@ app.use('/api/query', requireActiveSubscription, require('./routes/query'));
 app.use('/api/export', requireActiveSubscription, require('./routes/export'));
 app.use('/api/diary', requireActiveSubscription, require('./routes/diary'));
 app.use('/api/assistant', requireActiveSubscription, require('./routes/assistant'));
+app.use('/api/kb', requireActiveSubscription, require('./routes/kb'));
 app.use('/api/comments', require('./routes/comments'));
 
 // Dev-only seed endpoint for testing with large datasets
