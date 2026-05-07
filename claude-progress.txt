@@ -4387,3 +4387,152 @@ Out of scope for #382, which is research-only.
   implementation plan documented for follow-up infra ticket; bilingual
   EN/RU user-facing troubleshooting guide delivered).
 - Stats: 373/384 features passing (97.1%).
+
+
+## Session: T-23 Zoom / Google Meet SDK integration (Feature #381) — PASSING
+
+### Goal
+Research-first XL ticket. Customer signal: Алексей Фомкин interview
+(docs/new_fichas/customer-development-meetings/fomkin 2026-04-20.md,
+lines 181-213) — "from the dashboard window, click and Google Meet or
+Zoom opens, you run the session and everything is recorded." Per the
+ticket, Phase 1 deliverable is a research spike + decision doc covering
+(a) Zoom Meeting SDK vs (b) Zoom Video SDK vs (c) Google Meet vs
+(d) RecallAI 3rd-party, with cost / hosting / legal / decision sections.
+Code is explicitly out of scope until the ADR clears go.
+
+### Decision summary (full reasoning in ADR)
+
+**No-go for current cycle. Adopt option (e) — status quo on the existing
+T-07 / T-19 / T-20 chain plus a one-page user guide on how to record
+inside Zoom/Meet/Teams and drag the file into the Bulk Upload page.**
+
+The same interview turn (lines 193-213) explicitly accepts the
+post-hoc upload-and-auto-link path as the acceptable fallback ("даже если
+вот такой интеграции невозможно ... файлы есть метаданные ... этот файл
+присоединится к той сессии"). T-07 (admin upload), T-19 (single-track
+diarisation), T-20 (auto-link by date/metadata) — all already merged on
+dev — collectively ship that workflow, so the dependency chain the
+ticket calls out is satisfied.
+
+**Why each SDK option was rejected:**
+
+(a) Zoom Meeting SDK — embed Zoom UI in dashboard via
+    `@zoom/meetingsdk`. Free SDK but requires therapist Zoom Pro
+    ($14.99/mo, theirs); 50-80 eng-hours; needs Zoom Marketplace
+    approval; Zoom Cloud recording lag is 30-60 min vs. our existing
+    drop-and-go; Zoom is RU-blocked which would re-introduce the
+    accessibility problem ADR-0001 just solved.
+
+(b) Zoom Video SDK — white-label PaaS video. ~150-250 eng-hours; we
+    become a video conferencing company; loses the familiar Zoom UX
+    therapists already have.
+
+(c) Google Meet — no JavaScript SDK exists for embedding Meet in a
+    third-party origin. Workspace Add-ons SDK runs *inside* Meet
+    (wrong direction). Meet REST API can post-fetch artefacts but
+    requires Workspace Business Standard ($12/user/mo, theirs) and
+    delivers the same tab-switch UX as today.
+
+(d) Recall.ai — third-party meeting bot. Single integration covers
+    Zoom/Meet/Teams/Webex; ~3-5 days eng. BUT (i) ~$9.20/therapist/
+    month at 16 sessions × 50 min × $0.69/hr — kills Basic-tier
+    margin; (ii) bot is visible to client as a participant — privacy
+    regression for the paranoid-client / psychoanalyst segment that
+    drove T-06 Solo mode; (iii) adds first ever 3rd-party processor
+    of Class A audio, full GDPR Art.28(2) sub-processor notice
+    machinery.
+
+**Phase-3 deferred trigger conditions (file new ticket only when ALL
+fire):**
+1. ≥3 paying therapists explicitly request the integration (currently 1:
+   Алексей, who explicitly said "если возможно" + accepted fallback).
+2. Subscription product has a Premium tier whose unit economics absorb
+   ~$10-15/therapist/month of bot-recording cost.
+3. Compliance budget for Art.28(2) sub-processor onboarding (DPA, 30-day
+   notice, processor list update, T-18 consent text update).
+
+**If/when triggered: Recall.ai is the recommended path** — single
+integration, multi-platform, no per-therapist license dependency.
+Detailed 8-point Phase-3 implementation outline is in ADR § 6.
+
+### Mapping to original feature acceptance steps
+
+  Step 1 (Zoom Meeting SDK vs Video SDK vs RecallAI)
+        -> ADR § 2 (a) (b) (d), full pros/cons each
+  Step 2 (license cost comparison)
+        -> ADR § 3 cost table (5 rows, build-h + runtime + license dep)
+  Step 3 (hosting requirements: server-side bot vs client-side embed)
+        -> ADR § 2 implementation outlines for (a) and (d)
+  Step 4 (legal: consent in different jurisdictions)
+        -> ADR § 4 compliance matrix (GDPR Art.9/28, US two-party
+           consent CA/FL/IL/MD/MA/NV/PA/WA, HIPAA BAA availability,
+           RU 152-FZ accessibility, FZ-374)
+  Step 5 (decision doc go/no-go + scope)
+        -> ADR § 5 (no-go for current cycle, defer to Phase-3)
+  Step 6 (if go: phase 2 ticket)
+        -> ADR § 6 8-point Recall.ai implementation outline (parked
+           for orchestrator to file as new Integration ticket once
+           triggers fire)
+  Step 7 (if no-go: document reason and close)
+        -> ADR § 5 rationale + § 7 risks-of-doing-nothing + § 8
+           review trigger
+
+### Deliverables
+
+1. docs/decisions/0002-zoom-meet-integration.md (new file, 274 lines):
+   ADR with sections 1 Context (with verbatim Russian customer quotes
+   + status of T-07/T-19/T-20 dependency chain), 2 Five-options
+   analysis (a-e) with pros/cons/legal/eng-cost each, 3 Cost
+   comparison table, 4 Compliance matrix, 5 Decision (no-go +
+   rationale), 6 Phase-3 deferred 8-point Recall.ai implementation
+   outline + trigger conditions, 7 Risks-of-doing-nothing,
+   8 Review trigger, 9 Changelog.
+
+2. docs/troubleshooting/recording-from-zoom-meet.md (new file, 117
+   lines): user-facing guide covering Zoom (local + cloud recording),
+   Google Meet (Workspace recording + local-recorder fallback for
+   non-Workspace users), Microsoft Teams, in-person dictaphone /
+   Voice Memos / Recorder. Includes ffmpeg re-encode hint for files
+   over the 100 MB upload limit. After-upload guidance on T-20
+   auto-link, T-19 single-track mode, conflict resolution.
+   Cross-references the ADR for the "why no in-window integration"
+   question.
+
+### Verification
+
+This is a research-first feature; deliverables are documentation only.
+No code changes, so lint / type-check / server-restart / mock-data-grep
+are not applicable. Both files are valid Markdown, render correctly,
+and cross-reference each other (ADR § 5 commits to the doc nudge that
+the troubleshooting doc delivers; troubleshooting doc points back at
+ADR § 6 for the deferral rationale and at ADR-0001 for the RU context).
+Mock-data grep on the new ADR file returned zero hits.
+
+### Files added
+  docs/decisions/0002-zoom-meet-integration.md          (new file, 274 lines)
+  docs/troubleshooting/recording-from-zoom-meet.md      (new file, 117 lines)
+
+### Phase-3 follow-up
+
+A new feature ticket should be filed by the orchestrator under the
+**Integration** category, parked in the backlog, and only activated
+when all three Phase-3 triggers in ADR § 6 have fired. The 8-point
+Recall.ai implementation outline in ADR § 6 is the starting acceptance
+criteria for that ticket. Out of scope for #381, which is research-only.
+
+### Current status
+- Feature #381: PASSING (T-23 Zoom / Google Meet SDK integration —
+  decision doc adopts no-go for current cycle, defer to Phase-3 with
+  Recall.ai recommended path; rejected Zoom Meeting SDK on therapist-
+  paid-plan dependency + RU-accessibility regression; rejected Zoom
+  Video SDK on engineering scope; rejected Google Meet on no-embed-SDK
+  technical impossibility; rejected Recall.ai for current cycle on
+  ~$9.20/therapist/month gross-margin impact + visible-bot privacy
+  regression for paranoid-client segment + first-ever Class A audio
+  sub-processor; status-quo accepted because customer-stated fallback
+  in same interview turn was T-20 metadata-matching, already shipped;
+  delivered companion troubleshooting doc covering Zoom/Meet/Teams/
+  in-person recording workflows so therapists can self-serve the
+  fallback).
+- Stats: 374/384 features passing (97.4%).
