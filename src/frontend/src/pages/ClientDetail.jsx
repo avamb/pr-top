@@ -384,6 +384,15 @@ function ClientDetail() {
     setSearchParams(params, { replace: true });
   }, [activeTab, typeFilter, dateFrom, dateTo, diarySearch, timelineStartDate, timelineEndDate, timelineTypeFilter]);
 
+  // T-06: Solo clients have no diary/exercises/SOS — if a stale URL or
+  // back-button lands the user on one of those tabs, snap back to timeline.
+  useEffect(() => {
+    if (client && client.mode === 'solo' &&
+        (activeTab === 'diary' || activeTab === 'exercises' || activeTab === 'sos')) {
+      setActiveTab('timeline');
+    }
+  }, [client, activeTab]);
+
   // Validate client ID is a positive integer
   const isValidId = /^\d+$/.test(id) && Number(id) > 0;
   const clientAbortRef = useRef(null);
@@ -1441,15 +1450,32 @@ function ClientDetail() {
               { label: t('nav.clients'), to: '/clients' },
               { label: [client.first_name, client.last_name].filter(Boolean).join(' ') || client.email || client.telegram_id || `#${client.id}` }
             ]} />
-            <h2 className="text-2xl font-bold text-stone-800">
-              {[client.first_name, client.last_name].filter(Boolean).join(' ') || client.email || client.telegram_id || `#${client.id}`}
-            </h2>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="text-2xl font-bold text-stone-800">
+                {[client.first_name, client.last_name].filter(Boolean).join(' ') || client.email || client.telegram_id || `#${client.id}`}
+              </h2>
+              {/* T-06: Solo mode badge — flag therapist-only "smart notebook" clients */}
+              {client.mode === 'solo' && (
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700"
+                  title={t('client.solo.badgeTooltip', 'Therapist-only notebook — client is not connected to the bot.')}
+                  data-testid="client-solo-badge"
+                >
+                  📓 {t('client.solo.badge', 'Solo')}
+                </span>
+              )}
+            </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-stone-500">
               {client.phone && <span>{t('clientDetail.phone')}: {client.phone}</span>}
               {client.telegram_username && <span>{t('clientDetail.telegram')}: @{client.telegram_username}</span>}
               <span>{t('clientDetail.language')}: {(client.language || 'en').toUpperCase()}</span>
               <span>{t('clientDetail.consent')}: {client.consent_therapist_access ? t('clientDetail.consentGranted') : t('clientDetail.consentNotGranted')}</span>
               <span>{t('clientDetail.joined')}: {formatUserDateOnly(client.created_at)}</span>
+              {client.mode === 'solo' && (
+                <span className="text-indigo-600">
+                  {t('client.solo.subtitle', 'Therapist-only notebook · no bot connection')}
+                </span>
+              )}
             </div>
             {/* T-16: Per-client reminders override */}
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm" data-testid="client-reminders-control">
@@ -1526,45 +1552,63 @@ function ClientDetail() {
           />
         )}
 
-        {/* Tab Navigation */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-thin">
-          <button
-            onClick={() => setActiveTab('timeline')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'timeline' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
-          >📊 {t('clientDetail.timeline')} ({timelineTotal})</button>
-          <button
-            onClick={() => setActiveTab('diary')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'diary' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
-          >📝 {t('clientDetail.diary')} ({diaryTotal})</button>
-          <button
-            onClick={() => setActiveTab('notes')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'notes' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
-          >🗒️ {t('clientDetail.notesTab')} ({notesTotal})</button>
-          <button
-            onClick={() => setActiveTab('sessions')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'sessions' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
-          >🎧 {t('clientDetail.sessionsTab')} ({sessionsTotal})</button>
-          <button
-            onClick={() => setActiveTab('inquiries')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'inquiries' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
-          >🎯 {t('clientDetail.inquiriesTab')} ({inquiriesTotal})</button>
-          <button
-            onClick={() => setActiveTab('exercises')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'exercises' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
-          >💪 {t('clientDetail.exercisesTab')} ({exercisesTotal})</button>
-          <button
-            onClick={() => setActiveTab('context')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'context' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
-          >🧠 {t('clientDetail.contextTab')}</button>
-          <button
-            onClick={() => setActiveTab('comments')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'comments' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
-          >💬 {t('comments.title')}</button>
-          <button
-            onClick={() => setActiveTab('sos')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'sos' ? 'bg-red-600 text-white' : sosEvents.some(e => e.status !== 'resolved') ? 'bg-red-50 text-red-700 border border-red-300 animate-pulse' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
-          >🚨 {t('clientDetail.sosTab')} ({sosTotal})</button>
-        </div>
+        {/* Tab Navigation.
+            T-06: Solo clients have no bot side, so Diary, Exercises, and SOS
+            tabs are hidden — those flows are exclusively client-driven via
+            Telegram. The therapist can still use Timeline, Notes, Sessions,
+            Inquiries, Context, and Comments. */}
+        {(() => {
+          const isSolo = client && client.mode === 'solo';
+          return (
+            <div className="flex gap-2 mb-6 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-thin" data-testid="client-tabs">
+              <button
+                onClick={() => setActiveTab('timeline')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'timeline' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+              >📊 {t('clientDetail.timeline')} ({timelineTotal})</button>
+              {!isSolo && (
+                <button
+                  onClick={() => setActiveTab('diary')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'diary' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+                  data-testid="tab-diary"
+                >📝 {t('clientDetail.diary')} ({diaryTotal})</button>
+              )}
+              <button
+                onClick={() => setActiveTab('notes')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'notes' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+              >🗒️ {t('clientDetail.notesTab')} ({notesTotal})</button>
+              <button
+                onClick={() => setActiveTab('sessions')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'sessions' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+              >🎧 {t('clientDetail.sessionsTab')} ({sessionsTotal})</button>
+              <button
+                onClick={() => setActiveTab('inquiries')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'inquiries' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+              >🎯 {t('clientDetail.inquiriesTab')} ({inquiriesTotal})</button>
+              {!isSolo && (
+                <button
+                  onClick={() => setActiveTab('exercises')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'exercises' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+                  data-testid="tab-exercises"
+                >💪 {t('clientDetail.exercisesTab')} ({exercisesTotal})</button>
+              )}
+              <button
+                onClick={() => setActiveTab('context')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'context' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+              >🧠 {t('clientDetail.contextTab')}</button>
+              <button
+                onClick={() => setActiveTab('comments')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'comments' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+              >💬 {t('comments.title')}</button>
+              {!isSolo && (
+                <button
+                  onClick={() => setActiveTab('sos')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'sos' ? 'bg-red-600 text-white' : sosEvents.some(e => e.status !== 'resolved') ? 'bg-red-50 text-red-700 border border-red-300 animate-pulse' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+                  data-testid="tab-sos"
+                >🚨 {t('clientDetail.sosTab')} ({sosTotal})</button>
+              )}
+            </div>
+          );
+        })()}
 
         {/* SOS Status Banner */}
         {(() => {

@@ -212,7 +212,7 @@
     "emailPlaceholder": "you@example.com",
     "passwordPlaceholder": "Your password",
     "passwordMinPlaceholder": "At least 6 characters",
-    "confirmPasswordPlaceholder": "Repeat your password",
+    "confirmPasswordPlaceholder": "Confirm new password",
     "signIn": "Sign In",
     "signingIn": "Signing in...",
     "createAccount": "Create Account",
@@ -245,8 +245,6 @@
     "resetPasswordSuccess": "Your password has been reset successfully! You can now log in with your new password.",
     "newPassword": "New Password",
     "newPasswordPlaceholder": "Enter new password",
-    "confirmPassword": "Confirm Password",
-    "confirmPasswordPlaceholder": "Confirm new password",
     "passwordsMismatch": "Passwords do not match",
     "passwordRequirements": "Minimum 8 characters, with uppercase, lowercase, and a number",
     "resetPassword": "Reset Password",
@@ -940,7 +938,6 @@
     "block": "Block",
     "blocking": "Blocking...",
     "noTherapists": "No therapists registered yet.",
-    "plan": "Plan",
     "managePlan": "Manage Plan",
     "managePlanTitle": "Plan Management",
     "currentPlanLabel": "Current plan",
@@ -1686,5 +1683,34 @@
     "errorCreate": "Failed to create share link",
     "errorRevoke": "Failed to revoke share link",
     "errorCopy": "Failed to copy link to clipboard"
+  },
+  "client": {
+    "mode": {
+      "solo": "Solo",
+      "botConnected": "Bot-connected",
+      "soloDash": "—"
+    },
+    "solo": {
+      "title": "New solo client",
+      "badge": "Solo",
+      "badgeTooltip": "Therapist-only notebook — client is not connected to the bot.",
+      "description": "A therapist-only notebook. The client never connects to the bot — useful when the client cannot or will not use Telegram. You can still upload session audio, write notes, and run AI queries.",
+      "subtitle": "Therapist-only notebook · no bot connection",
+      "btn": "Solo Client",
+      "btnTooltip": "Create a therapist-only client (no bot connection).",
+      "firstName": "First name",
+      "lastName": "Last name",
+      "emailOptional": "Email (optional)",
+      "language": "Language",
+      "noteOptional": "Initial note (optional)",
+      "notePlaceholder": "Anything you want to remember about this client — encrypted, therapist-only.",
+      "disclaimer": "Solo clients are invisible to the Telegram bot. Diary, exercises, and SOS alerts are not available — you can still upload sessions, write notes, and run AI queries.",
+      "creating": "Creating…",
+      "create": "Create solo client",
+      "errorNeedIdentifier": "Provide a first name, last name, or email.",
+      "errorNoteTooLong": "Note must be 2000 characters or less.",
+      "errorAuth": "Authentication expired. Please log in again.",
+      "errorGeneric": "Failed to create solo client."
+    }
   }
 }

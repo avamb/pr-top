@@ -76,6 +76,148 @@ function convertLocalDateToUTC(localDateTimeStr, timezone) {
 router.use(authenticate);
 router.use(requireRole('therapist', 'superadmin'));
 
+// POST /api/clients/solo - Create a solo-mode client (T-06).
+// Solo mode is a therapist-only "smart notebook" — the client never connects
+// to the bot, has no telegram_id, and no invite_code. Useful for:
+//  - psychoanalysts whose clients won't use a chatbot
+//  - clients with paranoid traits
+//  - therapists who simply want a personal notebook for a case file.
+//
+// Behaviour vs the legacy invite-code flow:
+//  - role='client', therapist_id=THIS therapist (link is created immediately)
+//  - mode='solo', telegram_id=NULL, invite_code=NULL (not generated)
+//  - consent_therapist_access=1 auto-granted (no other party to consent)
+//  - consent_version=0 (the consent UX is N/A in solo mode)
+//
+// Body: { first_name?, last_name?, email?, language?, note? }
+//   first_name + last_name OR email is required (display name)
+//   note (optional ≤2000 chars) is encrypted into therapist_notes for context.
+router.post('/solo', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+    const body = req.body || {};
+
+    const firstName = typeof body.first_name === 'string' ? body.first_name.trim() : '';
+    const lastName = typeof body.last_name === 'string' ? body.last_name.trim() : '';
+    const rawEmail = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    const language = (typeof body.language === 'string' ? body.language.trim().toLowerCase() : 'en') || 'en';
+    const note = typeof body.note === 'string' ? body.note.trim() : '';
+
+    // Need at least a name or email to identify the client
+    if (!firstName && !lastName && !rawEmail) {
+      return res.status(400).json({ error: 'A first name, last name, or email is required to identify the client.' });
+    }
+
+    // Validate field lengths (defensive)
+    if (firstName.length > 100 || lastName.length > 100) {
+      return res.status(400).json({ error: 'Name fields must be 100 characters or less.' });
+    }
+    if (rawEmail && rawEmail.length > 255) {
+      return res.status(400).json({ error: 'Email must be 255 characters or less.' });
+    }
+    if (note.length > 2000) {
+      return res.status(400).json({ error: 'Note must be 2000 characters or less.' });
+    }
+
+    // Validate email format if provided
+    if (rawEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(rawEmail)) {
+        return res.status(400).json({ error: 'Invalid email format.' });
+      }
+      // Email must be unique across all users (case-insensitive)
+      const emailDup = db.exec("SELECT id FROM users WHERE email = ?", [rawEmail]);
+      if (emailDup.length > 0 && emailDup[0].values.length > 0) {
+        return res.status(409).json({ error: 'A user with this email already exists.' });
+      }
+    }
+
+    // Validate language against supported set
+    const allowedLanguages = ['en', 'ru', 'es', 'uk'];
+    if (!allowedLanguages.includes(language)) {
+      return res.status(400).json({ error: 'Unsupported language. Allowed: en, ru, es, uk.' });
+    }
+
+    // Enforce plan client limit — solo clients still consume a slot
+    const limitCheck = checkClientLimit(therapistId);
+    if (!limitCheck.allowed) {
+      return res.status(403).json({
+        error: 'Client limit reached',
+        message: limitCheck.message,
+        current: limitCheck.current,
+        limit: limitCheck.limit,
+        plan: limitCheck.plan
+      });
+    }
+
+    // Insert solo client row.
+    //   - mode='solo'
+    //   - telegram_id=NULL, invite_code=NULL (solo never connects to the bot)
+    //   - consent_therapist_access=1 auto-granted (no other party)
+    //   - consent_version=0 (extended-consent flow does not apply to solo)
+    db.run(
+      `INSERT INTO users (
+         email, role, therapist_id, mode, language,
+         consent_therapist_access, consent_version,
+         first_name, last_name,
+         created_at, updated_at
+       ) VALUES (?, 'client', ?, 'solo', ?, 1, 0, ?, ?, datetime('now'), datetime('now'))`,
+      [rawEmail || null, therapistId, language, firstName || null, lastName || null]
+    );
+
+    const newIdResult = db.exec('SELECT last_insert_rowid()');
+    const newClientId = newIdResult[0].values[0][0];
+
+    // Optional initial note — stored encrypted as a therapist_notes row so it
+    // shows up in the Notes tab right away.
+    if (note) {
+      const encryptedNote = encrypt(note);
+      db.run(
+        `INSERT INTO therapist_notes (therapist_id, client_id, note_encrypted, encryption_key_id, payload_version, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+        [therapistId, newClientId, encryptedNote.encrypted, encryptedNote.keyId, encryptedNote.keyVersion]
+      );
+    }
+
+    // Audit log
+    db.run(
+      `INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at)
+       VALUES (?, 'solo_client_created', 'user', ?, ?, datetime('now'))`,
+      [therapistId, newClientId, JSON.stringify({
+        client_id: newClientId,
+        mode: 'solo',
+        had_initial_note: !!note,
+        had_email: !!rawEmail
+      })]
+    );
+
+    saveDatabaseAfterWrite();
+
+    logger.info(`T-06: Solo client created id=${newClientId} by therapist=${therapistId}`);
+
+    res.status(201).json({
+      message: 'Solo client created successfully',
+      client: {
+        id: newClientId,
+        telegram_id: null,
+        email: rawEmail || null,
+        consent_therapist_access: true,
+        language: language,
+        mode: 'solo',
+        first_name: firstName || '',
+        last_name: lastName || '',
+        phone: '',
+        telegram_username: '',
+        created_at: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    logger.error('Solo client create error: ' + error.message);
+    res.status(500).json({ error: 'Failed to create solo client' });
+  }
+});
+
 // GET /api/clients - List therapist's linked clients
 // Supports: ?search=term&page=1&per_page=25&language=en
 router.get('/', (req, res) => {
@@ -121,7 +263,8 @@ router.get('/', (req, res) => {
                 SELECT created_at FROM sessions WHERE client_id = u.id
               )) AS last_activity,
               u.first_name, u.last_name, u.phone, u.telegram_username,
-              (SELECT COUNT(*) FROM sos_events WHERE client_id = u.id AND status != 'resolved') AS active_sos_count
+              (SELECT COUNT(*) FROM sos_events WHERE client_id = u.id AND status != 'resolved') AS active_sos_count,
+              u.mode
        FROM users u
        WHERE ${whereClause}
        ORDER BY active_sos_count DESC, last_activity DESC NULLS LAST, u.created_at DESC
@@ -142,7 +285,8 @@ router.get('/', (req, res) => {
       last_name: row[9] || '',
       phone: row[10] || '',
       telegram_username: row[11] || '',
-      active_sos_count: row[12] || 0
+      active_sos_count: row[12] || 0,
+      mode: row[13] || 'bot_connected'
     }));
 
     // Also include limit info
@@ -174,7 +318,7 @@ router.get('/:id', (req, res) => {
 
     // Verify client belongs to this therapist
     const clientResult = db.exec(
-      "SELECT id, telegram_id, email, consent_therapist_access, language, created_at, updated_at, first_name, last_name, phone, telegram_username, reminders_enabled FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      "SELECT id, telegram_id, email, consent_therapist_access, language, created_at, updated_at, first_name, last_name, phone, telegram_username, reminders_enabled, mode FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
       [clientId, therapistId]
     );
 
@@ -201,7 +345,8 @@ router.get('/:id', (req, res) => {
         last_name: row[8] || '',
         phone: row[9] || '',
         telegram_username: row[10] || '',
-        reminders_enabled: remindersEnabled
+        reminders_enabled: remindersEnabled,
+        mode: row[12] || 'bot_connected'
       }
     });
   } catch (error) {
@@ -261,7 +406,7 @@ router.put('/:id', (req, res) => {
 
     // Return the updated client (same shape as GET /:id)
     const refreshed = db.exec(
-      "SELECT id, telegram_id, email, consent_therapist_access, language, created_at, updated_at, first_name, last_name, phone, telegram_username, reminders_enabled FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      "SELECT id, telegram_id, email, consent_therapist_access, language, created_at, updated_at, first_name, last_name, phone, telegram_username, reminders_enabled, mode FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
       [clientId, therapistId]
     );
     const row = refreshed[0].values[0];
@@ -285,7 +430,8 @@ router.put('/:id', (req, res) => {
         last_name: row[8] || '',
         phone: row[9] || '',
         telegram_username: row[10] || '',
-        reminders_enabled: remindersEnabled
+        reminders_enabled: remindersEnabled,
+        mode: row[12] || 'bot_connected'
       }
     });
   } catch (error) {
@@ -1377,6 +1523,15 @@ router.post('/:id/exercises', (req, res) => {
     const consentCheck = verifyClientConsent(therapistId, clientId, 'exercise_send');
     if (!consentCheck.allowed) {
       return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+
+    // T-06: Solo clients have no bot side, so exercise delivery is meaningless.
+    const modeRow = db.exec("SELECT mode FROM users WHERE id = ?", [clientId]);
+    const clientMode = (modeRow.length > 0 && modeRow[0].values.length > 0) ? modeRow[0].values[0][0] : 'bot_connected';
+    if (clientMode === 'solo') {
+      return res.status(403).json({
+        error: 'Exercises cannot be sent to a solo (notebook-only) client. The client is not connected to the bot.'
+      });
     }
 
     // Get telegram_id for notification

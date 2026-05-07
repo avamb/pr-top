@@ -196,7 +196,7 @@
     "emailPlaceholder": "tu@ejemplo.com",
     "passwordPlaceholder": "Tu contraseña",
     "passwordMinPlaceholder": "Al menos 6 caracteres",
-    "confirmPasswordPlaceholder": "Repite tu contraseña",
+    "confirmPasswordPlaceholder": "Confirme nueva contraseña",
     "signIn": "Iniciar sesión",
     "signingIn": "Iniciando sesión...",
     "createAccount": "Crear cuenta",
@@ -229,8 +229,6 @@
     "resetPasswordSuccess": "¡Su contraseña se ha restablecido exitosamente! Ahora puede iniciar sesión con su nueva contraseña.",
     "newPassword": "Nueva contraseña",
     "newPasswordPlaceholder": "Ingrese nueva contraseña",
-    "confirmPassword": "Confirmar contraseña",
-    "confirmPasswordPlaceholder": "Confirme nueva contraseña",
     "passwordsMismatch": "Las contraseñas no coinciden",
     "passwordRequirements": "Mínimo 8 caracteres, con mayúscula, minúscula y número",
     "resetPassword": "Restablecer contraseña",
@@ -924,7 +922,6 @@
     "block": "Bloquear",
     "blocking": "Bloqueando...",
     "noTherapists": "Aún no hay terapeutas registrados.",
-    "plan": "Plan",
     "managePlan": "Gestionar plan",
     "managePlanTitle": "Gestión de plan",
     "currentPlanLabel": "Plan actual",
@@ -1670,5 +1667,34 @@
     "errorCreate": "No se pudo crear el enlace",
     "errorRevoke": "No se pudo revocar el enlace",
     "errorCopy": "No se pudo copiar el enlace"
+  },
+  "client": {
+    "mode": {
+      "solo": "Solo",
+      "botConnected": "Conectado al bot",
+      "soloDash": "—"
+    },
+    "solo": {
+      "title": "Nuevo cliente solo",
+      "badge": "Solo",
+      "badgeTooltip": "Cuaderno solo del terapeuta — el cliente no está conectado al bot.",
+      "description": "Un cuaderno solo para el terapeuta. El cliente nunca se conecta al bot — útil cuando el cliente no puede o no quiere usar Telegram. Aún puedes subir audio de sesiones, escribir notas y hacer consultas con IA.",
+      "subtitle": "Cuaderno solo del terapeuta · sin conexión con el bot",
+      "btn": "Cliente solo",
+      "btnTooltip": "Crear un cliente solo para el terapeuta (sin conexión al bot).",
+      "firstName": "Nombre",
+      "lastName": "Apellido",
+      "emailOptional": "Email (opcional)",
+      "language": "Idioma",
+      "noteOptional": "Nota inicial (opcional)",
+      "notePlaceholder": "Cualquier cosa que quieras recordar sobre el cliente — cifrada, visible solo para ti.",
+      "disclaimer": "Los clientes solo son invisibles para el bot de Telegram. Diario, ejercicios y alertas SOS no están disponibles — pero puedes subir sesiones, escribir notas y consultar la IA.",
+      "creating": "Creando…",
+      "create": "Crear cliente solo",
+      "errorNeedIdentifier": "Indica un nombre, apellido o email.",
+      "errorNoteTooLong": "La nota debe tener 2000 caracteres o menos.",
+      "errorAuth": "La sesión ha expirado. Inicia sesión de nuevo.",
+      "errorGeneric": "No se pudo crear el cliente solo."
+    }
   }
 }

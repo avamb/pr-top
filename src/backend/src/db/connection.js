@@ -1473,6 +1473,38 @@ function applySchema(db) {
     // Best-effort
   }
 
+  // T-06: Solo mode (therapist-only "smart notebook").
+  // Some therapists (psychoanalysts, those working with paranoid clients) cannot
+  // bring the client into the bot. Solo mode lets the therapist create a "client"
+  // entity manually that lives entirely on the therapist's side: the client never
+  // sees the system, has no telegram_id and no invite_code, but the therapist can
+  // still upload session audio, write post-session notes, and run NL queries.
+  // - users.mode: 'bot_connected' (default, legacy invite-code flow) | 'solo'.
+  //   Stored on the client row only; therapist/superadmin/viewer rows leave it
+  //   NULL or default. The application enforces the enum via app code (no SQL
+  //   CHECK so future modes can be added without a table rebuild).
+  // Backfill: every existing client row gets 'bot_connected' so legacy invite-
+  // code clients keep working unchanged.
+  let _addedClientModeColumn = false;
+  try {
+    db.run("ALTER TABLE users ADD COLUMN mode TEXT DEFAULT 'bot_connected'");
+    logger.info('T-06: added mode column to users');
+    _addedClientModeColumn = true;
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  // Idempotent backfill: existing client rows with NULL mode become
+  // 'bot_connected' so they stay on the legacy flow. Run on every boot so
+  // any later-introduced NULL row also gets normalised.
+  try {
+    db.run("UPDATE users SET mode = 'bot_connected' WHERE role = 'client' AND (mode IS NULL OR mode = '')");
+    if (_addedClientModeColumn) {
+      logger.info("T-06: backfilled mode='bot_connected' for existing clients");
+    }
+  } catch (e) {
+    logger.warn('T-06 mode backfill skipped: ' + e.message);
+  }
+
   // Seed default superadmin account if not exists
   seedSuperadmin(db);
 

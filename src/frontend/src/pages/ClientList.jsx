@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { formatUserDate, formatUserDateOnly } from '../utils/formatDate';
 import BulkImport from '../components/BulkImport';
+import CreateSoloClient from '../components/CreateSoloClient';
 import useWebSocket from '../hooks/useWebSocket';
 
 const API_URL = '/api';
@@ -69,22 +70,45 @@ function SosBadge({ count, t }) {
   );
 }
 
+// T-06: Solo mode badge — distinguishes therapist-only "smart notebook"
+// clients from real bot-connected clients. Solo clients have no telegram_id,
+// no invite_code, and no client-facing flow.
+function SoloBadge({ t }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700"
+      title={t('client.solo.badgeTooltip', 'Therapist-only notebook — client is not connected to the bot.')}
+      data-testid="client-solo-badge"
+    >
+      📓 {t('client.solo.badge', 'Solo')}
+    </span>
+  );
+}
+
 function ClientRow({ client, onClick, t }) {
+  const isSolo = client.mode === 'solo';
   const consentColor = client.consent_therapist_access
     ? 'bg-green-100 text-green-700'
     : 'bg-gray-100 text-gray-600';
   const consentLabel = client.consent_therapist_access ? 'Consented' : 'No Consent';
-  const displayName = client.email || client.telegram_id || `Client #${client.id}`;
+  const displayName =
+    [client.first_name, client.last_name].filter(Boolean).join(' ') ||
+    client.email ||
+    client.telegram_id ||
+    `Client #${client.id}`;
 
   return (
     <tr className={`border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer ${client.active_sos_count > 0 ? 'bg-red-50' : ''}`} onClick={onClick}>
       <td className="px-4 py-3 text-sm font-medium text-primary hover:underline">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {displayName}
+          {isSolo && <SoloBadge t={t} />}
           <SosBadge count={client.active_sos_count} t={t} />
         </div>
       </td>
-      <td className="px-4 py-3 text-sm text-secondary">{client.telegram_id || '—'}</td>
+      <td className="px-4 py-3 text-sm text-secondary">
+        {isSolo ? <span className="text-indigo-500">{t('client.mode.soloDash', '—')}</span> : (client.telegram_id || '—')}
+      </td>
       <td className="px-4 py-3 text-sm text-secondary">{client.language?.toUpperCase() || 'EN'}</td>
       <td className="px-4 py-3">
         <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${consentColor}`}>
@@ -114,6 +138,7 @@ export default function ClientList() {
   const [planInfo, setPlanInfo] = useState(null);
   const [loadTime, setLoadTime] = useState(null);
   const [showImport, setShowImport] = useState(false);
+  const [showSoloCreate, setShowSoloCreate] = useState(false);
   const fetchRef = useRef(0);
   const abortControllerRef = useRef(null);
 
@@ -256,6 +281,15 @@ export default function ClientList() {
               </svg>
             </div>
             <button
+              onClick={() => setShowSoloCreate(true)}
+              className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 whitespace-nowrap"
+              data-testid="create-solo-client-btn"
+              title={t('client.solo.btnTooltip', 'Create a therapist-only client (no bot connection).')}
+            >
+              <span>📓</span>
+              {t('client.solo.btn', 'Solo Client')}
+            </button>
+            <button
               onClick={() => setShowImport(true)}
               className="px-4 py-2 text-sm font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors flex items-center gap-2 whitespace-nowrap"
             >
@@ -275,6 +309,19 @@ export default function ClientList() {
             onImportComplete={() => fetchClients(search, page)}
           />
         )}
+
+        {/* T-06: Solo client creation modal */}
+        <CreateSoloClient
+          open={showSoloCreate}
+          onClose={() => setShowSoloCreate(false)}
+          onCreated={() => {
+            // Reload from page 1 so the brand-new solo client is visible at the top.
+            setSearchInput('');
+            setSearch('');
+            setPage(1);
+            fetchClients('', 1);
+          }}
+        />
 
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
@@ -328,12 +375,21 @@ export default function ClientList() {
                           <p className="text-sm text-gray-400 max-w-md mx-auto mb-4">
                             {t('clientList.noClientsHint', 'Share your invite code with clients so they can connect with you via the Telegram bot.')}
                           </p>
-                          <button
-                            onClick={() => navigate('/dashboard')}
-                            className="px-4 py-2 text-sm bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg transition-colors font-medium"
-                          >
-                            {t('clientList.viewInviteCode', 'View Invite Code')}
-                          </button>
+                          <div className="flex items-center justify-center gap-2 flex-wrap">
+                            <button
+                              onClick={() => navigate('/dashboard')}
+                              className="px-4 py-2 text-sm bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg transition-colors font-medium"
+                            >
+                              {t('clientList.viewInviteCode', 'View Invite Code')}
+                            </button>
+                            <button
+                              onClick={() => setShowSoloCreate(true)}
+                              className="px-4 py-2 text-sm bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg transition-colors font-medium"
+                              data-testid="create-solo-client-empty-btn"
+                            >
+                              {t('client.solo.btn', 'Solo Client')}
+                            </button>
+                          </div>
                         </div>
                       )}
                     </td>

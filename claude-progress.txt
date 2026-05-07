@@ -4148,3 +4148,135 @@ keys present in every locale (verified via _t20_validate_locales.js).
   all verified end-to-end; persistence verified across backend
   restart; no mock data; existing audit/security model preserved by
   reusing POST /api/sessions for the actual upload).
+
+
+## Session: T-06 Solo mode (Feature #364) — PASSING
+
+### Goal
+Allow therapists (psychoanalysts, those working with paranoid clients, or
+anyone who simply wants a personal case-file notebook) to create "clients"
+that live entirely on the therapist side — no Telegram bot connection, no
+invite code, no client-facing flow. Add 'mode' field to existing client
+entity (don't create a parallel one).
+
+### Backend (existing prior to this session)
+
+src/backend/src/db/connection.js — users.mode column ('bot_connected' default,
+'solo' for therapist-only). Backfill UPDATE on every boot ensures legacy
+client rows stay 'bot_connected'.
+
+src/backend/src/routes/clients.js
+  - POST /api/clients/solo — creates solo client with:
+      mode='solo', telegram_id=NULL, invite_code=NULL,
+      consent_therapist_access=1 (auto-granted), consent_version=0.
+      Optional initial note encrypted into therapist_notes.
+      Plan client-limit enforced; bad email / oversize note rejected 400.
+  - GET /api/clients — returns mode in response (default 'bot_connected').
+  - GET /api/clients/:id — returns mode.
+  - POST /api/clients/:id/exercises — 403 with explanatory error when
+    mode='solo' (exercises require a Telegram-connected client).
+
+Bot endpoints under /api/bot/* look up by telegram_id; solo clients have
+telegram_id=NULL so any bot-side request for a solo client naturally
+404s (defense-in-depth — verified end-to-end).
+
+### Frontend (this session)
+
+src/frontend/src/components/CreateSoloClient.jsx — new modal component:
+  - First name / last name / optional email / language / optional initial
+    note (≤2000 chars, char counter).
+  - Validates locally (need at least one identifier; cap note length).
+  - POSTs to /api/clients/solo with bearer + CSRF; on success calls
+    onCreated() and closes.
+  - Disclaimer panel reminds the therapist that diary/exercises/SOS are
+    not available in solo mode.
+
+src/frontend/src/pages/ClientList.jsx
+  - Imports CreateSoloClient.
+  - Added "📓 Solo Client" button (indigo) next to "Import Clients".
+  - SoloBadge component appears next to client name in list rows when
+    client.mode === 'solo'.
+  - Telegram column shows '—' for solo (was already '—' since
+    telegram_id=null, but now styled as indigo to match badge).
+  - Empty state ("no clients yet") gets a second action button to create
+    a solo client immediately.
+  - Switches displayed name to first/last + email/telegram fallback chain.
+
+src/frontend/src/pages/ClientDetail.jsx
+  - Solo badge ("📓 Solo") rendered in header next to client name.
+  - Header subtitle "Therapist-only notebook · no bot connection" for solo.
+  - Tabs Diary, Exercises, and SOS hidden when client.mode === 'solo'.
+  - useEffect snaps activeTab back to 'timeline' if a solo client lands on
+    a hidden tab via stale URL / back button.
+  - All tabs gated on isSolo as a single (() => { ... return <div>...</div>; })()
+    wrapper so the tab-bar JSX stays a single React element.
+
+### i18n
+
+Added client.mode.{solo,botConnected,soloDash} and client.solo.{title,
+badge,badgeTooltip,description,subtitle,btn,btnTooltip,firstName,lastName,
+emailOptional,language,noteOptional,notePlaceholder,disclaimer,creating,
+create,errorNeedIdentifier,errorNoteTooLong,errorAuth,errorGeneric} —
+21 keys × 4 locales (en/ru/es/uk) = 84 new translation strings.
+
+### Verification
+
+1) Compile sanity (esbuild) on:
+   - src/frontend/src/components/CreateSoloClient.jsx -> 10.4kb, no warnings
+   - src/frontend/src/pages/ClientList.jsx           -> 18.9kb, no warnings
+   - src/frontend/src/pages/ClientDetail.jsx         -> 153.4kb, no warnings
+   - node -c on src/backend/src/routes/clients.js    -> OK
+
+2) Locale validation: all four en/ru/es/uk JSON parse + 11 required
+   solo keys present in every locale.
+
+3) Live HTTP e2e (_t06_e2e.js, 26 PASS / 0 FAIL):
+   - Therapist register + login via CSRF + cookie jar
+   - POST /api/clients/solo with name + note -> 201
+       returned mode='solo', consent_therapist_access=true, telegram_id=null
+   - GET /api/clients includes the solo client with mode='solo'
+   - GET /api/clients/:id mode='solo'
+   - Empty body / bad email / oversize note all reject 400
+   - Bad-input requests do NOT leak rows (only 1 solo client in list after)
+   - POST /api/clients/:id/exercises -> 403 with 'solo' message
+   - GET /api/clients/:id/diary -> 200 [] (consent passes; no entries)
+   - GET /api/clients/:id/notes -> 200 with the encrypted intake note
+     decrypted and matched by unique TEST_T06_INTAKE marker
+   - Bot endpoint /api/bot/user/0 -> 404 (solo has no telegram_id)
+   - Bot endpoint /api/bot/user/<soloId> -> 404 (queries by telegram_id,
+     solo's is NULL so the row is unreachable)
+
+4) Server-restart persistence (_t06_persistence_check.js create / kill /
+   restart / verify):
+   - Created therapist + solo client with marker note 'T06_RESTART_PERSIST_<ts>'
+   - Killed backend PID 60200 via process.kill(SIGKILL)
+   - Restarted via npm --prefix src/backend run dev
+   - Logged back in fresh, fetched /api/clients + /api/clients/<soloId>/notes
+   - Solo row, mode='solo', and decrypted marker note all survived. PASS.
+
+5) Mock-data grep across all touched files
+   (src/backend/src/routes/clients.js, src/frontend/src/components/
+   CreateSoloClient.jsx, src/frontend/src/pages/ClientList.jsx,
+   src/frontend/src/pages/ClientDetail.jsx) — zero hits for
+   globalThis|devStore|dev-store|mockDb|mockData|fakeData|sampleData|
+   dummyData. All persistence flows through prtop.db (sql.js + AES at
+   application layer for Class A note content).
+
+### Files changed this session
+
+  src/frontend/src/components/CreateSoloClient.jsx   (new file, ~245 lines)
+  src/frontend/src/pages/ClientList.jsx              (+44 lines)
+  src/frontend/src/pages/ClientDetail.jsx            (+43 lines)
+  src/frontend/src/i18n/en.json                      (+30 keys)
+  src/frontend/src/i18n/ru.json                      (+30 keys)
+  src/frontend/src/i18n/es.json                      (+30 keys)
+  src/frontend/src/i18n/uk.json                      (+30 keys)
+
+### Current status
+- Feature #364: PASSING (T-06 Solo mode — therapist-only "smart notebook"
+  client entity; mode column on users with backfill; POST /api/clients/solo
+  endpoint; auto-granted consent + null telegram_id + null invite_code;
+  exercises blocked with 403 for solo; bot endpoints naturally 404 since
+  telegram_id is NULL; full create-client modal with EN/RU/ES/UK i18n;
+  Diary / Exercises / SOS tabs hidden in ClientDetail for solo clients;
+  encrypted initial note persists across backend restart).
