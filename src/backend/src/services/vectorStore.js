@@ -358,16 +358,40 @@ function semanticSearch(queryText, options = {}) {
     }
   }
 
+  // T-12: drop diary-entry hits whose source row is marked client-private.
+  // We collect the candidate diary IDs in one pass and filter in O(N) before
+  // sorting so therapists never see private diary content via semantic search.
+  const diaryIds = scored
+    .filter((s) => s.source_type === 'diary_entry')
+    .map((s) => Number(s.source_id))
+    .filter((n) => Number.isInteger(n));
+  let privateDiaryIds = new Set();
+  if (diaryIds.length > 0) {
+    const placeholders = diaryIds.map(() => '?').join(',');
+    const privCheck = db.exec(
+      `SELECT id FROM diary_entries WHERE id IN (${placeholders}) AND is_private = 1`,
+      diaryIds
+    );
+    if (privCheck.length > 0 && privCheck[0].values.length > 0) {
+      privateDiaryIds = new Set(privCheck[0].values.map((r) => Number(r[0])));
+    }
+  }
+  const filteredScored = privateDiaryIds.size === 0
+    ? scored
+    : scored.filter((s) =>
+        s.source_type !== 'diary_entry' || !privateDiaryIds.has(Number(s.source_id))
+      );
+
   // Sort by similarity descending
-  scored.sort((a, b) => b.similarity - a.similarity);
+  filteredScored.sort((a, b) => b.similarity - a.similarity);
 
   const limit = options.limit || 10;
-  const topResults = scored.slice(0, limit);
+  const topResults = filteredScored.slice(0, limit);
 
   return {
     results: topResults,
     query: queryText,
-    total: scored.length
+    total: filteredScored.length
   };
 }
 

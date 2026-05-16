@@ -104,9 +104,17 @@ router.get('/embedding/:sourceType/:sourceId', (req, res) => {
       let clientId = null;
 
       if (sourceType === 'diary_entry') {
-        const diaryResult = db.exec('SELECT client_id FROM diary_entries WHERE id = ?', [parseInt(sourceId)]);
+        // T-12: hide client-private diary embeddings from therapist search results
+        // by treating the row as missing.
+        const diaryResult = db.exec(
+          'SELECT client_id FROM diary_entries WHERE id = ? AND (is_private = 0 OR is_private IS NULL)',
+          [parseInt(sourceId)]
+        );
         if (diaryResult.length > 0 && diaryResult[0].values.length > 0) {
           clientId = diaryResult[0].values[0][0];
+        } else {
+          // Either no such entry or it is client-private — block access.
+          return res.status(404).json({ error: 'Source not found' });
         }
       } else if (sourceType === 'session_transcript' || sourceType === 'session_summary') {
         const sessionResult = db.exec('SELECT client_id FROM sessions WHERE id = ?', [parseInt(sourceId)]);

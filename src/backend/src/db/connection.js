@@ -656,6 +656,18 @@ function applySchema(db) {
     // Column already exists, ignore
   }
 
+  // T-12: Add is_private column to diary_entries so clients can mark a single
+  // diary entry private from the bot (the therapist will not see it in API or UI).
+  // Class B metadata: 0 = shared with therapist (default), 1 = private (client-only).
+  // The privacy flag is owned by the client (the entry's author); only the client
+  // (or a superadmin) may flip it via the bot make-private endpoint.
+  try {
+    db.run('ALTER TABLE diary_entries ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0');
+    logger.info('Added is_private column to diary_entries (T-12)');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
   // Normalize existing emails to lowercase (migration for case-insensitive matching)
   try {
     const mixedCaseResult = db.exec("SELECT COUNT(*) FROM users WHERE email != LOWER(email)");

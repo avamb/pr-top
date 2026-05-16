@@ -66,8 +66,9 @@ function exportClientContext(clientId, therapistId) {
  */
 function exportDiaryEntries(clientId) {
   const db = getDatabase();
+  // T-12: never export client-private diary entries to therapist-initiated dumps.
   const result = db.exec(
-    "SELECT id, entry_type, content_encrypted, transcript_encrypted, file_ref, created_at FROM diary_entries WHERE client_id = ? ORDER BY created_at DESC",
+    "SELECT id, entry_type, content_encrypted, transcript_encrypted, file_ref, created_at FROM diary_entries WHERE client_id = ? AND (is_private = 0 OR is_private IS NULL) ORDER BY created_at DESC",
     [clientId]
   );
   if (result.length === 0) return [];
@@ -223,7 +224,7 @@ function exportAnalyticsCSV(therapistId, days) {
             0 as notes
      FROM diary_entries d
      JOIN users u ON u.id = d.client_id AND u.therapist_id = ? AND u.consent_therapist_access = 1
-     WHERE d.created_at >= ?
+     WHERE d.created_at >= ? AND (d.is_private = 0 OR d.is_private IS NULL)
      GROUP BY date(d.created_at)
      UNION ALL
      SELECT date(s.created_at) as date,
@@ -263,7 +264,7 @@ function exportAnalyticsCSV(therapistId, days) {
   // Client activity
   const clientResult = db.exec(
     `SELECT u.id, u.email,
-            (SELECT COUNT(*) FROM diary_entries de WHERE de.client_id = u.id AND de.created_at >= ?) as diary_entries,
+            (SELECT COUNT(*) FROM diary_entries de WHERE de.client_id = u.id AND de.created_at >= ? AND (de.is_private = 0 OR de.is_private IS NULL)) as diary_entries,
             (SELECT COUNT(*) FROM sessions s WHERE s.client_id = u.id AND s.therapist_id = ? AND s.created_at >= ?) as sessions,
             (SELECT COUNT(*) FROM therapist_notes tn WHERE tn.client_id = u.id AND tn.therapist_id = ? AND tn.created_at >= ?) as notes
      FROM users u

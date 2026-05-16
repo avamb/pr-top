@@ -1053,6 +1053,43 @@ if (!token || token === 'your-telegram-bot-token') {
       return;
     }
 
+    // T-12: Handle "Make private" callback for a freshly-saved diary entry.
+    // The therapist will not see entries flagged is_private = 1, so this lets
+    // the client retroactively redact a diary entry without deleting it.
+    if (data.startsWith('diary_make_private_')) {
+      const lang = await getUserLang(telegramId);
+      const entryIdStr = data.replace('diary_make_private_', '');
+      const entryId = parseInt(entryIdStr, 10);
+      if (!Number.isInteger(entryId) || entryId <= 0) {
+        bot.answerCallbackQuery(callbackQuery.id, { text: t(lang, 'commentMakePrivateFailed') });
+        return;
+      }
+      try {
+        const r = await api.post(`/api/bot/diary/${entryId}/make-private`, {
+          telegram_id: String(telegramId)
+        });
+        // Strip the inline keyboard so the client can't tap it twice and to
+        // visually confirm the action took effect.
+        try {
+          await bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
+            chat_id: chatId,
+            message_id: callbackQuery.message.message_id
+          });
+        } catch (e) { /* keyboard edit is best-effort */ }
+
+        const wasAlready = !!(r.data && r.data.already_private);
+        const toastKey = wasAlready ? 'commentAlreadyPrivate' : 'commentMadePrivate';
+        // Toast confirmation on the inline button itself.
+        bot.answerCallbackQuery(callbackQuery.id, { text: t(lang, toastKey), show_alert: false });
+        // Plus a chat-message confirmation so it's visible after scroll.
+        bot.sendMessage(chatId, t(lang, toastKey));
+      } catch (error) {
+        const errorMsg = (error.response && error.response.data && error.response.data.error) || t(lang, 'commentMakePrivateFailed');
+        bot.answerCallbackQuery(callbackQuery.id, { text: errorMsg, show_alert: true });
+      }
+      return;
+    }
+
     // Handle exercise start callbacks
     if (data.startsWith('exercise_start_')) {
       const deliveryId = data.replace('exercise_start_', '');
@@ -1398,6 +1435,23 @@ if (!token || token === 'your-telegram-bot-token') {
   }
 
   /**
+   * T-12: Build the inline keyboard offering "Make private" right after the
+   * client saves a diary entry. The therapist will not see entries the client
+   * marks private. Returns null when no entry id is available.
+   */
+  function makePrivateKeyboard(entryId, lang) {
+    if (!entryId) return null;
+    return {
+      inline_keyboard: [[
+        {
+          text: t(lang, 'commentMakePrivate'),
+          callback_data: 'diary_make_private_' + entryId
+        }
+      ]]
+    };
+  }
+
+  /**
    * Forward voice/video message to therapist's Telegram chat.
    */
   async function forwardVoiceToTherapist(forwardInfo, fileId, entryType, chatIdOriginal) {
@@ -1522,8 +1576,10 @@ if (!token || token === 'your-telegram-bot-token') {
         console.warn(`Audio file was not stored for voice entry ${result.data.entry.id}`);
       }
 
-      // Notify user that transcription is in progress
-      bot.sendMessage(chatId, t(lang, 'voiceSavedTranscribing'));
+      // Notify user that transcription is in progress + offer T-12 "Make private"
+      const voiceEntryId = result.data && result.data.entry ? result.data.entry.id : null;
+      const voiceKb = makePrivateKeyboard(voiceEntryId, lang);
+      bot.sendMessage(chatId, t(lang, 'voiceSavedTranscribing'), voiceKb ? { reply_markup: voiceKb } : {});
 
       // Forward voice to therapist if enabled
       if (result.data && result.data.forward_voice) {
@@ -1590,8 +1646,10 @@ if (!token || token === 'your-telegram-bot-token') {
         console.warn(`Audio file was not stored for video entry ${result.data.entry.id}`);
       }
 
-      // Notify user that transcription is in progress
-      bot.sendMessage(chatId, t(lang, 'videoSavedTranscribing'));
+      // Notify user that transcription is in progress + offer T-12 "Make private"
+      const videoEntryId = result.data && result.data.entry ? result.data.entry.id : null;
+      const videoKb = makePrivateKeyboard(videoEntryId, lang);
+      bot.sendMessage(chatId, t(lang, 'videoSavedTranscribing'), videoKb ? { reply_markup: videoKb } : {});
 
       // Forward video to therapist if enabled
       if (result.data && result.data.forward_voice) {
@@ -1653,8 +1711,10 @@ if (!token || token === 'your-telegram-bot-token') {
         console.warn(`Audio file was not stored for video note entry ${result.data.entry.id}`);
       }
 
-      // Notify user that transcription is in progress
-      bot.sendMessage(chatId, t(lang, 'videoSavedTranscribing'));
+      // Notify user that transcription is in progress + offer T-12 "Make private"
+      const noteEntryId = result.data && result.data.entry ? result.data.entry.id : null;
+      const noteKb = makePrivateKeyboard(noteEntryId, lang);
+      bot.sendMessage(chatId, t(lang, 'videoSavedTranscribing'), noteKb ? { reply_markup: noteKb } : {});
 
       // Forward video note to therapist if enabled
       if (result.data && result.data.forward_voice) {
@@ -1872,13 +1932,16 @@ if (!token || token === 'your-telegram-bot-token') {
       }
 
       // Default: save as diary entry
-      await api.post('/api/bot/diary', {
+      const diaryResult = await api.post('/api/bot/diary', {
         telegram_id: String(telegramId),
         entry_type: 'text',
         content: msg.text
       });
 
-      bot.sendMessage(chatId, t(lang, 'diarySaved'));
+      // T-12: offer "Make private" inline keyboard right next to "Saved!"
+      const textEntryId = diaryResult.data && diaryResult.data.entry ? diaryResult.data.entry.id : null;
+      const textKb = makePrivateKeyboard(textEntryId, lang);
+      bot.sendMessage(chatId, t(lang, 'diarySaved'), textKb ? { reply_markup: textKb } : {});
     } catch (error) {
       const errorMsg = error.response?.data?.error || t(lang, 'failedDiary');
       bot.sendMessage(chatId, `❌ ${errorMsg}`);

@@ -849,6 +849,77 @@ router.post('/transcribe-diary/:entry_id', botAuth, async (req, res) => {
   }
 });
 
+// T-12: POST /api/bot/diary/:entry_id/make-private
+//   Body: { telegram_id }
+//   Marks the given diary entry as private (is_private = 1) so the therapist
+//   no longer sees it in API or UI. Only the entry's owner (matched by
+//   telegram_id) may flip the flag, and the flag can only be set, not unset,
+//   from the bot — once private, the client cannot accidentally re-share it.
+//   Idempotent: re-calling on an already-private entry returns success.
+router.post('/diary/:entry_id/make-private', botAuth, (req, res) => {
+  try {
+    const entryId = parseInt(req.params.entry_id, 10);
+    if (!Number.isInteger(entryId) || entryId <= 0) {
+      return res.status(400).json({ error: 'Invalid entry_id' });
+    }
+    const { telegram_id } = req.body || {};
+    if (!telegram_id) {
+      return res.status(400).json({ error: 'telegram_id is required' });
+    }
+
+    const db = getDatabase();
+    const userResult = db.exec(
+      'SELECT id, role FROM users WHERE telegram_id = ?',
+      [String(telegram_id)]
+    );
+    if (userResult.length === 0 || userResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const user = userResult[0].values[0];
+    const userId = user[0];
+    const userRole = user[1];
+    if (userRole !== 'client') {
+      return res.status(403).json({ error: 'Only clients may mark diary entries private' });
+    }
+
+    const entryResult = db.exec(
+      'SELECT id, client_id, is_private FROM diary_entries WHERE id = ?',
+      [entryId]
+    );
+    if (entryResult.length === 0 || entryResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Diary entry not found' });
+    }
+    const row = entryResult[0].values[0];
+    const ownerId = row[1];
+    const wasPrivate = !!row[2];
+
+    if (Number(ownerId) !== Number(userId)) {
+      return res.status(403).json({ error: 'You may only modify your own diary entries' });
+    }
+
+    if (!wasPrivate) {
+      db.run(
+        "UPDATE diary_entries SET is_private = 1, updated_at = datetime('now') WHERE id = ?",
+        [entryId]
+      );
+      saveDatabaseAfterWrite();
+      logger.info(`Client ${userId} marked diary entry #${entryId} as private (T-12)`);
+    } else {
+      logger.info(`Client ${userId} re-asked to mark diary entry #${entryId} private (already private)`);
+    }
+
+    return res.json({
+      success: true,
+      entry_id: entryId,
+      is_private: 1,
+      already_private: wasPrivate
+    });
+  } catch (error) {
+    logger.error('Bot diary make-private error: ' + error.message);
+    return res.status(500).json({ error: 'Failed to mark diary entry as private' });
+  }
+});
+
 // GET /api/bot/diary/:telegram_id - Get diary entries for a client
 router.get('/diary/:telegram_id', botAuth, (req, res) => {
   try {

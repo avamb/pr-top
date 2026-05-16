@@ -159,10 +159,11 @@ function executeNLQuery(therapistId, clientId, query, options = {}) {
   const results = [];
   let totalSearched = 0;
 
-  // 1. Search diary entries
+  // 1. Search diary entries (T-12: hide client-private entries from therapist NL queries)
   const diaryResult = db.exec(
     `SELECT id, entry_type, content_encrypted, transcript_encrypted, created_at
-     FROM diary_entries WHERE client_id = ? ORDER BY created_at DESC`,
+     FROM diary_entries WHERE client_id = ? AND (is_private = 0 OR is_private IS NULL)
+     ORDER BY created_at DESC`,
     [clientId]
   );
 

@@ -19,7 +19,7 @@ router.get('/:id/stream', authenticate, requireRole('therapist', 'superadmin'), 
     const entryId = req.params.id;
 
     const result = db.exec(
-      'SELECT client_id, entry_type, audio_file_ref FROM diary_entries WHERE id = ?',
+      'SELECT client_id, entry_type, audio_file_ref, is_private FROM diary_entries WHERE id = ?',
       [entryId]
     );
 
@@ -31,6 +31,13 @@ router.get('/:id/stream', authenticate, requireRole('therapist', 'superadmin'), 
     const clientId = row[0];
     const entryType = row[1];
     const audioFileRef = row[2];
+    const isPrivate = !!row[3];
+
+    // T-12: client-private diary entries are invisible to therapists; don't even
+    // confirm existence to avoid information leak.
+    if (isPrivate && req.user.role !== 'superadmin') {
+      return res.status(404).json({ error: 'Diary entry not found' });
+    }
 
     // Verify therapist owns this client (unless superadmin)
     if (req.user.role !== 'superadmin') {
@@ -129,7 +136,7 @@ router.post('/:id/retranscribe', authenticate, requireRole('therapist', 'superad
     const entryId = req.params.id;
 
     const result = db.exec(
-      'SELECT client_id, entry_type, audio_file_ref FROM diary_entries WHERE id = ?',
+      'SELECT client_id, entry_type, audio_file_ref, is_private FROM diary_entries WHERE id = ?',
       [entryId]
     );
 
@@ -141,6 +148,12 @@ router.post('/:id/retranscribe', authenticate, requireRole('therapist', 'superad
     const clientId = row[0];
     const entryType = row[1];
     const audioFileRef = row[2];
+    const isPrivate = !!row[3];
+
+    // T-12: client-private diary entries are invisible to therapists.
+    if (isPrivate && req.user.role !== 'superadmin') {
+      return res.status(404).json({ error: 'Diary entry not found' });
+    }
 
     // Verify therapist owns this client (unless superadmin)
     if (req.user.role !== 'superadmin') {

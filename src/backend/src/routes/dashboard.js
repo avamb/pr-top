@@ -87,11 +87,13 @@ router.get('/activity', (req, res) => {
     const activities = [];
 
     // Get recent diary entries from linked clients (consent filter)
+    // T-12: exclude client-private diary entries from the activity feed.
     const diaryResult = db.exec(
       `SELECT de.id, de.entry_type, de.created_at, u.email, u.telegram_id, u.id as client_id
        FROM diary_entries de
        JOIN users u ON u.id = de.client_id
        WHERE u.therapist_id = ? AND u.consent_therapist_access = 1
+         AND (de.is_private = 0 OR de.is_private IS NULL)
        ORDER BY de.created_at DESC
        LIMIT ?`,
       [therapistId, limit]
@@ -250,11 +252,13 @@ router.get('/analytics', (req, res) => {
     const startDateStr = startDate.toISOString().split('T')[0];
 
     // Get diary entries per day (consent filter)
+    // T-12: exclude client-private diary entries from charts.
     const diaryResult = db.exec(
       `SELECT DATE(de.created_at) as day, COUNT(*) as count
        FROM diary_entries de
        JOIN users u ON u.id = de.client_id
        WHERE u.therapist_id = ? AND u.consent_therapist_access = 1 AND de.created_at >= ?
+         AND (de.is_private = 0 OR de.is_private IS NULL)
        GROUP BY DATE(de.created_at)
        ORDER BY day ASC`,
       [therapistId, startDateStr]
@@ -315,11 +319,11 @@ router.get('/analytics', (req, res) => {
     // Get per-client activity summary
     const clientActivityResult = db.exec(
       `SELECT u.id, u.email, u.telegram_id,
-              (SELECT COUNT(*) FROM diary_entries WHERE client_id = u.id) as diary_count,
+              (SELECT COUNT(*) FROM diary_entries WHERE client_id = u.id AND (is_private = 0 OR is_private IS NULL)) as diary_count,
               (SELECT COUNT(*) FROM sessions WHERE client_id = u.id AND therapist_id = ?) as session_count,
               (SELECT COUNT(*) FROM therapist_notes WHERE client_id = u.id AND therapist_id = ?) as note_count,
               (SELECT MAX(created_at) FROM (
-                SELECT created_at FROM diary_entries WHERE client_id = u.id
+                SELECT created_at FROM diary_entries WHERE client_id = u.id AND (is_private = 0 OR is_private IS NULL)
                 UNION ALL
                 SELECT created_at FROM sessions WHERE client_id = u.id
                 UNION ALL

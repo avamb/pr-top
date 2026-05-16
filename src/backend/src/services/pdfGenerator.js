@@ -170,10 +170,11 @@ function generateAnalyticsPDF(therapistId, days, therapistEmail) {
 function getTotals(db, therapistId, cutoff) {
   let diary = 0, sessions = 0, notes = 0;
 
+  // T-12: exclude client-private diary entries from therapist PDF totals.
   const diaryResult = db.exec(
     `SELECT COUNT(*) FROM diary_entries d
      JOIN users u ON u.id = d.client_id AND u.therapist_id = ? AND u.consent_therapist_access = 1
-     WHERE d.created_at >= ?`,
+     WHERE d.created_at >= ? AND (d.is_private = 0 OR d.is_private IS NULL)`,
     [therapistId, cutoff]
   );
   if (diaryResult.length > 0) diary = diaryResult[0].values[0][0];
@@ -198,10 +199,12 @@ function getTotals(db, therapistId, cutoff) {
 function getDailyActivity(db, therapistId, cutoff) {
   const dateMap = {};
 
+  // T-12: exclude client-private diary entries from PDF daily activity charts.
   const diaryResult = db.exec(
     `SELECT date(d.created_at) as dt, COUNT(*) as cnt FROM diary_entries d
      JOIN users u ON u.id = d.client_id AND u.therapist_id = ? AND u.consent_therapist_access = 1
-     WHERE d.created_at >= ? GROUP BY date(d.created_at)`,
+     WHERE d.created_at >= ? AND (d.is_private = 0 OR d.is_private IS NULL)
+     GROUP BY date(d.created_at)`,
     [therapistId, cutoff]
   );
   if (diaryResult.length > 0) {
@@ -245,7 +248,7 @@ function getDailyActivity(db, therapistId, cutoff) {
 function getClientActivity(db, therapistId, cutoff) {
   const result = db.exec(
     `SELECT u.id, u.email,
-            (SELECT COUNT(*) FROM diary_entries de WHERE de.client_id = u.id AND de.created_at >= ?) as diary_entries,
+            (SELECT COUNT(*) FROM diary_entries de WHERE de.client_id = u.id AND de.created_at >= ? AND (de.is_private = 0 OR de.is_private IS NULL)) as diary_entries,
             (SELECT COUNT(*) FROM sessions s WHERE s.client_id = u.id AND s.therapist_id = ? AND s.created_at >= ?) as sessions,
             (SELECT COUNT(*) FROM therapist_notes tn WHERE tn.client_id = u.id AND tn.therapist_id = ? AND tn.created_at >= ?) as notes
      FROM users u

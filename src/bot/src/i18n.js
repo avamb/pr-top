@@ -40,6 +40,12 @@ Connect clients with one link — simple and secure.
     failedVoiceDiary: 'Failed to save voice diary entry.',
     failedVideoDiary: 'Failed to save video diary entry.',
     failedDiary: 'Failed to save diary entry.',
+    // T-12 — bot.comment.makePrivate: client can flip a freshly-saved diary
+    // entry to private so the therapist will not see it. Default is shared.
+    commentMakePrivate: '🔒 Make private',
+    commentMadePrivate: '🔒 Marked private. Your therapist will not see this entry.',
+    commentAlreadyPrivate: '🔒 This entry is already private.',
+    commentMakePrivateFailed: 'Could not make this entry private. Please try again.',
     therapistFreeText: '💡 As a therapist, use the web dashboard to manage clients.\n\nType /help for available commands.',
     therapistVoiceText: '💡 Voice diary entries are for clients only.\n\nAs a therapist, use the web dashboard to manage your clients.\nType /help for available commands.',
     therapistVideoText: '💡 Video diary entries are for clients only.\n\nAs a therapist, use the web dashboard to manage your clients.\nType /help for available commands.',
@@ -212,6 +218,12 @@ Connect clients with one link — simple and secure.
     failedVoiceDiary: 'Не удалось сохранить голосовую запись дневника.',
     failedVideoDiary: 'Не удалось сохранить видеозапись дневника.',
     failedDiary: 'Не удалось сохранить запись дневника.',
+    // T-12 — bot.comment.makePrivate: клиент может скрыть свежесохранённую
+    // запись дневника от терапевта. По умолчанию запись общая.
+    commentMakePrivate: '🔒 Сделать приватной',
+    commentMadePrivate: '🔒 Запись помечена приватной. Терапевт её не увидит.',
+    commentAlreadyPrivate: '🔒 Эта запись уже приватная.',
+    commentMakePrivateFailed: 'Не удалось сделать запись приватной. Попробуйте ещё раз.',
     therapistFreeText: '💡 Как терапевт, используйте веб-панель для управления клиентами.\n\nВведите /help для просмотра доступных команд.',
     therapistVoiceText: '💡 Голосовые записи дневника доступны только клиентам.\n\nКак терапевт, используйте веб-панель для управления клиентами.\nВведите /help для просмотра команд.',
     therapistVideoText: '💡 Видеозаписи дневника доступны только клиентам.\n\nКак терапевт, используйте веб-панель для управления клиентами.\nВведите /help для просмотра команд.',
@@ -381,6 +393,12 @@ Conecta clientes con un enlace — simple y seguro.
     voiceSaved: '🎤 ¡Entrada de diario de voz guardada! Tu terapeuta podrá escucharla.',
     videoSaved: '🎥 ¡Entrada de diario de video guardada! Tu terapeuta podrá verla.',
     diarySaved: '📝 ¡Entrada de diario guardada!',
+    // T-12 — bot.comment.makePrivate: el cliente puede ocultar al terapeuta
+    // una entrada recién guardada del diario. Por defecto es compartida.
+    commentMakePrivate: '🔒 Hacerla privada',
+    commentMadePrivate: '🔒 Entrada marcada como privada. Tu terapeuta no la verá.',
+    commentAlreadyPrivate: '🔒 Esta entrada ya es privada.',
+    commentMakePrivateFailed: 'No se pudo marcar como privada. Inténtalo de nuevo.',
     failedVoiceDiary: 'No se pudo guardar la entrada de voz del diario.',
     failedVideoDiary: 'No se pudo guardar la entrada de video del diario.',
     failedDiary: 'No se pudo guardar la entrada del diario.',
@@ -556,6 +574,13 @@ Conecta clientes con un enlace — simple y seguro.
     failedVoiceDiary: 'Не вдалося зберегти голосовий запис щоденника.',
     failedVideoDiary: 'Не вдалося зберегти відеозапис щоденника.',
     failedDiary: 'Не вдалося зберегти запис щоденника.',
+    // T-12 — bot.comment.makePrivate: клієнт може зробити щойно збережений
+    // запис щоденника приватним, щоб терапевт його не бачив. За замовчуванням
+    // запис є спільним.
+    commentMakePrivate: '🔒 Зробити приватним',
+    commentMadePrivate: '🔒 Запис позначено приватним. Терапевт його не побачить.',
+    commentAlreadyPrivate: '🔒 Цей запис уже приватний.',
+    commentMakePrivateFailed: 'Не вдалося зробити запис приватним. Спробуйте ще раз.',
     therapistFreeText: '💡 Як терапевт, використовуйте веб-панель для керування клієнтами.\n\nВведіть /help для перегляду доступних команд.',
     therapistVoiceText: '💡 Голосові записи щоденника доступні лише клієнтам.\n\nЯк терапевт, використовуйте веб-панель для керування клієнтами.\nВведіть /help для перегляду команд.',
     therapistVideoText: '💡 Відеозаписи щоденника доступні лише клієнтам.\n\nЯк терапевт, використовуйте веб-панель для керування клієнтами.\nВведіть /help для перегляду команд.',

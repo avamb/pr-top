@@ -346,8 +346,9 @@ function buildSupervisorView(link) {
   try {
     const dRows = rowsToObjects(
       db.exec(
+        // T-12: never share client-private diary entries with supervisors.
         `SELECT id, entry_type, content_encrypted, transcript_encrypted, created_at
-         FROM diary_entries WHERE client_id = ?
+         FROM diary_entries WHERE client_id = ? AND (is_private = 0 OR is_private IS NULL)
          ORDER BY created_at DESC LIMIT 200`,
         [clientId]
       )
