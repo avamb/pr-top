@@ -130,6 +130,14 @@ export default function Settings() {
   const [savingReminders, setSavingReminders] = useState(false);
   const [remindersSuccess, setRemindersSuccess] = useState(null);
 
+  // T-26: AI source disclaimer transparency toggle. Controls whether the
+  // "Generated with AI based on: <sources>" block renders next to AI-authored
+  // summaries and exercises. Defaults to true (transparency-on) so the
+  // disclaimer is visible unless the therapist explicitly hides it.
+  const [showAiSources, setShowAiSources] = useState(true);
+  const [savingAiSources, setSavingAiSources] = useState(false);
+  const [aiSourcesSuccess, setAiSourcesSuccess] = useState(null);
+
   // T-08: Summary specialization (modality preset) + optional custom prompt.
   // The dropdown options come from the backend (so adding a preset doesn't
   // require an FE deploy); labels are i18n'd via settings.summary.presets.<id>.
@@ -300,6 +308,13 @@ export default function Settings() {
         setTelegramUsername(data.profile.telegram_username || '');
         setOtherInfo(data.profile.other_info || '');
         setRemindersEnabledDefault(!!data.profile.reminders_enabled_default);
+        // T-26: hydrate the AI source disclaimer toggle. Default to true when
+        // the field is missing (older DB rows without backfill).
+        setShowAiSources(
+          Object.prototype.hasOwnProperty.call(data.profile, 'show_ai_sources')
+            ? !!data.profile.show_ai_sources
+            : true
+        );
         // Sync i18n language with profile
         const lang = data.profile.language || 'en';
         if (i18n.language !== lang) {
@@ -503,6 +518,54 @@ export default function Settings() {
       setError(err.message);
     } finally {
       setSavingReminders(false);
+    }
+  }
+
+  // T-26: persist therapist preference for AI source disclaimer visibility.
+  // Toggling this only changes UI rendering — the underlying source data is
+  // always written by the generation pipeline so flipping the toggle back on
+  // brings the disclaimer back without re-running summarization.
+  async function handleSaveAiSources(e) {
+    e.preventDefault();
+    if (savingAiSources) return;
+    setSavingAiSources(true);
+    setError(null);
+    setAiSourcesSuccess(null);
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/settings/profile`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ show_ai_sources: showAiSources })
+      });
+
+      if (res.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/login');
+        return;
+      }
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to update AI sources preference');
+      }
+
+      const data = await res.json();
+      setProfile(data.profile);
+      setShowAiSources(
+        Object.prototype.hasOwnProperty.call(data.profile, 'show_ai_sources')
+          ? !!data.profile.show_ai_sources
+          : true
+      );
+      setAiSourcesSuccess(t('ai.disclaimer.settingsToggleSaved'));
+      setTimeout(() => setAiSourcesSuccess(null), 3000);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingAiSources(false);
     }
   }
 
@@ -786,6 +849,43 @@ export default function Settings() {
                     >
                       {savingReminders && <LoadingSpinner size={16} className="mr-2" />}
                       {savingReminders ? t('settings.saving') : t('settings.reminders.save')}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* T-26: AI source disclaimer transparency toggle.
+                Therapist controls whether the "Generated with AI based on:
+                <sources>" disclaimer renders next to AI-authored summaries
+                and exercises. */}
+            {(profile.role === 'therapist' || profile.role === 'superadmin') && (
+              <div className="bg-white rounded-lg shadow-md p-8 mb-6" data-testid="ai-sources-section">
+                <h3 className="text-lg font-semibold text-stone-700 mb-2">{t('ai.disclaimer.settingsToggleTitle')}</h3>
+                <p className="text-sm text-stone-500 mb-4">{t('ai.disclaimer.settingsToggleHint')}</p>
+
+                {aiSourcesSuccess && (
+                  <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm" data-testid="ai-sources-saved-banner">
+                    {aiSourcesSuccess}
+                  </div>
+                )}
+
+                <form onSubmit={handleSaveAiSources}>
+                  <ToggleSwitch
+                    id="show_ai_sources"
+                    label={t('ai.disclaimer.settingsToggleLabel')}
+                    checked={showAiSources}
+                    onChange={(v) => setShowAiSources(v)}
+                  />
+                  <div className="pt-4">
+                    <button
+                      type="submit"
+                      disabled={savingAiSources}
+                      data-testid="ai-sources-save-btn"
+                      className="px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                    >
+                      {savingAiSources && <LoadingSpinner size={16} className="mr-2" />}
+                      {savingAiSources ? t('settings.saving') : t('ai.disclaimer.settingsToggleSave')}
                     </button>
                   </div>
                 </form>

@@ -4,6 +4,9 @@ import { useTranslation } from 'react-i18next';
 import { formatUserDate } from '../utils/formatDate';
 import AudioPlayer from '../components/AudioPlayer';
 import AssignmentsPanel from '../components/AssignmentsPanel';
+// T-26: AI source disclaimer block rendered under the summary when the AI
+// pipeline pulled passages from the therapist's personal KB (T-09 RAG).
+import AiSourceDisclaimer from '../components/AiSourceDisclaimer';
 
 const API = '/api';
 
@@ -15,6 +18,11 @@ function SessionDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const token = localStorage.getItem('token');
+
+  // T-26: therapist's `show_ai_sources` preference. Fetched once on mount;
+  // defaults to true (transparency on) so the disclaimer renders unless the
+  // therapist has explicitly hidden it via Settings.
+  const [showAiSources, setShowAiSources] = useState(true);
 
   // T-15: post-session therapist notes ("на что обратить внимание в следующий раз")
   // Therapist-only field. Voice -> transcription -> textarea, then save via PATCH.
@@ -76,8 +84,27 @@ function SessionDetail() {
       return;
     }
     fetchSession();
+    fetchShowAiSourcesPreference();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // T-26: read the therapist's transparency toggle so we know whether to render
+  // the AI source disclaimer next to the summary. Treat a missing field or
+  // failed fetch as "show" (transparency-on by default).
+  async function fetchShowAiSourcesPreference() {
+    try {
+      const res = await fetch(`${API}/settings/profile`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data && data.profile && Object.prototype.hasOwnProperty.call(data.profile, 'show_ai_sources')) {
+        setShowAiSources(!!data.profile.show_ai_sources);
+      }
+    } catch (_) {
+      // Default to true on any error — transparency-on is the safer fallback.
+    }
+  }
 
   // Make sure we release the microphone if the component unmounts mid-recording.
   useEffect(() => {
@@ -722,6 +749,19 @@ function SessionDetail() {
                 <p className="text-stone-500 text-sm">{t('sessionDetail.summaryDecryptFail')}</p>
               ) : (
                 <p className="text-stone-400">{t('sessionDetail.noSummaryYet')}</p>
+              )}
+
+              {/* T-26: AI source disclaimer. Renders whenever the summary was
+                  generated with KB hits (summary_kb_sources is non-empty) and
+                  the therapist hasn't disabled the transparency toggle. */}
+              {session.has_summary && session.summary && (
+                <AiSourceDisclaimer
+                  sources={Array.isArray(session.summary_kb_sources) ? session.summary_kb_sources : []}
+                  aiGenerated={Array.isArray(session.summary_kb_sources) && session.summary_kb_sources.length > 0}
+                  variant="summary"
+                  testIdPrefix="session-summary-ai-sources"
+                  enabled={showAiSources}
+                />
               )}
             </div>
 

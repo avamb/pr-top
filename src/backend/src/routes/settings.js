@@ -27,7 +27,7 @@ router.get('/profile', authenticate, (req, res) => {
   try {
     const db = getDatabase();
     const result = db.exec(
-      'SELECT id, email, role, language, timezone, created_at, escalation_preferences, first_name, last_name, phone, telegram_username, other_info, reminders_enabled_default FROM users WHERE id = ?',
+      'SELECT id, email, role, language, timezone, created_at, escalation_preferences, first_name, last_name, phone, telegram_username, other_info, reminders_enabled_default, show_ai_sources FROM users WHERE id = ?',
       [req.user.id]
     );
 
@@ -61,7 +61,12 @@ router.get('/profile', authenticate, (req, res) => {
         other_info: user[11] || '',
         // T-16: Optional reminders toggle (per-therapist default).
         // Stored as INTEGER 0/1; expose to clients as a boolean.
-        reminders_enabled_default: user[12] === 1 || user[12] === true
+        reminders_enabled_default: user[12] === 1 || user[12] === true,
+        // T-26: AI source disclaimer toggle. 1 = show "Sources used" block in
+        // summary / exercise UI (default), 0 = hide. Always a boolean over the wire.
+        // Treat any non-zero (or NULL == defaults to 1) value as true so an
+        // unbackfilled row still defaults to transparency-on for the UI.
+        show_ai_sources: user[13] === null || user[13] === undefined ? true : (user[13] === 1 || user[13] === true)
       }
     });
   } catch (error) {
@@ -73,7 +78,7 @@ router.get('/profile', authenticate, (req, res) => {
 // PUT /api/settings/profile - Update user profile settings
 router.put('/profile', authenticate, (req, res) => {
   try {
-    const { language, timezone, first_name, last_name, phone, telegram_username, other_info, reminders_enabled_default } = req.body;
+    const { language, timezone, first_name, last_name, phone, telegram_username, other_info, reminders_enabled_default, show_ai_sources } = req.body;
     const db = getDatabase();
 
     // Validate language
@@ -151,6 +156,20 @@ router.put('/profile', authenticate, (req, res) => {
       params.push(reminders_enabled_default ? 1 : 0);
     }
 
+    // T-26: AI source disclaimer toggle — therapist controls whether the
+    // "Generated with AI based on: <sources>" block is rendered in the UI.
+    // Persisted as INTEGER 0/1; the underlying source data is always written
+    // by the generation pipeline so flipping this toggle on retroactively
+    // brings the disclaimer back without re-running summarization.
+    if (show_ai_sources !== undefined) {
+      if (typeof show_ai_sources !== 'boolean'
+          && show_ai_sources !== 0 && show_ai_sources !== 1) {
+        return res.status(400).json({ error: 'show_ai_sources must be a boolean' });
+      }
+      updates.push('show_ai_sources = ?');
+      params.push(show_ai_sources ? 1 : 0);
+    }
+
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No valid fields to update' });
     }
@@ -164,7 +183,7 @@ router.put('/profile', authenticate, (req, res) => {
 
     // Return updated profile
     const result = db.exec(
-      'SELECT id, email, role, language, timezone, created_at, escalation_preferences, first_name, last_name, phone, telegram_username, other_info, reminders_enabled_default FROM users WHERE id = ?',
+      'SELECT id, email, role, language, timezone, created_at, escalation_preferences, first_name, last_name, phone, telegram_username, other_info, reminders_enabled_default, show_ai_sources FROM users WHERE id = ?',
       [req.user.id]
     );
 
@@ -193,7 +212,9 @@ router.put('/profile', authenticate, (req, res) => {
         phone: user[9] || '',
         telegram_username: user[10] || '',
         other_info: user[11] || '',
-        reminders_enabled_default: user[12] === 1 || user[12] === true
+        reminders_enabled_default: user[12] === 1 || user[12] === true,
+        // T-26: AI source disclaimer toggle (see GET handler comment).
+        show_ai_sources: user[13] === null || user[13] === undefined ? true : (user[13] === 1 || user[13] === true)
       }
     });
   } catch (error) {

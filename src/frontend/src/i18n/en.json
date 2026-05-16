@@ -1,5 +1,26 @@
 {
   "brand": "PR-TOP",
+  "ai": {
+    "disclaimer": {
+      "generatedWithAi": "Generated with AI",
+      "basedOn": "based on",
+      "sourcesUsed": "Sources used",
+      "showSources": "Show sources",
+      "hideSources": "Hide sources",
+      "noSources": "No sources from your library were used for this generation.",
+      "sourceLabel": "Source",
+      "fromLibrary": "from your library",
+      "similarity": "match",
+      "exerciseGenerated": "This exercise was generated with AI assistance.",
+      "summaryGenerated": "This summary was generated with AI assistance.",
+      "transparencyNote": "Sources are listed for transparency. You can hide this block in Settings.",
+      "settingsToggleTitle": "Show AI sources",
+      "settingsToggleLabel": "Show \"Sources used\" disclaimers next to AI-generated summaries and exercises",
+      "settingsToggleHint": "When enabled, AI-generated content shows which items from your personal knowledge base were used. Toggle off to hide the block (the data is still stored).",
+      "settingsToggleSave": "Save preference",
+      "settingsToggleSaved": "AI sources preference saved"
+    }
+  },
   "exercise": {
     "templateBadge": "Template",
     "templateTooltip": "This is a formatting example. You can use it or create your own exercise in My Exercises.",

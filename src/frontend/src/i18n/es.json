@@ -1,5 +1,26 @@
 {
   "brand": "PR-TOP",
+  "ai": {
+    "disclaimer": {
+      "generatedWithAi": "Generado con IA",
+      "basedOn": "basado en",
+      "sourcesUsed": "Fuentes utilizadas",
+      "showSources": "Mostrar fuentes",
+      "hideSources": "Ocultar fuentes",
+      "noSources": "No se usaron materiales de tu biblioteca para esta generación.",
+      "sourceLabel": "Fuente",
+      "fromLibrary": "de tu biblioteca",
+      "similarity": "coincidencia",
+      "exerciseGenerated": "Este ejercicio fue generado con asistencia de IA.",
+      "summaryGenerated": "Este resumen fue generado con asistencia de IA.",
+      "transparencyNote": "Las fuentes se muestran por transparencia. Puedes ocultar este bloque en Ajustes.",
+      "settingsToggleTitle": "Mostrar fuentes de IA",
+      "settingsToggleLabel": "Mostrar el bloque «Fuentes utilizadas» junto a resúmenes y ejercicios generados con IA",
+      "settingsToggleHint": "Cuando está activado, el contenido generado con IA muestra qué materiales de tu base de conocimientos personal se utilizaron. Desactívalo para ocultar el bloque (los datos se conservan).",
+      "settingsToggleSave": "Guardar preferencia",
+      "settingsToggleSaved": "Preferencia de fuentes de IA guardada"
+    }
+  },
   "exercise": {
     "templateBadge": "Plantilla",
     "templateTooltip": "Este es un ejemplo de formato. Puedes usarlo o crear tu propio ejercicio en Mis Ejercicios.",

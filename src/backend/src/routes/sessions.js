@@ -247,7 +247,8 @@ router.get('/:id', authenticate, requireRole('therapist', 'superadmin'), async (
       `SELECT id, therapist_id, client_id, audio_ref, transcript_encrypted, summary_encrypted,
               encryption_key_id, payload_version, status, scheduled_at, created_at, updated_at,
               title, inquiry_id, post_session_notes_encrypted,
-              recording_mode, selected_speaker_label, speaker_segments_json
+              recording_mode, selected_speaker_label, speaker_segments_json,
+              summary_kb_sources_json
        FROM sessions WHERE id = ?`,
       [sessionId]
     );
@@ -333,6 +334,23 @@ router.get('/:id', authenticate, requireRole('therapist', 'superadmin'), async (
       } catch (e) {
         session.summary = null;
         session.summary_error = 'Decryption failed';
+      }
+    }
+
+    // T-26: parse KB attribution JSON so the UI can render the
+    // "Generated with AI based on: <sources>" disclaimer next to the summary.
+    // Class B metadata (kb_id, title, chunk_id, similarity) — never includes
+    // the underlying chunk text, which stays in the kb tables and is only
+    // re-fetched if the therapist clicks through to the source.
+    session.summary_kb_sources = [];
+    if (row[18]) {
+      try {
+        const parsed = JSON.parse(row[18]);
+        if (Array.isArray(parsed)) {
+          session.summary_kb_sources = parsed;
+        }
+      } catch (e) {
+        logger.warn(`Failed to parse summary_kb_sources_json for session ${sessionId}: ${e.message}`);
       }
     }
 

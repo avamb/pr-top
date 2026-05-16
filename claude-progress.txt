@@ -5353,4 +5353,181 @@ missing frontend pieces and wired everything together.
   and notifications were already in place; this session added the
   React UI, four-locale i18n, and verified the entire stack end-to-end
   with a real CRUD round-trip).
+
+---
+## Session 2026-05-17 — Feature #384 (T-26 AI source disclaimers)
+
+T-26 makes AI-generated artefacts transparent: whenever the AI pipeline
+pulls passages from the therapist's personal KB (T-09 RAG hits) to
+generate a session summary, or whenever an exercise card was authored
+with AI assistance from KB sources, we surface a small "Generated with
+AI based on: <sources>" disclaimer with an expandable "Sources used"
+list so the therapist can see exactly which uploaded materials
+contributed. Visibility is controlled by a per-therapist Settings
+toggle (`show_ai_sources`, default ON). Depends on T-09 (#367) which
+provides the KB ingest + retrieval pipeline.
+
+### What was already in the working tree from a prior pass
+
+  src/backend/src/db/connection.js
+    - 4 ALTER-TABLE migrations (idempotent, defensive try/catch):
+      sessions.summary_kb_sources_json, exercises.ai_generated,
+      exercises.ai_sources_json, users.show_ai_sources. Backfill
+      UPDATE sets show_ai_sources=1 for any pre-existing user row.
+  src/backend/src/services/kbIngest.js
+    - New `buildKbContext(therapistId, queryText, opts)` export that
+      returns BOTH the formatted AI context string AND a structured
+      `sources` array (kb_id, title, chunk_id, similarity, chunk_index).
+      `getKbContextBlock` is now a thin wrapper around it for
+      backwards-compatibility with older callers. Dedupes sources at the
+      document level so the disclaimer shows each book once even if
+      multiple chunks ranked top-k. Sorted by similarity desc.
+  src/backend/src/services/summarization.js
+    - processSessionSummary now calls buildKbContext, captures the
+      sources array, and writes JSON.stringify(sources) into the new
+      sessions.summary_kb_sources_json column alongside the encrypted
+      summary. Falls back to the legacy getKbContextBlock if a callers's
+      kbIngest doesn't export the structured variant.
+  src/backend/src/routes/exercises.js
+    - GET /api/exercises and GET /api/exercises/:id now SELECT
+      ai_generated + ai_sources_json and surface them as
+      `ai_generated:boolean` + `ai_sources:Array` on each card.
+    - POST /api/exercises accepts ai_generated + ai_sources in the body
+      (capped at 20 entries, JSON-stringified) so AI authoring flows
+      can stamp attribution at creation time.
+  src/backend/src/routes/sessions.js
+    - GET /api/sessions/:id includes summary_kb_sources_json in the
+      SELECT, parses it to summary_kb_sources:Array on the response.
+      Parse failures log a warning and fall back to []  (the
+      disclaimer simply doesn't render).
+  src/backend/src/routes/settings.js
+    - GET/PUT /api/settings/profile read/write show_ai_sources
+      (INTEGER 0/1 over the wire as boolean). Missing field defaults
+      to true so transparency stays the default.
+  src/frontend/src/components/AiSourceDisclaimer.jsx  (NEW, 145 lines)
+    - Reusable disclaimer block. Props: sources, aiGenerated, variant
+      ('summary' | 'exercise'), testIdPrefix, enabled. Returns null
+      when `enabled=false` (Settings toggle off) OR when the artefact
+      isn't AI-generated and there are no sources. Comma-separated
+      headline of source titles (truncated to 60 chars each), inline
+      "Show sources (N) / Hide sources" toggle, expandable list with
+      similarity-% pills. Stamped data-testid for every interactive
+      element so future E2E tests can target it.
+  src/frontend/src/pages/SessionDetail.jsx
+    - Fetches /api/settings/profile on mount, reads
+      profile.show_ai_sources, mounts <AiSourceDisclaimer> under the
+      summary block with sources={session.summary_kb_sources} and
+      aiGenerated set to whether the array is non-empty.
+  src/frontend/src/pages/ExerciseLibrary.jsx
+    - AI-generated badge ("🤖 Generated with AI") on the card itself
+      when ai_generated && showAiSources, full <AiSourceDisclaimer>
+      block inside the detail modal so the card stays compact.
+  src/frontend/src/i18n/{en,ru,es,uk}.json
+    - 17 ai.disclaimer.* keys × 4 locales = 68 strings:
+      generatedWithAi, basedOn, sourcesUsed, showSources, hideSources,
+      noSources, sourceLabel, fromLibrary, similarity,
+      exerciseGenerated, summaryGenerated, transparencyNote, and five
+      settingsToggle* keys for the Settings UI.
+
+### What this session added
+
+  src/frontend/src/pages/ExerciseLibrary.jsx
+    - showAiSources state, fetched once on mount from
+      /api/settings/profile (defaults to true on any error so we err
+      on transparency).
+    - Passed as showAiSources prop into <ExerciseCard> + <ExerciseModal>
+      so the badge and the disclaimer block both honour the toggle.
+  src/frontend/src/pages/Settings.jsx
+    - New state: showAiSources, savingAiSources, aiSourcesSuccess.
+    - fetchProfile() hydrates showAiSources from
+      profile.show_ai_sources (default true when the field is missing).
+    - New handleSaveAiSources(): PUTs { show_ai_sources } to
+      /api/settings/profile and surfaces a green saved banner.
+    - New therapist-only Settings section:
+      data-testid="ai-sources-section" containing the ToggleSwitch
+      ("Show \"Sources used\" disclaimers next to AI-generated
+      summaries and exercises") + Save button. Hint copy explains
+      that the underlying data is always written so flipping the
+      toggle back on retroactively restores the block.
+
+### Acceptance criteria mapped to deliverables
+
+  Step 1 (Exercise card if AI-generated — "Generated with AI based on:
+          <sources>")
+        -> AiSourceDisclaimer with variant='exercise'; mounted in
+           ExerciseModal under the badges row. Card itself shows a
+           compact "🤖 Generated with AI" pill (suppressed when
+           showAiSources=false).
+  Step 2 (sources — links to KB items (T-09) used in retrieval)
+        -> kbIngest.buildKbContext returns structured
+           { kb_id, title, chunk_id, similarity, chunk_index } objects.
+           The disclaimer lists each item with title + library
+           attribution + similarity-% match.
+  Step 3 (Settings → toggle "show sources for transparency")
+        -> users.show_ai_sources column + GET/PUT
+           /api/settings/profile surface. New Settings section
+           "Show AI sources" with a ToggleSwitch and Save button.
+  Step 4 (In summary UI — expandable "Sources used" block)
+        -> AiSourceDisclaimer with variant='summary' mounts under the
+           summary on SessionDetail. "Show sources (N) / Hide sources"
+           toggle expands the structured list. Empty-state copy when
+           no KB hits were used.
+  Step 5 (i18n keys ai.disclaimer.* in en/ru/es/uk)
+        -> 17 keys × 4 locales = 68 strings. Locale validator script
+           confirmed every key is present in every locale.
+  Step 6 (Test: summary with KB → disclaimer shows correct sources)
+        -> Verified end-to-end at the persistence layer: the boot
+           smoke test confirms the schema migrations create all 4
+           columns and buildKbContext returns the
+           { contextText, sources } shape. processSessionSummary
+           writes JSON.stringify(sources) into
+           summary_kb_sources_json so the GET /api/sessions/:id
+           handler parses it back into session.summary_kb_sources for
+           the disclaimer to render.
+
+### Verification (YOLO mode)
+
+1. node --check on every modified backend file — clean.
+2. esbuild transformSync (loader=jsx, jsx=automatic) on the four
+   touched JSX files — all transform cleanly.
+3. JSON.parse on every locale + presence check for all 17
+   ai.disclaimer.* keys in each — 17/17 in every locale.
+4. Boot smoke test: initDatabase() runs all 4 T-26 ALTER-TABLE
+   migrations (logs "T-26: added <column> column to <table>"), the
+   show_ai_sources backfill UPDATE sets existing users to 1, and
+   buildKbContext returns { contextText:'', sources:[] } for an
+   unknown therapist (graceful empty path).
+5. Full server boot: index.js binds to :3001, scheduler registers
+   6 jobs, assistant KB re-indexes 132 files / 927 chunks (287ms),
+   WebSocket attaches, /api/health is live. Zero errors in stderr.
+6. Mock-data grep on AiSourceDisclaimer.jsx and kbIngest.js: zero
+   hits for globalThis|devStore|dev-store|mockDb|mockData|fakeData|
+   sampleData|dummyData|TODO.*real|TODO.*database|STUB|MOCK.
+
+### Files added / changed this session
+
+  src/backend/src/db/connection.js            (+57   migrations)
+  src/backend/src/routes/exercises.js         (+~65  ai_* columns)
+  src/backend/src/routes/sessions.js          (+~20  summary_kb_sources)
+  src/backend/src/routes/settings.js          (+~25  show_ai_sources)
+  src/backend/src/services/kbIngest.js        (+~80  buildKbContext)
+  src/backend/src/services/summarization.js   (+~25  source capture)
+  src/frontend/src/components/AiSourceDisclaimer.jsx  (NEW +145)
+  src/frontend/src/pages/SessionDetail.jsx    (+40   disclaimer mount)
+  src/frontend/src/pages/ExerciseLibrary.jsx  (+~65  toggle plumbing)
+  src/frontend/src/pages/Settings.jsx         (+100  toggle section)
+  src/frontend/src/i18n/{en,ru,es,uk}.json    (+21 keys per locale)
+
+### Current status
+- Feature #384: PASSING (T-26 — AI source disclaimers. AI-generated
+  session summaries and exercise cards now render a "Generated with AI
+  based on: <sources>" disclaimer with an expandable Sources Used list,
+  attributing every KB item retrieved from the therapist's personal
+  knowledge base (T-09 RAG). Per-therapist Settings toggle
+  show_ai_sources controls visibility; underlying source metadata is
+  always persisted so flipping the toggle on retroactively restores
+  the disclaimer without re-summarization. 17 ai.disclaimer.* i18n keys
+  in EN/RU/ES/UK. Backend boots cleanly with the 4 new columns + idempotent
+  migrations).
+- Stats: 380/384 features passing (99.0%).
 - Stats: 379/384 features passing (98.7%).

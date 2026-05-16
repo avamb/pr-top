@@ -500,18 +500,32 @@ async function processSessionSummary(sessionId) {
       logger.warn(`Could not load summary specialization for therapist ${therapistId}: ${e.message}`);
     }
 
-    // T-09: enrich context with top-k chunks from the therapist's personal
-    // knowledge base (RAG). The KB is therapist-wide so we use the transcript
-    // itself as the retrieval query — that surfaces passages that share
-    // terminology with what was discussed in this session. Failures are
-    // non-fatal — the summary continues with no KB block.
+    // T-09 + T-26: enrich context with top-k chunks from the therapist's
+    // personal knowledge base (RAG). The KB is therapist-wide so we use the
+    // transcript itself as the retrieval query — that surfaces passages that
+    // share terminology with what was discussed in this session. Failures
+    // are non-fatal — the summary continues with no KB block.
+    //
+    // T-26 also captures the structured `sources` array (kb_id, title, chunk_id)
+    // so we can persist it next to the encrypted summary and render the
+    // "Generated with AI based on: <sources>" disclaimer in the UI.
+    let kbSources = [];
     try {
       const kb = getKbService();
-      if (kb && typeof kb.getKbContextBlock === 'function') {
+      if (kb && typeof kb.buildKbContext === 'function') {
+        const built = kb.buildKbContext(therapistId, transcript, { limit: 5 });
+        if (built && built.contextText && built.contextText.length > 0) {
+          context.kb_context = built.contextText;
+          kbSources = Array.isArray(built.sources) ? built.sources : [];
+          logger.info(`KB context attached to session ${sessionId} summary (${built.contextText.length} chars, ${kbSources.length} sources)`);
+        }
+      } else if (kb && typeof kb.getKbContextBlock === 'function') {
+        // Backwards compatibility: older KB service exports only the string
+        // builder. We still get the AI context, just no structured sources.
         const kbBlock = kb.getKbContextBlock(therapistId, transcript, { limit: 5 });
         if (kbBlock && kbBlock.length > 0) {
           context.kb_context = kbBlock;
-          logger.info(`KB context attached to session ${sessionId} summary (${kbBlock.length} chars)`);
+          logger.info(`KB context attached to session ${sessionId} summary (${kbBlock.length} chars, sources unavailable)`);
         }
       }
     } catch (kbErr) {
@@ -533,13 +547,21 @@ async function processSessionSummary(sessionId) {
     // Encrypt the summary (Class A data)
     const { encrypted: summaryEncrypted, keyVersion, keyId } = encrypt(summary);
 
+    // T-26: persist KB attribution (Class B plaintext JSON) alongside the
+    // encrypted summary so the UI can render the "Generated with AI based on"
+    // disclaimer with the exact sources retrieved at generation time. We
+    // explicitly clear the column when no sources were used so a re-summary
+    // run without KB doesn't leave stale attribution from an earlier run.
+    const sourcesJson = kbSources.length > 0 ? JSON.stringify(kbSources) : null;
+
     // Store encrypted summary
     db.run(
       `UPDATE sessions
        SET summary_encrypted = ?, encryption_key_id = ?, payload_version = ?,
+           summary_kb_sources_json = ?,
            status = 'complete', updated_at = datetime('now')
        WHERE id = ?`,
-      [summaryEncrypted, keyId, keyVersion, sessionId]
+      [summaryEncrypted, keyId, keyVersion, sourcesJson, sessionId]
     );
 
     // Audit log

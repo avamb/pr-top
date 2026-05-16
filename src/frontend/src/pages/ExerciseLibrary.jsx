@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useCsrfToken } from '../hooks/useCsrfToken';
+// T-26: AI source disclaimer block. Renders on exercise cards/modals when the
+// exercise was generated with AI assistance, optionally listing KB sources.
+import AiSourceDisclaimer from '../components/AiSourceDisclaimer';
 
 const API_URL = '/api';
 
@@ -75,10 +78,14 @@ function isTemplateExercise(exercise) {
   return exercise.is_custom === 0;
 }
 
-function ExerciseCard({ exercise, onClick, lang, t, onEdit, onDelete, showActions }) {
+function ExerciseCard({ exercise, onClick, lang, t, onEdit, onDelete, showActions, showAiSources }) {
   const title = getLocalizedField(exercise, 'title', lang);
   const description = getLocalizedField(exercise, 'description', lang);
   const isTemplate = isTemplateExercise(exercise);
+  // T-26: render the AI badge inline next to the title when the exercise was
+  // produced by an AI flow. The expandable source list lives on the modal
+  // (full detail view) to keep the card compact.
+  const aiGenerated = !!exercise.ai_generated;
   return (
     <div
       className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer relative"
@@ -92,6 +99,18 @@ function ExerciseCard({ exercise, onClick, lang, t, onEdit, onDelete, showAction
             {exercise.is_custom === 1 && (
               <span className="text-xs px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded-full font-medium shrink-0">
                 {t('exerciseLibrary.myBadge')}
+              </span>
+            )}
+            {/* T-26: AI-generated badge — purely visual, the full disclaimer
+                with sources lives on the detail modal. Suppressed when the
+                therapist has hidden AI source disclosures in Settings. */}
+            {aiGenerated && showAiSources && (
+              <span
+                className="text-xs px-1.5 py-0.5 bg-violet-100 text-violet-700 rounded-full font-medium shrink-0"
+                data-testid={`exercise-ai-badge-${exercise.id}`}
+                title={t('ai.disclaimer.exerciseGenerated', 'This exercise was generated with AI assistance.')}
+              >
+                🤖 {t('ai.disclaimer.generatedWithAi', 'Generated with AI')}
               </span>
             )}
           </div>
@@ -126,13 +145,16 @@ function ExerciseCard({ exercise, onClick, lang, t, onEdit, onDelete, showAction
   );
 }
 
-function ExerciseModal({ exercise, onClose, t, lang }) {
+function ExerciseModal({ exercise, onClose, t, lang, showAiSources }) {
   if (!exercise) return null;
 
   const title = getLocalizedField(exercise, 'title', lang);
   const description = getLocalizedField(exercise, 'description', lang);
   const instructions = getLocalizedField(exercise, 'instructions', lang);
   const isTemplate = isTemplateExercise(exercise);
+  // T-26: structured AI metadata so the disclaimer can show sources.
+  const aiSources = Array.isArray(exercise.ai_sources) ? exercise.ai_sources : [];
+  const aiGenerated = !!exercise.ai_generated;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -174,6 +196,19 @@ function ExerciseModal({ exercise, onClose, t, lang }) {
           <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm" data-testid="template-notice">
             {t('exercise.templateTooltip')}
           </div>
+        )}
+
+        {/* T-26: AI source disclaimer with expandable "Sources used" block.
+            Renders when the exercise is AI-generated (with or without KB hits)
+            and the therapist's show_ai_sources preference is on. */}
+        {aiGenerated && (
+          <AiSourceDisclaimer
+            sources={aiSources}
+            aiGenerated={aiGenerated}
+            variant="exercise"
+            testIdPrefix={`exercise-ai-sources-${exercise.id}`}
+            enabled={showAiSources}
+          />
         )}
 
         <div className="mb-4">
@@ -470,6 +505,12 @@ function ExerciseLibrary() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
 
+  // T-26: therapist's `show_ai_sources` profile preference. Used to suppress
+  // the AI source disclaimer badge on cards and the expandable Sources block
+  // in the modal. Defaults to true (transparency on) and is fetched once on
+  // mount; any error keeps the disclaimer visible (the safer default).
+  const [showAiSources, setShowAiSources] = useState(true);
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -478,6 +519,28 @@ function ExerciseLibrary() {
     }
     fetchExercises(token);
   }, [selectedCategory, lang, activeView]);
+
+  // T-26: pull the therapist's transparency preference once on mount.
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/settings/profile`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (data && data.profile && Object.prototype.hasOwnProperty.call(data.profile, 'show_ai_sources')) {
+          if (!cancelled) setShowAiSources(!!data.profile.show_ai_sources);
+        }
+      } catch (_) {
+        // Default to true on any error — transparency-on is the safer fallback.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   async function fetchExercises(tokenArg) {
     const token = tokenArg || localStorage.getItem('token');
@@ -718,6 +781,7 @@ function ExerciseLibrary() {
                   onEdit={handleEdit}
                   onDelete={handleDelete}
                   showActions={activeView === 'my'}
+                  showAiSources={showAiSources}
                 />
               ))}
             </div>
@@ -731,6 +795,7 @@ function ExerciseLibrary() {
         onClose={() => setSelectedExercise(null)}
         t={t}
         lang={lang}
+        showAiSources={showAiSources}
       />
 
       {/* Create/Edit form modal */}

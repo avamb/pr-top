@@ -177,19 +177,19 @@ router.get('/', requireAuth, (req, res) => {
     if (filter === 'my') {
       // Return only therapist's own custom exercises
       if (category) {
-        query = "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, updated_at FROM exercises WHERE therapist_id = ? AND is_custom = 1 AND category = ? ORDER BY category, id";
+        query = "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, updated_at, ai_generated, ai_sources_json FROM exercises WHERE therapist_id = ? AND is_custom = 1 AND category = ? ORDER BY category, id";
         params = [req.user.id, category];
       } else {
-        query = "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, updated_at FROM exercises WHERE therapist_id = ? AND is_custom = 1 ORDER BY category, id";
+        query = "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, updated_at, ai_generated, ai_sources_json FROM exercises WHERE therapist_id = ? AND is_custom = 1 ORDER BY category, id";
         params = [req.user.id];
       }
     } else if (category) {
       // Filter by category: system exercises + own custom exercises
-      query = "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, updated_at FROM exercises WHERE category = ? AND (is_custom = 0 OR therapist_id = ?) ORDER BY category, id";
+      query = "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, updated_at, ai_generated, ai_sources_json FROM exercises WHERE category = ? AND (is_custom = 0 OR therapist_id = ?) ORDER BY category, id";
       params = [category, req.user.id];
     } else {
       // Default: all system exercises + own custom exercises
-      query = "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, updated_at FROM exercises WHERE is_custom = 0 OR therapist_id = ? ORDER BY category, id";
+      query = "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, updated_at, ai_generated, ai_sources_json FROM exercises WHERE is_custom = 0 OR therapist_id = ? ORDER BY category, id";
       params = [req.user.id];
     }
 
@@ -210,6 +210,21 @@ router.get('/', requireAuth, (req, res) => {
 
       // Add is_own boolean: true if this exercise belongs to the requesting therapist
       obj.is_own = obj.therapist_id === req.user.id;
+
+      // T-26: normalise AI-source metadata so the UI never has to parse JSON
+      // itself. ai_generated is always a boolean; ai_sources is always an array
+      // (possibly empty). The original JSON column stays available on
+      // obj.ai_sources_json for callers that need the raw blob.
+      obj.ai_generated = obj.ai_generated === 1 || obj.ai_generated === true;
+      obj.ai_sources = [];
+      if (obj.ai_sources_json) {
+        try {
+          const parsed = JSON.parse(obj.ai_sources_json);
+          if (Array.isArray(parsed)) obj.ai_sources = parsed;
+        } catch (_) {
+          obj.ai_sources = [];
+        }
+      }
 
       // If language specified, add convenience fields with localized content
       if (lang) {
@@ -259,7 +274,7 @@ router.get('/categories', requireAuth, (req, res) => {
 router.get('/:id', requireAuth, (req, res) => {
   try {
     const db = getDatabase();
-    const results = db.exec("SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at FROM exercises WHERE id = ?", [req.params.id]);
+    const results = db.exec("SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, ai_generated, ai_sources_json FROM exercises WHERE id = ?", [req.params.id]);
 
     if (!results.length || !results[0].values.length) {
       return res.status(404).json({ error: 'Exercise not found' });
@@ -272,6 +287,19 @@ router.get('/:id', requireAuth, (req, res) => {
 
     // Add is_own boolean
     exercise.is_own = exercise.therapist_id === req.user.id;
+
+    // T-26: normalise AI-source metadata on the single-exercise endpoint too
+    // (mirrors the list endpoint above).
+    exercise.ai_generated = exercise.ai_generated === 1 || exercise.ai_generated === true;
+    exercise.ai_sources = [];
+    if (exercise.ai_sources_json) {
+      try {
+        const parsed = JSON.parse(exercise.ai_sources_json);
+        if (Array.isArray(parsed)) exercise.ai_sources = parsed;
+      } catch (_) {
+        exercise.ai_sources = [];
+      }
+    }
 
     // Support language parameter
     const { language } = req.query;
@@ -297,7 +325,12 @@ router.post('/', requireAuth, (req, res) => {
     const {
       category, title_ru, title_en, title_es, title_uk,
       description_ru, description_en, description_es, description_uk,
-      instructions_ru, instructions_en, instructions_es, instructions_uk
+      instructions_ru, instructions_en, instructions_es, instructions_uk,
+      // T-26: optional AI authoring metadata. When the exercise was generated
+      // by an AI flow (with or without KB sources), the caller passes
+      // ai_generated=true and an optional ai_sources array of
+      // { kb_id, title, chunk_id, similarity } objects.
+      ai_generated, ai_sources
     } = req.body;
 
     // Validate: at least one title required
@@ -324,16 +357,34 @@ router.post('/', requireAuth, (req, res) => {
       return res.status(403).json({ error: 'Only therapists can create exercises' });
     }
 
+    // T-26: validate AI metadata. ai_generated coerces to 0/1; ai_sources must
+    // be an array (each entry just needs to be JSON-serialisable). Sources
+    // beyond a sensible cap are dropped to keep the row light.
+    const aiGeneratedFlag = (ai_generated === true || ai_generated === 1 || ai_generated === '1') ? 1 : 0;
+    let aiSourcesJson = null;
+    if (Array.isArray(ai_sources) && ai_sources.length > 0) {
+      const capped = ai_sources.slice(0, 20);
+      try {
+        aiSourcesJson = JSON.stringify(capped);
+      } catch (_) {
+        aiSourcesJson = null;
+      }
+    }
+
     // T-13: custom therapist exercises are NOT templates — is_template=0
+    // T-26: persist ai_generated + ai_sources_json so the UI can render the
+    // "Generated with AI based on: <sources>" disclaimer on the card.
     db.run(
-      `INSERT INTO exercises (category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, datetime('now'), datetime('now'))`,
+      `INSERT INTO exercises (category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, ai_generated, ai_sources_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, datetime('now'), datetime('now'))`,
       [
         category,
         title_ru || null, title_en || null, title_es || null, title_uk || null,
         description_ru || null, description_en || null, description_es || null, description_uk || null,
         instructions_ru || null, instructions_en || null, instructions_es || null, instructions_uk || null,
-        req.user.id
+        req.user.id,
+        aiGeneratedFlag,
+        aiSourcesJson
       ]
     );
 
@@ -353,7 +404,7 @@ router.post('/', requireAuth, (req, res) => {
 
     // Return the created exercise
     const results = db.exec(
-      "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, updated_at FROM exercises WHERE id = ?",
+      "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, updated_at, ai_generated, ai_sources_json FROM exercises WHERE id = ?",
       [exerciseId]
     );
     const columns = results[0].columns;
@@ -361,6 +412,18 @@ router.post('/', requireAuth, (req, res) => {
     const exercise = {};
     columns.forEach((col, i) => { exercise[col] = row[i]; });
     exercise.is_own = true;
+
+    // T-26: normalise AI source metadata on the returned exercise
+    exercise.ai_generated = exercise.ai_generated === 1 || exercise.ai_generated === true;
+    exercise.ai_sources = [];
+    if (exercise.ai_sources_json) {
+      try {
+        const parsed = JSON.parse(exercise.ai_sources_json);
+        if (Array.isArray(parsed)) exercise.ai_sources = parsed;
+      } catch (_) {
+        exercise.ai_sources = [];
+      }
+    }
 
     res.status(201).json({ message: 'Exercise created successfully', exercise });
   } catch (error) {
@@ -445,7 +508,7 @@ router.put('/:id', requireAuth, (req, res) => {
 
     // Return updated exercise
     const updated = db.exec(
-      "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, updated_at FROM exercises WHERE id = ?",
+      "SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, updated_at, ai_generated, ai_sources_json FROM exercises WHERE id = ?",
       [exerciseId]
     );
     const columns = updated[0].columns;

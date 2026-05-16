@@ -1611,6 +1611,63 @@ function applySchema(db) {
   db.run('CREATE INDEX IF NOT EXISTS idx_assignments_client_status ON assignments(client_id, status)');
   db.run('CREATE INDEX IF NOT EXISTS idx_assignments_exercise ON assignments(exercise_id)');
 
+  // T-26: AI source disclaimers.
+  // When AI summarizes a session using the therapist's personal knowledge base
+  // (T-09 RAG hits), or when an exercise card is generated with AI assistance
+  // from KB sources, we must surface a disclaimer with attribution so the
+  // therapist can see exactly which uploaded materials contributed.
+  //
+  // Storage strategy: a small JSON blob per record holding the list of
+  // KB items that were retrieved at generation time. Class B (plaintext
+  // metadata: kb_id, title, chunk_id, similarity); the underlying KB
+  // documents themselves are never re-shared via this column.
+  //
+  // - sessions.summary_kb_sources_json: JSON array of
+  //   { kb_id, title, chunk_id, similarity } populated by processSessionSummary
+  //   when getKbContextBlock returns hits. Null/empty when no KB was used
+  //   (legacy summaries OR summaries generated without an uploaded library).
+  // - exercises.ai_generated: 0/1 flag set when the exercise was produced
+  //   by an AI-assisted authoring flow. Defaults to 0; seeded library and
+  //   manually-authored custom exercises remain 0.
+  // - exercises.ai_sources_json: same shape as summary_kb_sources_json, used
+  //   when the AI exercise authoring step pulled from the therapist's KB.
+  // - users.show_ai_sources: per-therapist transparency toggle. 1 = show
+  //   the "Sources used" disclaimer block in the UI (default). 0 = hide it.
+  //   Therapist may choose to hide the block on shared screens etc., but
+  //   the data is always persisted so they can flip the toggle back on.
+  try {
+    db.run('ALTER TABLE sessions ADD COLUMN summary_kb_sources_json TEXT');
+    logger.info('T-26: added summary_kb_sources_json column to sessions');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE exercises ADD COLUMN ai_generated INTEGER DEFAULT 0');
+    logger.info('T-26: added ai_generated column to exercises');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE exercises ADD COLUMN ai_sources_json TEXT');
+    logger.info('T-26: added ai_sources_json column to exercises');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE users ADD COLUMN show_ai_sources INTEGER DEFAULT 1');
+    logger.info('T-26: added show_ai_sources column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  // Backfill: any user row with NULL show_ai_sources should default to 1
+  // (transparency on). This is idempotent — once the column has a value
+  // for every row, subsequent boots are no-ops.
+  try {
+    db.run('UPDATE users SET show_ai_sources = 1 WHERE show_ai_sources IS NULL');
+  } catch (e) {
+    logger.warn('T-26: show_ai_sources backfill skipped: ' + e.message);
+  }
+
   // Seed default superadmin account if not exists
   seedSuperadmin(db);
 
