@@ -2,7 +2,16 @@
   "brand": "PR-TOP",
   "exercise": {
     "templateBadge": "Plantilla",
-    "templateTooltip": "Este es un ejemplo de formato. Puedes usarlo o crear tu propio ejercicio en Mis Ejercicios."
+    "templateTooltip": "Este es un ejemplo de formato. Puedes usarlo o crear tu propio ejercicio en Mis Ejercicios.",
+    "comments": {
+      "running": "Notas en curso",
+      "final": "Final",
+      "finalBadge": "Final",
+      "emptyRunning": "Aún no hay notas en curso — el cliente no ha compartido notas paso a paso de este ejercicio.",
+      "emptyFinal": "Aún no hay respuesta final — el cliente no ha enviado su respuesta final.",
+      "runningPlaceholder": "Añade una nota en curso (visible para el cliente durante el ejercicio)",
+      "addRunning": "Añadir nota en curso"
+    }
   },
   "nav": {
     "dashboard": "Panel",

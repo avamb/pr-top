@@ -2,7 +2,16 @@
   "brand": "PR-TOP",
   "exercise": {
     "templateBadge": "Template",
-    "templateTooltip": "This is a formatting example. You can use it or create your own exercise in My Exercises."
+    "templateTooltip": "This is a formatting example. You can use it or create your own exercise in My Exercises.",
+    "comments": {
+      "running": "Running notes",
+      "final": "Final",
+      "finalBadge": "Final",
+      "emptyRunning": "No running notes yet — the client hasn't shared step-by-step notes on this exercise.",
+      "emptyFinal": "No final answer yet — the client hasn't submitted their final response.",
+      "runningPlaceholder": "Add a running note (visible to the client during the exercise)",
+      "addRunning": "Add running note"
+    }
   },
   "nav": {
     "dashboard": "Dashboard",

@@ -256,7 +256,7 @@ router.get('/', (req, res) => {
     const result = db.exec(
       `SELECT u.id, u.telegram_id, u.email, u.consent_therapist_access, u.language, u.created_at, u.updated_at,
               (SELECT MAX(created_at) FROM (
-                SELECT created_at FROM diary_entries WHERE client_id = u.id
+                SELECT created_at FROM diary_entries WHERE client_id = u.id AND (is_private = 0 OR is_private IS NULL)
                 UNION ALL
                 SELECT created_at FROM therapist_notes WHERE client_id = u.id
                 UNION ALL
@@ -465,7 +465,9 @@ router.get('/:id/diary', (req, res) => {
     }
 
     // Build query with optional type filter
-    let whereClause = 'client_id = ?';
+    // T-12: therapist-facing list MUST exclude entries marked private by the
+    // client (is_private = 1). The IS NULL guard keeps pre-migration rows visible.
+    let whereClause = 'client_id = ? AND (is_private = 0 OR is_private IS NULL)';
     const params = [clientId];
 
     if (entryType && ['text', 'voice', 'video'].includes(entryType)) {
@@ -621,9 +623,9 @@ router.delete('/:id/diary/:entryId', (req, res) => {
       return res.status(403).json({ error: 'Client has not granted consent for data access' });
     }
 
-    // Verify entry exists and belongs to this client
+    // Verify entry exists, belongs to this client, and is not client-private (T-12).
     const entryResult = db.exec(
-      'SELECT id FROM diary_entries WHERE id = ? AND client_id = ?',
+      'SELECT id FROM diary_entries WHERE id = ? AND client_id = ? AND (is_private = 0 OR is_private IS NULL)',
       [entryId, clientId]
     );
 
@@ -637,8 +639,8 @@ router.delete('/:id/diary/:entryId', (req, res) => {
       [entryId]
     );
 
-    // Delete the diary entry
-    db.run('DELETE FROM diary_entries WHERE id = ? AND client_id = ?', [entryId, clientId]);
+    // Delete the diary entry (visible non-private entries only)
+    db.run('DELETE FROM diary_entries WHERE id = ? AND client_id = ? AND (is_private = 0 OR is_private IS NULL)', [entryId, clientId]);
     saveDatabaseAfterWrite();
 
     // Audit log
@@ -1217,8 +1219,9 @@ router.get('/:id/timeline', (req, res) => {
     // First, get total counts efficiently (without decryption)
     let totalCount = 0;
     if (!filterByType || filterByType === 'diary') {
+      // T-12: hide client-private diary entries from therapist timeline.
       const countResult = db.exec(
-        `SELECT COUNT(*) FROM diary_entries WHERE client_id = ?${dateFilter}`,
+        `SELECT COUNT(*) FROM diary_entries WHERE client_id = ? AND (is_private = 0 OR is_private IS NULL)${dateFilter}`,
         [clientId, ...dateParams]
       );
       if (countResult.length > 0) totalCount += countResult[0].values[0][0];
@@ -1249,8 +1252,9 @@ router.get('/:id/timeline', (req, res) => {
     const allItems = [];
 
     if (!filterByType || filterByType === 'diary') {
+      // T-12: omit client-private diary entries from therapist timeline.
       const diaryResult = db.exec(
-        `SELECT id, 'diary' as type, created_at FROM diary_entries WHERE client_id = ?${dateFilter}`,
+        `SELECT id, 'diary' as type, created_at FROM diary_entries WHERE client_id = ? AND (is_private = 0 OR is_private IS NULL)${dateFilter}`,
         [clientId, ...dateParams]
       );
       if (diaryResult.length > 0) {
@@ -1475,10 +1479,15 @@ router.get('/:id/exercises', (req, res) => {
       return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
-    // Get exercise deliveries for this client
+    // Get exercise deliveries for this client.
+    // T-22: also surface response_encrypted so the dashboard can render the
+    // client's "Final" answer alongside per-run "Running notes" comments
+    // (which come from the polymorphic comments table, entity_type =
+    // 'exercise_completion').
     const result = db.exec(
       `SELECT ed.id, ed.exercise_id, ed.status, ed.sent_at, ed.completed_at,
-              e.title_en, e.title_ru, e.title_es, e.category, e.description_en
+              e.title_en, e.title_ru, e.title_es, e.category, e.description_en,
+              ed.response_encrypted
        FROM exercise_deliveries ed
        LEFT JOIN exercises e ON ed.exercise_id = e.id
        WHERE ed.therapist_id = ? AND ed.client_id = ?
@@ -1486,16 +1495,30 @@ router.get('/:id/exercises', (req, res) => {
       [therapistId, clientId]
     );
 
-    const deliveries = (result.length > 0 ? result[0].values : []).map(row => ({
-      id: row[0],
-      exercise_id: row[1],
-      status: row[2],
-      sent_at: row[3],
-      completed_at: row[4],
-      exercise_title: row[5] || row[6] || row[7] || 'Unknown',
-      exercise_category: row[8],
-      exercise_description: row[9]
-    }));
+    const deliveries = (result.length > 0 ? result[0].values : []).map(row => {
+      let finalResponse = null;
+      if (row[10]) {
+        try {
+          finalResponse = decrypt(row[10]);
+        } catch (e) {
+          logger.warn(`Exercise delivery ${row[0]}: response decryption failed: ${e.message}`);
+          finalResponse = '[decryption error]';
+        }
+      }
+      return {
+        id: row[0],
+        exercise_id: row[1],
+        status: row[2],
+        sent_at: row[3],
+        completed_at: row[4],
+        exercise_title: row[5] || row[6] || row[7] || 'Unknown',
+        exercise_category: row[8],
+        exercise_description: row[9],
+        // T-22: client's final exercise response (decrypted at app layer).
+        // null until the client completes the exercise.
+        final_response: finalResponse
+      };
+    });
 
     res.json({
       deliveries,
@@ -2113,9 +2136,9 @@ router.get('/:id/diary/export', (req, res) => {
       return res.status(403).json({ error: 'Client has not granted consent for data access' });
     }
 
-    // Fetch all diary entries (decrypted)
+    // Fetch all diary entries (decrypted), excluding T-12 client-private entries.
     var diaryResult = db.exec(
-      "SELECT id, entry_type, content_encrypted, transcript_encrypted, created_at, updated_at FROM diary_entries WHERE client_id = ? ORDER BY created_at DESC",
+      "SELECT id, entry_type, content_encrypted, transcript_encrypted, created_at, updated_at FROM diary_entries WHERE client_id = ? AND (is_private = 0 OR is_private IS NULL) ORDER BY created_at DESC",
       [clientId]
     );
 

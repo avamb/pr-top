@@ -8,6 +8,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import { formatUserDate, formatUserDateOnly, getUserTimezone } from '../utils/formatDate';
 import AudioPlayer from '../components/AudioPlayer';
 import CommentsPanel from '../components/CommentsPanel';
+import ExerciseRunComments from '../components/ExerciseRunComments';
 import SupervisionShareModal from '../components/SupervisionShareModal';
 import SessionCalendar from '../components/SessionCalendar';
 
@@ -2737,35 +2738,54 @@ function ClientDetail() {
               <p className="text-stone-400 text-center py-8">No exercises sent to this client yet.</p>
             ) : (
               <div className="space-y-4">
-                {exercises.map(delivery => (
-                  <div key={delivery.id} className="border border-stone-200 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">💪</span>
-                        <span className="font-medium text-stone-700">{delivery.exercise_title}</span>
-                        {delivery.exercise_category && (
-                          <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-800 rounded-full">
-                            {delivery.exercise_category}
-                          </span>
-                        )}
+                {exercises.map(delivery => {
+                  let storedUser = {};
+                  try { storedUser = JSON.parse(localStorage.getItem('user') || '{}'); } catch { /* noop */ }
+                  return (
+                    <div
+                      key={delivery.id}
+                      data-testid={`exercise-delivery-${delivery.id}`}
+                      className="border border-stone-200 rounded-lg p-4"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">💪</span>
+                          <span className="font-medium text-stone-700">{delivery.exercise_title}</span>
+                          {delivery.exercise_category && (
+                            <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-800 rounded-full">
+                              {delivery.exercise_category}
+                            </span>
+                          )}
+                        </div>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          delivery.status === 'completed' ? 'bg-green-100 text-green-800' :
+                          delivery.status === 'acknowledged' ? 'bg-blue-100 text-blue-800' :
+                          'bg-amber-100 text-amber-800'
+                        }`}>
+                          {delivery.status}
+                        </span>
                       </div>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        delivery.status === 'completed' ? 'bg-green-100 text-green-800' :
-                        delivery.status === 'acknowledged' ? 'bg-blue-100 text-blue-800' :
-                        'bg-amber-100 text-amber-800'
-                      }`}>
-                        {delivery.status}
-                      </span>
+                      {delivery.exercise_description && (
+                        <p className="text-sm text-stone-600 mt-1">{delivery.exercise_description}</p>
+                      )}
+                      <div className="text-xs text-stone-400 mt-2">
+                        Sent: {formatUserDate(delivery.sent_at)}
+                        {delivery.completed_at && ` • Completed: ${formatUserDate(delivery.completed_at)}`}
+                      </div>
+                      {/* T-22: per-exercise-run comments — Running notes vs Final tabs.
+                          Reuses T-10 /api/comments (entity_type=exercise_completion)
+                          for running notes and surfaces delivery.final_response
+                          (T-04 response_encrypted) under the Final tab. */}
+                      <ExerciseRunComments
+                        deliveryId={delivery.id}
+                        finalResponse={delivery.final_response}
+                        completedAt={delivery.completed_at}
+                        userRole={storedUser.role || 'therapist'}
+                        currentUserId={storedUser.id}
+                      />
                     </div>
-                    {delivery.exercise_description && (
-                      <p className="text-sm text-stone-600 mt-1">{delivery.exercise_description}</p>
-                    )}
-                    <div className="text-xs text-stone-400 mt-2">
-                      Sent: {formatUserDate(delivery.sent_at)}
-                      {delivery.completed_at && ` • Completed: ${formatUserDate(delivery.completed_at)}`}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

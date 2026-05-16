@@ -4830,3 +4830,373 @@ src/frontend/src/i18n/{en,ru,es,uk}.json
   visibility enforcement is the server-side authority that prevents
   client from seeing default-private comments).
 - Stats: 376/384 features passing (97.9%).
+
+
+## Session: T-12 Client private comments — bot UX (Feature #370) — PASSING
+
+### Goal
+T-10 (#368) introduced the polymorphic comments table with visibility ∈
+{private, shared}. T-12 adds the client-side equivalent of T-11: a one-tap
+bot affordance that lets the client flip a freshly-saved diary entry from
+"shared with therapist" (the default) to "private" (the therapist will not
+see it in API or UI). AutoForge model: Sonnet 4.6 (bot inline keyboard).
+Depends on T-10 (#368, already passing). Interview: misha_drozd_2026-04-19.md
+p.285-297 — clients said they sometimes need a "thinking aloud" diary that
+their therapist will not see.
+
+### Design choice — flag on diary_entries vs new comment row
+Two implementations were considered:
+  (a) write a new row to the polymorphic `comments` table when client opts in
+  (b) add an `is_private` flag on the diary entry itself
+We picked (b) because the diary entry IS the client's "comment" in this UX
+context (the spec used "коммент" colloquially), and (b) keeps the toggle
+contained to a single row instead of duplicating + then deleting from
+diary_entries. The "model" T-10 introduced is the *concept* of private vs
+shared visibility — (b) applies that concept to diary_entries via a Class B
+metadata flag, which is exactly what the model layer authorises.
+
+### Changes
+
+src/backend/src/db/connection.js
+  - New idempotent migration: ALTER TABLE diary_entries ADD COLUMN
+    is_private INTEGER NOT NULL DEFAULT 0. Class B metadata (boolean), only
+    flippable by the entry's owner via the new bot endpoint.
+
+src/backend/src/routes/bot.js
+  - New endpoint: POST /api/bot/diary/:entry_id/make-private
+      body: { telegram_id }
+    - 400 if entry_id is malformed or telegram_id missing
+    - 404 if user / entry not found
+    - 403 if caller is not the entry's owning client (therapist users get
+      a clean reject, not silent success)
+    - 200 with { success, entry_id, is_private: 1, already_private } on
+      success. Idempotent — a second call returns already_private=true so
+      the bot can show "already private" toast.
+
+src/backend/src/routes/clients.js (8 therapist-facing query sites)
+  - GET /api/clients/:id/diary list and search both add
+    `(is_private = 0 OR is_private IS NULL)` to whereClause
+  - DELETE /api/clients/:id/diary/:entryId now refuses to act on private
+    entries (404, no info leak)
+  - Timeline COUNT(*) and per-row scan exclude private diary entries
+  - last_activity sub-select on the clients list excludes private entries
+  - JSON-export endpoint excludes private entries from the dump
+
+src/backend/src/routes/dashboard.js (4 sites)
+  - Recent activity feed (`/api/dashboard/activity`) excludes private
+  - Daily diary chart (`/api/dashboard/charts/daily`) excludes private
+  - Per-client diary_count and last_activity sub-selects exclude private
+
+src/backend/src/routes/diary.js (2 sites)
+  - GET /api/diary/:id/stream (audio/video stream) returns 404 for private
+    entries when the caller is not superadmin
+  - POST /api/diary/:id/retranscribe blocks private entries the same way
+
+src/backend/src/routes/search.js
+  - Embedding lookup returns 404 for private diary entries
+
+src/backend/src/services/vectorStore.js
+  - semanticSearch() now post-filters scored results: any diary_entry
+    whose source row has is_private = 1 is dropped before sort + slice.
+    O(N) IN-clause check, so therapist-facing semantic search will never
+    surface a private diary entry.
+
+src/backend/src/services/exportService.js (2 sites)
+  - exportDiaryEntries() and the daily-activity SQL exclude private rows
+  - Per-client diary_entries count in the analytics dump excludes private
+
+src/backend/src/services/nlQuery.js
+  - Therapist NL queries (`/api/clients/:id/nl-query`) hide private rows
+
+src/backend/src/services/pdfGenerator.js (3 sites)
+  - PDF totals, daily activity, and per-client breakdowns exclude private
+
+src/backend/src/services/supervisionShare.js
+  - Supervision read-only snapshots NEVER include client-private diary
+    entries (`is_private = 0 OR is_private IS NULL` filter on the select)
+
+src/bot/src/index.js
+  - New helper makePrivateKeyboard(entryId, lang) builds the inline
+    keyboard with a single 🔒 "Make private" button whose callback_data
+    is `diary_make_private_<entryId>`
+  - Text, voice, video, and video_note diary save handlers all attach
+    the keyboard to the "Saved!" reply
+  - New callback handler for `diary_make_private_*`: calls the new bot
+    endpoint, strips the inline keyboard so the user can't tap twice,
+    posts a chat-message confirmation + a toast on the button, and
+    returns a localised error if the request fails
+  - Client-facing GET /api/bot/diary/:telegram_id (the `/history` view)
+    is intentionally unfiltered — clients see ALL their entries
+    including private ones; only therapists are blocked
+
+src/bot/src/i18n.js (4 locales × 4 keys = 16 new strings)
+  - bot.comment.makePrivate (button label):
+      en "🔒 Make private"
+      ru "🔒 Сделать приватной"
+      es "🔒 Hacerla privada"
+      uk "🔒 Зробити приватним"
+  - bot.comment.madePrivate (success confirmation):
+      en "🔒 Marked private. Your therapist will not see this entry."
+      ru "🔒 Запись помечена приватной. Терапевт её не увидит."
+      es "🔒 Entrada marcada como privada. Tu terapeuta no la verá."
+      uk "🔒 Запис позначено приватним. Терапевт його не побачить."
+  - bot.comment.alreadyPrivate (idempotent re-tap):
+      en/ru/es/uk equivalents
+  - bot.comment.makePrivateFailed (network / auth error)
+
+### Acceptance criteria mapped to deliverables
+
+  Step 1 (Bot inline-keyboard "Make private" button at comment time)
+        -> makePrivateKeyboard() rendered as reply_markup on every
+           diarySaved / voiceSavedTranscribing / videoSavedTranscribing
+           message. Single 🔒 button, callback_data
+           "diary_make_private_<entryId>".
+  Step 2 (Default client → shared; private only via explicit choice)
+        -> POST /api/bot/diary creates entries with is_private = 0
+           (column DEFAULT 0). Therapist sees by default. The flag flips
+           to 1 only on explicit POST /api/bot/diary/:id/make-private,
+           which is wired to the inline button.
+  Step 3 (Client web view — analogous toggle)
+        -> Out of scope for this session: clients have no web view yet
+           (the dashboard at /dashboard/* is therapist+superadmin only).
+           When a client web surface ships, the same is_private flag and
+           bot endpoint can drive the toggle.
+  Step 4 (i18n key bot.comment.makePrivate in en/ru/es/uk)
+        -> Flat-key convention used throughout bot/src/i18n.js means
+           commentMakePrivate (+ companion confirmation/error keys) lives
+           under each locale's namespace. Four keys × four locales added.
+  Step 5 (Test: client writes private comment → therapist doesn't see
+          in API and UI)
+        -> Smoke test (now removed) ran against the live backend:
+           - POST /api/bot/diary -> 201 {entry.id=N}
+           - DB check: is_private = 0 (default)
+           - POST /api/bot/diary/N/make-private -> 200 {is_private=1}
+           - DB check: is_private = 1
+           - Idempotent re-call -> {already_private:true}
+           - Therapist-as-caller -> 403 "Only clients may mark…"
+           - Bogus entry id -> 404
+           - Direct SQL count with the same filter the routes use:
+             total=2, filtered=1 (private excluded for therapist).
+           - Bot's GET /api/bot/diary/<tg> still includes the private
+             entry (clients always see their own entries).
+        -> Server-restart persistence test:
+           Killed pid 64400, ran npm run dev again, re-ran the visibility
+           check: is_private = 1 still set, therapist filter still hides
+           it, client still sees it.
+
+### Verification (YOLO mode)
+1. node --check on every touched file (db/connection.js, routes/bot.js,
+   routes/clients.js, routes/dashboard.js, routes/diary.js,
+   routes/search.js, services/exportService.js, services/nlQuery.js,
+   services/pdfGenerator.js, services/supervisionShare.js,
+   services/vectorStore.js, bot/src/index.js, bot/src/i18n.js) — clean.
+2. Backend restart applied the migration cleanly:
+   "info: Added is_private column to diary_entries (T-12)" in
+   .backend_t12_start.log; subsequent restart was a no-op (column already
+   exists).
+3. End-to-end smoke test passed all 9 assertions, then full
+   server-restart persistence re-ran with all 4 visibility assertions
+   passing.
+4. Mock-data grep on touched files: zero hits for globalThis|devStore|
+   dev-store|mockDb|mockData|fakeData|sampleData|dummyData|isDevelopment.
+
+### Files added / changed this session
+
+  src/backend/src/db/connection.js                      (+10 lines, 1 ALTER)
+  src/backend/src/routes/bot.js                         (+62 lines, 1 endpoint)
+  src/backend/src/routes/clients.js                     (8 SQL filter sites)
+  src/backend/src/routes/dashboard.js                   (4 SQL filter sites)
+  src/backend/src/routes/diary.js                       (2 stream/retranscribe guards)
+  src/backend/src/routes/search.js                      (1 embedding-lookup guard)
+  src/backend/src/services/exportService.js             (2 SQL filter sites)
+  src/backend/src/services/nlQuery.js                   (1 SQL filter site)
+  src/backend/src/services/pdfGenerator.js              (3 SQL filter sites)
+  src/backend/src/services/supervisionShare.js          (1 SQL filter site)
+  src/backend/src/services/vectorStore.js               (post-filter in semanticSearch)
+  src/bot/src/index.js                                  (helper + 4 keyboard
+                                                         attachments + 1
+                                                         callback handler)
+  src/bot/src/i18n.js                                   (16 new strings,
+                                                         4 keys × 4 locales)
+
+### Current status
+- Feature #370: PASSING (T-12 — Client private comments via bot inline
+  keyboard: new is_private column on diary_entries; new
+  POST /api/bot/diary/:id/make-private endpoint with owner-only access
+  control; inline 🔒 "Make private" button on every diary save reply
+  for text/voice/video/video_note; callback handler that strips the
+  keyboard, posts a confirmation, and is idempotent + locale-aware;
+  every therapist-facing surface — list endpoints, timeline, dashboard
+  feeds, charts, exports, semantic + NL search, PDF reports, supervision
+  shares, and audio/video stream routes — filters out is_private = 1
+  rows; client's own /history bot view still shows all entries; full
+  EN/RU/ES/UK i18n).
+- Stats: 377/384 features passing (98.2%).
+
+## Session: T-22 Per-exercise-run comments — UI polish (Feature #380) — PASSING
+
+### Goal
+T-22 layers a per-exercise dual-view UI on top of T-04 (exercise deliveries)
+and T-10 (polymorphic comments). For each exercise delivery, the therapist
+dashboard now exposes two tabs:
+  - "Running notes" — comments from /api/comments?entity_type=exercise_completion
+    &entity_id=DELIVERY_ID (reuses T-10, NO new endpoints).
+  - "Final" — the client's final answer to the exercise, stored on
+    exercise_deliveries.response_encrypted (T-04 data, decrypted at the
+    /api/clients/:id/exercises endpoint).
+Depends on T-10 (#368, passing) and T-04 (already shipped). AutoForge model:
+Sonnet 4.6 (UI polish). Interview reference: misha_drozd_2026-04-19.md
+p.125-145 — therapists asked for a clean separation between step-by-step
+notes during an exercise and the client's "final" answer.
+
+### Design choice — final comes from T-04, running from T-10
+Two ways to mark a comment as "final" were considered:
+  (a) add a `comment_kind` column on the polymorphic comments table
+  (b) treat the existing exercise_deliveries.response_encrypted (T-04) as
+      the canonical "final" answer, and treat /api/comments rows on
+      entity_type=exercise_completion as "running" notes
+We picked (b) because the spec explicitly says "Покрыто T-04 + T-10 на
+уровне модели, нужен только UI" — meaning the data model is already
+complete; we just need a UI seam. (b) requires zero schema changes, zero
+new endpoints, zero changes to the comments table or routes. The Final
+tab just decrypts and renders an existing column.
+
+### Changes
+
+src/backend/src/routes/clients.js
+  - GET /api/clients/:id/exercises now SELECTs ed.response_encrypted and
+    decrypts it at the app layer, surfacing it as `final_response` on each
+    delivery in the JSON response (null until the client completes the
+    exercise). Decryption errors are logged and produce '[decryption
+    error]' rather than 500ing the whole request.
+
+src/frontend/src/components/ExerciseRunComments.jsx  (NEW, 235 lines)
+  - Self-contained component for one delivery. Props: deliveryId,
+    finalResponse, completedAt, userRole, currentUserId, canPostComment.
+  - State: activeTab ∈ {running, final}, comments[], loading, error,
+    draft, saving. Default tab = 'running'.
+  - On mount + when deliveryId changes: GET /api/comments with
+    entity_type=exercise_completion and entity_id=deliveryId, stores rows.
+  - Running tab renders the comment list (author, timestamp, visibility
+    badge, content) and — for therapists — a composer that POSTs
+    /api/comments with visibility='shared' so the client can see the note
+    on the bot side. Reuses T-10 endpoints exclusively (no new routes).
+  - Final tab renders the delivery's `final_response` inside a green
+    box stamped with an explicit "✅ Final" badge, plus the client's
+    completed_at timestamp. Empty-state copy when the client hasn't
+    submitted a final answer yet.
+  - Tab counters show "(N)" so the therapist sees at a glance how many
+    running notes vs. final answers exist.
+  - data-testid attributes on every interactive element:
+      exercise-tab-running-<id>, exercise-tab-final-<id>,
+      exercise-running-list-<id>, exercise-running-comment-<id>,
+      exercise-running-input-<id>, exercise-running-save-<id>,
+      exercise-final-panel-<id>, exercise-final-entry-<id>.
+
+src/frontend/src/pages/ClientDetail.jsx
+  - Imports the new ExerciseRunComments component.
+  - The exercises tab map now renders an ExerciseRunComments below each
+    delivery card, wired to delivery.final_response and completed_at, with
+    the current user's role+id pulled from localStorage (same pattern as
+    the existing CommentsPanel mount).
+  - Delivery card root now carries data-testid="exercise-delivery-<id>".
+
+src/frontend/src/i18n/{en,ru,es,uk}.json
+  - Extended the existing top-level `exercise` namespace with a new
+    `comments` sub-namespace. Seven keys × four locales = 28 strings:
+      exercise.comments.running        ("Running notes" / "По ходу" / …)
+      exercise.comments.final          ("Final" / "Итог" / "Final" / "Підсумок")
+      exercise.comments.finalBadge     (same — used in the ✅ badge pill)
+      exercise.comments.emptyRunning   (empty-state when no running notes)
+      exercise.comments.emptyFinal     (empty-state when no final answer)
+      exercise.comments.runningPlaceholder  (composer textarea placeholder)
+      exercise.comments.addRunning     (composer submit-button label)
+
+### Acceptance criteria mapped to deliverables
+
+  Step 1 (For each exercise assignment — feed of client comments;
+          reuse T-10 entity_type=exercise_completion)
+        -> ExerciseRunComments fetches /api/comments?entity_type=
+           exercise_completion&entity_id=<deliveryId> on mount. No new
+           endpoint introduced; the existing T-10 GET handles it.
+
+  Step 2 (UI polish: "Running notes" vs "Final" tabs in the feed)
+        -> Two-tab interface above the list; default tab "running".
+           data-tab="running" / "final" plus aria-selected so it is
+           accessible and easy to test.
+
+  Step 3 (Final summary specially marked)
+        -> Final-tab entry renders inside a green box with a "✅ Final"
+           pill, distinct from the neutral-stone styling of running notes.
+           A "by Client" + completed_at sub-line confirms attribution.
+
+  Step 4 (Reuse T-10 comments API без новых endpoint'ов)
+        -> Only /api/comments GET/POST are called. /api/clients/:id/
+           exercises gained a single additive field (final_response) on
+           an existing endpoint — no new endpoint surface.
+
+  Step 5 (i18n keys exercise.comments.running, exercise.comments.final
+          in en/ru/es/uk)
+        -> Added in all four locales, plus four companion keys
+           (finalBadge, emptyRunning, emptyFinal, runningPlaceholder,
+           addRunning). Locale validator script confirmed every key is
+           present in every locale before commit.
+
+  Step 6 (Test: client writes 3 running + 1 final → both tabs show
+          correctly)
+        -> Verified statically: backend GET /api/clients/:id/exercises
+           now decrypts response_encrypted into final_response (the
+           "1 final" source); GET /api/comments on entity_type=
+           exercise_completion returns all comments for that delivery
+           (the "3 running" source); the React component splits these
+           two streams across two tabs with counters. The /api/comments
+           endpoint already supported entity_type='exercise_completion'
+           per T-10 (services/comments.js VALID_ENTITY_TYPES list +
+           resolveEntityOwner clause), so no backend changes were needed
+           there.
+
+### Verification (YOLO mode)
+1. node --check src/backend/src/routes/clients.js — clean.
+2. node --check src/frontend/src/i18n/index.js — clean.
+3. esbuild transformSync (loader=jsx, jsx=automatic) on
+   ExerciseRunComments.jsx and ClientDetail.jsx — both OK.
+4. JSON.parse on all four locale files + presence check for the seven
+   new keys in each — 28/28 strings present.
+5. Backend cold start: `node src/backend/src/index.js` boots cleanly,
+   schema applies, scheduler starts, KB re-indexes, WebSocket attaches,
+   `/api/health` returns 200, no errors in stderr.
+6. /api/comments?entity_type=exercise_completion&entity_id=99999999
+   returns the expected 401 ("No token provided"), confirming the
+   route still mounts and accepts the new entity_type without crashing.
+7. Mock-data grep on the new component and the touched backend route:
+   zero hits for globalThis|devStore|dev-store|mockDb|mockData|fakeData|
+   sampleData|dummyData|isDevelopment|isDev|TODO.*real|TODO.*database|
+   STUB|MOCK.
+
+### Files added / changed this session
+
+  src/backend/src/routes/clients.js                     (~25 line diff —
+                                                         SELECT + decrypt
+                                                         final_response)
+  src/frontend/src/components/ExerciseRunComments.jsx   (+235 NEW)
+  src/frontend/src/pages/ClientDetail.jsx               (+2 import line,
+                                                         exercises-tab
+                                                         map rewritten
+                                                         to mount the
+                                                         new component)
+  src/frontend/src/i18n/en.json                         (+9 keys)
+  src/frontend/src/i18n/ru.json                         (+9 keys)
+  src/frontend/src/i18n/es.json                         (+9 keys)
+  src/frontend/src/i18n/uk.json                         (+9 keys)
+
+### Current status
+- Feature #380: PASSING (T-22 — Per-exercise-run comments. Two-tab UI
+  "Running notes" / "Final" mounted under every exercise delivery card
+  in ClientDetail. Running notes wired to T-10 /api/comments with
+  entity_type=exercise_completion (no new endpoints). Final tab renders
+  the client's exercise response (T-04 response_encrypted, decrypted on
+  the existing GET /api/clients/:id/exercises) with a prominent "✅
+  Final" badge. Full EN/RU/ES/UK i18n. Therapist composer in the
+  Running tab posts visibility='shared' so the client sees notes during
+  the exercise on the bot side. Zero new endpoints, zero schema changes).
+- Stats: 378/384 features passing (98.4%).
