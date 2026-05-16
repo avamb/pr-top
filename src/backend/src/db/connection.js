@@ -1562,6 +1562,55 @@ function applySchema(db) {
   db.run('CREATE INDEX IF NOT EXISTS idx_kb_chunks_kb ON therapist_knowledge_base_chunks(kb_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_kb_chunks_therapist ON therapist_knowledge_base_chunks(therapist_id)');
 
+  // T-03: Assignments — concrete homework the therapist sets at the end of a
+  // session. Each assignment is either tied to one library/custom exercise
+  // (exercise_id) OR is a freeform task (exercise_id IS NULL, title +
+  // description carry the instruction). Sessions can have 1+ assignments.
+  //
+  // Class A (encrypted at app layer): title_encrypted, description_encrypted.
+  // Class B (access-controlled plaintext): IDs, status, frequency, deadline,
+  // timestamps.
+  //
+  // report_frequency drives how often the bot expects a follow-up report:
+  //   - daily          → every calendar day
+  //   - every_n_days   → every N days; N is stored in report_frequency_n
+  //   - weekly         → once per week
+  //   - on_demand      → only when the client opens /assignments and writes
+  //
+  // Status flow:
+  //   active        → therapist created it, client has not finalised it
+  //   completed     → client accepted the assignment as done (set by T-05 once
+  //                   acceptance flow lands; current code accepts an explicit
+  //                   PATCH from the therapist or a client-side complete call)
+  //   abandoned     → therapist marked this as abandoned (no longer expected)
+  //
+  // session_id is nullable: when the parent session is deleted (T-19 hard
+  // delete path) we set session_id = NULL on assignments rather than dropping
+  // them, so the homework thread for the client is preserved. The client and
+  // therapist FK references stay intact.
+  db.run(`CREATE TABLE IF NOT EXISTS assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
+    therapist_id INTEGER NOT NULL REFERENCES users(id),
+    client_id INTEGER NOT NULL REFERENCES users(id),
+    exercise_id INTEGER REFERENCES exercises(id),
+    title_encrypted TEXT NOT NULL,
+    description_encrypted TEXT,
+    encryption_key_id INTEGER REFERENCES encryption_keys(id),
+    payload_version INTEGER DEFAULT 1,
+    report_frequency TEXT NOT NULL DEFAULT 'on_demand' CHECK(report_frequency IN ('daily', 'every_n_days', 'weekly', 'on_demand')),
+    report_frequency_n INTEGER,
+    deadline TEXT,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'completed', 'abandoned')),
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    completed_at TEXT
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_assignments_session ON assignments(session_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_assignments_therapist_client ON assignments(therapist_id, client_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_assignments_client_status ON assignments(client_id, status)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_assignments_exercise ON assignments(exercise_id)');
+
   // Seed default superadmin account if not exists
   seedSuperadmin(db);
 

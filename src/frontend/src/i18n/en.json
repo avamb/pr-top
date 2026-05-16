@@ -1765,5 +1765,54 @@
       "errorAuth": "Authentication expired. Please log in again.",
       "errorGeneric": "Failed to create solo client."
     }
+  },
+  "assignment": {
+    "title": "Assignments",
+    "subtitleSession": "Homework attached to this session — visible to the client in their Telegram bot under /assignments.",
+    "subtitleClient": "All homework you've assigned this client, across every session.",
+    "newButton": "New assignment",
+    "cancel": "Cancel",
+    "create": "Create assignment",
+    "creating": "Creating…",
+    "fieldTitle": "Title",
+    "fieldExercise": "Exercise (optional)",
+    "fieldDescription": "Description",
+    "fieldFrequency": "Report frequency",
+    "fieldFrequencyN": "Every N days",
+    "fieldDeadline": "Deadline (optional)",
+    "titlePlaceholder": "e.g. Breathing practice 5 min/day",
+    "descriptionPlaceholder": "Detailed instructions for the client — encrypted at rest.",
+    "exerciseNone": "— Freeform (no library exercise) —",
+    "exerciseHint": "Pick a library exercise OR leave empty and use the title/description as freeform instructions.",
+    "linkedExercise": "Linked exercise",
+    "fromLibrary": "Library",
+    "orphan": "Detached session",
+    "deadlineLabel": "Deadline",
+    "createdAt": "Created",
+    "emptySession": "No assignments for this session yet. Click ＋ New assignment to set the first one.",
+    "emptyClient": "No assignments for this client yet. You can create them from a session or directly here.",
+    "markComplete": "Mark completed",
+    "abandon": "Abandon",
+    "delete": "Delete",
+    "confirmAbandon": "Mark this assignment as abandoned? The client will no longer see it as active.",
+    "confirmDelete": "Permanently delete this assignment? This cannot be undone.",
+    "errorLoad": "Failed to load assignments",
+    "errorCreate": "Failed to create assignment",
+    "errorAbandon": "Failed to abandon assignment",
+    "errorComplete": "Failed to complete assignment",
+    "errorDelete": "Failed to delete assignment",
+    "errorTitleRequired": "Title is required",
+    "errorFrequencyN": "Number of days must be between 1 and 365",
+    "status": {
+      "active": "Active",
+      "completed": "Completed",
+      "abandoned": "Abandoned"
+    },
+    "frequency": {
+      "daily": "Daily",
+      "every_n_days": "Every N days",
+      "weekly": "Weekly",
+      "on_demand": "On demand"
+    }
   }
 }

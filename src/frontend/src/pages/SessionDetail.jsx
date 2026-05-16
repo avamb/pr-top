@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { formatUserDate } from '../utils/formatDate';
 import AudioPlayer from '../components/AudioPlayer';
+import AssignmentsPanel from '../components/AssignmentsPanel';
 
 const API = '/api';
 
@@ -723,6 +724,20 @@ function SessionDetail() {
                 <p className="text-stone-400">{t('sessionDetail.noSummaryYet')}</p>
               )}
             </div>
+
+            {/* T-03: Assignments attached to this session.
+                Therapist picks one or more pieces of homework (library exercise
+                OR freeform) at the end of the session. The client gets a
+                Telegram + WebSocket notification on create and can view the
+                list with /assignments inside the bot. */}
+            {session.client_id && (
+              <AssignmentsPanel
+                mode="session"
+                sessionId={Number(id)}
+                clientId={session.client_id}
+                canEdit={true}
+              />
+            )}
           </div>
         ) : (
           <p className="text-stone-400">{t('sessionDetail.sessionNotFound')}</p>

@@ -9,6 +9,7 @@ import { formatUserDate, formatUserDateOnly, getUserTimezone } from '../utils/fo
 import AudioPlayer from '../components/AudioPlayer';
 import CommentsPanel from '../components/CommentsPanel';
 import ExerciseRunComments from '../components/ExerciseRunComments';
+import AssignmentsPanel from '../components/AssignmentsPanel';
 import SupervisionShareModal from '../components/SupervisionShareModal';
 import SessionCalendar from '../components/SessionCalendar';
 
@@ -387,9 +388,11 @@ function ClientDetail() {
 
   // T-06: Solo clients have no diary/exercises/SOS — if a stale URL or
   // back-button lands the user on one of those tabs, snap back to timeline.
+  // T-03: Assignments tab is also bot-only (the client has to read them
+  // through Telegram), so solo clients skip it too.
   useEffect(() => {
     if (client && client.mode === 'solo' &&
-        (activeTab === 'diary' || activeTab === 'exercises' || activeTab === 'sos')) {
+        (activeTab === 'diary' || activeTab === 'exercises' || activeTab === 'sos' || activeTab === 'assignments')) {
       setActiveTab('timeline');
     }
   }, [client, activeTab]);
@@ -1592,6 +1595,17 @@ function ClientDetail() {
                   data-testid="tab-exercises"
                 >💪 {t('clientDetail.exercisesTab')} ({exercisesTotal})</button>
               )}
+              {/* T-03: Assignments — aggregated homework list across all sessions.
+                  Solo clients have no bot side, so they don't get this tab
+                  (assignments only make sense if the client receives them
+                  via Telegram). */}
+              {!isSolo && (
+                <button
+                  onClick={() => setActiveTab('assignments')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'assignments' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+                  data-testid="tab-assignments"
+                >📝 {t('assignment.title')}</button>
+              )}
               <button
                 onClick={() => setActiveTab('context')}
                 className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'context' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
@@ -2789,6 +2803,18 @@ function ClientDetail() {
               </div>
             )}
           </div>
+        )}
+
+        {/* T-03: Assignments tab — aggregated homework list across all sessions.
+            Lets the therapist create assignments that are not tied to a
+            specific session (session_id stays NULL) and review every
+            assignment they've ever set for this client. */}
+        {activeTab === 'assignments' && (
+          <AssignmentsPanel
+            mode="client"
+            clientId={Number(id)}
+            canEdit={true}
+          />
         )}
 
         {/* Diary Tab */}

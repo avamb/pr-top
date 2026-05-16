@@ -1749,5 +1749,54 @@
       "errorAuth": "La sesión ha expirado. Inicia sesión de nuevo.",
       "errorGeneric": "No se pudo crear el cliente solo."
     }
+  },
+  "assignment": {
+    "title": "Tareas",
+    "subtitleSession": "Tareas asociadas a esta sesión — el cliente las ve en su bot de Telegram con /assignments.",
+    "subtitleClient": "Todas las tareas que has asignado a este cliente, en cualquier sesión.",
+    "newButton": "Nueva tarea",
+    "cancel": "Cancelar",
+    "create": "Crear tarea",
+    "creating": "Creando…",
+    "fieldTitle": "Título",
+    "fieldExercise": "Ejercicio (opcional)",
+    "fieldDescription": "Descripción",
+    "fieldFrequency": "Frecuencia del informe",
+    "fieldFrequencyN": "Cada N días",
+    "fieldDeadline": "Fecha límite (opcional)",
+    "titlePlaceholder": "p. ej. Respiración 5 min/día",
+    "descriptionPlaceholder": "Instrucciones detalladas para el cliente — cifradas en reposo.",
+    "exerciseNone": "— Libre (sin ejercicio de la biblioteca) —",
+    "exerciseHint": "Elige un ejercicio de la biblioteca O déjalo vacío y describe la tarea en el título y la descripción.",
+    "linkedExercise": "Ejercicio vinculado",
+    "fromLibrary": "Biblioteca",
+    "orphan": "Sin sesión",
+    "deadlineLabel": "Fecha límite",
+    "createdAt": "Creada",
+    "emptySession": "Aún no hay tareas para esta sesión. Pulsa ＋ Nueva tarea para añadir la primera.",
+    "emptyClient": "Aún no hay tareas para este cliente. Puedes crearlas desde una sesión o directamente aquí.",
+    "markComplete": "Marcar completada",
+    "abandon": "Abandonar",
+    "delete": "Eliminar",
+    "confirmAbandon": "¿Marcar esta tarea como abandonada? El cliente dejará de verla como activa.",
+    "confirmDelete": "¿Eliminar la tarea de forma permanente? Esta acción no se puede deshacer.",
+    "errorLoad": "No se pudieron cargar las tareas",
+    "errorCreate": "No se pudo crear la tarea",
+    "errorAbandon": "No se pudo abandonar la tarea",
+    "errorComplete": "No se pudo completar la tarea",
+    "errorDelete": "No se pudo eliminar la tarea",
+    "errorTitleRequired": "El título es obligatorio",
+    "errorFrequencyN": "El número de días debe estar entre 1 y 365",
+    "status": {
+      "active": "Activa",
+      "completed": "Completada",
+      "abandoned": "Abandonada"
+    },
+    "frequency": {
+      "daily": "Diaria",
+      "every_n_days": "Cada N días",
+      "weekly": "Semanal",
+      "on_demand": "A demanda"
+    }
   }
 }

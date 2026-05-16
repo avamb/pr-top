@@ -14,6 +14,7 @@ const { processSessionDiarization } = require('../services/diarization');
 const { checkSessionLimit } = require('../utils/planLimits');
 const { logger } = require('../utils/logger');
 const { verifyClientConsent } = require('../utils/consentCheck');
+const assignmentsService = require('../services/assignments');
 
 // Configure multer for audio file uploads
 // Files are stored in a non-public directory with opaque (random) filenames
@@ -956,6 +957,17 @@ router.delete('/:id', authenticate, requireRole('therapist', 'superadmin'), asyn
       }
     }
 
+    // T-03: Detach (but don't delete) any assignments hanging off this
+    // session — the homework thread for the client should survive even if
+    // the parent session recording is removed. The FK uses ON DELETE SET
+    // NULL but we do it explicitly so the behavior holds even if FK PRAGMA
+    // state shifts in the future.
+    try {
+      db.run('UPDATE assignments SET session_id = NULL WHERE session_id = ?', [sessionId]);
+    } catch (e) {
+      logger.warn('T-03: failed to detach assignments before session delete: ' + e.message);
+    }
+
     // Delete the session record
     db.run('DELETE FROM sessions WHERE id = ?', [sessionId]);
     saveDatabaseAfterWrite();
@@ -1324,6 +1336,91 @@ router.post('/auto-match', authenticate, requireRole('therapist', 'superadmin'),
   } catch (error) {
     logger.error('Auto-match error: ' + error.message);
     res.status(500).json({ error: 'Failed to compute auto-match suggestions' });
+  }
+});
+
+// =====================================================================
+// ASSIGNMENTS (T-03) — homework attached to a specific session
+// =====================================================================
+
+// GET /api/sessions/:id/assignments — list all assignments attached to a session
+router.get('/:id/assignments', authenticate, requireRole('therapist', 'superadmin'), (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const sessionId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(sessionId) || sessionId <= 0) {
+      return res.status(400).json({ error: 'Invalid session id' });
+    }
+
+    const result = assignmentsService.listAssignmentsForSession(therapistId, sessionId);
+    if (result.notFound) return res.status(404).json({ error: 'Session not found' });
+    if (result.forbidden) return res.status(403).json({ error: 'You do not own this session' });
+
+    // Consent check on the client the session belongs to.
+    const consentCheck = verifyClientConsent(therapistId, result.clientId, 'list_session_assignments');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+
+    res.json({ assignments: result.assignments, total: result.assignments.length, session_id: sessionId, client_id: result.clientId });
+  } catch (error) {
+    logger.error('List session assignments error: ' + error.message);
+    res.status(500).json({ error: 'Failed to list session assignments' });
+  }
+});
+
+// POST /api/sessions/:id/assignments — create assignment attached to a session
+router.post('/:id/assignments', authenticate, requireRole('therapist', 'superadmin'), (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const sessionId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(sessionId) || sessionId <= 0) {
+      return res.status(400).json({ error: 'Invalid session id' });
+    }
+
+    // Resolve client_id from the session itself so the caller doesn't have to
+    // supply it — the session already knows which client it belongs to.
+    const db = getDatabase();
+    const sessRows = db.exec(
+      'SELECT therapist_id, client_id FROM sessions WHERE id = ?',
+      [sessionId]
+    );
+    if (sessRows.length === 0 || sessRows[0].values.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    const [sessTherapistId, clientId] = sessRows[0].values[0];
+    if (Number(sessTherapistId) !== Number(therapistId)) {
+      return res.status(403).json({ error: 'You do not own this session' });
+    }
+
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'create_session_assignment');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+
+    const body = req.body || {};
+    const assignment = assignmentsService.createAssignment({
+      therapistId,
+      clientId,
+      sessionId,
+      exerciseId: body.exercise_id,
+      title: body.title,
+      description: body.description || '',
+      reportFrequency: body.report_frequency || 'on_demand',
+      reportFrequencyN: body.report_frequency_n,
+      deadline: body.deadline,
+      status: body.status || 'active',
+    });
+
+    logger.info(`Therapist ${therapistId} created assignment ${assignment.id} on session ${sessionId} for client ${clientId}`);
+    if (assignment.status === 'active') assignmentsService.notifyClientOfNewAssignment(assignment);
+    res.status(201).json(assignment);
+  } catch (error) {
+    if (error.code === 'invalid_input') {
+      return res.status(400).json({ error: error.message });
+    }
+    logger.error('Create session assignment error: ' + error.message);
+    res.status(500).json({ error: 'Failed to create session assignment' });
   }
 });
 

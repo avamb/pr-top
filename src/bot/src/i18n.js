@@ -130,6 +130,27 @@ Connect clients with one link — simple and secure.
     exerciseNotFound: 'Exercise not found or already completed.',
     exerciseAwaitingResponse: '✍️ Please type your response to the exercise now.',
     exerciseNoActiveExercise: 'You don\'t have an active exercise. Use /exercises to see your exercises.',
+    // T-03: /assignments command — homework set by therapist
+    assignmentsHeader: '📝 *Your Assignments:*',
+    assignmentsEmpty: '📝 You have no active assignments.\n\nYour therapist will assign tasks at the end of sessions.',
+    assignmentsFailed: 'Failed to load assignments. Please try again.',
+    assignmentNotFound: 'Assignment not found.',
+    assignmentDetail: (title, description, frequency, deadline) =>
+      `📝 *${title}*\n\n` +
+      (description ? `${description}\n\n` : '') +
+      `⏱ *Report frequency:* ${frequency}\n` +
+      (deadline ? `📅 *Deadline:* ${deadline}\n` : '') +
+      `\nPress *Write report* to send a progress update, or *Mark complete* when finished.`,
+    assignmentReportBtn: '✍️ Write report',
+    assignmentCompleteBtn: '✅ Mark complete',
+    assignmentReportPrompt: (id) => `✍️ Type your progress report for assignment #${id} below. Your therapist will see it as a diary entry.`,
+    assignmentCompletedToast: '✅ Marked complete',
+    assignmentCompletedMsg: '✅ Assignment marked as complete. Your therapist will be notified.',
+    assignmentCompleteFailed: 'Failed to mark assignment complete. Please try again.',
+    assignmentFrequency_daily: 'Daily',
+    assignmentFrequency_every_n_days: 'Every few days',
+    assignmentFrequency_weekly: 'Weekly',
+    assignmentFrequency_on_demand: 'On demand',
     // Deep link connect
     deepLinkInvalidCode: 'Invite code not found or invalid.',
     deepLinkFallbackHint: 'You can also try manually with /connect YOUR_CODE',
@@ -308,6 +329,27 @@ Connect clients with one link — simple and secure.
     exerciseNotFound: 'Упражнение не найдено или уже выполнено.',
     exerciseAwaitingResponse: '✍️ Напишите ваш ответ на упражнение.',
     exerciseNoActiveExercise: 'У вас нет активного упражнения. Используйте /exercises для просмотра упражнений.',
+    // T-03: /assignments command — задания от терапевта
+    assignmentsHeader: '📝 *Ваши задания:*',
+    assignmentsEmpty: '📝 У вас нет активных заданий.\n\nТерапевт назначит задачи в конце сессии.',
+    assignmentsFailed: 'Не удалось загрузить задания. Попробуйте снова.',
+    assignmentNotFound: 'Задание не найдено.',
+    assignmentDetail: (title, description, frequency, deadline) =>
+      `📝 *${title}*\n\n` +
+      (description ? `${description}\n\n` : '') +
+      `⏱ *Частота отчётов:* ${frequency}\n` +
+      (deadline ? `📅 *Срок:* ${deadline}\n` : '') +
+      `\nНажмите *Написать отчёт* для отправки обновления или *Отметить выполненным* по завершении.`,
+    assignmentReportBtn: '✍️ Написать отчёт',
+    assignmentCompleteBtn: '✅ Отметить выполненным',
+    assignmentReportPrompt: (id) => `✍️ Напишите ваш отчёт о прогрессе по заданию #${id}. Терапевт увидит его в дневнике.`,
+    assignmentCompletedToast: '✅ Отмечено выполненным',
+    assignmentCompletedMsg: '✅ Задание отмечено выполненным. Терапевт получит уведомление.',
+    assignmentCompleteFailed: 'Не удалось отметить задание выполненным. Попробуйте снова.',
+    assignmentFrequency_daily: 'Ежедневно',
+    assignmentFrequency_every_n_days: 'Раз в несколько дней',
+    assignmentFrequency_weekly: 'Раз в неделю',
+    assignmentFrequency_on_demand: 'По запросу',
     // Deep link connect
     deepLinkInvalidCode: 'Код приглашения не найден или недействителен.',
     deepLinkFallbackHint: 'Вы также можете попробовать вручную: /connect ВАШ_КОД',
@@ -486,6 +528,27 @@ Conecta clientes con un enlace — simple y seguro.
     exerciseNotFound: 'Ejercicio no encontrado o ya completado.',
     exerciseAwaitingResponse: '✍️ Escribe tu respuesta al ejercicio ahora.',
     exerciseNoActiveExercise: 'No tienes un ejercicio activo. Usa /exercises para ver tus ejercicios.',
+    // T-03: /assignments — tareas asignadas por el terapeuta
+    assignmentsHeader: '📝 *Tus tareas:*',
+    assignmentsEmpty: '📝 No tienes tareas activas.\n\nTu terapeuta te asignará tareas al final de las sesiones.',
+    assignmentsFailed: 'No se pudieron cargar las tareas. Inténtalo de nuevo.',
+    assignmentNotFound: 'Tarea no encontrada.',
+    assignmentDetail: (title, description, frequency, deadline) =>
+      `📝 *${title}*\n\n` +
+      (description ? `${description}\n\n` : '') +
+      `⏱ *Frecuencia de informes:* ${frequency}\n` +
+      (deadline ? `📅 *Fecha límite:* ${deadline}\n` : '') +
+      `\nPulsa *Escribir informe* para enviar una actualización o *Marcar como completada* cuando termines.`,
+    assignmentReportBtn: '✍️ Escribir informe',
+    assignmentCompleteBtn: '✅ Marcar como completada',
+    assignmentReportPrompt: (id) => `✍️ Escribe tu informe de progreso para la tarea #${id}. Tu terapeuta lo verá como una entrada de diario.`,
+    assignmentCompletedToast: '✅ Marcada como completada',
+    assignmentCompletedMsg: '✅ Tarea marcada como completada. Tu terapeuta será notificado.',
+    assignmentCompleteFailed: 'No se pudo marcar la tarea como completada. Inténtalo de nuevo.',
+    assignmentFrequency_daily: 'Diaria',
+    assignmentFrequency_every_n_days: 'Cada pocos días',
+    assignmentFrequency_weekly: 'Semanal',
+    assignmentFrequency_on_demand: 'A demanda',
     // Deep link connect
     deepLinkInvalidCode: 'Código de invitación no encontrado o no válido.',
     deepLinkFallbackHint: 'También puedes intentar manualmente con /connect TU_CÓDIGO',
@@ -665,6 +728,27 @@ Conecta clientes con un enlace — simple y seguro.
     exerciseNotFound: 'Вправу не знайдено або вже виконано.',
     exerciseAwaitingResponse: '✍️ Напишіть вашу відповідь на вправу.',
     exerciseNoActiveExercise: 'У вас немає активної вправи. Використовуйте /exercises для перегляду вправ.',
+    // T-03: /assignments — завдання від терапевта
+    assignmentsHeader: '📝 *Ваші завдання:*',
+    assignmentsEmpty: '📝 У вас немає активних завдань.\n\nТерапевт призначить завдання наприкінці сесій.',
+    assignmentsFailed: 'Не вдалося завантажити завдання. Спробуйте знову.',
+    assignmentNotFound: 'Завдання не знайдено.',
+    assignmentDetail: (title, description, frequency, deadline) =>
+      `📝 *${title}*\n\n` +
+      (description ? `${description}\n\n` : '') +
+      `⏱ *Частота звітів:* ${frequency}\n` +
+      (deadline ? `📅 *Термін:* ${deadline}\n` : '') +
+      `\nНатисніть *Написати звіт*, щоб надіслати оновлення, або *Позначити виконаним*, коли завершите.`,
+    assignmentReportBtn: '✍️ Написати звіт',
+    assignmentCompleteBtn: '✅ Позначити виконаним',
+    assignmentReportPrompt: (id) => `✍️ Напишіть звіт про прогрес із завдання #${id}. Терапевт побачить його у щоденнику.`,
+    assignmentCompletedToast: '✅ Позначено виконаним',
+    assignmentCompletedMsg: '✅ Завдання позначено виконаним. Терапевт отримає сповіщення.',
+    assignmentCompleteFailed: 'Не вдалося позначити завдання виконаним. Спробуйте знову.',
+    assignmentFrequency_daily: 'Щодня',
+    assignmentFrequency_every_n_days: 'Раз на кілька днів',
+    assignmentFrequency_weekly: 'Щотижня',
+    assignmentFrequency_on_demand: 'За запитом',
     // Deep link connect
     deepLinkInvalidCode: 'Код запрошення не знайдено або недійсний.',
     deepLinkFallbackHint: 'Ви також можете спробувати вручну: /connect ВАШ_КОД',

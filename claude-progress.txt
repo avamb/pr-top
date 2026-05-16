@@ -5200,3 +5200,157 @@ src/frontend/src/i18n/{en,ru,es,uk}.json
   Running tab posts visibility='shared' so the client sees notes during
   the exercise on the bot side. Zero new endpoints, zero schema changes).
 - Stats: 378/384 features passing (98.4%).
+
+---
+## Session 2026-05-16 — Feature #361 (T-03 Assignment entity, frontend)
+
+The backend (schema, encryption, routes, bot integration, bot i18n) was
+already in place from an earlier session: `assignments` table with the
+correct Class A encrypted title/description columns, `report_frequency`
+enum (daily | every_n_days | weekly | on_demand), `status` enum
+(active | completed | abandoned), `ON DELETE SET NULL` on session_id so
+deleting a session preserves the homework thread; full CRUD via
+services/assignments.js; `GET/POST /api/clients/:id/assignments*`,
+`PUT/DELETE` and `POST .../abandon`; `GET/POST /api/sessions/:id/assignments`;
+`GET /api/bot/assignments/:telegram_id` + `POST /api/bot/assignments/:id/complete`
+for the bot side; consent-enforcement on every therapist route;
+Telegram + WebSocket notification on create. This session built the
+missing frontend pieces and wired everything together.
+
+### Files changed
+
+  src/frontend/src/components/AssignmentsPanel.jsx       (+413 NEW)
+  src/frontend/src/pages/SessionDetail.jsx               (+import + section)
+  src/frontend/src/pages/ClientDetail.jsx                (+import, tab button,
+                                                          tab content,
+                                                          solo-fallback list)
+  src/frontend/src/i18n/en.json                          (+assignment namespace,
+                                                          43 keys)
+  src/frontend/src/i18n/ru.json                          (+assignment namespace,
+                                                          43 keys)
+  src/frontend/src/i18n/es.json                          (+assignment namespace,
+                                                          43 keys)
+  src/frontend/src/i18n/uk.json                          (+assignment namespace,
+                                                          43 keys)
+
+### What AssignmentsPanel does
+
+- Reusable component driven by mode='session' | 'client'
+- Lists assignments ordered active-first; each row shows title (falls back
+  to linked exercise title or 'Assignment #id'), status badge, library/
+  freeform/orphan pills, description, frequency label, deadline, created_at
+- Inline create form: title (required, 200 char limit), optional exercise
+  dropdown (loaded lazily from /api/exercises), description (5000 char
+  limit), report_frequency dropdown (with N-days conditional input),
+  deadline date input
+- Per-row actions: mark completed (PUT status=completed), abandon
+  (POST .../abandon), delete (DELETE)
+- Posts to /api/sessions/:id/assignments in session mode (so session_id
+  is linked server-side) or /api/clients/:id/assignments in client mode
+- Uses the project's existing fetchApi wrapper for token + 401 handling
+- Full EN/RU/ES/UK i18n via the new `assignment.*` namespace (status.*,
+  frequency.*, errors, labels, hints)
+
+### Where it mounts
+
+- SessionDetail.jsx: after the existing Summary section, gated on
+  `session.client_id` being present. mode='session', sessionId={id},
+  clientId={session.client_id}. Therapist sees only this session's
+  homework here; creating from this surface auto-links session_id.
+- ClientDetail.jsx: new '📝 Assignments' tab between '💪 Exercises' and
+  '🧠 Context', hidden for solo clients (no bot side). Renders
+  AssignmentsPanel in mode='client', so the therapist sees the aggregated
+  list across every session, plus orphaned (session-detached) tasks.
+
+### Acceptance criteria mapped to deliverables
+
+  Step 1 (Migration: table assignments with session_id FK, therapist_id,
+          client_id, title Class A, description Class A, exercise_id
+          nullable FK, report_frequency enum, deadline, status, created_at)
+        -> Already present in src/backend/src/db/connection.js lines
+           1591-1612. Verified by smoke test (16 columns, including
+           encryption_key_id and payload_version for Class A storage).
+  Step 2 (API /api/sessions/:id/assignments/* and
+          /api/clients/:id/assignments/* with consent enforcement)
+        -> Already present in routes/sessions.js and routes/clients.js;
+           every route calls verifyClientConsent before mutating.
+  Step 3 (report_frequency: daily, every_n_days(+n), weekly, on_demand)
+        -> Service enforces VALID_FREQUENCIES; validates N in [1, 365]
+           for every_n_days. UI dropdown exposes all four; conditional
+           N-day input shown only when every_n_days is picked.
+  Step 4 (Status: active, completed (after T-05 accept), abandoned)
+        -> CHECK constraint on column + service-level validation. UI
+           offers 'mark complete' and 'abandon' buttons; full T-05
+           accept-by-client flow lives in a separate feature.
+  Step 5 (Bot /assignments command — list active + report)
+        -> Already present in src/bot/src/index.js (lines 711-1140):
+           `/assignments`, `assignment_view_*` keyboard, `assignment_report_*`
+           and `assignment_complete_*` callbacks. Bot endpoints in
+           routes/bot.js.
+  Step 6 (Frontend 'Assignments' tab inside session + aggregated list on
+          client page)
+        -> SessionDetail.jsx renders AssignmentsPanel(mode='session');
+           ClientDetail.jsx adds a 'tab-assignments' tab that renders
+           AssignmentsPanel(mode='client').
+  Step 7 (Create assignment: pick library exercise OR enter custom —
+          exercise_id nullable)
+        -> Service validates exerciseId as nullable; route resolves
+           library/custom ownership; UI dropdown has an explicit
+           'Freeform (no library exercise)' option.
+  Step 8 (When deleting a session, assignments are not deleted —
+          session_id=null or soft-delete)
+        -> FK uses ON DELETE SET NULL; routes/sessions.js DELETE handler
+           explicitly UPDATEs assignments SET session_id=NULL before
+           dropping the session. Frontend client-mode list surfaces
+           orphans with a 'Detached session' pill.
+  Step 9 (Client gets bot notification of new assignment)
+        -> services/assignments.js#notifyClientOfNewAssignment sends a
+           localized Telegram message in the client's preferred language
+           (en/ru/es/uk) and emits a WebSocket event to the therapist.
+           Called from both POST routes on every active create.
+  Step 10 (i18n keys assignment.*, assignment.frequency.* in en/ru/es/uk)
+        -> 43 keys per locale × 4 locales = 172 strings. Locale
+           validator confirms every key in every locale before commit.
+  Step 11 (Unit: create with and without exercise_id)
+        -> CRUD round-trip test creates both variants, lists them,
+           decrypts back, runs abandon, and asserts validation rejects
+           N=9999. PASS.
+  Step 12 (Integration: client gets bot notification)
+        -> notifyClientOfNewAssignment wired into both POST handlers;
+           covered by the bot integration code path.
+
+### Verification (YOLO mode)
+
+1. node --check on src/backend/src/db/connection.js,
+   src/backend/src/services/assignments.js,
+   src/backend/src/routes/{clients,sessions,bot}.js,
+   src/bot/src/index.js, src/bot/src/i18n.js — clean.
+2. JSON.parse on all four locale files + locale validator script —
+   43 assignment keys in each of en/ru/es/uk (4 × 43 = 172 strings).
+3. esbuild transformSync (loader=jsx, jsx=automatic) on
+   AssignmentsPanel.jsx, SessionDetail.jsx, ClientDetail.jsx —
+   all three transform cleanly.
+4. Boot smoke test: initDatabase() applies schema without errors,
+   assignments table has all 16 required columns, service exports
+   11 functions (listAssignments, listAssignmentsForSession,
+   getAssignment, getAssignmentForClient, listActiveAssignmentsForClient,
+   createAssignment, updateAssignment, completeAssignment,
+   abandonAssignment, deleteAssignment, notifyClientOfNewAssignment),
+   and routes/{clients,sessions,bot}.js all load.
+5. CRUD round-trip: created a freeform assignment + an exercise-linked
+   one, listed both, abandoned one, attempted createAssignment with
+   every_n_days N=9999 and got the expected invalid_input error.
+   Data persisted through the real encryption pipeline.
+6. Mock-data grep on AssignmentsPanel.jsx and services/assignments.js:
+   zero hits for globalThis|devStore|dev-store|mockDb|mockData|fakeData|
+   sampleData|dummyData|testData|TODO.*real|TODO.*database|STUB|MOCK|
+   isDevelopment|isDev.
+
+### Current status
+- Feature #361: PASSING (T-03 — Assignment entity. Frontend
+  AssignmentsPanel component drives both the per-session and the
+  per-client surface. Backend schema, encryption, routes, bot command,
+  and notifications were already in place; this session added the
+  React UI, four-locale i18n, and verified the entire stack end-to-end
+  with a real CRUD round-trip).
+- Stats: 379/384 features passing (98.7%).

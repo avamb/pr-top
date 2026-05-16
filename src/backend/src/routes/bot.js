@@ -13,6 +13,7 @@ const { checkClientLimit } = require('../utils/planLimits');
 const telegramNotify = require('../utils/telegramNotify');
 const emailService = require('../services/emailService');
 const wsService = require('../services/websocketService');
+const assignmentsService = require('../services/assignments');
 
 // Directory for encrypted diary voice/video files
 const DIARY_FILES_DIR = path.resolve(__dirname, '../../data/diary_files');
@@ -1467,6 +1468,110 @@ router.post('/exercises/:delivery_id/respond', botAuth, (req, res) => {
   } catch (error) {
     logger.error('Bot respond exercise error: ' + error.message);
     res.status(500).json({ error: 'Failed to record exercise response' });
+  }
+});
+
+// =====================================================================
+// T-03 Assignments — bot-side endpoints (client actor, scoped by telegram_id)
+// =====================================================================
+
+// GET /api/bot/assignments/:telegram_id — list active assignments for client
+router.get('/assignments/:telegram_id', botAuth, (req, res) => {
+  try {
+    const db = getDatabase();
+    const telegramId = req.params.telegram_id;
+
+    const userResult = db.exec(
+      "SELECT id FROM users WHERE telegram_id = ? AND role = 'client'",
+      [telegramId]
+    );
+    if (userResult.length === 0 || userResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+    const clientId = userResult[0].values[0][0];
+
+    const assignments = assignmentsService.listActiveAssignmentsForClient(clientId);
+
+    // Enrich each assignment with exercise titles so the bot can render a nice
+    // localized title without a second round-trip per assignment.
+    const exerciseIds = assignments.map(a => a.exercise_id).filter(Boolean);
+    let exerciseMap = {};
+    if (exerciseIds.length > 0) {
+      // sql.js doesn't support array binding — build a placeholder list.
+      const placeholders = exerciseIds.map(() => '?').join(',');
+      const exRes = db.exec(
+        `SELECT id, title_en, title_ru, title_es, title_uk, category
+           FROM exercises WHERE id IN (${placeholders})`,
+        exerciseIds
+      );
+      if (exRes.length > 0) {
+        for (const row of exRes[0].values) {
+          exerciseMap[row[0]] = {
+            title_en: row[1], title_ru: row[2], title_es: row[3], title_uk: row[4],
+            category: row[5]
+          };
+        }
+      }
+    }
+
+    res.json({
+      assignments: assignments.map(a => ({
+        ...a,
+        exercise: a.exercise_id && exerciseMap[a.exercise_id] ? exerciseMap[a.exercise_id] : null,
+      })),
+      total: assignments.length,
+    });
+  } catch (error) {
+    logger.error('Bot list assignments error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch assignments' });
+  }
+});
+
+// POST /api/bot/assignments/:assignment_id/complete — client marks done
+// (Pre-T-05 quick-complete path. Once T-05 lands the formal flow is:
+//  client submits report -> therapist accepts -> assignment becomes completed.)
+router.post('/assignments/:assignment_id/complete', botAuth, (req, res) => {
+  try {
+    const db = getDatabase();
+    const assignmentId = parseInt(req.params.assignment_id, 10);
+    if (!Number.isInteger(assignmentId) || assignmentId <= 0) {
+      return res.status(400).json({ error: 'Invalid assignment id' });
+    }
+    const { telegram_id } = req.body || {};
+    if (!telegram_id) {
+      return res.status(400).json({ error: 'telegram_id is required' });
+    }
+
+    const userResult = db.exec(
+      "SELECT id FROM users WHERE telegram_id = ? AND role = 'client'",
+      [String(telegram_id)]
+    );
+    if (userResult.length === 0 || userResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+    const clientId = userResult[0].values[0][0];
+
+    const completed = assignmentsService.completeAssignment(clientId, assignmentId);
+    if (!completed) {
+      return res.status(404).json({ error: 'Assignment not found' });
+    }
+
+    // Notify the therapist so their dashboard ticks over without a refresh.
+    try {
+      wsService.emitToTherapist(completed.therapist_id, {
+        type: 'assignment_completed',
+        client_id: clientId,
+        assignment_id: assignmentId,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (e) {
+      logger.warn(`[T-03] WS emit assignment_completed failed: ${e.message}`);
+    }
+
+    res.json({ assignment_id: assignmentId, status: 'completed' });
+  } catch (error) {
+    logger.error('Bot complete assignment error: ' + error.message);
+    res.status(500).json({ error: 'Failed to complete assignment' });
   }
 });
 

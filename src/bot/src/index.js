@@ -171,6 +171,7 @@ if (!token || token === 'your-telegram-bot-token') {
     try {
       // Client commands (default for all private chats)
       await bot.setMyCommands([
+        { command: 'assignments', description: 'My assignments' },
         { command: 'exercises', description: 'My exercises' },
         { command: 'sessions', description: 'My recent sessions' },
         { command: 'history', description: 'Diary history' },
@@ -707,6 +708,58 @@ if (!token || token === 'your-telegram-bot-token') {
     await handleExercises(chatId, telegramId, lang);
   });
 
+  // T-03: /assignments — client lists active homework set by therapist + can
+  // open an assignment to write a freeform report (text message). Voice/video
+  // diary entries are NOT auto-attached as reports here — the client must use
+  // a text reply, the same way exercise responses work today.
+  bot.onText(/\/assignments/, async (msg) => {
+    const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+    const lang = await getUserLang(telegramId);
+    await handleAssignments(chatId, telegramId, lang);
+  });
+
+  async function handleAssignments(chatId, telegramId, lang) {
+    try {
+      const result = await api.get(`/api/bot/assignments/${telegramId}`);
+      const assignments = (result.data && result.data.assignments) || [];
+
+      if (assignments.length === 0) {
+        bot.sendMessage(chatId, t(lang, 'assignmentsEmpty'));
+        return;
+      }
+
+      let text = t(lang, 'assignmentsHeader') + '\n\n';
+      const inlineButtons = [];
+      assignments.forEach((a, i) => {
+        const exerciseTitle = a.exercise
+          ? (lang === 'ru' ? (a.exercise.title_ru || a.exercise.title_en)
+            : lang === 'es' ? (a.exercise.title_es || a.exercise.title_en)
+            : lang === 'uk' ? (a.exercise.title_uk || a.exercise.title_en)
+            : a.exercise.title_en)
+          : null;
+          // Prefer therapist-supplied title; fall back to library exercise title.
+        const displayTitle = (a.title && a.title.trim()) ? a.title : (exerciseTitle || `Assignment #${a.id}`);
+        const freqLabel = t(lang, `assignmentFrequency_${a.report_frequency}`);
+        text += `${i + 1}. *${displayTitle}*\n   ⏱ ${freqLabel}\n`;
+        inlineButtons.push([{
+          text: `${i + 1}. ${displayTitle}`,
+          callback_data: `assignment_view_${a.id}`,
+        }]);
+      });
+
+      const opts = { parse_mode: 'Markdown' };
+      if (inlineButtons.length > 0) {
+        opts.reply_markup = { inline_keyboard: inlineButtons };
+      }
+      bot.sendMessage(chatId, text, opts);
+    } catch (error) {
+      const errorMsg = (error.response && error.response.data && error.response.data.error)
+        || t(lang, 'assignmentsFailed');
+      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+    }
+  }
+
   // /timezone command - view and change timezone
   bot.onText(/\/timezone/, async (msg) => {
     const chatId = msg.chat.id;
@@ -1011,6 +1064,78 @@ if (!token || token === 'your-telegram-bot-token') {
       }
 
       bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
+
+    // T-03: Show assignment details + actions (mark done | report).
+    if (data.startsWith('assignment_view_')) {
+      const assignmentId = data.replace('assignment_view_', '');
+      const lang = await getUserLang(telegramId);
+      try {
+        const result = await api.get(`/api/bot/assignments/${telegramId}`);
+        const a = (result.data.assignments || []).find(x => String(x.id) === String(assignmentId));
+        if (!a) {
+          bot.sendMessage(chatId, t(lang, 'assignmentNotFound'));
+          bot.answerCallbackQuery(callbackQuery.id);
+          return;
+        }
+        const exerciseTitle = a.exercise
+          ? (lang === 'ru' ? (a.exercise.title_ru || a.exercise.title_en)
+            : lang === 'es' ? (a.exercise.title_es || a.exercise.title_en)
+            : lang === 'uk' ? (a.exercise.title_uk || a.exercise.title_en)
+            : a.exercise.title_en)
+          : null;
+        const displayTitle = (a.title && a.title.trim()) ? a.title : (exerciseTitle || `Assignment #${a.id}`);
+        const freqLabel = t(lang, `assignmentFrequency_${a.report_frequency}`);
+        const detailFn = t(lang, 'assignmentDetail');
+        const body = detailFn(displayTitle, a.description || '', freqLabel, a.deadline || '');
+        bot.sendMessage(chatId, body, {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: t(lang, 'assignmentReportBtn'), callback_data: `assignment_report_${a.id}` }],
+              [{ text: t(lang, 'assignmentCompleteBtn'), callback_data: `assignment_complete_${a.id}` }],
+            ],
+          },
+        });
+      } catch (error) {
+        const errorMsg = (error.response && error.response.data && error.response.data.error) || t(lang, 'assignmentsFailed');
+        bot.sendMessage(chatId, `❌ ${errorMsg}`);
+      }
+      bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
+
+    if (data.startsWith('assignment_report_')) {
+      const assignmentId = data.replace('assignment_report_', '');
+      const lang = await getUserLang(telegramId);
+      // Reuse the diary text-capture path: the next text message will be
+      // captured as a diary entry, which the therapist will see linked to the
+      // client (no extra storage required for the pre-T-05 path). We send
+      // helpful guidance.
+      bot.sendMessage(chatId, t(lang, 'assignmentReportPrompt')(assignmentId));
+      bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
+
+    if (data.startsWith('assignment_complete_')) {
+      const assignmentId = data.replace('assignment_complete_', '');
+      const lang = await getUserLang(telegramId);
+      try {
+        await api.post(`/api/bot/assignments/${assignmentId}/complete`, {
+          telegram_id: String(telegramId),
+        });
+        try {
+          await bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
+            chat_id: chatId, message_id: callbackQuery.message.message_id,
+          });
+        } catch (_) { /* keyboard edit is best-effort */ }
+        bot.answerCallbackQuery(callbackQuery.id, { text: t(lang, 'assignmentCompletedToast') });
+        bot.sendMessage(chatId, t(lang, 'assignmentCompletedMsg'));
+      } catch (error) {
+        const errorMsg = (error.response && error.response.data && error.response.data.error) || t(lang, 'assignmentCompleteFailed');
+        bot.answerCallbackQuery(callbackQuery.id, { text: errorMsg, show_alert: true });
+      }
       return;
     }
 

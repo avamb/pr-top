@@ -8,6 +8,7 @@ const { encrypt, decrypt } = require('../services/encryption');
 const { verifyClientConsent } = require('../utils/consentCheck');
 const telegramNotify = require('../utils/telegramNotify');
 const inquiriesService = require('../services/inquiries');
+const assignmentsService = require('../services/assignments');
 const supervisionShare = require('../services/supervisionShare');
 
 const router = express.Router();
@@ -2662,6 +2663,199 @@ router.delete('/:id/inquiries/:inquiryId', (req, res) => {
   } catch (error) {
     logger.error('Delete inquiry error: ' + error.message);
     res.status(500).json({ error: 'Failed to delete inquiry' });
+  }
+});
+
+// =====================================================================
+// ASSIGNMENTS (T-03) — homework tasks the therapist sets per session/client
+// =====================================================================
+
+function parseAssignmentBody(body, { requireTitle = false } = {}) {
+  const out = {};
+  if (body == null || typeof body !== 'object') return out;
+  if ('title' in body || requireTitle) out.title = body.title;
+  if ('description' in body) out.description = body.description;
+  if ('exercise_id' in body) out.exerciseId = body.exercise_id;
+  if ('session_id' in body) out.sessionId = body.session_id;
+  if ('report_frequency' in body) out.reportFrequency = body.report_frequency;
+  if ('report_frequency_n' in body) out.reportFrequencyN = body.report_frequency_n;
+  if ('deadline' in body) out.deadline = body.deadline;
+  if ('status' in body) out.status = body.status;
+  return out;
+}
+
+// GET /api/clients/:id/assignments — list all assignments for this client.
+// Optional filters: ?status=active|completed|abandoned, ?session_id=N|none
+router.get('/:id/assignments', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+    const status = req.query.status || null;
+    const sessionId = req.query.session_id || null;
+
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'list_assignments');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+
+    const assignments = assignmentsService.listAssignments(therapistId, clientId, { status, sessionId });
+    res.json({ assignments, total: assignments.length });
+  } catch (error) {
+    logger.error('List assignments error: ' + error.message);
+    res.status(500).json({ error: 'Failed to list assignments' });
+  }
+});
+
+// GET /api/clients/:id/assignments/:assignmentId — single assignment
+router.get('/:id/assignments/:assignmentId', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = req.params.id;
+    const assignmentId = parseInt(req.params.assignmentId, 10);
+    if (!Number.isFinite(assignmentId) || assignmentId <= 0) {
+      return res.status(400).json({ error: 'Invalid assignment id' });
+    }
+
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'view_assignment');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+
+    const assignment = assignmentsService.getAssignment(therapistId, clientId, assignmentId);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+    res.json(assignment);
+  } catch (error) {
+    logger.error('Get assignment error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch assignment' });
+  }
+});
+
+// POST /api/clients/:id/assignments — create a new assignment for this client
+router.post('/:id/assignments', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = parseInt(req.params.id, 10);
+    const body = parseAssignmentBody(req.body || {}, { requireTitle: true });
+
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'create_assignment');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+
+    const assignment = assignmentsService.createAssignment({
+      therapistId,
+      clientId,
+      sessionId: body.sessionId || null,
+      exerciseId: body.exerciseId,
+      title: body.title,
+      description: body.description || '',
+      reportFrequency: body.reportFrequency || 'on_demand',
+      reportFrequencyN: body.reportFrequencyN,
+      deadline: body.deadline,
+      status: body.status || 'active',
+    });
+
+    logger.info(`Therapist ${therapistId} created assignment ${assignment.id} for client ${clientId}`);
+    if (assignment.status === 'active') assignmentsService.notifyClientOfNewAssignment(assignment);
+    res.status(201).json(assignment);
+  } catch (error) {
+    if (error.code === 'invalid_input') {
+      return res.status(400).json({ error: error.message });
+    }
+    logger.error('Create assignment error: ' + error.message);
+    res.status(500).json({ error: 'Failed to create assignment' });
+  }
+});
+
+// PUT /api/clients/:id/assignments/:assignmentId — update assignment
+router.put('/:id/assignments/:assignmentId', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = parseInt(req.params.id, 10);
+    const assignmentId = parseInt(req.params.assignmentId, 10);
+    if (!Number.isFinite(assignmentId) || assignmentId <= 0) {
+      return res.status(400).json({ error: 'Invalid assignment id' });
+    }
+    const body = parseAssignmentBody(req.body || {});
+
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'update_assignment');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+
+    const assignment = assignmentsService.updateAssignment({
+      therapistId,
+      clientId,
+      assignmentId,
+      title: body.title,
+      description: body.description,
+      exerciseId: 'exerciseId' in body ? body.exerciseId : undefined,
+      reportFrequency: body.reportFrequency,
+      reportFrequencyN: body.reportFrequencyN,
+      deadline: body.deadline,
+      status: body.status,
+    });
+
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+    logger.info(`Therapist ${therapistId} updated assignment ${assignmentId} for client ${clientId}`);
+    res.json(assignment);
+  } catch (error) {
+    if (error.code === 'invalid_input') {
+      return res.status(400).json({ error: error.message });
+    }
+    logger.error('Update assignment error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update assignment' });
+  }
+});
+
+// POST /api/clients/:id/assignments/:assignmentId/abandon — therapist abandons
+router.post('/:id/assignments/:assignmentId/abandon', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = parseInt(req.params.id, 10);
+    const assignmentId = parseInt(req.params.assignmentId, 10);
+    if (!Number.isFinite(assignmentId) || assignmentId <= 0) {
+      return res.status(400).json({ error: 'Invalid assignment id' });
+    }
+
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'abandon_assignment');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+
+    const assignment = assignmentsService.abandonAssignment(therapistId, clientId, assignmentId);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+    res.json(assignment);
+  } catch (error) {
+    if (error.code === 'invalid_input') {
+      return res.status(400).json({ error: error.message });
+    }
+    logger.error('Abandon assignment error: ' + error.message);
+    res.status(500).json({ error: 'Failed to abandon assignment' });
+  }
+});
+
+// DELETE /api/clients/:id/assignments/:assignmentId
+router.delete('/:id/assignments/:assignmentId', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = parseInt(req.params.id, 10);
+    const assignmentId = parseInt(req.params.assignmentId, 10);
+    if (!Number.isFinite(assignmentId) || assignmentId <= 0) {
+      return res.status(400).json({ error: 'Invalid assignment id' });
+    }
+
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'delete_assignment');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+
+    const ok = assignmentsService.deleteAssignment(therapistId, clientId, assignmentId);
+    if (!ok) return res.status(404).json({ error: 'Assignment not found' });
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Delete assignment error: ' + error.message);
+    res.status(500).json({ error: 'Failed to delete assignment' });
   }
 });
 
