@@ -158,6 +158,13 @@ Connect clients with one link — simple and secure.
     reportSaved: '✅ Report sent. Your therapist will see it shortly.',
     reportVoiceSaved: '🎤 Voice report sent! Transcription in progress — your therapist will see the text once it lands.',
     reportFailed: 'Failed to send your report. Please try again.',
+    // T-21: Photo attachments on reports
+    reportPhotoSaved: '📸 Photo attached to your report. Your therapist will see it in the report feed.',
+    reportPhotoFailed: 'Failed to attach the photo. Please try again.',
+    reportPhotoMissing: '📸 I could not read the photo. Please try sending it again.',
+    reportPhotoIdleHint: '📸 To attach a photo to a progress report, first use /report to pick an assignment, then send the photo.',
+    reportPhotoTherapist: '📸 Photo handling is only available for clients in the progress-report flow.',
+    reportPhotoStubContent: '[Photo report]',
     // Deep link connect
     deepLinkInvalidCode: 'Invite code not found or invalid.',
     deepLinkFallbackHint: 'You can also try manually with /connect YOUR_CODE',
@@ -364,6 +371,13 @@ Connect clients with one link — simple and secure.
     reportSaved: '✅ Отчёт отправлен. Терапевт скоро его увидит.',
     reportVoiceSaved: '🎤 Голосовой отчёт отправлен! Транскрибирование выполняется — терапевт увидит текст после завершения.',
     reportFailed: 'Не удалось отправить отчёт. Попробуйте ещё раз.',
+    // T-21: Photo attachments on reports
+    reportPhotoSaved: '📸 Фото прикреплено к отчёту. Терапевт увидит его в ленте отчётов.',
+    reportPhotoFailed: 'Не удалось прикрепить фото. Попробуйте ещё раз.',
+    reportPhotoMissing: '📸 Не удалось прочитать фото. Попробуйте отправить его снова.',
+    reportPhotoIdleHint: '📸 Чтобы прикрепить фото к отчёту, сначала используйте /report, выберите задание, затем отправьте фото.',
+    reportPhotoTherapist: '📸 Загрузка фото доступна только клиентам в режиме отчёта.',
+    reportPhotoStubContent: '[Фото-отчёт]',
     // Deep link connect
     deepLinkInvalidCode: 'Код приглашения не найден или недействителен.',
     deepLinkFallbackHint: 'Вы также можете попробовать вручную: /connect ВАШ_КОД',
@@ -570,6 +584,13 @@ Conecta clientes con un enlace — simple y seguro.
     reportSaved: '✅ Informe enviado. Tu terapeuta lo verá pronto.',
     reportVoiceSaved: '🎤 ¡Informe de voz enviado! Transcripción en progreso — tu terapeuta verá el texto en cuanto llegue.',
     reportFailed: 'No se pudo enviar el informe. Inténtalo de nuevo.',
+    // T-21: Adjuntos de fotos en informes
+    reportPhotoSaved: '📸 Foto adjuntada al informe. Tu terapeuta la verá en el hilo de informes.',
+    reportPhotoFailed: 'No se pudo adjuntar la foto. Inténtalo de nuevo.',
+    reportPhotoMissing: '📸 No pude leer la foto. Intenta enviarla de nuevo.',
+    reportPhotoIdleHint: '📸 Para adjuntar una foto a un informe, primero usa /report, elige una tarea y luego envía la foto.',
+    reportPhotoTherapist: '📸 La carga de fotos solo está disponible para clientes en el modo de informe.',
+    reportPhotoStubContent: '[Informe con foto]',
     // Deep link connect
     deepLinkInvalidCode: 'Código de invitación no encontrado o no válido.',
     deepLinkFallbackHint: 'También puedes intentar manualmente con /connect TU_CÓDIGO',
@@ -777,6 +798,13 @@ Conecta clientes con un enlace — simple y seguro.
     reportSaved: '✅ Звіт надіслано. Терапевт скоро його побачить.',
     reportVoiceSaved: '🎤 Голосовий звіт надіслано! Транскрибування виконується — терапевт побачить текст після завершення.',
     reportFailed: 'Не вдалося надіслати звіт. Спробуйте ще раз.',
+    // T-21: Фото-вкладення до звітів
+    reportPhotoSaved: '📸 Фото додано до звіту. Терапевт побачить його у стрічці звітів.',
+    reportPhotoFailed: 'Не вдалося додати фото. Спробуйте ще раз.',
+    reportPhotoMissing: '📸 Не вдалося прочитати фото. Спробуйте надіслати його знову.',
+    reportPhotoIdleHint: '📸 Щоб додати фото до звіту, спочатку використайте /report, виберіть завдання, потім надішліть фото.',
+    reportPhotoTherapist: '📸 Завантаження фото доступне лише клієнтам у режимі звіту.',
+    reportPhotoStubContent: '[Фото-звіт]',
     // Deep link connect
     deepLinkInvalidCode: 'Код запрошення не знайдено або недійсний.',
     deepLinkFallbackHint: 'Ви також можете спробувати вручну: /connect ВАШ_КОД',

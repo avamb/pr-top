@@ -1851,6 +1851,18 @@
         "pending": "Pending review",
         "accepted": "Accepted",
         "rejected": "Rejected"
+      },
+      "photo": {
+        "label": "Photo",
+        "openAlt": "Open full-size photo",
+        "thumbAlt": "Report photo attachment",
+        "count_one": "{{count}} photo",
+        "count_other": "{{count}} photos",
+        "delete": "Delete photo",
+        "deleteConfirm": "Delete this photo? This cannot be undone.",
+        "deleteFailed": "Failed to delete photo",
+        "loadFailed": "Photo failed to load",
+        "close": "Close"
       }
     }
   }

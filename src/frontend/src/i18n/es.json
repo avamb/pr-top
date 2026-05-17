@@ -1835,6 +1835,18 @@
         "pending": "Pendiente de revisión",
         "accepted": "Aceptado",
         "rejected": "Rechazado"
+      },
+      "photo": {
+        "label": "Foto",
+        "openAlt": "Abrir foto a tamaño completo",
+        "thumbAlt": "Foto adjunta al informe",
+        "count_one": "{{count}} foto",
+        "count_other": "{{count}} fotos",
+        "delete": "Eliminar foto",
+        "deleteConfirm": "¿Eliminar esta foto? Esta acción no se puede deshacer.",
+        "deleteFailed": "No se pudo eliminar la foto",
+        "loadFailed": "No se pudo cargar la foto",
+        "close": "Cerrar"
       }
     }
   }

@@ -6,6 +6,143 @@ import LoadingSpinner from './LoadingSpinner';
 import useWebSocket from '../hooks/useWebSocket';
 
 /**
+ * ReportPhotoThumbnail — T-21 (feature #379).
+ *
+ * Fetches an attachment image via the authenticated streaming endpoint
+ * (Bearer token, no public URL), turns it into a blob URL, and renders a
+ * thumbnail. Clicking the thumb invokes onOpen(blobUrl, attachment) so the
+ * parent can show a full-size lightbox.
+ *
+ * We intentionally fetch the blob ourselves rather than using an <img src>
+ * pointing at /api/.../stream because <img> tags cannot send the Bearer
+ * Authorization header (the dashboard uses localStorage token auth). The
+ * fetch + blob pattern mirrors what AudioPlayer.jsx does for diary audio.
+ */
+function ReportPhotoThumbnail({ clientId, assignmentId, reportId, attachment, onOpen, canDelete, onDelete }) {
+  const { t } = useTranslation();
+  const [blobUrl, setBlobUrl] = useState(null);
+  const [error, setError] = useState(false);
+
+  const streamUrl = `/api/clients/${clientId}/assignments/${assignmentId}/reports/${reportId}/attachments/${attachment.id}/stream`;
+
+  useEffect(() => {
+    let cancelled = false;
+    let createdUrl = null;
+    async function load() {
+      try {
+        const res = await fetchApi(streamUrl);
+        if (!res.ok) throw new Error('stream failed');
+        const blob = await res.blob();
+        if (cancelled) return;
+        createdUrl = URL.createObjectURL(blob);
+        setBlobUrl(createdUrl);
+      } catch (e) {
+        if (!cancelled) setError(true);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
+    };
+  }, [streamUrl]);
+
+  if (error) {
+    return (
+      <div
+        data-testid={`report-photo-error-${attachment.id}`}
+        className="w-20 h-20 flex items-center justify-center bg-rose-50 border border-rose-200 rounded text-[10px] text-rose-600 px-1 text-center"
+      >
+        {t('assignment.report.photo.loadFailed')}
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => blobUrl && onOpen && onOpen(blobUrl, attachment)}
+        disabled={!blobUrl}
+        className="w-20 h-20 rounded overflow-hidden border border-stone-200 bg-stone-100 hover:ring-2 hover:ring-teal-400 transition disabled:opacity-50 disabled:cursor-wait"
+        aria-label={t('assignment.report.photo.openAlt')}
+        data-testid={`report-photo-thumb-${attachment.id}`}
+      >
+        {blobUrl ? (
+          <img
+            src={blobUrl}
+            alt={t('assignment.report.photo.thumbAlt')}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-[10px] text-stone-400">
+            …
+          </div>
+        )}
+      </button>
+      {canDelete && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onDelete) onDelete(attachment);
+          }}
+          className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-white border border-stone-300 text-rose-600 text-[10px] leading-none flex items-center justify-center shadow hover:bg-rose-50"
+          aria-label={t('assignment.report.photo.delete')}
+          title={t('assignment.report.photo.delete')}
+          data-testid={`report-photo-delete-${attachment.id}`}
+        >
+          ×
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * ReportPhotoLightbox — T-21 (feature #379).
+ *
+ * Simple full-screen overlay used to display the full-size image when the
+ * therapist clicks a thumbnail. Backdrop click + Escape both close.
+ */
+function ReportPhotoLightbox({ blobUrl, onClose }) {
+  const { t } = useTranslation();
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === 'Escape') onClose();
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  if (!blobUrl) return null;
+  return (
+    <div
+      data-testid="report-photo-lightbox"
+      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute top-4 right-4 text-white text-3xl leading-none hover:text-stone-300"
+        aria-label={t('assignment.report.photo.close')}
+      >
+        ×
+      </button>
+      <img
+        src={blobUrl}
+        alt={t('assignment.report.photo.thumbAlt')}
+        className="max-w-full max-h-full object-contain rounded shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
+  );
+}
+
+/**
  * AssignmentReportsFeed — T-04 (feature #362).
  *
  * Inline chronological feed of freeform client progress reports for a single
@@ -13,12 +150,16 @@ import useWebSocket from '../hooks/useWebSocket';
  * clicks "Show reports". Receives a WebSocket "assignment_report_created" /
  * "assignment_report_transcribed" event from the parent panel via the
  * `wsTick` prop so it can refetch in real-time without polling.
+ *
+ * T-21: also renders the per-report photo attachment strip + lightbox.
  */
 function AssignmentReportsFeed({ clientId, assignmentId, wsTick }) {
   const { t } = useTranslation();
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // T-21: lightbox state for the report-attachment overlay.
+  const [lightboxUrl, setLightboxUrl] = useState(null);
 
   const url = `/api/clients/${clientId}/assignments/${assignmentId}/reports`;
 
@@ -38,6 +179,32 @@ function AssignmentReportsFeed({ clientId, assignmentId, wsTick }) {
       setLoading(false);
     }
   }, [url, t]);
+
+  // T-21: delete an attachment from a report. Optimistically refetches the
+  // reports list on success so the thumbnail strip updates immediately.
+  const handleDeleteAttachment = useCallback(async (reportId, attachment) => {
+    // eslint-disable-next-line no-alert
+    if (!window.confirm(t('assignment.report.photo.deleteConfirm'))) return;
+    try {
+      const res = await fetchApi(
+        `/api/clients/${clientId}/assignments/${assignmentId}/reports/${reportId}/attachments/${attachment.id}`,
+        { method: 'DELETE' }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || t('assignment.report.photo.deleteFailed'));
+      }
+      // Optimistic local update — drop the attachment from the report row.
+      setReports((prev) => prev.map((r) => (
+        r.id === reportId
+          ? { ...r, attachments: (r.attachments || []).filter((a) => a.id !== attachment.id) }
+          : r
+      )));
+    } catch (e) {
+      // eslint-disable-next-line no-alert
+      window.alert(e.message);
+    }
+  }, [clientId, assignmentId, t]);
 
   useEffect(() => {
     fetchReports();
@@ -124,9 +291,39 @@ function AssignmentReportsFeed({ clientId, assignmentId, wsTick }) {
                 {t('assignment.report.transcribingHint')}
               </p>
             ) : null}
+            {/* T-21: photo attachment strip. Only render if the backend
+                included an attachments array with at least one item. */}
+            {Array.isArray(r.attachments) && r.attachments.length > 0 && (
+              <div
+                data-testid={`report-attachments-${r.id}`}
+                className="mt-2 flex items-center gap-2 flex-wrap"
+              >
+                <span className="text-[10px] uppercase tracking-wide text-stone-500 mr-1">
+                  {t('assignment.report.photo.count', { count: r.attachments.length })}
+                </span>
+                {r.attachments.map((att) => (
+                  <ReportPhotoThumbnail
+                    key={att.id}
+                    clientId={clientId}
+                    assignmentId={assignmentId}
+                    reportId={r.id}
+                    attachment={att}
+                    onOpen={(blobUrl) => setLightboxUrl(blobUrl)}
+                    canDelete
+                    onDelete={(a) => handleDeleteAttachment(r.id, a)}
+                  />
+                ))}
+              </div>
+            )}
           </li>
         );
       })}
+      {lightboxUrl && (
+        <ReportPhotoLightbox
+          blobUrl={lightboxUrl}
+          onClose={() => setLightboxUrl(null)}
+        />
+      )}
     </ul>
   );
 }
@@ -210,7 +407,9 @@ function AssignmentsPanel({ mode = 'client', sessionId = null, clientId, canEdit
     };
     const off1 = wsOn('assignment_report_created', handle);
     const off2 = wsOn('assignment_report_transcribed', handle);
-    return () => { off1(); off2(); };
+    // T-21: also tick when a new photo lands on a report.
+    const off3 = wsOn('assignment_report_attachment_added', handle);
+    return () => { off1(); off2(); off3(); };
   }, [wsOn]);
 
   function toggleReports(assignmentId) {

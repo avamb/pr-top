@@ -1710,6 +1710,39 @@ function applySchema(db) {
     logger.warn('T-26: show_ai_sources backfill skipped: ' + e.message);
   }
 
+  // T-21: Photo attachments to assignment reports (feature #379)
+  // ---------------------------------------------------------------
+  // Clients can attach photos to an existing progress report ("snapped
+  // my diary", "photo of workout"). Storage strategy mirrors voice
+  // notes: each file is encrypted at rest on disk (data/diary_files
+  // dir, same AES-GCM helper) and referenced by an opaque .enc filename.
+  //
+  // - report_id FK with ON DELETE CASCADE so deleting a report also
+  //   removes its attachments (the on-disk file is cleaned up by the
+  //   delete route).
+  // - file_ref: opaque .enc filename inside data/diary_files
+  //   (e.g. "a1b2c3d4.jpg.enc"). Never expose to clients directly —
+  //   the therapist streams through /api/clients/.../reports/.../
+  //   attachments/:aid/stream which performs auth + decrypts on the fly.
+  // - mime_type: original Telegram mime (image/jpeg, image/png, image/webp).
+  // - size_bytes: original file size in bytes (before encryption), used
+  //   to enforce the 10MB per-photo cap and surface in the dashboard.
+  // - encryption_key_id / payload_version: track which key encrypted
+  //   the file payload, mirroring the assignment_reports columns so
+  //   future key-rotation jobs can re-encrypt files of a given vintage.
+  // - created_at: timestamp (Class B metadata, plaintext).
+  db.run(`CREATE TABLE IF NOT EXISTS assignment_report_attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    report_id INTEGER NOT NULL REFERENCES assignment_reports(id) ON DELETE CASCADE,
+    file_ref TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    encryption_key_id INTEGER REFERENCES encryption_keys(id),
+    payload_version INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_assignment_report_attachments_report ON assignment_report_attachments(report_id, created_at ASC)');
+
   // Seed default superadmin account if not exists
   seedSuperadmin(db);
 

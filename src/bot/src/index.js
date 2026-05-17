@@ -1948,10 +1948,139 @@ if (!token || token === 'your-telegram-bot-token') {
     }
   });
 
+  // T-21: Handle photo messages (feature #379)
+  // ------------------------------------------
+  // Clients can attach photos to a freeform progress report by entering
+  // the report flow first (`/report` or tapping the "Write report" button)
+  // and then sending a photo. The handler:
+  //   1. Looks up the assignment armed in activeReports[telegramId]
+  //   2. Finds the most recent report on that assignment (created by the
+  //      client when they sent a text/voice message), OR creates a stub
+  //      text report if none exists yet, then attaches the photo.
+  //   3. Posts the encrypted photo bytes via the bot API.
+  //
+  // Outside of the /report context, we politely tell the client what to do.
+  bot.on('photo', async (msg) => {
+    const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+    const lang = await getUserLang(telegramId);
+
+    try {
+      const user = await checkExistingUser(telegramId);
+      if (user && user.role !== 'client') {
+        bot.sendMessage(chatId, t(lang, 'reportPhotoTherapist'));
+        return;
+      }
+      if (!(await requireConsentUpToDate(chatId, telegramId, lang, user))) return;
+
+      // Only handle photos when the client is in the report flow.
+      const armedAssignmentId = activeReports[telegramId];
+      if (!armedAssignmentId) {
+        bot.sendMessage(chatId, t(lang, 'reportPhotoIdleHint'));
+        return;
+      }
+
+      // Telegram sends an array of photo sizes — pick the largest (last).
+      const photos = Array.isArray(msg.photo) ? msg.photo : [];
+      if (photos.length === 0) {
+        bot.sendMessage(chatId, t(lang, 'reportPhotoMissing'));
+        return;
+      }
+      const largest = photos[photos.length - 1];
+      const fileId = largest.file_id;
+
+      // Download the bytes from Telegram.
+      let downloaded = null;
+      try {
+        downloaded = await downloadTelegramFile(fileId);
+      } catch (dlErr) {
+        console.error('[T-21] Photo download failed:', dlErr.message);
+      }
+      if (!downloaded || !downloaded.buffer) {
+        bot.sendMessage(chatId, `❌ ${t(lang, 'reportPhotoFailed')}`);
+        return;
+      }
+      // Telegram resizes/converts photos to JPEG.
+      let fileExt = '.jpg';
+      if (downloaded.filePath) {
+        const guessed = downloaded.filePath.split('.').pop();
+        if (guessed && guessed.length <= 5) fileExt = '.' + guessed.toLowerCase();
+      }
+      const mimeByExt = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.webp': 'image/webp',
+        '.gif': 'image/gif',
+      };
+      const mimeType = mimeByExt[fileExt] || 'image/jpeg';
+
+      // Find an existing report on the armed assignment to attach to. If
+      // none exists yet (the client armed the flow but hasn't sent text
+      // or voice first), create a small stub text report so the photo has
+      // a parent. We keep the assignment armed so the next text/voice
+      // message becomes a proper report on the same parent assignment.
+      let reportId = null;
+      try {
+        const list = await api.get(`/api/bot/assignments/${armedAssignmentId}/reports`, {
+          params: { telegram_id: String(telegramId) },
+        });
+        const reports = (list.data && list.data.reports) || [];
+        if (reports.length > 0) {
+          // Newest first (the GET returns ASC; pick the last one).
+          reportId = reports[reports.length - 1].id;
+        }
+      } catch (listErr) {
+        console.error('[T-21] Failed to list reports for attachment:', listErr.message);
+      }
+
+      if (!reportId) {
+        // Create a stub text report to hang the photo on.
+        try {
+          const created = await api.post(`/api/bot/assignments/${armedAssignmentId}/reports`, {
+            telegram_id: String(telegramId),
+            report_type: 'text',
+            content: t(lang, 'reportPhotoStubContent'),
+          });
+          reportId = created.data && created.data.report && created.data.report.id;
+        } catch (createErr) {
+          const errorMsg = createErr.response?.data?.error || t(lang, 'reportPhotoFailed');
+          bot.sendMessage(chatId, `❌ ${errorMsg}`);
+          return;
+        }
+      }
+
+      if (!reportId) {
+        bot.sendMessage(chatId, `❌ ${t(lang, 'reportPhotoFailed')}`);
+        return;
+      }
+
+      // Upload the photo bytes (encrypted server-side, opaque file_ref).
+      try {
+        await api.post(
+          `/api/bot/assignments/${armedAssignmentId}/reports/${reportId}/attachments`,
+          {
+            telegram_id: String(telegramId),
+            file_data: downloaded.buffer.toString('base64'),
+            file_ext: fileExt,
+            mime_type: mimeType,
+          }
+        );
+        bot.sendMessage(chatId, t(lang, 'reportPhotoSaved'));
+      } catch (uploadErr) {
+        const errorMsg = uploadErr.response?.data?.error || t(lang, 'reportPhotoFailed');
+        bot.sendMessage(chatId, `❌ ${errorMsg}`);
+      }
+    } catch (error) {
+      console.error('[T-21] Photo handler error:', error.message);
+      bot.sendMessage(chatId, `❌ ${t(lang, 'reportPhotoFailed')}`);
+    }
+  });
+
   // Handle text messages as diary entries, exercise responses, or keyboard button presses
   bot.on('message', async (msg) => {
     // Skip commands and non-text messages
-    if (!msg.text || msg.text.startsWith('/') || msg.voice || msg.video || msg.video_note) return;
+    if (!msg.text || msg.text.startsWith('/') || msg.voice || msg.video || msg.video_note || msg.photo) return;
 
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;

@@ -58,6 +58,7 @@ function decryptRow(row) {
     transcription_status: row.transcription_status || null,
     is_final: !!row.is_final,
     acceptance_status: row.acceptance_status,
+    attachments: listAttachmentsForReport(row.id),
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -529,6 +530,195 @@ function setAcceptanceStatus(therapistId, reportId, status) {
   return { report: getReport(reportId) };
 }
 
+// =====================================================================
+// T-21: Photo attachments on assignment reports (feature #379)
+// =====================================================================
+//
+// Storage strategy mirrors voice notes: each photo is AES-encrypted on
+// disk inside data/diary_files (the same directory the diary + voice
+// reports use), referenced by an opaque .enc filename. The therapist
+// streams the file through a backend route that performs auth and
+// decrypts on the fly; clients never see the on-disk filename.
+
+const MAX_ATTACHMENTS_PER_REPORT = 5;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // 10 MB
+const ALLOWED_ATTACHMENT_MIMES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
+
+/**
+ * List attachment metadata for a single report (oldest first).
+ * Never returns the encrypted blob — only ids / mime / size so the
+ * frontend can render thumbnails and request streaming separately.
+ */
+function listAttachmentsForReport(reportId) {
+  const db = getDatabase();
+  const rows = rowsToObjects(
+    db.exec(
+      `SELECT id, report_id, mime_type, size_bytes, created_at
+         FROM assignment_report_attachments
+        WHERE report_id = ?
+        ORDER BY datetime(created_at) ASC, id ASC`,
+      [reportId]
+    )
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    report_id: r.report_id,
+    mime_type: r.mime_type,
+    size_bytes: r.size_bytes,
+    created_at: r.created_at,
+  }));
+}
+
+/**
+ * Count attachments for a report (used to enforce the per-report cap).
+ */
+function countAttachmentsForReport(reportId) {
+  const db = getDatabase();
+  const result = db.exec(
+    'SELECT COUNT(*) FROM assignment_report_attachments WHERE report_id = ?',
+    [reportId]
+  );
+  if (result.length === 0 || result[0].values.length === 0) return 0;
+  return Number(result[0].values[0][0]) || 0;
+}
+
+/**
+ * Fetch a single attachment row including the file_ref (needed for
+ * the streaming path). Returns null when missing.
+ */
+function getAttachment(attachmentId) {
+  const db = getDatabase();
+  const rows = rowsToObjects(
+    db.exec(
+      `SELECT id, report_id, file_ref, mime_type, size_bytes,
+              encryption_key_id, payload_version, created_at
+         FROM assignment_report_attachments WHERE id = ?`,
+      [attachmentId]
+    )
+  );
+  return rows.length === 0 ? null : rows[0];
+}
+
+/**
+ * Persist a new attachment row. Caller is responsible for writing the
+ * encrypted file to disk first (mirrors the voice-report path).
+ *
+ * @param {object} args
+ * @param {number} args.reportId
+ * @param {string} args.fileRef - opaque .enc filename inside DIARY_FILES_DIR
+ * @param {string} args.mimeType
+ * @param {number} args.sizeBytes - original (pre-encryption) byte count
+ * @param {number} args.actorId - which user id triggered this (for audit)
+ * @param {number|null} args.keyId
+ * @param {number} args.keyVersion
+ * @returns {object} the inserted attachment row (no file_ref leak)
+ */
+function insertAttachment({
+  reportId,
+  fileRef,
+  mimeType,
+  sizeBytes,
+  actorId,
+  keyId = null,
+  keyVersion = 1,
+}) {
+  if (!fileRef || typeof fileRef !== 'string') {
+    const err = new Error('file_ref is required');
+    err.code = 'invalid_input';
+    throw err;
+  }
+  const normalizedMime = String(mimeType || '').toLowerCase().trim();
+  if (!ALLOWED_ATTACHMENT_MIMES.has(normalizedMime)) {
+    const err = new Error(`Unsupported attachment mime type: ${mimeType}`);
+    err.code = 'invalid_input';
+    throw err;
+  }
+  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+    const err = new Error('size_bytes must be a positive number');
+    err.code = 'invalid_input';
+    throw err;
+  }
+  if (sizeBytes > MAX_ATTACHMENT_BYTES) {
+    const err = new Error(`Attachment too large (max ${MAX_ATTACHMENT_BYTES} bytes)`);
+    err.code = 'invalid_input';
+    throw err;
+  }
+  const existing = countAttachmentsForReport(reportId);
+  if (existing >= MAX_ATTACHMENTS_PER_REPORT) {
+    const err = new Error(`Max ${MAX_ATTACHMENTS_PER_REPORT} attachments per report`);
+    err.code = 'invalid_input';
+    throw err;
+  }
+
+  const db = getDatabase();
+  db.run(
+    `INSERT INTO assignment_report_attachments
+       (report_id, file_ref, mime_type, size_bytes,
+        encryption_key_id, payload_version, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
+    [reportId, fileRef, normalizedMime, sizeBytes, keyId, keyVersion]
+  );
+  const idResult = db.exec('SELECT last_insert_rowid()');
+  const attachmentId = idResult[0].values[0][0];
+
+  audit(actorId, 'assignment_report_attachment_create', attachmentId, {
+    report_id: reportId,
+    mime_type: normalizedMime,
+    size_bytes: sizeBytes,
+  });
+
+  saveDatabaseAfterWrite();
+
+  // Notify therapist so the dashboard re-fetches and renders the thumbnail.
+  try {
+    const report = getReport(reportId);
+    if (report) {
+      wsService.emitToTherapist(report.therapist_id, {
+        type: 'assignment_report_attachment_added',
+        assignment_id: report.assignment_id,
+        client_id: report.client_id,
+        report_id: reportId,
+        attachment_id: attachmentId,
+        mime_type: normalizedMime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  } catch (wsErr) {
+    logger.warn(`[T-21] WS emit assignment_report_attachment_added failed: ${wsErr.message}`);
+  }
+
+  return {
+    id: attachmentId,
+    report_id: reportId,
+    mime_type: normalizedMime,
+    size_bytes: sizeBytes,
+  };
+}
+
+/**
+ * Delete an attachment row. Caller (route layer) is responsible for
+ * removing the on-disk encrypted file. Returns true when deleted,
+ * false when no such row existed.
+ */
+function deleteAttachment(attachmentId, actorId) {
+  const db = getDatabase();
+  const att = getAttachment(attachmentId);
+  if (!att) return false;
+  db.run('DELETE FROM assignment_report_attachments WHERE id = ?', [attachmentId]);
+  audit(actorId, 'assignment_report_attachment_delete', attachmentId, {
+    report_id: att.report_id,
+    mime_type: att.mime_type,
+  });
+  saveDatabaseAfterWrite();
+  return true;
+}
+
 module.exports = {
   VALID_REPORT_TYPES,
   listReportsForAssignment,
@@ -542,6 +732,15 @@ module.exports = {
   processReportTranscription,
   deleteReport,
   setAcceptanceStatus,
+  // T-21 attachments
+  MAX_ATTACHMENTS_PER_REPORT,
+  MAX_ATTACHMENT_BYTES,
+  ALLOWED_ATTACHMENT_MIMES,
+  listAttachmentsForReport,
+  countAttachmentsForReport,
+  getAttachment,
+  insertAttachment,
+  deleteAttachment,
   // exposed for tests / internal use
   insertReport,
   findAssignmentBase,

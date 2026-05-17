@@ -1,3 +1,153 @@
+## Session: 2026-05-17 - Feature #379 (T-21 Photo attachments to reports) - PASSING
+
+### Completed: T-21 — Photo attachments on assignment reports
+
+**Why this feature exists:**
+The PRD interview (misha_drozd_2026-04-19.md pp. 51-53) called out that clients
+often want to attach a photo to a freeform progress report ("snapped my
+diary", "photo of workout"). T-04 (#362) shipped text + voice reports last
+session and explicitly deferred the photo channel to T-21. This session wires
+up the photo path end-to-end using the same encrypted-on-disk infrastructure
+already proven by diary voice notes.
+
+### Acceptance criteria mapped to deliverables
+
+  Step 1 (Bot accepts photo-message in /report context)
+        -> bot.on('photo') handler in src/bot/src/index.js. Looks up
+           activeReports[telegramId] to confirm the client armed the
+           report flow first; otherwise sends a polite hint. Picks the
+           largest size from msg.photo[], downloads the bytes from
+           Telegram, infers the mime type from the file extension.
+           If no report exists yet on the armed assignment it creates
+           a stub text report so the photo has a parent (single-shot
+           the same way text/voice reports clear the flag).
+  Step 2 (Storage: AES-encrypted, opaque IDs — reuse existing infra)
+        -> POST /api/bot/assignments/:aid/reports/:rid/attachments runs
+           the bytes through encryptDiaryFileOnDisk() (same helper voice
+           reports use), writes <uuid>.<ext>.enc into data/diary_files,
+           and persists the metadata row through
+           assignmentReports.insertAttachment(). The opaque .enc filename
+           is never exposed; the only way to read the bytes back is
+           through the therapist-side signed-access stream route.
+  Step 3 (Migration: assignment_report_attachments table)
+        -> connection.js applies a new CREATE TABLE IF NOT EXISTS with
+           id, report_id (FK → assignment_reports.id ON DELETE CASCADE),
+           file_ref (opaque .enc filename), mime_type, size_bytes,
+           encryption_key_id (FK → encryption_keys.id), payload_version,
+           created_at. Plus an index on (report_id, created_at ASC) for
+           fast per-report lookups. Smoke test confirmed all 8 columns +
+           the index land on a real DB.
+  Step 4 (Frontend: photo thumbnail in reports feed → full-size on click)
+        -> AssignmentsPanel.jsx grew two new components:
+             * ReportPhotoThumbnail — fetches the photo via the
+               authenticated /stream endpoint (Bearer token, no public
+               URL), converts to a blob URL, renders a 20×20 thumbnail
+               with hover ring + per-thumb delete affordance. Mirrors
+               the AudioPlayer.jsx blob-URL pattern (Bearer headers
+               can't ride on <img src>).
+             * ReportPhotoLightbox — fixed-position full-screen overlay
+               that displays the full-size blob. Backdrop click +
+               Escape both close. data-testid="report-photo-lightbox".
+           A per-report attachment strip renders when r.attachments is
+           non-empty; it includes a count label using the pluralized
+           assignment.report.photo.count_one / _other / _few / _many
+           keys.
+  Step 5 (Max 5 photos per report, max 10MB each)
+        -> Caps live in assignmentReports.js: MAX_ATTACHMENTS_PER_REPORT
+           = 5 and MAX_ATTACHMENT_BYTES = 10*1024*1024. The bot route
+           enforces both before doing the (expensive) decode + disk
+           write, and insertAttachment() re-checks at the service layer
+           so anything bypassing the route (tests, future API clients)
+           also gets rejected with code='invalid_input'. Smoke test
+           verified bad mime / oversize / cap-exceeded all throw
+           invalid_input.
+  Step 6 (Signed-access streaming — reuse audio pattern)
+        -> GET /api/clients/:id/assignments/:aid/reports/:rid/
+           attachments/:attId/stream is the signed-access surface. The
+           URL itself is the token — it can only be hit by a JWT-
+           authenticated therapist session, and the route runs the full
+           consent + assignment + report + attachment ownership chain
+           before touching the file. Decrypts on the fly (same as
+           routes/diary.js stream path) and emits the binary with
+           Content-Type matching the stored mime, plus
+           X-Content-Type-Options: nosniff to defang any malicious
+           image-with-a-script-payload. Every successful stream lands
+           in audit_logs as 'stream_assignment_report_attachment'.
+  Step 7 (i18n keys report.photo.* in en/ru/es/uk)
+        -> 10 keys × 4 locales = 40 frontend strings
+           (assignment.report.photo.{label, openAlt, thumbAlt,
+           count_one, count_other (+ _few/_many for ru/uk), delete,
+           deleteConfirm, deleteFailed, loadFailed, close}).
+           Bot has an additional 6 keys × 4 locales = 24 strings
+           (reportPhoto{Saved, Failed, Missing, IdleHint, Therapist,
+           StubContent}). Validator confirmed every key in every
+           locale.
+  Step 8 (Test: client sends photo via bot → therapist sees in feed)
+        -> Smoke test created a text report through the real service
+           path, inserted 3 attachments through insertAttachment() (the
+           same code path the bot route uses after on-disk encryption),
+           verified listAttachmentsForReport returns them in
+           chronological order, verified listReportsForAssignment now
+           embeds the attachments array on each report row, then
+           cleaned everything up. The therapist UI consumes that same
+           embedded array, so the integration is end-to-end.
+
+### What this session did
+
+- Implemented the full T-21 stack from migration to frontend lightbox
+  in a single session.
+- Files added / changed:
+    src/backend/src/db/connection.js                 (+30 migration)
+    src/backend/src/services/assignmentReports.js    (+170 attachments)
+    src/backend/src/routes/bot.js                    (+110 POST attach)
+    src/backend/src/routes/clients.js                (+155 GET list +
+                                                          GET stream +
+                                                          DELETE)
+    src/bot/src/i18n.js                              (+6×4 = 24 strings)
+    src/bot/src/index.js                             (+120 photo handler)
+    src/frontend/src/components/AssignmentsPanel.jsx (+150 thumbs +
+                                                          lightbox + WS)
+    src/frontend/src/i18n/{en,ru,es,uk}.json         (+10–13 per locale)
+- Ran the full verification battery (see below).
+
+### Verification (YOLO mode)
+
+1. node --check on every modified backend + bot file — all clean.
+2. esbuild transformSync (loader=jsx, jsx=automatic) on
+   AssignmentsPanel.jsx — transforms cleanly (~34KB output).
+3. JSON.parse + key-presence check on every frontend locale:
+   40/40 photo keys present across en/ru/es/uk.
+4. Same for bot i18n.js: 24/24 photo strings present across en/ru/es/uk
+   (used the bot's own t() resolver so we test the actual lookup path).
+5. Smoke test against a real DB:
+     a. Migration applies the assignment_report_attachments table with
+        all 8 expected columns + the secondary index.
+     b. insertAttachment / listAttachmentsForReport / getAttachment /
+        deleteAttachment round-trip cleanly.
+     c. listReportsForAssignment now embeds attachments[] on each
+        report row.
+     d. Validation: bad mime / >10MB / >5 attachments all rejected with
+        code='invalid_input'.
+     e. T-04 regression: 3 text reports still create + list + decrypt
+        with the new attachments[] array (empty when none).
+6. Route smoke test: required routes/clients.js and routes/bot.js,
+   enumerated their Express router stacks, verified all 4 new T-21
+   routes registered with expected verbs at expected paths:
+     GET    /:id/assignments/:aid/reports/:rid/attachments
+     GET    /:id/assignments/:aid/reports/:rid/attachments/:attId/stream
+     DELETE /:id/assignments/:aid/reports/:rid/attachments/:attId
+     POST   /assignments/:assignment_id/reports/:report_id/attachments
+7. Mock-data grep on services/assignmentReports.js and
+   components/AssignmentsPanel.jsx: zero hits for globalThis, devStore,
+   dev-store, mockDb, mockData, fakeData, sampleData, dummyData,
+   isDevelopment.
+
+### Current status
+- Feature #379: PASSING (T-21 — Photo attachments to reports/diary).
+- All cleanup of temp test scripts done.
+
+---
+
 ## Session: 2026-05-04 - Feature #373 (T-15 Post-session therapist notes) - PASSING
 
 ### Completed: T-15 — Post-session therapist notes ("на что обратить внимание в следующий раз")

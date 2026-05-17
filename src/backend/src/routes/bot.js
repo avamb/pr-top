@@ -1724,6 +1724,138 @@ router.get('/assignments/:assignment_id/reports', botAuth, (req, res) => {
   }
 });
 
+// T-21: POST /api/bot/assignments/:assignment_id/reports/:report_id/attachments
+// — client attaches a photo to one of their existing progress reports.
+//
+// Body:
+//   { telegram_id, file_data (base64), file_ext?, mime_type? }
+//
+// Storage path mirrors voice notes (encryptDiaryFileOnDisk → data/diary_files).
+// Enforces: report belongs to this client, max 5 attachments per report,
+// max 10MB per file, mime type must be a supported image type.
+router.post('/assignments/:assignment_id/reports/:report_id/attachments', botAuth, (req, res) => {
+  try {
+    const assignmentId = parseInt(req.params.assignment_id, 10);
+    const reportId = parseInt(req.params.report_id, 10);
+    if (!Number.isInteger(assignmentId) || assignmentId <= 0) {
+      return res.status(400).json({ error: 'Invalid assignment id' });
+    }
+    if (!Number.isInteger(reportId) || reportId <= 0) {
+      return res.status(400).json({ error: 'Invalid report id' });
+    }
+    const { telegram_id, file_data, file_ext, mime_type } = req.body || {};
+    if (!telegram_id) {
+      return res.status(400).json({ error: 'telegram_id is required' });
+    }
+    if (!file_data || typeof file_data !== 'string') {
+      return res.status(400).json({ error: 'file_data (base64) is required' });
+    }
+
+    const db = getDatabase();
+    const client = resolveClientByTelegram(db, telegram_id);
+    if (!client) {
+      return res.status(404).json({ error: 'Client not found. Please register first with /start.' });
+    }
+
+    // Verify the report exists, belongs to this assignment, and to this client.
+    const report = assignmentReports.getReport(reportId);
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+    if (Number(report.assignment_id) !== assignmentId) {
+      return res.status(404).json({ error: 'Report not found in this assignment' });
+    }
+    if (Number(report.client_id) !== Number(client.id)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    // Enforce cap before doing the (potentially large) decode + disk write.
+    const existing = assignmentReports.countAttachmentsForReport(reportId);
+    if (existing >= assignmentReports.MAX_ATTACHMENTS_PER_REPORT) {
+      return res.status(400).json({
+        error: `Max ${assignmentReports.MAX_ATTACHMENTS_PER_REPORT} attachments per report`,
+      });
+    }
+
+    // Decode + size cap (10MB).
+    let buffer;
+    try {
+      buffer = Buffer.from(file_data, 'base64');
+    } catch (decodeErr) {
+      return res.status(400).json({ error: 'Invalid base64 file_data' });
+    }
+    if (!buffer || buffer.length === 0) {
+      return res.status(400).json({ error: 'Empty file_data' });
+    }
+    if (buffer.length > assignmentReports.MAX_ATTACHMENT_BYTES) {
+      return res.status(400).json({
+        error: `Attachment too large (max ${assignmentReports.MAX_ATTACHMENT_BYTES} bytes)`,
+      });
+    }
+
+    // Default mime/ext to jpeg (Telegram photos always come down as .jpg).
+    const ext = (file_ext && typeof file_ext === 'string') ? file_ext : '.jpg';
+    const safeExt = ext.startsWith('.') ? ext : ('.' + ext);
+    const inferredMime = (mime_type && typeof mime_type === 'string')
+      ? mime_type.toLowerCase()
+      : 'image/jpeg';
+
+    // Write encrypted file to disk (same .enc pattern as voice notes).
+    const opaqueId = crypto.randomUUID();
+    const filename = `${opaqueId}${safeExt}`;
+    const tempPath = path.join(DIARY_FILES_DIR, filename);
+    let fileRef = null;
+    let keyId = null;
+    let keyVersion = 1;
+    try {
+      fs.writeFileSync(tempPath, buffer);
+      const encResult = encryptDiaryFileOnDisk(tempPath);
+      fileRef = `${filename}.enc`;
+      keyId = encResult.keyId;
+      keyVersion = encResult.keyVersion;
+      logger.info(`[T-21] Encrypted assignment-report photo: ${fileRef} (${buffer.length} bytes)`);
+    } catch (fileErr) {
+      // Best-effort cleanup of any half-written files.
+      try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (_) { /* ignore */ }
+      try {
+        const encPath = tempPath + '.enc';
+        if (fs.existsSync(encPath)) fs.unlinkSync(encPath);
+      } catch (_) { /* ignore */ }
+      logger.error('[T-21] Failed to encrypt photo attachment: ' + fileErr.message);
+      return res.status(500).json({ error: 'Failed to store photo' });
+    }
+
+    let attachment;
+    try {
+      attachment = assignmentReports.insertAttachment({
+        reportId,
+        fileRef,
+        mimeType: inferredMime,
+        sizeBytes: buffer.length,
+        actorId: client.id,
+        keyId,
+        keyVersion,
+      });
+    } catch (insertErr) {
+      // If the metadata insert fails, remove the encrypted file we just wrote
+      // so we don't accumulate orphans.
+      try {
+        const onDisk = path.join(DIARY_FILES_DIR, fileRef);
+        if (fs.existsSync(onDisk)) fs.unlinkSync(onDisk);
+      } catch (_) { /* ignore */ }
+      if (insertErr.code === 'invalid_input') {
+        return res.status(400).json({ error: insertErr.message });
+      }
+      throw insertErr;
+    }
+
+    res.status(201).json({ attachment });
+  } catch (error) {
+    logger.error('Bot create assignment report attachment error: ' + error.message);
+    res.status(500).json({ error: 'Failed to create attachment' });
+  }
+});
+
 // POST /api/bot/voice-query - Voice-based NL query for therapist
 // Accepts voice transcript text (already transcribed by bot/Telegram) and processes as NL query
 // Gated to Pro/Premium subscription tiers

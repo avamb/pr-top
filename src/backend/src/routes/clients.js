@@ -1,5 +1,7 @@
 // Client Routes - Therapist client management
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { authenticate, requireRole } = require('../middleware/auth');
@@ -11,6 +13,10 @@ const inquiriesService = require('../services/inquiries');
 const assignmentsService = require('../services/assignments');
 const assignmentReports = require('../services/assignmentReports');
 const supervisionShare = require('../services/supervisionShare');
+
+// T-21: Photo attachments for assignment reports — same encrypted-on-disk
+// directory as diary voice notes (reuse the existing infra).
+const DIARY_FILES_DIR = path.resolve(__dirname, '../../data/diary_files');
 
 const router = express.Router();
 
@@ -3032,6 +3038,180 @@ router.delete('/:id/assignments/:aid/reports/:rid', (req, res) => {
   } catch (error) {
     logger.error('Delete assignment report error: ' + error.message);
     res.status(500).json({ error: 'Failed to delete assignment report' });
+  }
+});
+
+// =====================================================================
+// T-21: ASSIGNMENT REPORT PHOTO ATTACHMENTS (feature #379)
+// =====================================================================
+//
+// Therapist-side routes for the photos a client attached to a progress
+// report via the bot. The bot uploads the encrypted file + metadata via
+// /api/bot/assignments/:aid/reports/:rid/attachments; here we expose:
+//
+//   GET    .../attachments              — JSON metadata list
+//   GET    .../attachments/:attId/stream — decrypted binary stream
+//                                          (image/jpeg etc), no caching
+//   DELETE .../attachments/:attId       — remove an attachment
+//
+// Every route runs through consent enforcement + the assignment+report
+// ownership chain, mirroring the existing assignment_reports endpoints.
+
+function assertReportInAssignment(therapistId, reportId, assignmentId) {
+  const r = assignmentReports.getReportForTherapist(therapistId, reportId);
+  if (r.notFound) return { error: 'Report not found', status: 404 };
+  if (r.forbidden) return { error: 'Forbidden', status: 403 };
+  if (Number(r.report.assignment_id) !== Number(assignmentId)) {
+    return { error: 'Report not found in this assignment', status: 404 };
+  }
+  return { report: r.report };
+}
+
+// GET /api/clients/:id/assignments/:aid/reports/:rid/attachments
+//   → list attachment metadata (id, mime_type, size_bytes, created_at)
+router.get('/:id/assignments/:aid/reports/:rid/attachments', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = parseInt(req.params.id, 10);
+    const assignmentId = parseInt(req.params.aid, 10);
+    const reportId = parseInt(req.params.rid, 10);
+    if (!Number.isFinite(reportId) || reportId <= 0) {
+      return res.status(400).json({ error: 'Invalid report id' });
+    }
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'list_assignment_report_attachments');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+    const own = assertAssignmentOwnership(therapistId, clientId, assignmentId);
+    if (own.error) return res.status(own.status).json({ error: own.error });
+    const r = assertReportInAssignment(therapistId, reportId, assignmentId);
+    if (r.error) return res.status(r.status).json({ error: r.error });
+
+    const attachments = assignmentReports.listAttachmentsForReport(reportId);
+    res.json({ report_id: reportId, attachments, total: attachments.length });
+  } catch (error) {
+    logger.error('List assignment report attachments error: ' + error.message);
+    res.status(500).json({ error: 'Failed to list attachments' });
+  }
+});
+
+// GET /api/clients/:id/assignments/:aid/reports/:rid/attachments/:attId/stream
+//   → decrypt the on-disk .enc file and stream the image binary.
+//
+// Signed-access pattern (T-21): the URL itself is the signed access
+// token — it can only be hit by an authenticated therapist session
+// (JWT cookie), and the route re-verifies consent + ownership before
+// touching the file. We deliberately don't expose the opaque .enc
+// filename to the client; the only way to fetch the bytes is through
+// this verified route.
+router.get('/:id/assignments/:aid/reports/:rid/attachments/:attId/stream', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = parseInt(req.params.id, 10);
+    const assignmentId = parseInt(req.params.aid, 10);
+    const reportId = parseInt(req.params.rid, 10);
+    const attachmentId = parseInt(req.params.attId, 10);
+    if (!Number.isFinite(attachmentId) || attachmentId <= 0) {
+      return res.status(400).json({ error: 'Invalid attachment id' });
+    }
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'stream_assignment_report_attachment');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+    const own = assertAssignmentOwnership(therapistId, clientId, assignmentId);
+    if (own.error) return res.status(own.status).json({ error: own.error });
+    const r = assertReportInAssignment(therapistId, reportId, assignmentId);
+    if (r.error) return res.status(r.status).json({ error: r.error });
+
+    const att = assignmentReports.getAttachment(attachmentId);
+    if (!att) return res.status(404).json({ error: 'Attachment not found' });
+    if (Number(att.report_id) !== reportId) {
+      return res.status(404).json({ error: 'Attachment not found on this report' });
+    }
+    const filePath = path.join(DIARY_FILES_DIR, att.file_ref);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Photo file not found on disk' });
+    }
+
+    let imageBuffer;
+    try {
+      const encryptedContent = fs.readFileSync(filePath, 'utf8');
+      const decryptedBase64 = decrypt(encryptedContent);
+      imageBuffer = Buffer.from(decryptedBase64, 'base64');
+    } catch (e) {
+      logger.error(`[T-21] Failed to decrypt attachment ${attachmentId}: ${e.message}`);
+      return res.status(500).json({ error: 'Failed to decrypt photo' });
+    }
+
+    // Audit log — same pattern as diary streaming.
+    try {
+      const db = getDatabase();
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'stream_assignment_report_attachment', 'assignment_report_attachment', ?, ?, datetime('now'))",
+        [therapistId, attachmentId, JSON.stringify({
+          report_id: reportId, assignment_id: assignmentId, client_id: clientId,
+        })]
+      );
+      saveDatabaseAfterWrite();
+    } catch (auditErr) {
+      logger.warn(`[T-21] Audit log failed for attachment ${attachmentId}: ${auditErr.message}`);
+    }
+
+    res.set({
+      'Content-Type': att.mime_type || 'application/octet-stream',
+      'Content-Length': imageBuffer.length,
+      'Cache-Control': 'no-store',
+      // Prevent any inline-script execution from a malicious image.
+      'X-Content-Type-Options': 'nosniff',
+    });
+    res.end(imageBuffer);
+  } catch (error) {
+    logger.error('Stream assignment report attachment error: ' + error.message);
+    res.status(500).json({ error: 'Failed to stream photo' });
+  }
+});
+
+// DELETE /api/clients/:id/assignments/:aid/reports/:rid/attachments/:attId
+//   → therapist removes an attachment (also unlinks the .enc file).
+router.delete('/:id/assignments/:aid/reports/:rid/attachments/:attId', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = parseInt(req.params.id, 10);
+    const assignmentId = parseInt(req.params.aid, 10);
+    const reportId = parseInt(req.params.rid, 10);
+    const attachmentId = parseInt(req.params.attId, 10);
+    if (!Number.isFinite(attachmentId) || attachmentId <= 0) {
+      return res.status(400).json({ error: 'Invalid attachment id' });
+    }
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'delete_assignment_report_attachment');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+    const own = assertAssignmentOwnership(therapistId, clientId, assignmentId);
+    if (own.error) return res.status(own.status).json({ error: own.error });
+    const r = assertReportInAssignment(therapistId, reportId, assignmentId);
+    if (r.error) return res.status(r.status).json({ error: r.error });
+
+    const att = assignmentReports.getAttachment(attachmentId);
+    if (!att) return res.status(404).json({ error: 'Attachment not found' });
+    if (Number(att.report_id) !== reportId) {
+      return res.status(404).json({ error: 'Attachment not found on this report' });
+    }
+
+    // Best-effort: remove the on-disk encrypted file first; even if it
+    // fails (missing file etc) we still want the metadata row gone.
+    try {
+      const onDisk = path.join(DIARY_FILES_DIR, att.file_ref);
+      if (fs.existsSync(onDisk)) fs.unlinkSync(onDisk);
+    } catch (unlinkErr) {
+      logger.warn(`[T-21] Failed to unlink attachment ${attachmentId} file: ${unlinkErr.message}`);
+    }
+
+    assignmentReports.deleteAttachment(attachmentId, therapistId);
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Delete assignment report attachment error: ' + error.message);
+    res.status(500).json({ error: 'Failed to delete attachment' });
   }
 });
 
