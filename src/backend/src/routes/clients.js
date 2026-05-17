@@ -3216,6 +3216,72 @@ router.delete('/:id/assignments/:aid/reports/:rid/attachments/:attId', (req, res
 });
 
 // =====================================================================
+// T-25: CLIENT ENGAGEMENT ANALYTICS (feature #383)
+// =====================================================================
+//
+// Per-client engagement metrics aggregated from all assignment_reports
+// the therapist has on file for this client. Returns:
+//   - summary: total reports, breakdown by type, avg content length, span
+//   - consistency: score in [0,1] + gap stats (mean/median/stdev/min/max)
+//   - timeline: per-day report counts (and avg chars) for charting
+//   - gaps_days: list of inter-report gaps in days
+//
+// Uses the same consent gate as every other client-data route.
+
+// GET /api/clients/:id/engagement?window=90
+//   window: optional look-back in days (default 90). Pass 0 or 'all' for all-time.
+router.get('/:id/engagement', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(clientId) || clientId <= 0) {
+      return res.status(400).json({ error: 'Invalid client id' });
+    }
+
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'engagement');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+
+    // Verify client belongs to this therapist (mirrors the supervision-share
+    // ownership check below). Prevents URL-tampering across clients even if
+    // consentCheck somehow allows.
+    const db = getDatabase();
+    const owns = db.exec(
+      "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [clientId, therapistId]
+    );
+    if (owns.length === 0 || owns[0].values.length === 0) {
+      return res.status(404).json({ error: 'Client not found or not linked to you' });
+    }
+
+    // Parse window. Default 90 days; cap to 1 year to keep the response
+    // bounded; allow 'all' / 0 for all-time.
+    let windowDays = 90;
+    const raw = req.query.window;
+    if (raw != null && raw !== '') {
+      if (String(raw).toLowerCase() === 'all' || raw === '0') {
+        windowDays = 0; // disables window
+      } else {
+        const n = parseInt(raw, 10);
+        if (!Number.isFinite(n) || n < 1) {
+          return res.status(400).json({ error: 'window must be a positive integer or "all"' });
+        }
+        windowDays = Math.min(n, 365);
+      }
+    }
+
+    const engagement = assignmentReports.getClientEngagement(therapistId, clientId, {
+      windowDays,
+    });
+    res.json(engagement);
+  } catch (error) {
+    logger.error('Get client engagement error: ' + error.message);
+    res.status(500).json({ error: 'Failed to load engagement analytics' });
+  }
+});
+
+// =====================================================================
 // SUPERVISION SHARE LINKS (T-17) - read-only client history for supervisor
 // =====================================================================
 

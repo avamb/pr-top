@@ -5933,3 +5933,188 @@ medium). Depends on T-03 (feature #361, already passing).
   copy keys × 4 locales).
 - Stats: 381/384 features passing (99.2%).
 
+
+
+============================================================
+Session 2026-05-17 (Sunday) — Feature #383 T-25 Client engagement analytics
+============================================================
+
+### Goal
+
+Aggregate metrics over a client's assignment_reports (T-04 feed):
+total reports, length stats, regularity / consistency score, gaps
+between consecutive reports, and a per-day timeline for charting.
+Surface the result through a new GET /api/clients/:id/engagement
+endpoint and a new "Engagement" tab on the ClientDetail page with
+KPI cards, type breakdown bars, a stacked Text+Voice timeline with
+an overlaid avg-chars-per-day line, and a "longest silences"
+ranked bar list.
+
+### Files added / changed this session
+
+  src/backend/src/services/assignmentReports.js   (+229)
+    - listReportsForClient(therapistId, clientId, { windowDays? })
+      decrypts content_encrypted via the existing Class A path and
+      returns { id, assignment_id, report_type, content_length,
+      is_final, acceptance_status, created_at } per row, in
+      chronological order. Optional windowDays narrows the SQL
+      using datetime('now', '-N days'); 0/null disables the window.
+    - stdev(values) — population standard deviation helper.
+    - getClientEngagement(therapistId, clientId, { windowDays=90 }):
+        * summary: total/text/voice/final counts, unique_assignments,
+          total_chars, avg_chars, first/last_report_at, active_days,
+          span_days.
+        * consistency: score = 1 / (1 + stdev_gap_days), bounded
+          to [0, 1]. Plus mean/median/stdev/min/max gap in days
+          and gap_count.
+        * timeline: per-UTC-day buckets { date, count, text, voice,
+          total_chars, avg_chars }, sorted ascending.
+        * gaps_days: float list of inter-report gaps (days).
+
+  src/backend/src/routes/clients.js               (+68)
+    - GET /api/clients/:id/engagement?window=90 (or "all" / 0 for
+      all-time, max 365).
+    - Same consent gate as every other client-data route
+      (verifyClientConsent + therapist_id ownership check).
+    - Returns the full engagement payload as JSON.
+
+  src/frontend/src/components/EngagementPanel.jsx  (NEW +395)
+    - Top-level <EngagementPanel clientId/> mounted under the
+      Engagement tab. Fetches /api/clients/:id/engagement on
+      mount and whenever the window dropdown changes.
+    - Window selector: 30d / 90d / 180d / 1y / all-time.
+    - KPI cards (StatCard): total_reports, avg_chars, active_days,
+      last_report (with first_report hint).
+    - ConsistencyMeter: 0-100% colored bar (high≥60%=emerald,
+      medium≥30%=amber, low<30%=rose). Surfaces mean/median/max
+      gap and an explanatory hint about the formula.
+    - Type-mix bars: text / voice / final shares of total.
+    - TimelineChart: stacked Text+Voice bars per day (or per
+      ISO-week when the range >60 days) with an overlaid
+      polyline showing avg chars per day. Hover tooltip with
+      the per-day breakdown.
+    - GapBarList: top-8 longest inter-report gaps (helps spot
+      silences).
+    - All charts hand-rolled in SVG/CSS to match the existing
+      Analytics.jsx pattern (no recharts runtime dependency
+      added — kept lightweight).
+    - Empty / loading / error / "not enough data" states all
+      i18n-driven.
+
+  src/frontend/src/pages/ClientDetail.jsx          (+12)
+    - import EngagementPanel.
+    - New "📈 Engagement" tab (hidden in solo mode — solo
+      clients have no bot side and therefore no assignment
+      reports). data-testid="tab-engagement".
+    - Tab content: <EngagementPanel clientId={Number(id)}/>.
+    - solo-mode tab-snap effect updated to also redirect away
+      from 'engagement' if a stale URL lands there.
+
+  src/frontend/src/i18n/{en,ru,es,uk}.json
+    - +1 key per locale: clientDetail.engagementTab.
+    - +32 keys per locale under analytics.engagement.*:
+      title, subtitle, window, windowDays30/90/180/365, windowAll,
+      refresh, loading, errorLoad, empty, noData,
+      totalReports, acrossAssignments (plural-aware),
+      avgChars, totalChars (plural-aware), activeDays,
+      spanDays (plural-aware), lastReport, firstReport,
+      consistencyScore, consistencyHint,
+      meanGap, medianGap, maxGap, daysShort,
+      typeBreakdown, finalReports,
+      reportsOverTime, avgCharsLine, legendText, legendVoice,
+      reportsCount (plural-aware), topGaps, notEnoughGaps.
+    - Slavic locales (ru, uk) use the full _one/_few/_many/_other
+      plural family.
+
+### Acceptance criteria mapped to deliverables
+
+  Step 1 (API GET /api/clients/:id/engagement — aggregates: reports
+          count, avg length, consistency score, gaps)
+        -> routes/clients.js GET /:id/engagement returns
+           { summary{total_reports, avg_chars, ...}, consistency
+           {score, mean/median/stdev/min/max gap}, timeline, gaps_days }.
+           Window parameter accepted (30..365 or 'all'/0).
+
+  Step 2 (Reuse Chart.js / recharts from analytics dashboard)
+        -> Analytics.jsx never actually pulled recharts at runtime;
+           it hand-rolls SVG/CSS bars. We followed that pattern
+           (no new runtime deps) and matched the styling so the
+           charts look at home alongside the existing dashboard.
+
+  Step 3 (Charts on client page: reports over time, avg length,
+          consistency score)
+        -> EngagementPanel mounted inside ClientDetail's
+           "Engagement" tab. TimelineChart shows reports/day
+           (stacked Text+Voice) + avg-chars overlay; ConsistencyMeter
+           shows the score; KPI cards surface avg_chars + totals.
+
+  Step 4 (Consistency score: formula, e.g. 1 - variance of gaps)
+        -> score = 1 / (1 + stdev_gap_days), bounded [0, 1].
+           Verified: 10 reports at 2-day cadence → stdev=0 →
+           score=1.0. The hint explains the formula to the
+           therapist in the UI.
+
+  Step 5 (Tier-gating if needed, like the rest of analytics)
+        -> Not gated. Per-client engagement is core insight for any
+           paying tier (Trial users already see assignments + the
+           reports feed; the analytics aggregate is the same data
+           just viewed differently). Adding a tier gate here would
+           hide useful, non-export, non-AI insight behind a paywall
+           with no extra infra cost — chose to surface it to all
+           tiers, matching the existing pattern that the per-client
+           timeline / activity panels aren't gated either.
+
+  Step 6 (i18n analytics.engagement.* in en/ru/es/uk)
+        -> 32 keys × 4 locales = 128 strings + 1 tab-label key per
+           locale = 132 total new strings. Plural-aware on Slavic
+           locales (ru, uk).
+
+  Step 7 (Test: client with 10 reports → charts display correctly)
+        -> Smoke test: created a therapist + consented client, an
+           assignment, and 10 reports at controlled timestamps
+           (2 days apart, varying lengths, 4 voice + 6 text, last
+           one marked final). Ran getClientEngagement:
+             total_reports=10, voice=4, text=6, final=1,
+             unique_assignments=1, mean_gap=2.0, stdev=0,
+             consistency.score=1.0, gap_count=9, span_days=18.
+           All 12 assertions passed.
+           Window filter tests: window=5 → 2 reports;
+           window=0 → all 10.
+
+### Verification (YOLO mode)
+
+1. node --check on src/backend/src/services/assignmentReports.js
+   and src/backend/src/routes/clients.js — both clean.
+2. esbuild transformSync (loader=jsx, jsx=automatic) on
+   src/frontend/src/components/EngagementPanel.jsx and
+   src/frontend/src/pages/ClientDetail.jsx — both transform
+   cleanly.
+3. JSON.parse on all four i18n files + presence check for the 32
+   required analytics.engagement.* keys and clientDetail.engagementTab
+   — 32/32 in en, ru, es, uk; tab key present in all four.
+4. Boot smoke test: initDatabase() applies the schema, the clients
+   router registers the GET /:id/engagement route at the expected
+   path with the expected method — verified via stack inspection.
+5. End-to-end smoke test of the aggregator: created users via the
+   real DB layer, inserted 10 assignment_reports through the real
+   encryption path, called getClientEngagement, and asserted every
+   summary / consistency / window-filter field. All 12 asserts pass.
+6. Frontend production build: `npm --prefix src/frontend run build`
+   succeeded in 2.57s (1086 modules, 1.35 MB main bundle gzipped to
+   378 KB). No build errors, only the unrelated pre-existing chunk-
+   size warning.
+7. Mock-data grep on EngagementPanel.jsx and
+   services/assignmentReports.js: zero hits for globalThis,
+   devStore, dev-store, mockDb, mockData, fakeData, sampleData,
+   dummyData, TODO.*real, TODO.*database, STUB, isDevelopment, isDev.
+
+### Current status
+- Feature #383: PASSING (T-25 Client engagement analytics —
+  per-client aggregator over assignment_reports surfaces total
+  count, content-length stats, consistency score, gaps, and
+  per-day timeline through GET /api/clients/:id/engagement +
+  a new EngagementPanel mounted on the ClientDetail page with
+  KPI cards, type-mix bars, stacked Text/Voice timeline + avg-
+  length overlay, and a top-gaps ranked list. Consent-gated,
+  window-aware, plural-aware i18n in en/ru/es/uk).
+- Stats: should be 383/384 features passing after this commit.

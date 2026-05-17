@@ -10,6 +10,7 @@ import AudioPlayer from '../components/AudioPlayer';
 import CommentsPanel from '../components/CommentsPanel';
 import ExerciseRunComments from '../components/ExerciseRunComments';
 import AssignmentsPanel from '../components/AssignmentsPanel';
+import EngagementPanel from '../components/EngagementPanel';
 import SupervisionShareModal from '../components/SupervisionShareModal';
 import SessionCalendar from '../components/SessionCalendar';
 
@@ -392,7 +393,7 @@ function ClientDetail() {
   // through Telegram), so solo clients skip it too.
   useEffect(() => {
     if (client && client.mode === 'solo' &&
-        (activeTab === 'diary' || activeTab === 'exercises' || activeTab === 'sos' || activeTab === 'assignments')) {
+        (activeTab === 'diary' || activeTab === 'exercises' || activeTab === 'sos' || activeTab === 'assignments' || activeTab === 'engagement')) {
       setActiveTab('timeline');
     }
   }, [client, activeTab]);
@@ -1610,6 +1611,17 @@ function ClientDetail() {
                 onClick={() => setActiveTab('context')}
                 className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'context' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
               >🧠 {t('clientDetail.contextTab')}</button>
+              {/* T-25: Engagement analytics — aggregate metrics across all
+                  assignment reports the client has produced. Solo clients
+                  have no bot side and therefore no assignment reports, so
+                  the tab is hidden in solo mode. */}
+              {!isSolo && (
+                <button
+                  onClick={() => setActiveTab('engagement')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'engagement' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
+                  data-testid="tab-engagement"
+                >📈 {t('clientDetail.engagementTab')}</button>
+              )}
               <button
                 onClick={() => setActiveTab('comments')}
                 className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${activeTab === 'comments' ? 'bg-teal-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}
@@ -2815,6 +2827,13 @@ function ClientDetail() {
             clientId={Number(id)}
             canEdit={true}
           />
+        )}
+
+        {/* T-25: Engagement analytics — KPIs, timeline of reports,
+            consistency score, and longest gaps. Pulls from
+            GET /api/clients/:id/engagement. */}
+        {activeTab === 'engagement' && (
+          <EngagementPanel clientId={Number(id)} />
         )}
 
         {/* Diary Tab */}

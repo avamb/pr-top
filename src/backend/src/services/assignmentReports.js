@@ -719,6 +719,230 @@ function deleteAttachment(attachmentId, actorId) {
   return true;
 }
 
+// =====================================================================
+// T-25: Client engagement analytics (feature #383)
+// =====================================================================
+//
+// Aggregate metrics over ALL assignment reports a client has produced
+// for a given therapist:
+//   - total reports + breakdown by type (text/voice) and finality
+//   - average plaintext content length (after decryption)
+//   - timeline (reports per day) for the requested window
+//   - gaps between consecutive reports (in days)
+//   - consistency score: 1 / (1 + std_gap_days), bounded to [0, 1]
+//     where std_gap_days is the population standard deviation of the
+//     day-gaps between consecutive reports. A perfectly regular cadence
+//     yields 1; long-deserted, bursty cadences trend toward 0.
+//
+// All decryption happens through the same encryption.decrypt() helper
+// the rest of this file uses, so Class A encryption is preserved end-to-end.
+// We intentionally do not leak per-report plaintext to the caller; only
+// numeric aggregates are returned.
+
+/**
+ * Internal: pull every report row for (therapist, client) in chronological
+ * order. Decrypts content to compute length, but does NOT include the
+ * plaintext in the returned objects.
+ */
+function listReportsForClient(therapistId, clientId, { windowDays = null } = {}) {
+  const db = getDatabase();
+  const params = [Number(therapistId), Number(clientId)];
+  let windowClause = '';
+  if (Number.isFinite(windowDays) && windowDays > 0) {
+    // Window is days from "now" in UTC. We use SQLite's datetime('now', '-N days')
+    // to keep the math inside the DB.
+    windowClause = `AND datetime(created_at) >= datetime('now', ?)`;
+    params.push(`-${Math.floor(windowDays)} days`);
+  }
+  const rows = rowsToObjects(
+    db.exec(
+      `SELECT id, assignment_id, report_type, content_encrypted,
+              is_final, acceptance_status, created_at
+         FROM assignment_reports
+        WHERE therapist_id = ? AND client_id = ?
+          ${windowClause}
+        ORDER BY datetime(created_at) ASC, id ASC`,
+      params
+    )
+  );
+  return rows.map((row) => {
+    let length = 0;
+    if (row.content_encrypted) {
+      try {
+        const text = decrypt(row.content_encrypted);
+        length = (text || '').length;
+      } catch (_) {
+        length = 0;
+      }
+    }
+    return {
+      id: row.id,
+      assignment_id: row.assignment_id,
+      report_type: row.report_type,
+      content_length: length,
+      is_final: !!row.is_final,
+      acceptance_status: row.acceptance_status,
+      created_at: row.created_at,
+    };
+  });
+}
+
+/**
+ * Compute population standard deviation of a list of numbers.
+ * Returns 0 for empty or single-value lists.
+ */
+function stdev(values) {
+  if (!values || values.length < 2) return 0;
+  const n = values.length;
+  const mean = values.reduce((a, b) => a + b, 0) / n;
+  const variance = values.reduce((acc, v) => acc + (v - mean) * (v - mean), 0) / n;
+  return Math.sqrt(variance);
+}
+
+/**
+ * Aggregate engagement metrics for a (therapist, client) pair.
+ *
+ * @param {object} args
+ * @param {number} args.therapistId
+ * @param {number} args.clientId
+ * @param {number} [args.windowDays=90] - look-back window in days; pass 0
+ *                                         to disable the window (all-time).
+ * @returns {{
+ *   client_id: number,
+ *   window_days: number|null,
+ *   summary: {
+ *     total_reports: number,
+ *     text_reports: number,
+ *     voice_reports: number,
+ *     final_reports: number,
+ *     unique_assignments: number,
+ *     total_chars: number,
+ *     avg_chars: number,
+ *     first_report_at: string|null,
+ *     last_report_at: string|null,
+ *     active_days: number,
+ *     span_days: number,
+ *   },
+ *   consistency: {
+ *     score: number,                 // [0,1]
+ *     gap_count: number,
+ *     mean_gap_days: number,
+ *     median_gap_days: number,
+ *     stdev_gap_days: number,
+ *     max_gap_days: number,
+ *     min_gap_days: number,
+ *   },
+ *   timeline: Array<{date: string, count: number, text: number, voice: number, total_chars: number, avg_chars: number}>,
+ *   gaps_days: number[],            // gaps between consecutive reports (days, float)
+ * }}
+ */
+function getClientEngagement(therapistId, clientId, { windowDays = 90 } = {}) {
+  const reports = listReportsForClient(therapistId, clientId, {
+    windowDays: Number.isFinite(windowDays) && windowDays > 0 ? windowDays : null,
+  });
+
+  const total = reports.length;
+  const text = reports.filter((r) => r.report_type === 'text').length;
+  const voice = reports.filter((r) => r.report_type === 'voice').length;
+  const finals = reports.filter((r) => r.is_final).length;
+  const uniqueAssignments = new Set(reports.map((r) => r.assignment_id)).size;
+  const totalChars = reports.reduce((acc, r) => acc + (r.content_length || 0), 0);
+  const avgChars = total > 0 ? Math.round(totalChars / total) : 0;
+
+  // Bucket per UTC day so the timeline is stable regardless of viewer TZ.
+  // The frontend can re-render to local TZ if desired.
+  const dayBuckets = new Map();
+  for (const r of reports) {
+    const day = (r.created_at || '').slice(0, 10); // 'YYYY-MM-DD'
+    if (!day) continue;
+    if (!dayBuckets.has(day)) {
+      dayBuckets.set(day, { date: day, count: 0, text: 0, voice: 0, total_chars: 0 });
+    }
+    const b = dayBuckets.get(day);
+    b.count += 1;
+    if (r.report_type === 'text') b.text += 1;
+    if (r.report_type === 'voice') b.voice += 1;
+    b.total_chars += (r.content_length || 0);
+  }
+  const timeline = Array.from(dayBuckets.values())
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+    .map((b) => ({
+      date: b.date,
+      count: b.count,
+      text: b.text,
+      voice: b.voice,
+      total_chars: b.total_chars,
+      avg_chars: b.count > 0 ? Math.round(b.total_chars / b.count) : 0,
+    }));
+
+  // Gaps between consecutive reports (in days, fractional).
+  const gapsDays = [];
+  for (let i = 1; i < reports.length; i++) {
+    const prev = Date.parse(reports[i - 1].created_at);
+    const curr = Date.parse(reports[i].created_at);
+    if (Number.isFinite(prev) && Number.isFinite(curr) && curr >= prev) {
+      gapsDays.push((curr - prev) / (1000 * 60 * 60 * 24));
+    }
+  }
+
+  const sortedGaps = gapsDays.slice().sort((a, b) => a - b);
+  const meanGap = gapsDays.length > 0
+    ? gapsDays.reduce((a, b) => a + b, 0) / gapsDays.length
+    : 0;
+  const medianGap = sortedGaps.length === 0
+    ? 0
+    : sortedGaps.length % 2 === 1
+      ? sortedGaps[(sortedGaps.length - 1) / 2]
+      : (sortedGaps[sortedGaps.length / 2 - 1] + sortedGaps[sortedGaps.length / 2]) / 2;
+  const stdevGap = stdev(gapsDays);
+  const maxGap = gapsDays.length > 0 ? Math.max(...gapsDays) : 0;
+  const minGap = gapsDays.length > 0 ? Math.min(...gapsDays) : 0;
+
+  // Consistency score: 1 / (1 + stdev_days).
+  // - stdev_days = 0  (perfectly regular cadence, e.g. every 2 days)  → 1.0
+  // - stdev_days = 1  (gap varies by ±1 day on average)               → 0.5
+  // - stdev_days = 7  (gap varies by ±1 week on average)              → 0.125
+  // We require at least 2 reports for a meaningful score; <2 returns null.
+  const consistencyScore = gapsDays.length >= 1
+    ? Math.max(0, Math.min(1, 1 / (1 + stdevGap)))
+    : null;
+
+  const firstAt = reports.length > 0 ? reports[0].created_at : null;
+  const lastAt = reports.length > 0 ? reports[reports.length - 1].created_at : null;
+  const spanDays = (firstAt && lastAt)
+    ? Math.max(0, (Date.parse(lastAt) - Date.parse(firstAt)) / (1000 * 60 * 60 * 24))
+    : 0;
+
+  return {
+    client_id: Number(clientId),
+    window_days: Number.isFinite(windowDays) && windowDays > 0 ? Math.floor(windowDays) : null,
+    summary: {
+      total_reports: total,
+      text_reports: text,
+      voice_reports: voice,
+      final_reports: finals,
+      unique_assignments: uniqueAssignments,
+      total_chars: totalChars,
+      avg_chars: avgChars,
+      first_report_at: firstAt,
+      last_report_at: lastAt,
+      active_days: dayBuckets.size,
+      span_days: Math.round(spanDays * 10) / 10,
+    },
+    consistency: {
+      score: consistencyScore,
+      gap_count: gapsDays.length,
+      mean_gap_days: Math.round(meanGap * 100) / 100,
+      median_gap_days: Math.round(medianGap * 100) / 100,
+      stdev_gap_days: Math.round(stdevGap * 100) / 100,
+      max_gap_days: Math.round(maxGap * 100) / 100,
+      min_gap_days: Math.round(minGap * 100) / 100,
+    },
+    timeline,
+    gaps_days: gapsDays.map((g) => Math.round(g * 100) / 100),
+  };
+}
+
 module.exports = {
   VALID_REPORT_TYPES,
   listReportsForAssignment,
@@ -741,6 +965,9 @@ module.exports = {
   getAttachment,
   insertAttachment,
   deleteAttachment,
+  // T-25 engagement analytics
+  getClientEngagement,
+  listReportsForClient,
   // exposed for tests / internal use
   insertReport,
   findAssignmentBase,
