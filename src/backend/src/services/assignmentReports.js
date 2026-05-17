@@ -19,6 +19,7 @@ const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { encrypt, decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
 const wsService = require('./websocketService');
+const telegramNotify = require('../utils/telegramNotify');
 
 // Reuse the diary audio directory — same encrypted-on-disk format.
 const DIARY_FILES_DIR = path.resolve(__dirname, '../../data/diary_files');
@@ -47,6 +48,15 @@ function decryptRow(row) {
       content = '';
     }
   }
+  let therapistComment = '';
+  if (row.therapist_comment_encrypted) {
+    try {
+      therapistComment = decrypt(row.therapist_comment_encrypted);
+    } catch (e) {
+      logger.warn(`assignmentReports.decryptRow: failed to decrypt therapist_comment for report ${row.id}: ${e.message}`);
+      therapistComment = '';
+    }
+  }
   return {
     id: row.id,
     assignment_id: row.assignment_id,
@@ -58,6 +68,9 @@ function decryptRow(row) {
     transcription_status: row.transcription_status || null,
     is_final: !!row.is_final,
     acceptance_status: row.acceptance_status,
+    therapist_comment: therapistComment || null,
+    accepted_at: row.accepted_at || null,
+    returned_at: row.returned_at || null,
     attachments: listAttachmentsForReport(row.id),
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -102,7 +115,9 @@ function listReportsForAssignment(assignmentId, { order = 'asc' } = {}) {
     db.exec(
       `SELECT id, assignment_id, client_id, therapist_id, report_type,
               content_encrypted, audio_file_ref, transcription_status,
-              is_final, acceptance_status, created_at, updated_at
+              is_final, acceptance_status,
+              therapist_comment_encrypted, accepted_at, returned_at,
+              created_at, updated_at
        FROM assignment_reports
        WHERE assignment_id = ?
        ORDER BY datetime(created_at) ${dir}, id ${dir}`,
@@ -121,7 +136,9 @@ function getReport(reportId) {
     db.exec(
       `SELECT id, assignment_id, client_id, therapist_id, report_type,
               content_encrypted, audio_file_ref, transcription_status,
-              is_final, acceptance_status, created_at, updated_at
+              is_final, acceptance_status,
+              therapist_comment_encrypted, accepted_at, returned_at,
+              created_at, updated_at
        FROM assignment_reports WHERE id = ?`,
       [reportId]
     )
@@ -504,11 +521,14 @@ function deleteReport(therapistId, reportId) {
 }
 
 /**
- * Update acceptance status of a (typically final) report. Used by the future
- * T-05 acceptance flow — we expose it now so the API is complete.
+ * Update acceptance status of a (typically final) report. Lower-level helper
+ * kept for backwards compatibility with the PATCH …/acceptance route.
+ * T-05 callers should prefer acceptReport() / returnReport(), which carry
+ * the full lifecycle (assignment status flip, notifications, encrypted
+ * therapist comment) on top of the bare column update.
  */
 function setAcceptanceStatus(therapistId, reportId, status) {
-  const validStatuses = ['pending', 'accepted', 'rejected'];
+  const validStatuses = ['pending', 'accepted', 'returned'];
   if (!validStatuses.includes(status)) {
     const err = new Error('Invalid acceptance_status');
     err.code = 'invalid_input';
@@ -528,6 +548,227 @@ function setAcceptanceStatus(therapistId, reportId, status) {
   });
   saveDatabaseAfterWrite();
   return { report: getReport(reportId) };
+}
+
+// =====================================================================
+// T-05: Final report acceptance / return lifecycle (feature #363)
+// =====================================================================
+//
+// The therapist reviews a client's final report and either:
+//   - ACCEPTS the report (one-way action): the assignment is locked into
+//     status='completed'; the client receives a "your report was accepted"
+//     push and can no longer reopen the assignment by submitting more.
+//   - RETURNS the report (reversible): the report is flagged returned, a
+//     mandatory Class A therapist comment (≥10 chars) is persisted, and
+//     the assignment goes back to status='active' so the client can
+//     submit a fresh final after addressing the feedback. The client
+//     receives a "your report was returned: <comment>" push.
+//
+// Both transitions only operate on FINAL reports (is_final = 1) that are
+// currently in the 'pending' state; attempting to flip an accepted report
+// is rejected with a 409 (one-way) and a returned report can move forward
+// to accept (or be replaced by a new final from the client).
+
+const RETURN_COMMENT_MIN_CHARS = 10;
+const RETURN_COMMENT_MAX_CHARS = 4000;
+
+/**
+ * Internal: bump the assignment's status. Pure SQL update — we do NOT
+ * pull in services/assignments.completeAssignment() to avoid a circular
+ * require and so the side-effects (audit/log) are reported as part of
+ * the assignment_report lifecycle, not the assignment one.
+ */
+function setAssignmentStatus(assignmentId, status) {
+  const db = getDatabase();
+  const completedClause = status === 'completed'
+    ? ", completed_at = COALESCE(completed_at, datetime('now'))"
+    : '';
+  db.run(
+    `UPDATE assignments
+        SET status = ?, updated_at = datetime('now')${completedClause}
+      WHERE id = ?`,
+    [status, assignmentId]
+  );
+}
+
+/**
+ * Notify the client over Telegram + WebSocket that their final report
+ * has been accepted or returned. Best-effort — never throws.
+ *
+ * @param {'accepted'|'returned'} action
+ * @param {object} report - decrypted report object (post-update).
+ * @param {string|null} comment - therapist comment (returns only).
+ */
+function notifyClientOfFinalReportAction(action, report, comment = null) {
+  try {
+    const db = getDatabase();
+    const userRes = db.exec(
+      'SELECT telegram_id, language FROM users WHERE id = ?',
+      [report.client_id]
+    );
+    if (!userRes || userRes.length === 0 || userRes[0].values.length === 0) return;
+    const [telegramId, lang] = userRes[0].values[0];
+    const clientLang = String(lang || 'en').toLowerCase();
+
+    let text;
+    if (action === 'accepted') {
+      if (clientLang === 'ru') {
+        text = `✅ *Ваш отчёт принят*\n\nТерапевт принял ваш итоговый отчёт по заданию. Спасибо за вашу работу!`;
+      } else if (clientLang === 'es') {
+        text = `✅ *Tu informe ha sido aceptado*\n\nEl terapeuta ha aceptado tu informe final de la tarea. ¡Gracias por tu trabajo!`;
+      } else if (clientLang === 'uk') {
+        text = `✅ *Ваш звіт прийнято*\n\nТерапевт прийняв ваш підсумковий звіт по завданню. Дякуємо за вашу роботу!`;
+      } else {
+        text = `✅ *Your report was accepted*\n\nThe therapist accepted your final report for the assignment. Thank you for your work!`;
+      }
+    } else {
+      const safeComment = (comment || '').slice(0, 1500);
+      if (clientLang === 'ru') {
+        text = `↩️ *Терапевт вернул отчёт*\n\nКомментарий терапевта:\n${safeComment}\n\nИспользуйте /report чтобы отправить новый итоговый отчёт.`;
+      } else if (clientLang === 'es') {
+        text = `↩️ *El terapeuta devolvió el informe*\n\nComentario del terapeuta:\n${safeComment}\n\nUsa /report para enviar un nuevo informe final.`;
+      } else if (clientLang === 'uk') {
+        text = `↩️ *Терапевт повернув звіт*\n\nКоментар терапевта:\n${safeComment}\n\nВикористовуйте /report, щоб надіслати новий підсумковий звіт.`;
+      } else {
+        text = `↩️ *Therapist returned your report*\n\nTherapist's comment:\n${safeComment}\n\nUse /report to submit a new final report.`;
+      }
+    }
+
+    if (telegramId) {
+      telegramNotify
+        .sendMessage(String(telegramId), text)
+        .catch((e) => logger.warn(`[T-05] Telegram notify ${action} failed: ${e.message}`));
+    }
+  } catch (e) {
+    logger.warn(`[T-05] notifyClientOfFinalReportAction(${action}) crashed: ${e.message}`);
+  }
+
+  // Therapist-side WS push so the dashboard re-renders the card.
+  try {
+    wsService.emitToTherapist(report.therapist_id, {
+      type: action === 'accepted'
+        ? 'assignment_report_accepted'
+        : 'assignment_report_returned',
+      assignment_id: report.assignment_id,
+      client_id: report.client_id,
+      report_id: report.id,
+      acceptance_status: report.acceptance_status,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (wsErr) {
+    logger.warn(`[T-05] WS emit assignment_report_${action} failed: ${wsErr.message}`);
+  }
+}
+
+/**
+ * Accept a final report. One-way action.
+ *
+ * Returns { report } on success or { notFound | forbidden | conflict | invalid_input }
+ * for the various failure modes.
+ *
+ * @param {number} therapistId
+ * @param {number} reportId
+ */
+function acceptReport(therapistId, reportId) {
+  const r = getReportForTherapist(therapistId, reportId);
+  if (r.notFound) return { notFound: true };
+  if (r.forbidden) return { forbidden: true };
+  const report = r.report;
+
+  if (!report.is_final) {
+    return { invalid_input: 'Only final reports can be accepted' };
+  }
+  if (report.acceptance_status === 'accepted') {
+    // Idempotent: already accepted, just return the current state. We do
+    // NOT re-notify in this case to avoid duplicate client pushes.
+    return { report };
+  }
+  // accept is one-way regardless of return history — return → accept is allowed.
+
+  const db = getDatabase();
+  db.run(
+    `UPDATE assignment_reports
+        SET acceptance_status = 'accepted',
+            accepted_at = datetime('now'),
+            updated_at = datetime('now')
+      WHERE id = ?`,
+    [reportId]
+  );
+  setAssignmentStatus(report.assignment_id, 'completed');
+  audit(therapistId, 'assignment_report_accept', reportId, {
+    assignment_id: report.assignment_id, client_id: report.client_id,
+  });
+  saveDatabaseAfterWrite();
+
+  const updated = getReport(reportId);
+  notifyClientOfFinalReportAction('accepted', updated);
+  return { report: updated };
+}
+
+/**
+ * Return a final report with a mandatory therapist comment (≥10 chars).
+ * Reversible: the client may submit another final after addressing the
+ * feedback.
+ *
+ * @param {number} therapistId
+ * @param {number} reportId
+ * @param {string} comment - plain-text therapist feedback, Class A encrypted on persist.
+ */
+function returnReport(therapistId, reportId, comment) {
+  if (comment == null || typeof comment !== 'string') {
+    const err = new Error('comment is required');
+    err.code = 'invalid_input';
+    throw err;
+  }
+  const trimmed = comment.trim();
+  if (trimmed.length < RETURN_COMMENT_MIN_CHARS) {
+    const err = new Error(`comment must be at least ${RETURN_COMMENT_MIN_CHARS} characters`);
+    err.code = 'invalid_input';
+    throw err;
+  }
+  if (trimmed.length > RETURN_COMMENT_MAX_CHARS) {
+    const err = new Error(`comment is too long (max ${RETURN_COMMENT_MAX_CHARS} chars)`);
+    err.code = 'invalid_input';
+    throw err;
+  }
+
+  const r = getReportForTherapist(therapistId, reportId);
+  if (r.notFound) return { notFound: true };
+  if (r.forbidden) return { forbidden: true };
+  const report = r.report;
+
+  if (!report.is_final) {
+    return { invalid_input: 'Only final reports can be returned' };
+  }
+  if (report.acceptance_status === 'accepted') {
+    // accept is one-way — cannot reopen an accepted report.
+    return { conflict: 'Cannot return a report that was already accepted' };
+  }
+
+  const enc = encrypt(trimmed);
+  const db = getDatabase();
+  db.run(
+    `UPDATE assignment_reports
+        SET acceptance_status = 'returned',
+            therapist_comment_encrypted = ?,
+            therapist_comment_key_id = ?,
+            therapist_comment_version = ?,
+            returned_at = datetime('now'),
+            updated_at = datetime('now')
+      WHERE id = ?`,
+    [enc.encrypted, enc.keyId, enc.keyVersion, reportId]
+  );
+  // Reopen the assignment so the client can submit another final.
+  setAssignmentStatus(report.assignment_id, 'active');
+  audit(therapistId, 'assignment_report_return', reportId, {
+    assignment_id: report.assignment_id, client_id: report.client_id,
+    comment_length: trimmed.length,
+  });
+  saveDatabaseAfterWrite();
+
+  const updated = getReport(reportId);
+  notifyClientOfFinalReportAction('returned', updated, trimmed);
+  return { report: updated };
 }
 
 // =====================================================================
@@ -956,6 +1197,11 @@ module.exports = {
   processReportTranscription,
   deleteReport,
   setAcceptanceStatus,
+  // T-05 accept/return lifecycle
+  acceptReport,
+  returnReport,
+  RETURN_COMMENT_MIN_CHARS,
+  RETURN_COMMENT_MAX_CHARS,
   // T-21 attachments
   MAX_ATTACHMENTS_PER_REPORT,
   MAX_ATTACHMENT_BYTES,

@@ -1627,9 +1627,16 @@ function applySchema(db) {
   //   (only one per assignment makes sense, but we don't enforce here —
   //   the UI guards via "submit final" action). Defaults to 0.
   // - acceptance_status: lifecycle for the therapist's review of a final
-  //   report (T-05 will drive this; we add the column now so the schema
-  //   doesn't need a second migration). Values: pending, accepted, rejected.
+  //   report. T-05 drives this. Values: pending, accepted, returned.
+  //   accept is one-way (the assignment is locked completed); return is
+  //   reversible (the client may submit another final after addressing
+  //   the therapist's comment).
+  // - therapist_comment_encrypted / _key_id / _version: Class A encrypted
+  //   text supplied by the therapist when they RETURN a final report.
+  //   Required when acceptance_status = 'returned' (T-05 service-level
+  //   validation enforces a minimum length of 10 chars).
   // - therapist_comment_id is reserved for T-10 (per-report comments).
+  // - accepted_at / returned_at: lifecycle timestamps for audit/history.
   // - transcription_status mirrors the diary_entries column so the
   //   existing Whisper pipeline can be reused.
   db.run(`CREATE TABLE IF NOT EXISTS assignment_reports (
@@ -1644,14 +1651,89 @@ function applySchema(db) {
     encryption_key_id INTEGER REFERENCES encryption_keys(id),
     payload_version INTEGER DEFAULT 1,
     is_final INTEGER NOT NULL DEFAULT 0,
-    acceptance_status TEXT NOT NULL DEFAULT 'pending' CHECK(acceptance_status IN ('pending', 'accepted', 'rejected')),
+    acceptance_status TEXT NOT NULL DEFAULT 'pending' CHECK(acceptance_status IN ('pending', 'accepted', 'returned')),
     therapist_comment_id INTEGER,
+    therapist_comment_encrypted TEXT,
+    therapist_comment_key_id INTEGER REFERENCES encryption_keys(id),
+    therapist_comment_version INTEGER DEFAULT 1,
+    accepted_at TEXT,
+    returned_at TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
   )`);
   db.run('CREATE INDEX IF NOT EXISTS idx_assignment_reports_assignment ON assignment_reports(assignment_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_assignment_reports_client ON assignment_reports(client_id, created_at DESC)');
   db.run('CREATE INDEX IF NOT EXISTS idx_assignment_reports_therapist ON assignment_reports(therapist_id, created_at DESC)');
+
+  // T-05: For DBs created before T-05 the CHECK constraint above used
+  // ('pending','accepted','rejected') and the therapist_comment_* /
+  // accepted_at / returned_at columns did not exist. We rebuild the table
+  // in-place ONLY when the older schema is detected. The rebuild is
+  // idempotent: subsequent boots find the new columns and skip.
+  try {
+    const colsRes = db.exec("PRAGMA table_info(assignment_reports)");
+    if (colsRes && colsRes.length > 0) {
+      const colNames = colsRes[0].values.map((r) => String(r[1]));
+      const needsRebuild = !colNames.includes('therapist_comment_encrypted')
+        || !colNames.includes('accepted_at')
+        || !colNames.includes('returned_at');
+      if (needsRebuild) {
+        logger.info('T-05: rebuilding assignment_reports table for accept/return flow');
+        db.run('BEGIN');
+        try {
+          db.run(`CREATE TABLE assignment_reports_v2 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            assignment_id INTEGER NOT NULL,
+            client_id INTEGER NOT NULL,
+            therapist_id INTEGER NOT NULL,
+            report_type TEXT NOT NULL DEFAULT 'text' CHECK(report_type IN ('text', 'voice')),
+            content_encrypted TEXT,
+            audio_file_ref TEXT,
+            transcription_status TEXT,
+            encryption_key_id INTEGER,
+            payload_version INTEGER DEFAULT 1,
+            is_final INTEGER NOT NULL DEFAULT 0,
+            acceptance_status TEXT NOT NULL DEFAULT 'pending' CHECK(acceptance_status IN ('pending', 'accepted', 'returned')),
+            therapist_comment_id INTEGER,
+            therapist_comment_encrypted TEXT,
+            therapist_comment_key_id INTEGER,
+            therapist_comment_version INTEGER DEFAULT 1,
+            accepted_at TEXT,
+            returned_at TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+          )`);
+          // Map legacy 'rejected' (never user-facing — column was reserved
+          // for T-05) into the new 'returned' bucket so no row is lost.
+          db.run(`INSERT INTO assignment_reports_v2
+            (id, assignment_id, client_id, therapist_id, report_type,
+             content_encrypted, audio_file_ref, transcription_status,
+             encryption_key_id, payload_version, is_final,
+             acceptance_status, therapist_comment_id,
+             created_at, updated_at)
+            SELECT id, assignment_id, client_id, therapist_id, report_type,
+                   content_encrypted, audio_file_ref, transcription_status,
+                   encryption_key_id, payload_version, is_final,
+                   CASE WHEN acceptance_status = 'rejected' THEN 'returned'
+                        ELSE acceptance_status END,
+                   therapist_comment_id, created_at, updated_at
+              FROM assignment_reports`);
+          db.run('DROP TABLE assignment_reports');
+          db.run('ALTER TABLE assignment_reports_v2 RENAME TO assignment_reports');
+          db.run('COMMIT');
+          db.run('CREATE INDEX IF NOT EXISTS idx_assignment_reports_assignment ON assignment_reports(assignment_id)');
+          db.run('CREATE INDEX IF NOT EXISTS idx_assignment_reports_client ON assignment_reports(client_id, created_at DESC)');
+          db.run('CREATE INDEX IF NOT EXISTS idx_assignment_reports_therapist ON assignment_reports(therapist_id, created_at DESC)');
+          logger.info('T-05: assignment_reports rebuilt successfully (added therapist_comment_* + accepted_at + returned_at)');
+        } catch (rebuildErr) {
+          try { db.run('ROLLBACK'); } catch (_) {}
+          logger.warn('T-05: assignment_reports rebuild failed: ' + rebuildErr.message);
+        }
+      }
+    }
+  } catch (e) {
+    logger.warn('T-05: assignment_reports migration probe skipped: ' + e.message);
+  }
 
   // T-26: AI source disclaimers.
   // When AI summarizes a session using the therapist's personal knowledge base

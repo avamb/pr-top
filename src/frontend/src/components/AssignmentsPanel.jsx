@@ -153,13 +153,18 @@ function ReportPhotoLightbox({ blobUrl, onClose }) {
  *
  * T-21: also renders the per-report photo attachment strip + lightbox.
  */
-function AssignmentReportsFeed({ clientId, assignmentId, wsTick }) {
+function AssignmentReportsFeed({ clientId, assignmentId, wsTick, onAssignmentChanged }) {
   const { t } = useTranslation();
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   // T-21: lightbox state for the report-attachment overlay.
   const [lightboxUrl, setLightboxUrl] = useState(null);
+  // T-05: per-report busy state for accept/return buttons + return modal.
+  const [busyReportId, setBusyReportId] = useState(null);
+  const [returnModalReport, setReturnModalReport] = useState(null);
+  const [returnCommentDraft, setReturnCommentDraft] = useState('');
+  const [returnError, setReturnError] = useState('');
 
   const url = `/api/clients/${clientId}/assignments/${assignmentId}/reports`;
 
@@ -179,6 +184,78 @@ function AssignmentReportsFeed({ clientId, assignmentId, wsTick }) {
       setLoading(false);
     }
   }, [url, t]);
+
+  // T-05: accept a final report — one-way action.
+  const handleAccept = useCallback(async (report) => {
+    if (busyReportId) return;
+    // eslint-disable-next-line no-alert
+    if (!window.confirm(t('assignment.report.confirmAccept'))) return;
+    setBusyReportId(report.id);
+    try {
+      const res = await fetchApi(
+        `/api/clients/${clientId}/assignments/${assignmentId}/reports/${report.id}/accept`,
+        { method: 'POST' }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || t('assignment.report.errorAccept'));
+      }
+      await fetchReports();
+      if (onAssignmentChanged) onAssignmentChanged();
+    } catch (e) {
+      // eslint-disable-next-line no-alert
+      window.alert(e.message);
+    } finally {
+      setBusyReportId(null);
+    }
+  }, [busyReportId, clientId, assignmentId, fetchReports, onAssignmentChanged, t]);
+
+  // T-05: open the return modal. The comment becomes a Class A encrypted
+  // field on the report and is required (min 10 chars).
+  const openReturnModal = useCallback((report) => {
+    setReturnModalReport(report);
+    setReturnCommentDraft('');
+    setReturnError('');
+  }, []);
+
+  const closeReturnModal = useCallback(() => {
+    setReturnModalReport(null);
+    setReturnCommentDraft('');
+    setReturnError('');
+  }, []);
+
+  // T-05: submit the return modal — POST /return with body.comment.
+  const handleReturnSubmit = useCallback(async () => {
+    if (!returnModalReport) return;
+    const trimmed = (returnCommentDraft || '').trim();
+    if (trimmed.length < 10) {
+      setReturnError(t('assignment.report.returnReasonRequired'));
+      return;
+    }
+    setBusyReportId(returnModalReport.id);
+    setReturnError('');
+    try {
+      const res = await fetchApi(
+        `/api/clients/${clientId}/assignments/${assignmentId}/reports/${returnModalReport.id}/return`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ comment: trimmed }),
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || t('assignment.report.errorReturn'));
+      }
+      closeReturnModal();
+      await fetchReports();
+      if (onAssignmentChanged) onAssignmentChanged();
+    } catch (e) {
+      setReturnError(e.message);
+    } finally {
+      setBusyReportId(null);
+    }
+  }, [returnModalReport, returnCommentDraft, clientId, assignmentId, fetchReports, onAssignmentChanged, closeReturnModal, t]);
 
   // T-21: delete an attachment from a report. Optimistically refetches the
   // reports list on success so the thumbnail strip updates immediately.
@@ -315,6 +392,87 @@ function AssignmentReportsFeed({ clientId, assignmentId, wsTick }) {
                 ))}
               </div>
             )}
+
+            {/* T-05: acceptance state row — only for final reports.
+                Shows the current status (pending/accepted/returned), the
+                therapist's previous return comment (if any), and the
+                Accept / Return action buttons. Accept is one-way: once
+                a report is accepted it cannot be reopened. Return is
+                reversible: it reopens the assignment and unlocks the
+                client to submit another final. */}
+            {r.is_final && (
+              <div
+                data-testid={`report-acceptance-${r.id}`}
+                className="mt-2 border-t border-stone-100 pt-2"
+              >
+                <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                  <span className="text-stone-500">
+                    {t('assignment.report.acceptanceLabel')}:
+                  </span>
+                  <span
+                    data-testid={`report-acceptance-status-${r.id}`}
+                    className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-full font-semibold ${
+                      r.acceptance_status === 'accepted'
+                        ? 'bg-green-100 text-green-800'
+                        : r.acceptance_status === 'returned'
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-stone-100 text-stone-700'
+                    }`}
+                  >
+                    {t(`assignment.report.acceptanceStatus.${r.acceptance_status || 'pending'}`)}
+                  </span>
+                  {r.accepted_at && (
+                    <span className="text-stone-400">· {formatUserDate(r.accepted_at)}</span>
+                  )}
+                  {r.returned_at && r.acceptance_status === 'returned' && (
+                    <span className="text-stone-400">· {formatUserDate(r.returned_at)}</span>
+                  )}
+                </div>
+
+                {/* Previous return comment surfaces inside the card so the
+                    therapist (and via the read-only API the client) can see
+                    the full history without opening the modal again. */}
+                {r.therapist_comment && r.therapist_comment.length > 0 && (
+                  <div
+                    data-testid={`report-therapist-comment-${r.id}`}
+                    className="mt-1 rounded bg-amber-50 border border-amber-200 p-2"
+                  >
+                    <p className="text-[10px] uppercase tracking-wide text-amber-700 font-semibold">
+                      {t('assignment.report.commentFromTherapist')}
+                    </p>
+                    <p className="mt-1 text-sm text-amber-900 whitespace-pre-wrap">
+                      {r.therapist_comment}
+                    </p>
+                  </div>
+                )}
+
+                {/* Action buttons — only when the report is still actionable.
+                    accepted reports are terminal (one-way); returned and
+                    pending reports both still expose Accept. */}
+                {r.acceptance_status !== 'accepted' && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      type="button"
+                      data-testid={`report-accept-${r.id}`}
+                      onClick={() => handleAccept(r)}
+                      disabled={busyReportId === r.id}
+                      className="px-2 py-1 text-xs bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded disabled:opacity-50"
+                    >
+                      ✓ {t('assignment.report.accept')}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`report-return-${r.id}`}
+                      onClick={() => openReturnModal(r)}
+                      disabled={busyReportId === r.id}
+                      className="px-2 py-1 text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded disabled:opacity-50"
+                    >
+                      ↩ {t('assignment.report.return')}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </li>
         );
       })}
@@ -323,6 +481,74 @@ function AssignmentReportsFeed({ clientId, assignmentId, wsTick }) {
           blobUrl={lightboxUrl}
           onClose={() => setLightboxUrl(null)}
         />
+      )}
+
+      {/* T-05: Return-comment modal. Mandatory comment ≥10 chars; the
+          backend rejects empty / too-short comments with 400. */}
+      {returnModalReport && (
+        <div
+          data-testid="report-return-modal"
+          className="fixed inset-0 z-40 bg-black/50 flex items-center justify-center p-4"
+          onClick={closeReturnModal}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-lg w-full p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h4 className="text-base font-semibold text-stone-800 mb-1">
+              {t('assignment.report.returnTitle')}
+            </h4>
+            <p className="text-xs text-stone-500 mb-3">
+              {t('assignment.report.returnHint')}
+            </p>
+            <textarea
+              data-testid="report-return-comment"
+              value={returnCommentDraft}
+              onChange={(e) => setReturnCommentDraft(e.target.value)}
+              rows={5}
+              maxLength={4000}
+              placeholder={t('assignment.report.returnPlaceholder')}
+              className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
+            <div className="flex items-center justify-between text-[11px] text-stone-500 mt-1">
+              <span>{t('assignment.report.returnMinChars', { count: 10 })}</span>
+              <span data-testid="report-return-charcount">
+                {returnCommentDraft.trim().length} / 4000
+              </span>
+            </div>
+            {returnError && (
+              <p
+                data-testid="report-return-error"
+                className="mt-2 text-sm text-rose-600"
+              >
+                {returnError}
+              </p>
+            )}
+            <div className="mt-4 flex items-center gap-2 justify-end">
+              <button
+                type="button"
+                data-testid="report-return-cancel"
+                onClick={closeReturnModal}
+                className="px-3 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-300 rounded-lg text-sm font-medium"
+              >
+                {t('assignment.report.returnCancel')}
+              </button>
+              <button
+                type="button"
+                data-testid="report-return-submit"
+                onClick={handleReturnSubmit}
+                disabled={busyReportId === returnModalReport.id || returnCommentDraft.trim().length < 10}
+                className="px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                {busyReportId === returnModalReport.id
+                  ? t('assignment.report.returnSubmitting')
+                  : t('assignment.report.returnSubmit')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </ul>
   );
@@ -409,7 +635,11 @@ function AssignmentsPanel({ mode = 'client', sessionId = null, clientId, canEdit
     const off2 = wsOn('assignment_report_transcribed', handle);
     // T-21: also tick when a new photo lands on a report.
     const off3 = wsOn('assignment_report_attachment_added', handle);
-    return () => { off1(); off2(); off3(); };
+    // T-05: tick when the therapist accepts or returns a final report so
+    // any other tab viewing the same assignment refreshes the feed.
+    const off4 = wsOn('assignment_report_accepted', handle);
+    const off5 = wsOn('assignment_report_returned', handle);
+    return () => { off1(); off2(); off3(); off4(); off5(); };
   }, [wsOn]);
 
   function toggleReports(assignmentId) {
@@ -892,6 +1122,10 @@ function AssignmentsPanel({ mode = 'client', sessionId = null, clientId, canEdit
                       clientId={clientId}
                       assignmentId={a.id}
                       wsTick={reportTicks[a.id] || 0}
+                      onAssignmentChanged={() => {
+                        fetchAssignments();
+                        if (onChange) onChange();
+                      }}
                     />
                   )}
                 </div>

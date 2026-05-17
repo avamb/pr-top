@@ -2983,7 +2983,10 @@ router.get('/:id/assignments/:aid/reports/:rid', (req, res) => {
 });
 
 // PATCH /api/clients/:id/assignments/:aid/reports/:rid/acceptance — therapist
-// review action (pending|accepted|rejected). Body: { status }.
+// review action (pending|accepted|returned). Body: { status }.
+// Lower-level endpoint kept for backwards compatibility — the T-05 lifecycle
+// (POST /accept, POST /return) should be preferred by new callers because
+// it also flips the assignment state and emits the client-side push.
 router.patch('/:id/assignments/:aid/reports/:rid/acceptance', (req, res) => {
   try {
     const therapistId = req.user.id;
@@ -3011,6 +3014,83 @@ router.patch('/:id/assignments/:aid/reports/:rid/acceptance', (req, res) => {
     }
     logger.error('Update report acceptance error: ' + error.message);
     res.status(500).json({ error: 'Failed to update acceptance status' });
+  }
+});
+
+// T-05: POST /api/clients/:id/assignments/:aid/reports/:rid/accept — therapist
+// accepts a final report (one-way). The assignment locks into 'completed'
+// and the client receives a "your report was accepted" Telegram push.
+//
+// Spec also exposes this at /api/assignments/:aid/reports/:rid/accept; that
+// alias is mounted below in the standalone assignments router (see
+// index.js mount point '/api/assignments').
+router.post('/:id/assignments/:aid/reports/:rid/accept', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = parseInt(req.params.id, 10);
+    const assignmentId = parseInt(req.params.aid, 10);
+    const reportId = parseInt(req.params.rid, 10);
+    if (!Number.isFinite(reportId) || reportId <= 0) {
+      return res.status(400).json({ error: 'Invalid report id' });
+    }
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'accept_assignment_report');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+    const own = assertAssignmentOwnership(therapistId, clientId, assignmentId);
+    if (own.error) return res.status(own.status).json({ error: own.error });
+
+    const result = assignmentReports.acceptReport(therapistId, reportId);
+    if (result.notFound) return res.status(404).json({ error: 'Report not found' });
+    if (result.forbidden) return res.status(403).json({ error: 'Forbidden' });
+    if (result.invalid_input) return res.status(400).json({ error: result.invalid_input });
+    // Sanity: the route's :aid must match the report's actual assignment.
+    if (result.report && Number(result.report.assignment_id) !== assignmentId) {
+      return res.status(404).json({ error: 'Report not found in this assignment' });
+    }
+    res.json(result.report);
+  } catch (error) {
+    logger.error('Accept report error: ' + error.message);
+    res.status(500).json({ error: 'Failed to accept report' });
+  }
+});
+
+// T-05: POST /api/clients/:id/assignments/:aid/reports/:rid/return — therapist
+// returns a final report with a mandatory comment (min 10 chars). Reversible:
+// the client may submit another final after addressing the feedback.
+// Body: { comment: string }.
+router.post('/:id/assignments/:aid/reports/:rid/return', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = parseInt(req.params.id, 10);
+    const assignmentId = parseInt(req.params.aid, 10);
+    const reportId = parseInt(req.params.rid, 10);
+    if (!Number.isFinite(reportId) || reportId <= 0) {
+      return res.status(400).json({ error: 'Invalid report id' });
+    }
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'return_assignment_report');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+    const own = assertAssignmentOwnership(therapistId, clientId, assignmentId);
+    if (own.error) return res.status(own.status).json({ error: own.error });
+
+    const comment = (req.body || {}).comment;
+    const result = assignmentReports.returnReport(therapistId, reportId, comment);
+    if (result.notFound) return res.status(404).json({ error: 'Report not found' });
+    if (result.forbidden) return res.status(403).json({ error: 'Forbidden' });
+    if (result.conflict) return res.status(409).json({ error: result.conflict });
+    if (result.invalid_input) return res.status(400).json({ error: result.invalid_input });
+    if (result.report && Number(result.report.assignment_id) !== assignmentId) {
+      return res.status(404).json({ error: 'Report not found in this assignment' });
+    }
+    res.json(result.report);
+  } catch (error) {
+    if (error.code === 'invalid_input') {
+      return res.status(400).json({ error: error.message });
+    }
+    logger.error('Return report error: ' + error.message);
+    res.status(500).json({ error: 'Failed to return report' });
   }
 });
 

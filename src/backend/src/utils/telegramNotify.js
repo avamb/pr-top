@@ -3,7 +3,11 @@
 // falls back to logging in development mode.
 // Failures are non-fatal — they never break the calling flow.
 
-const logger = require('./logger');
+// logger.js exports `{ logger, getSystemLogs }`, so destructure it.
+// Without the destructure, calls like `logger.info(...)` throw
+// "logger.info is not a function" which silently breaks the dev-mode
+// notify path used by T-05 accept/return pushes.
+const { logger } = require('./logger');
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_API_BASE = 'https://api.telegram.org/bot';

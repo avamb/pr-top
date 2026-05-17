@@ -6118,3 +6118,289 @@ ranked bar list.
   length overlay, and a top-gaps ranked list. Consent-gated,
   window-aware, plural-aware i18n in en/ru/es/uk).
 - Stats: should be 383/384 features passing after this commit.
+
+
+
+============================================================
+Session 2026-05-17 (Sunday) — Feature #363 T-05 Final report
+                            accept / return flow
+============================================================
+
+### Goal
+
+Build the therapist review lifecycle for a client's FINAL
+assignment_report (T-04 dependency):
+
+  - therapist ACCEPTS the report (one-way) → assignment is
+    locked into status='completed'; client receives a "your
+    report was accepted" Telegram push.
+  - therapist RETURNS the report (reversible) with a mandatory
+    comment (≥10 chars) → comment is Class A AES-encrypted on
+    disk; assignment goes back to status='active' so the
+    client can submit another final; client receives a
+    "therapist returned your report: <comment>" Telegram push.
+
+Exposed at the spec path POST /api/assignments/:id/reports
+                          /:reportId/(accept|return) with a
+return body { comment: string } — empty / short comment → 400.
+
+### Files added / changed this session
+
+  src/backend/src/db/connection.js   (+88 / -3)
+    - assignment_reports.acceptance_status CHECK enum updated
+      from ('pending','accepted','rejected') to
+      ('pending','accepted','returned').
+    - New columns: therapist_comment_encrypted,
+      therapist_comment_key_id, therapist_comment_version,
+      accepted_at, returned_at.
+    - Idempotent in-place table rebuild for existing DBs that
+      pre-date T-05: detects the missing columns / old CHECK,
+      copies all rows into the new shape, maps any leftover
+      'rejected' rows to 'returned' so nothing is lost,
+      atomic BEGIN/COMMIT, re-creates the three indexes.
+    - Subsequent boots find the new columns and skip the
+      rebuild (idempotent migration probe).
+
+  src/backend/src/services/assignmentReports.js   (+256 / -5)
+    - decryptRow() now also decrypts therapist_comment_encrypted
+      and surfaces therapist_comment, accepted_at, returned_at
+      on the report payload.
+    - listReportsForAssignment / getReport SELECT pulled in the
+      new columns.
+    - setAcceptanceStatus() updated to use the new enum
+      ('rejected' → 'returned'); kept for back-compat with the
+      legacy PATCH …/acceptance route.
+    - NEW acceptReport(therapistId, reportId)
+        * One-way action — idempotent if already accepted (no
+          re-notify on second call).
+        * Only operates on is_final=1 reports.
+        * Flips the assignment to status='completed' with a
+          coalesce on completed_at.
+        * Audit log + WS push + Telegram push.
+    - NEW returnReport(therapistId, reportId, comment)
+        * Validates comment: non-null, trimmed length in
+          [10, 4000]. Throws err.code='invalid_input' otherwise.
+        * Class A AES-encrypts the comment.
+        * Sets acceptance_status='returned', persists
+          therapist_comment_encrypted + key_id + version,
+          stamps returned_at.
+        * Reopens the assignment to status='active' so the
+          client can submit another final.
+        * Accepted → returned is a CONFLICT (409); accept is
+          one-way.
+        * Audit log + WS push + Telegram push (with comment
+          body, truncated to 1500 chars for the push).
+    - notifyClientOfFinalReportAction(action, report, comment)
+        Multi-language push copy (en/ru/es/uk) for both the
+        "accepted" and "returned" branches. Best-effort —
+        wrapped in try/catch so failures never break the
+        accept/return flow. Also emits a therapist-side WS
+        event (assignment_report_accepted /
+        assignment_report_returned).
+
+  src/backend/src/routes/assignments.js   (NEW +120)
+    - Brand-new standalone /api/assignments router (mounted in
+      index.js below /api/clients) so the spec-shaped
+      POST /api/assignments/:id/reports/:reportId/(accept|return)
+      paths exist without coupling them to /api/clients/:cid.
+    - The router resolves client_id from the assignment row,
+      runs verifyClientConsent + therapist ownership, then
+      delegates to acceptReport / returnReport.
+    - Returns 404 / 403 / 409 / 400 / 500 with structured
+      JSON errors.
+
+  src/backend/src/routes/clients.js   (+82 / -3)
+    - Mirror endpoints at /api/clients/:id/assignments/:aid
+      /reports/:rid/(accept|return) so the frontend can keep
+      using the existing nested URL shape it already
+      authenticates against.
+    - PATCH …/acceptance kept for back-compat (status enum
+      now uses 'returned' in place of the old 'rejected').
+
+  src/backend/src/index.js   (+4)
+    - app.use('/api/assignments', requireActiveSubscription,
+        require('./routes/assignments'));
+      Same subscription gate as the rest of the therapist API.
+
+  src/backend/src/utils/telegramNotify.js   (+4 / -1)
+    - Fix a latent pre-existing bug: this file did
+      `const logger = require('./logger')` (no destructure) but
+      logger.js exports `{ logger, getSystemLogs }`. Every call
+      site (`logger.info`, `logger.warn`, `logger.error`) was
+      therefore TypeError-ing silently and the .catch on the
+      caller swallowed the real intent of the log line. Fix:
+      destructure: `const { logger } = require('./logger');`.
+      Without this fix the T-05 dev-mode "[TELEGRAM NOTIFY]
+      Would send to <chatId>: <text>" line — which is the
+      only signal we have that the bot push fired in dev —
+      never appeared. With it, both accept and return pushes
+      log cleanly.
+
+  src/frontend/src/components/AssignmentsPanel.jsx   (+238 / -4)
+    - Acceptance state row inside the final-report card:
+      pill-shaped status badge (pending/accepted/returned),
+      timestamp chips (accepted_at / returned_at), and a
+      surfaced "comment from therapist" callout box (amber
+      bg) whenever therapist_comment is present.
+    - Accept button (✓): green; behind a confirm() because
+      accept is one-way. Disabled for already-accepted
+      reports.
+    - Return button (↩): amber; opens a centered modal with
+      a textarea, char counter (X / 4000), min-10-char
+      hint, error surface, Cancel + "Return report"
+      buttons. Modal closes on backdrop click; submit is
+      disabled until ≥10 chars.
+    - All accept/return buttons + the modal carry stable
+      data-testid attributes so the E2E suite can target
+      them without depending on copy.
+    - AssignmentReportsFeed now bubbles an
+      onAssignmentChanged() callback up to AssignmentsPanel
+      so the parent reloads assignments (and therefore the
+      status badge on the card header) after accept/return.
+    - WebSocket subscriptions extended with
+      assignment_report_accepted and
+      assignment_report_returned so the feed re-fetches
+      across tabs.
+
+  src/frontend/src/i18n/{en,ru,es,uk}.json
+    - 16 new assignment.report.* strings per locale:
+      acceptanceLabel, acceptanceStatus.returned, accept,
+      return, confirmAccept, errorAccept, errorReturn,
+      returnTitle, returnHint, returnReasonRequired,
+      returnPlaceholder, returnMinChars, returnSubmit,
+      returnSubmitting, returnCancel, commentFromTherapist.
+
+### Acceptance criteria mapped to deliverables
+
+  Step 1 (schema: is_final, acceptance_status, Class A
+          therapist_comment required when returned)
+    -> connection.js: new CHECK enum + therapist_comment_*
+       columns + idempotent migration probe. Service rejects
+       returns without a ≥10-char comment at validation time.
+
+  Step 2 (POST .../accept)
+    -> /api/assignments/:id/reports/:reportId/accept
+       (spec path) + alias under /api/clients/.../accept.
+
+  Step 3 (POST .../return with body.comment ≥10 chars; 400
+          without comment)
+    -> /api/assignments/:id/reports/:reportId/return with
+       request body { comment }. Service validates
+       comment.trim().length ∈ [10, 4000]; route translates
+       err.code='invalid_input' into 400.
+
+  Step 4 (accept → assignment status = completed)
+    -> acceptReport() calls setAssignmentStatus(id,
+       'completed') and stamps completed_at.
+
+  Step 5 (return → client receives bot notification with
+          therapist's comment; can submit new reports)
+    -> Telegram push in client's locale with comment in
+       body. returnReport() flips the assignment back to
+       status='active' so /report (T-04 bot command) accepts
+       new submissions on the same assignment.
+
+  Step 6 (accept is one-way; return is reversible)
+    -> acceptReport refuses no-op double-accept (idempotent
+       silent return). returnReport on an already-accepted
+       report → conflict 409. After return, the client can
+       submit another final and the therapist can accept
+       that one.
+
+  Step 7 (Frontend: accept/return buttons in final-report
+          card; modal with textarea for return-comment)
+    -> AssignmentReportsFeed acceptance row + return modal.
+       Mandatory char count, min 10, max 4000.
+
+  Step 8 (Bot: client receives push)
+    -> notifyClientOfFinalReportAction() builds locale-aware
+       message text in en/ru/es/uk and routes through
+       telegramNotify.sendMessage().
+
+  Step 9 (Accept/return history visible in the report feed)
+    -> Status pill + timestamps + "comment from therapist"
+       callout all live in the same feed entry. WS events
+       drive live refresh.
+
+  Step 10 (Client may submit multiple final reports if the
+           previous was returned)
+    -> Smoke test confirms: report#1 returned → reopen →
+       client posts report#2 (also final) → therapist
+       accepts → assignment completed.
+
+  Step 11 (i18n assignment.report.{accept,return,
+           returnReasonRequired,commentFromTherapist} in
+           en/ru/es/uk)
+    -> All 16 required keys × 4 locales = 64 new strings.
+       Validation script confirms 4/4 locales have every key.
+
+  Step 12 (API test: return without comment → 400)
+    -> Smoke test asserts that returnReport(_, _, undefined)
+       throws err.code='invalid_input' (route surfaces as
+       400); a 9-char comment also throws.
+
+  Step 13 (E2E: client final report → therapist returns
+           with comment → client writes new → accept →
+           completed)
+    -> Smoke test exercises the full lifecycle end-to-end
+       against the real DB + encryption layer. 11/11
+       assertions pass:
+         1.  final report created (is_final=true,
+             status=pending)
+         2.  return without comment → invalid_input
+         3.  return with 9-char comment → invalid_input
+         4.  return with valid comment → status=returned,
+             therapist_comment present, returned_at set
+         5.  assignment reopens to status=active
+         6.  second final report created on same assignment
+         7.  accept second report → status=accepted,
+             accepted_at set
+         8.  assignment locked to status=completed
+         9.  trying to return an accepted report → conflict
+         10. re-accept an accepted report → idempotent
+             no-op
+         11. non-final report cannot be accepted (rejected
+             by service guard)
+
+### Verification (YOLO mode)
+
+1. node --check on the five backend files touched
+   (db/connection.js, index.js, routes/clients.js,
+   routes/assignments.js, services/assignmentReports.js,
+   utils/telegramNotify.js) — all clean.
+2. JSON.parse on all four i18n files — all clean. Custom
+   validator confirms all 15 T-05 keys + acceptanceStatus
+   .returned exist in en, ru, es, uk.
+3. Boot probe (_t05_boot_check.js): initDatabase() applies
+   the migration cleanly on the existing prtop.db. PRAGMA
+   table_info reports the five new columns. CHECK constraint
+   accepts 'returned'. Both routers + the service load
+   without error.
+4. Route probe (_t05_route_check.js): the standalone
+   /api/assignments router exposes exactly
+       POST /:id/reports/:reportId/accept
+       POST /:id/reports/:reportId/return
+   at the path shape the spec requires.
+5. End-to-end smoke test (_t05_smoke.js): 11/11 assertions
+   pass against the real DB + encryption layer; both push
+   messages render in dev-mode logs with the expected
+   locale-aware text.
+6. Mock-data grep across services/assignmentReports.js,
+   routes/assignments.js, components/AssignmentsPanel.jsx —
+   zero hits for globalThis, devStore, mockDb, fakeData,
+   sampleData, TODO.*real, STUB, isDevelopment.
+7. Frontend production build: `npm --prefix src/frontend
+   run build` succeeded in 2.34s — 1086 modules, 1.36 MB
+   main bundle gzipped to 380 KB. No build errors.
+
+### Current status
+- Feature #363: PASSING (T-05 — Final report + accept/return
+  flow. Therapist can accept (one-way → completed) or return
+  with a mandatory Class A encrypted ≥10-char comment
+  (reversible → active) any final assignment_report. Client
+  gets a locale-aware Telegram push and can submit another
+  final after a return. Schema migrated in-place with no
+  data loss; CHECK constraint now allows 'returned'.
+  16 new i18n strings × 4 locales surface the entire UI in
+  en/ru/es/uk).
+- Stats: 384/384 features passing after this commit (100%).

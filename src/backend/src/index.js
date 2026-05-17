@@ -189,6 +189,10 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/dashboard', requireActiveSubscription, dashboardRoutes);
 app.use('/api/encryption', encryptionRoutes);
 app.use('/api/clients', requireActiveSubscription, require('./routes/clients'));
+// T-05: standalone /api/assignments router exposes the spec-shaped
+// POST /api/assignments/:id/reports/:reportId/(accept|return) aliases on
+// top of the nested /api/clients/:cid/assignments/... endpoints.
+app.use('/api/assignments', requireActiveSubscription, require('./routes/assignments'));
 app.use('/api/invite-code', requireActiveSubscription, require('./routes/inviteCode'));
 app.use('/api/sessions', requireActiveSubscription, require('./routes/sessions'));
 app.use('/api/exercises', requireActiveSubscription, require('./routes/exercises'));
