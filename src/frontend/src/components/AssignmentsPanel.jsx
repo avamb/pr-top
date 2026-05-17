@@ -10,8 +10,10 @@ import useWebSocket from '../hooks/useWebSocket';
  *
  * Fetches an attachment image via the authenticated streaming endpoint
  * (Bearer token, no public URL), turns it into a blob URL, and renders a
- * thumbnail. Clicking the thumb invokes onOpen(blobUrl, attachment) so the
- * parent can show a full-size lightbox.
+ * thumbnail. Clicking the thumb invokes onOpen(attachment) so the parent
+ * can show a full-size lightbox; the lightbox does its own independent
+ * fetch so the thumbnail's blob URL is free to be revoked on unmount
+ * without affecting the open lightbox image (T-385 audit fix).
  *
  * We intentionally fetch the blob ourselves rather than using an <img src>
  * pointing at /api/.../stream because <img> tags cannot send the Bearer
@@ -62,7 +64,7 @@ function ReportPhotoThumbnail({ clientId, assignmentId, reportId, attachment, on
     <div className="relative inline-block">
       <button
         type="button"
-        onClick={() => blobUrl && onOpen && onOpen(blobUrl, attachment)}
+        onClick={() => blobUrl && onOpen && onOpen(attachment)}
         disabled={!blobUrl}
         className="w-20 h-20 rounded overflow-hidden border border-stone-200 bg-stone-100 hover:ring-2 hover:ring-teal-400 transition disabled:opacity-50 disabled:cursor-wait"
         aria-label={t('assignment.report.photo.openAlt')}
@@ -104,9 +106,19 @@ function ReportPhotoThumbnail({ clientId, assignmentId, reportId, attachment, on
  *
  * Simple full-screen overlay used to display the full-size image when the
  * therapist clicks a thumbnail. Backdrop click + Escape both close.
+ *
+ * T-385 audit fix: the lightbox owns its own fetch + blob URL lifecycle.
+ * It used to receive `blobUrl` from the thumbnail, but the thumbnail
+ * revokes that URL on unmount — which could race against a parent refetch
+ * (WS tick, assignment-changed callback) and break the full-size image
+ * while the user was still viewing it. By fetching independently, the
+ * lightbox's image survives any thumbnail churn.
  */
-function ReportPhotoLightbox({ blobUrl, onClose }) {
+function ReportPhotoLightbox({ streamUrl, onClose }) {
   const { t } = useTranslation();
+  const [blobUrl, setBlobUrl] = useState(null);
+  const [error, setError] = useState(false);
+
   useEffect(() => {
     function onKey(e) {
       if (e.key === 'Escape') onClose();
@@ -115,7 +127,30 @@ function ReportPhotoLightbox({ blobUrl, onClose }) {
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  if (!blobUrl) return null;
+  useEffect(() => {
+    if (!streamUrl) return undefined;
+    let cancelled = false;
+    let createdUrl = null;
+    async function load() {
+      try {
+        const res = await fetchApi(streamUrl);
+        if (!res.ok) throw new Error('stream failed');
+        const blob = await res.blob();
+        if (cancelled) return;
+        createdUrl = URL.createObjectURL(blob);
+        setBlobUrl(createdUrl);
+      } catch (e) {
+        if (!cancelled) setError(true);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
+    };
+  }, [streamUrl]);
+
+  if (!streamUrl) return null;
   return (
     <div
       data-testid="report-photo-lightbox"
@@ -132,12 +167,20 @@ function ReportPhotoLightbox({ blobUrl, onClose }) {
       >
         ×
       </button>
-      <img
-        src={blobUrl}
-        alt={t('assignment.report.photo.thumbAlt')}
-        className="max-w-full max-h-full object-contain rounded shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      />
+      {error ? (
+        <div className="text-white text-sm bg-rose-700/80 rounded px-4 py-3">
+          {t('assignment.report.photo.loadFailed')}
+        </div>
+      ) : blobUrl ? (
+        <img
+          src={blobUrl}
+          alt={t('assignment.report.photo.thumbAlt')}
+          className="max-w-full max-h-full object-contain rounded shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <div className="text-white text-sm">…</div>
+      )}
     </div>
   );
 }
@@ -385,7 +428,9 @@ function AssignmentReportsFeed({ clientId, assignmentId, wsTick, onAssignmentCha
                     assignmentId={assignmentId}
                     reportId={r.id}
                     attachment={att}
-                    onOpen={(blobUrl) => setLightboxUrl(blobUrl)}
+                    onOpen={() => setLightboxUrl(
+                      `/api/clients/${clientId}/assignments/${assignmentId}/reports/${r.id}/attachments/${att.id}/stream`
+                    )}
                     canDelete
                     onDelete={(a) => handleDeleteAttachment(r.id, a)}
                   />
@@ -478,7 +523,7 @@ function AssignmentReportsFeed({ clientId, assignmentId, wsTick, onAssignmentCha
       })}
       {lightboxUrl && (
         <ReportPhotoLightbox
-          blobUrl={lightboxUrl}
+          streamUrl={lightboxUrl}
           onClose={() => setLightboxUrl(null)}
         />
       )}

@@ -1797,8 +1797,19 @@ router.post('/assignments/:assignment_id/reports/:report_id/attachments', botAut
     const ext = (file_ext && typeof file_ext === 'string') ? file_ext : '.jpg';
     const safeExt = ext.startsWith('.') ? ext : ('.' + ext);
     const inferredMime = (mime_type && typeof mime_type === 'string')
-      ? mime_type.toLowerCase()
+      ? mime_type.toLowerCase().trim()
       : 'image/jpeg';
+
+    // T-385 audit fix: validate the claimed mime BEFORE writing the file to
+    // disk. The service layer (insertAttachment) re-validates against the
+    // same allowlist, but doing it here too avoids a wasted encrypt + disk
+    // write + orphan-cleanup roundtrip when a malicious / misbehaving client
+    // sends a non-image mime type.
+    if (!assignmentReports.ALLOWED_ATTACHMENT_MIMES.has(inferredMime)) {
+      return res.status(400).json({
+        error: `Unsupported attachment mime type: ${inferredMime}`,
+      });
+    }
 
     // Write encrypted file to disk (same .enc pattern as voice notes).
     const opaqueId = crypto.randomUUID();

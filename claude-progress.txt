@@ -6404,3 +6404,262 @@ return body { comment: string } — empty / short comment → 400.
   16 new i18n strings × 4 locales surface the entire UI in
   en/ru/es/uk).
 - Stats: 384/384 features passing after this commit (100%).
+
+
+## Session 2026-05-17 21:00 — Feature #385: QA bug sweep of recent merges (T-04, T-05, T-21, T-25, T-26)
+
+### Scope
+Cross-file audit of the last 5 merges in `dev`:
+  - 12ca16c  T-05  final report accept and return flow
+  - 476e732  T-25  client engagement analytics (#383)
+  - 11dac9d  T-21  photo attachments on assignment reports (#379)
+  - 0ac1f74  T-04  freeform progress reports per assignment (#362)
+  - de30d0a  T-26  AI source disclaimers (#384)
+
+Shared touch points: services/assignmentReports.js, routes/clients.js,
+db/connection.js, components/AssignmentsPanel.jsx, bot/index.js — high
+interference risk. Read each merge's full diff against the current `dev`
+HEAD state and stepped through every concern called out in feature #385's
+verification steps.
+
+### Audit conclusions per feature
+
+**T-04 (freeform progress reports)**
+- activeReports[telegramId] race:
+  * Voice handler (bot/index.js:1765) and text handler (:2287) both check
+    AND delete the entry → second message correctly falls through to diary.
+  * Photo handler (:1977) intentionally does NOT delete the entry so a
+    text/voice follow-up can attach to the same parent report. By design.
+  * No TTL on activeReports — stale entries persist until next /report or
+    bot restart. Minor; not a leak. Filed as a future polish item only.
+- Ownership chain:
+  * /api/clients/.../reports/* routes all run through verifyClientConsent
+    + assertAssignmentOwnership (which calls assignmentsService.getAssignment
+    scoped to therapist+client+assignment).
+  * The accept/return alias router at /api/assignments/:id/reports/:rid/...
+    additionally re-checks ownership via findAssignmentBase. Belt+braces.
+  * Voice transcription is fired as `processReportTranscription(report.id)
+    .then().catch()` — fire-and-forget, never blocks the bot response. ✓
+- WS scoping:
+  * emitToTherapist(therapistId, ...) is used for every event, never a
+    broadcast. ✓ No cross-therapist leak.
+
+**T-05 (final report accept / return)**
+- Idempotency:
+  * acceptReport already idempotent when status === 'accepted' (early
+    return, no duplicate Telegram push). ✓
+  * returnReport on an accepted report returns { conflict } → 409. ✓
+  * returnReport on an already-returned report with the SAME comment
+    used to re-encrypt + re-update returned_at + re-audit + RE-NOTIFY,
+    which means a double-click on the modal's Submit button would send
+    TWO Telegram pushes to the client. **BUG FIX #1 below.**
+- Ownership:
+  * Standalone /api/assignments/:id/reports/:rid/... router checks
+    Number(base.therapist_id) === Number(req.user.id) before any service
+    call. Attempt by therapist A to accept therapist B's client report
+    returns 403 (not 500, not data leak). ✓
+
+**T-21 (photo attachments)**
+- Limits enforced (5/report, 10MB, image mime allowlist) at both layers:
+  * routes/bot.js validates BEFORE service call but used to do the disk
+    write before checking mime. **BUG FIX #2 below.**
+  * services/assignmentReports.insertAttachment re-validates as last line
+    of defense, throws { code: 'invalid_input' } on violation.
+- Delete-on-disk:
+  * routes/clients.js DELETE handler explicitly fs.unlinkSync(.enc) BEFORE
+    calling deleteAttachment(). On-disk file removed even when service
+    delete fails. ✓
+- Signed access / opaque ID:
+  * file_ref is crypto.randomUUID() + ext + '.enc' → unguessable. Never
+    exposed to the wire; therapist streams via the authenticated route.
+    Response carries 'X-Content-Type-Options: nosniff' + 'Cache-Control:
+    no-store'. Bytes are not stored as-is on disk (encrypted with key
+    rotation tracked via encryption_key_id + payload_version). ✓
+- Frontend lightbox lifecycle:
+  * Previous design: thumbnail's useEffect cleanup revoked the blob URL on
+    unmount; the parent passed that same URL to the lightbox. A WS-driven
+    refetch (assignment_report_accepted / _returned / attachment_added)
+    could remount thumbnails and revoke the URL while the lightbox was
+    still showing the full-size image — broken image until close. **BUG
+    FIX #3 below.**
+
+**T-25 (client engagement analytics)**
+- Division-by-zero / single-report safety:
+  * stdev() returns 0 for `< 2` values. ✓
+  * meanGap / medianGap / max / minGap all guarded with
+    `gapsDays.length > 0` check. ✓
+  * consistencyScore returns null when `< 1` gaps (i.e. fewer than 2
+    reports — matches the inline comment). ✓
+- Window-aware aggregation:
+  * Window capped at 365 days at the route layer (Math.min(n, 365)).
+  * Window passed through to listReportsForClient as `'-N days'`, applied
+    inside the SQL with datetime('now', ?). ✓
+- Consent + ownership:
+  * /api/clients/:id/engagement uses verifyClientConsent ('engagement')
+    AND additionally verifies `WHERE id = ? AND therapist_id = ? AND
+    role = 'client'` before reading anything. ✓ No URL-tampering leak.
+- N+1 / perf:
+  * listReportsForClient does ONE SELECT for all reports, then decrypts
+    each row's content in-process to compute length. For a 1000-report
+    client that's 1000 decrypt calls inside one request. Audit step 13
+    flagged this as "use ciphertext_length?" — confirmed it would be a
+    valid micro-optimization but is NOT a correctness bug. Not fixed in
+    this audit (out of scope for a bug sweep; would be a separate
+    perf-tuning feature).
+- decryptRow → listAttachmentsForReport for EVERY row in
+  listReportsForAssignment is an N+1 in the dashboard feed too; same
+  perf-only call-out, not fixed here.
+
+**T-26 (AI source disclaimers)**
+- Migration idempotency:
+  * Each `ALTER TABLE ADD COLUMN` is wrapped in its own try/catch — repeat
+    boots are no-ops. ✓
+  * Backfill `UPDATE users SET show_ai_sources = 1 WHERE show_ai_sources
+    IS NULL` is idempotent (becomes a no-op once all rows have a value).
+    ✓ Verified by booting the app twice; no migration errors.
+- Cross-therapist sources leak:
+  * vectorStore.searchKb(query, therapistId, ...) scopes the vector
+    search to the requesting therapist.
+  * buildKbContext does the followup chunk lookup with
+    `WHERE c.id = ? AND c.therapist_id = ?` — explicit therapist scope.
+    ✓ Therapist A's hits NEVER show up in therapist B's session
+    summary or exercise sources_json.
+- show_ai_sources is UI-only:
+  * Settings PUT only flips the column; the source data is persisted
+    unconditionally by summarization/exercise-authoring. Toggling on
+    after the fact brings the disclaimer back without re-running
+    generation. ✓ Audit-compliant: data always stored.
+
+**Cross-file regression**
+- 3 of the 5 commits (T-04, T-05, T-21) edit
+  services/assignmentReports.js. The final-state file is well-organized:
+  T-04 helpers at top, T-05 accept/return in the middle, T-21
+  attachment block at the bottom, T-25 analytics last. Single module
+  exports object with no duplicates or shadowing.
+- routes/clients.js similarly stacks T-04 → T-21 → T-25 sections cleanly.
+- AssignmentsPanel.jsx has separate sub-components (ReportPhotoThumbnail,
+  ReportPhotoLightbox, AssignmentReportsFeed) with no naming collisions.
+- bot/index.js photo handler vs voice/text handlers all interact through
+  the same activeReports[telegramId] map without stomping each other.
+
+**i18n coverage**
+- assignment.report.*           — 42 keys × 4 locales (en/ru/es/uk).
+- analytics.engagement.*        — 40 keys × 4 locales (ru/uk have
+                                   _few/_many plural forms in addition
+                                   to _one/_other; en/es only need
+                                   _one/_other per CLDR plural rules).
+- clientDetail.engagementTab    —  1 key × 4 locales.
+- ai.disclaimer.*               — 17 keys × 4 locales.
+  Validated with a programmatic key-set diff against en.json — no
+  missing translations in ru/es/uk. The only diff is the Slavic-only
+  `_few` / `_many` plural forms which are correctly NOT present in
+  en/es per CLDR plural rules for those locales.
+
+### Bug fixes applied
+
+**Fix #1 — T-05 returnReport idempotency on double-click.**
+File: src/backend/src/services/assignmentReports.js (+8 lines).
+Before: A second call to returnReport with the SAME comment re-encrypted,
+re-stamped returned_at, re-audited, and re-sent the Telegram push to the
+client. UX impact: rapid Submit-button clicks (or a slow network retry)
+caused the client to receive 2+ identical "your report was returned"
+pushes.
+After: When `acceptance_status === 'returned'` AND
+`report.therapist_comment === trimmed` (the new comment matches the
+already-stored one), return early with the current state — no DB write,
+no audit log, no notification. Therapists editing their feedback with a
+DIFFERENT comment still get the update + re-notify (legitimate use case
+preserved).
+Regression test (`_t385_return_idempotent.js`): 6/6 assertions pass —
+  - 1st return → 1 push
+  - 2nd return (same comment) → 0 pushes
+  - 3rd return (different comment) → 1 push
+
+**Fix #2 — T-21 mime validation BEFORE disk write.**
+File: src/backend/src/routes/bot.js (+12 lines).
+Before: The bot upload route did the base64 decode + buffer cap check
+correctly, but then proceeded to encrypt + write the file to disk before
+the service-layer mime check ran inside insertAttachment(). On rejection
+the orphan cleanup ran, but disk I/O + an AES-GCM encrypt had already
+been spent. Could be abused by a noisy client to do many wasted writes.
+After: After determining `inferredMime`, validate against
+`assignmentReports.ALLOWED_ATTACHMENT_MIMES` immediately and return
+400 if unsupported. Disk write only happens once the mime is on the
+allowlist. Service-layer check stays as defense-in-depth.
+
+**Fix #3 — T-21 photo lightbox owns its own blob URL fetch.**
+File: src/frontend/src/components/AssignmentsPanel.jsx (~50 lines).
+Before: ReportPhotoThumbnail created an `URL.createObjectURL` blob URL
+on mount, passed it through `onOpen(blobUrl)` → parent's setLightboxUrl
+→ lightbox `<img src={blobUrl}>`. The thumbnail's useEffect cleanup
+revoked the URL on unmount. If the AssignmentReportsFeed refetched
+(WS tick from assignment_report_accepted / _returned / attachment_added)
+while the lightbox was open, the thumbnail could remount and revoke the
+URL, breaking the open lightbox image.
+After: Lightbox accepts a `streamUrl` (the authenticated stream-route
+URL) instead of a blob URL, runs its own fetch + createObjectURL +
+revoke cleanup. Thumbnail's lifecycle is now fully independent of the
+lightbox's. The parent passes the streamUrl string when opening; the
+lightbox owns the blob from fetch to unmount.
+
+### Verification (YOLO mode)
+
+1. `node --check` on every backend file touched by the audit:
+     - src/backend/src/services/assignmentReports.js   OK
+     - src/backend/src/routes/bot.js                   OK
+     - src/backend/src/routes/clients.js               OK
+     - src/backend/src/routes/assignments.js           OK
+     - src/backend/src/db/connection.js                OK
+     - src/backend/src/utils/telegramNotify.js         OK
+     - src/bot/src/index.js                            OK
+   All seven files parse clean.
+
+2. Frontend production build:
+   `npm --prefix src/frontend run build` succeeded in 2.28s — 1086
+   modules, 1.36 MB main bundle gzipped to 380 KB. Zero build errors
+   after the lightbox refactor.
+
+3. End-to-end smoke (`_t385_smoke.js`):
+   Seeds therapist + client + assignment, drives:
+     - T-04 text report create/round-trip
+     - T-21 attach photo + per-report cap (5) + mime rejection
+     - T-05 final report → return (without/short/valid comment) →
+            re-create final → accept → completed → conflict on re-return
+     - T-25 engagement aggregator on multi-report + 0-report clients
+     - T-26 buildKbContext envelope shape
+   41/41 assertions pass. Telegram-notify lines render in dev-mode logs
+   exactly as expected.
+
+4. Idempotent return regression test (`_t385_return_idempotent.js`):
+   6/6 assertions pass. Spied Telegram send counter goes 1 → 0 → 1
+   across the three return calls.
+
+5. i18n key coverage script (custom): all four locales have full
+   coverage of the T-04/T-05/T-21/T-25/T-26 prefixes after accounting
+   for CLDR plural form differences (en/es have _one/_other; ru/uk
+   additionally have _few/_many).
+
+### What was NOT fixed (deliberately scoped out)
+
+- N+1 attachments listing inside decryptRow (perf only; not a
+  correctness bug).
+- N+1 plaintext-length decryption in T-25 listReportsForClient
+  (perf only; using ciphertext_length would be a separate optimization).
+- activeReports[telegramId] TTL in the bot (minor stale-state issue
+  without security impact).
+- T-21 mime spoofing (claimed image/jpeg + non-image bytes): out of
+  scope; nosniff defense + Telegram only ever sends real JPEGs in
+  practice. A magic-number sniff is a future hardening item.
+
+### Files touched in this audit session
+  src/backend/src/services/assignmentReports.js   (+8)
+  src/backend/src/routes/bot.js                   (+12)
+  src/frontend/src/components/AssignmentsPanel.jsx (~50, lightbox refactor)
+  claude-progress.txt                             (this entry)
+
+### Current status
+- Feature #385: PASSING (QA bug sweep of last 5 merges — 3 real bugs
+  found and fixed with mini-fixes, 4 perf-only / nice-to-have items
+  documented for future work, all cross-cutting flows verified end-to-end
+  against the real DB + encryption layer + dev-mode Telegram notify).
+- Stats: 385/385 features passing (100%).

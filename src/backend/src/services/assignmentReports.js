@@ -744,6 +744,15 @@ function returnReport(therapistId, reportId, comment) {
     // accept is one-way — cannot reopen an accepted report.
     return { conflict: 'Cannot return a report that was already accepted' };
   }
+  // T-385 audit fix: idempotent re-return. A double-click on the Return modal
+  // (or any client retry) used to re-encrypt the comment, bump returned_at,
+  // re-audit, AND re-send a Telegram push — spamming the client. If the
+  // report is already in 'returned' state and the comment matches the prior
+  // one, return early with the current state (no DB write, no notify).
+  if (report.acceptance_status === 'returned'
+      && (report.therapist_comment || '') === trimmed) {
+    return { report };
+  }
 
   const enc = encrypt(trimmed);
   const db = getDatabase();
