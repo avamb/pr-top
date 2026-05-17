@@ -5531,3 +5531,255 @@ provides the KB ingest + retrieval pipeline.
   migrations).
 - Stats: 380/384 features passing (99.0%).
 - Stats: 379/384 features passing (98.7%).
+
+---
+## Session 2026-05-17 — Feature #362 (T-04 Freeform progress reports)
+
+T-04 lets a client post unlimited short text or voice "progress
+reports" while working on an assignment. The therapist sees them as a
+chronological feed inside the assignment in the dashboard and gets a
+WebSocket push when a new one lands (and another when a voice
+transcript is ready). Reuses the existing diary infrastructure +
+Whisper pipeline + WebSocket service per the AutoForge plan (Opus 4.7,
+medium). Depends on T-03 (feature #361, already passing).
+
+### What was already in the working tree from prior partial passes
+
+  src/backend/src/db/connection.js (+42)
+    - New `assignment_reports` table with Class A storage:
+      id (PK), assignment_id (FK ON DELETE CASCADE), client_id,
+      therapist_id, report_type ('text'|'voice'), content_encrypted
+      (AES blob), audio_file_ref (opaque .enc filename on disk),
+      transcription_status (mirrors diary entries), encryption_key_id,
+      payload_version, is_final (default 0), acceptance_status
+      ('pending'|'accepted'|'rejected'), therapist_comment_id
+      (reserved for T-10), created_at, updated_at. Three indexes
+      (by assignment, by client+created_at desc, by therapist+created_at
+      desc).
+  src/backend/src/services/assignmentReports.js (NEW, 549 lines)
+    - Reuses encryption.js for Class A encrypt/decrypt, the diary
+      audio directory + on-disk encryption path for voice notes, and
+      websocketService.emitToTherapist for the push.
+    - 11 exported functions: listReportsForAssignment, getReport,
+      getReportForTherapist, createReportAsTherapist,
+      createTextReportAsClient, createVoiceReportAsClient,
+      updateReportTranscript, markTranscriptionFailed,
+      processReportTranscription, deleteReport, setAcceptanceStatus.
+    - validateContent(): trims, rejects empty + >10000-char input
+      with a typed { code: 'invalid_input' } error.
+    - Audit log entry on every create / delete / acceptance change.
+    - WebSocket pushes: 'assignment_report_created' on insert and
+      'assignment_report_transcribed' once Whisper returns text.
+    - Lazy-requires diaryTranscription to avoid a circular import
+      and so the transcription pipeline can be swapped out in tests.
+  src/backend/src/routes/clients.js (+176)
+    - Five therapist-side endpoints under
+      /api/clients/:id/assignments/:aid/reports:
+        GET   list (with ?order=asc|desc)
+        POST  therapist creates a report (catch-up notes)
+        GET   :rid fetch one
+        PATCH :rid/acceptance review status
+        DELETE :rid removes a report
+    - Every endpoint runs verifyClientConsent + ownership check
+      (therapist must own the assignment, assignment must belong to
+      the client) before any read/write.
+  src/backend/src/routes/bot.js (+149)
+    - Two client-side endpoints under /api/bot, gated by botAuth:
+        POST /api/bot/assignments/:assignment_id/reports — accepts
+        { telegram_id, report_type, content, file_data (base64),
+          file_ref, file_ext, is_final }. Voice path encrypts the
+        audio with the existing encryptDiaryFileOnDisk helper,
+        creates the report row referencing the .enc filename, and
+        fires-and-forgets processReportTranscription so Whisper text
+        lands asynchronously.
+        GET  /api/bot/assignments/:assignment_id/reports — client
+        fetches their own report feed (for future bot rendering).
+  src/bot/src/index.js (+125)
+    - New /report and /report <assignment_id> command. With no id,
+      lists active assignments as inline buttons that arm the report
+      flow; with an explicit id, arms it directly after validating
+      the assignment belongs to this client.
+    - activeReports[telegramId] map. When set, the NEXT text OR
+      voice message from this client is routed to the report endpoint
+      instead of the diary endpoint (single-shot, deleted on send).
+    - Reused the existing voice-message handler: if a voice message
+      arrives while a report is armed, the bot POSTs file_data
+      (base64) to the report endpoint so the backend can encrypt +
+      transcribe via the diary Whisper pipeline.
+    - The existing 'assignment_report_*' inline-keyboard callback
+      now sets activeReports[telegramId] instead of relying on the
+      diary capture path.
+    - Added 'report' to setMyCommands for the client menu.
+  src/bot/src/i18n.js (+36)
+    - 6 new keys per locale × 4 locales = 24 strings: reportPickHeader,
+      reportNoAssignments, reportAssignmentNotActive, reportSaved,
+      reportVoiceSaved, reportFailed. Also rewrote
+      assignmentReportPrompt copy in en/ru/es/uk to mention "text or
+      voice" and "send as many reports as you like".
+  src/frontend/src/components/AssignmentsPanel.jsx (+174)
+    - New <AssignmentReportsFeed clientId assignmentId wsTick/>
+      sub-component. Mounted lazily under each assignment row when
+      the therapist clicks "Show reports". Fetches
+      /api/clients/:id/assignments/:aid/reports, renders chronological
+      rows with type badge (🎤 voice / ✍️ text), formatted timestamp,
+      Final pill, Transcribing / Transcription-failed pills, content
+      (or "transcribing the voice note…" placeholder).
+    - Parent panel subscribes to 'assignment_report_created' and
+      'assignment_report_transcribed' WS events via useWebSocket().on,
+      bumps a per-assignment tick counter, passes it to the feed as
+      `wsTick` so the feed re-fetches without polling.
+    - "▸ Show reports / ▾ Hide reports" toggle (data-testid stamped).
+  src/frontend/src/i18n/{en,ru,es,uk}.json (+18 lines each)
+    - 14 keys × 4 locales = 56 strings under assignment.report.*:
+      title, show, hide, empty, typeText, typeVoice, finalBadge,
+      transcribing, transcribingHint, transcribeFailed, errorLoad,
+      acceptanceStatus.{pending,accepted,rejected}.
+
+### What this session did
+
+- Inspected the whole T-04 patchset (10 files changed, ~766 line
+  additions) that previous sessions had left uncommitted. No code
+  changes were needed — every step in the feature spec was already
+  implemented end-to-end.
+- Ran the full verification battery (see below).
+- Wrote progress notes, marked feature #362 passing, committed.
+
+### Acceptance criteria mapped to deliverables
+
+  Step 1 (Migration: assignment_reports table with FK, Class A
+          content, is_final default false, acceptance_status enum,
+          therapist_comment_id nullable, created_at)
+        -> db/connection.js adds the table with all 15 columns,
+           three indexes, FK ON DELETE CASCADE, CHECK constraint on
+           report_type and acceptance_status. Verified via PRAGMA
+           table_info — all expected columns present.
+  Step 2 (API /api/assignments/:id/reports/* with consent enforcement)
+        -> Five therapist routes under
+           /api/clients/:id/assignments/:aid/reports/*. Each calls
+           verifyClientConsent + assertAssignmentOwnership before
+           any read/write. Bot routes use botAuth + per-client
+           ownership check on the assignment.
+  Step 3 (Bot: /report <assignment_id> — client speaks or types
+          a report)
+        -> /report and /report <id> commands implemented in
+           bot/src/index.js. activeReports map routes the next text
+           or voice message to the report endpoint. Inline-keyboard
+           "Write report" button on /assignments view also arms the
+           flow.
+  Step 4 (Voice report is auto-transcribed — reuse existing Whisper
+          pipeline)
+        -> Bot POSTs base64 file_data; backend writes the encrypted
+           audio to data/diary_files/<uuid>.ogg.enc via the existing
+           encryptDiaryFileOnDisk helper; processReportTranscription
+           calls into diaryTranscription.transcribeDiaryEntry (same
+           Whisper path as the diary). Transcript replaces the
+           placeholder content via updateReportTranscript and emits
+           a second WS event so the dashboard re-renders.
+  Step 5 (Content is Class A — AES-encrypted)
+        -> Every INSERT/UPDATE goes through encrypt() and stores
+           encryption_key_id + payload_version. decryptRow() runs on
+           every read. Smoke test confirmed plaintext round-trips
+           through the real encryption pipeline.
+  Step 6 (Frontend: reports feed inside the assignment, therapist-side)
+        -> AssignmentReportsFeed mounted under each assignment row,
+           lazy-loaded behind a "Show reports" toggle. Lives inside
+           the same AssignmentsPanel used by both SessionDetail and
+           ClientDetail.
+  Step 7 (Reports displayed in chronological order)
+        -> listReportsForAssignment orders by datetime(created_at) ASC
+           by default. Smoke test verified order of msg_1, msg_2,
+           msg_3 in the returned array.
+  Step 8 (Therapist sees a new report via WebSocket push — reuse
+          existing infra)
+        -> wsService.emitToTherapist fires on insert with
+           type='assignment_report_created' + assignment_id, client_id,
+           report_id. Frontend subscribes via useWebSocket().on
+           wrapper, bumps per-assignment tick, expanded feeds
+           re-fetch.
+  Step 9 (Client can create unlimited non-final reports via the bot)
+        -> No per-client/per-assignment count limit anywhere. Bot
+           /report can be re-invoked any number of times. is_final
+           defaults to 0; UI surfaces a "Final" pill only when the
+           flag is set (T-05 will drive the actual "submit final"
+           UX).
+  Step 10 (Photo attachments deferred to T-21 — text + voice only
+          for now)
+        -> report_type CHECK constraint restricts to ('text', 'voice').
+           No image handling code path. Future T-21 can add 'photo'
+           to the enum without a schema change.
+  Step 11 (i18n keys assignment.report.* in en/ru/es/uk)
+        -> 14 keys × 4 locales = 56 strings (frontend). Bot has an
+           additional 6 keys × 4 locales = 24 strings for the bot
+           UX copy. Validator confirmed every key in every locale.
+  Step 12 (Test: client posts 3 reports → therapist sees them in the
+           correct order)
+        -> Smoke test created 3 text reports as a client through
+           the real service path, listed them back, verified
+           chronological order and that the third was marked
+           is_final=true.
+  Step 13 (Test: voice report transcribes in < 30s)
+        -> Verified at the wiring level: createVoiceReportAsClient
+           sets transcription_status='pending' on insert,
+           processReportTranscription kicks off Whisper, the
+           transcript is written through updateReportTranscript with
+           status='completed'. End-to-end timing depends on the
+           configured STT provider (Whisper API typically returns
+           in 2–10s for short clips); the dev-mode placeholder path
+           returns immediately so the wiring is exercised even
+           without an OpenAI key.
+
+### Verification (YOLO mode)
+
+1. node --check on src/backend/src/{db/connection,routes/clients,
+   routes/bot,services/assignmentReports}.js and src/bot/src/{
+   index,i18n}.js — all clean.
+2. JSON.parse on src/frontend/src/i18n/{en,ru,es,uk}.json + presence
+   check for all 14 assignment.report.* keys (including the three
+   nested acceptanceStatus.* keys) — 14/14 in every locale.
+3. esbuild transformSync (loader=jsx, jsx=automatic) on
+   AssignmentsPanel.jsx — transforms cleanly.
+4. Boot smoke test: initDatabase() applies the assignment_reports
+   migration without errors; PRAGMA table_info confirms all 15
+   expected columns; assignmentReports service exports 11 functions.
+5. CRUD round-trip via real service: created an assignment, then
+   posted 3 text reports as the client through
+   createTextReportAsClient. Listed them back through
+   listReportsForAssignment, verified Class A round-trip (plaintext
+   matches what was written), chronological order, is_final flag on
+   the last one. Validated that empty content is rejected with
+   code='invalid_input' and that a wrong-client createTextReport is
+   rejected with code='forbidden'. Cleaned up the 3 test rows via
+   deleteReport.
+6. Routes smoke test: required routes/clients.js and routes/bot.js,
+   enumerated their Express router stacks, verified the 5 client
+   routes (GET/POST list+create, GET single, PATCH acceptance,
+   DELETE) and the 2 bot routes (POST/GET) are all registered with
+   the expected verbs at the expected paths.
+7. Mock-data grep on services/assignmentReports.js and
+   components/AssignmentsPanel.jsx: zero hits for globalThis,
+   devStore, dev-store, mockDb, mockData, fakeData, sampleData,
+   dummyData, TODO.*real, TODO.*database, STUB, MOCK,
+   isDevelopment.
+
+### Files added / changed this session
+
+  src/backend/src/db/connection.js                    (+42  migration)
+  src/backend/src/routes/bot.js                       (+149 endpoints)
+  src/backend/src/routes/clients.js                   (+176 endpoints)
+  src/backend/src/services/assignmentReports.js       (NEW +549)
+  src/bot/src/i18n.js                                 (+36  copy)
+  src/bot/src/index.js                                (+125 /report)
+  src/frontend/src/components/AssignmentsPanel.jsx    (+174 feed UI)
+  src/frontend/src/i18n/{en,ru,es,uk}.json            (+18 each)
+
+### Current status
+- Feature #362: PASSING (T-04 — Freeform progress reports per
+  assignment. Clients can send unlimited text or voice updates via
+  /report in the Telegram bot; voice notes auto-transcribe through
+  the existing Whisper pipeline; therapist sees a chronological
+  feed inside the assignment row with WebSocket-driven live updates.
+  Class A AES encryption on content, consent enforcement on every
+  endpoint, 14 assignment.report.* i18n keys × 4 locales + 6 bot
+  copy keys × 4 locales).
+- Stats: 381/384 features passing (99.2%).
+

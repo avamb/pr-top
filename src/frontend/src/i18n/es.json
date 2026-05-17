@@ -1818,6 +1818,24 @@
       "every_n_days": "Cada N días",
       "weekly": "Semanal",
       "on_demand": "A demanda"
+    },
+    "report": {
+      "title": "Informes de progreso",
+      "show": "Mostrar informes",
+      "hide": "Ocultar informes",
+      "empty": "Aún no hay informes. El cliente puede enviar texto libre o notas de voz desde el bot.",
+      "typeText": "Informe de texto",
+      "typeVoice": "Informe de voz",
+      "finalBadge": "Final",
+      "transcribing": "Transcribiendo",
+      "transcribingHint": "Transcribiendo la nota de voz — aparecerá aquí cuando Whisper devuelva el texto.",
+      "transcribeFailed": "Transcripción fallida",
+      "errorLoad": "No se pudieron cargar los informes",
+      "acceptanceStatus": {
+        "pending": "Pendiente de revisión",
+        "accepted": "Aceptado",
+        "rejected": "Rechazado"
+      }
     }
   }
 }

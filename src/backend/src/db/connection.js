@@ -1611,6 +1611,48 @@ function applySchema(db) {
   db.run('CREATE INDEX IF NOT EXISTS idx_assignments_client_status ON assignments(client_id, status)');
   db.run('CREATE INDEX IF NOT EXISTS idx_assignments_exercise ON assignments(exercise_id)');
 
+  // T-04: Freeform progress reports per assignment (feature #362).
+  // While the client works on an assignment they can post unlimited short
+  // text / voice reports via the bot. The therapist sees a chronological
+  // feed of these reports inside the assignment, plus a WebSocket push
+  // notification when a new one arrives.
+  //
+  // - content_encrypted holds the report body (text typed by the client OR
+  //   the Whisper-produced transcript of a voice note). Class A — always
+  //   AES encrypted before INSERT, decrypted only when serving authorized
+  //   therapists / the client themselves.
+  // - audio_file_ref points at the encrypted on-disk audio blob (when the
+  //   report originated as a voice note). Same opaque-id pattern as diary.
+  // - is_final marks the report the client tagged as the final write-up
+  //   (only one per assignment makes sense, but we don't enforce here —
+  //   the UI guards via "submit final" action). Defaults to 0.
+  // - acceptance_status: lifecycle for the therapist's review of a final
+  //   report (T-05 will drive this; we add the column now so the schema
+  //   doesn't need a second migration). Values: pending, accepted, rejected.
+  // - therapist_comment_id is reserved for T-10 (per-report comments).
+  // - transcription_status mirrors the diary_entries column so the
+  //   existing Whisper pipeline can be reused.
+  db.run(`CREATE TABLE IF NOT EXISTS assignment_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    assignment_id INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+    client_id INTEGER NOT NULL REFERENCES users(id),
+    therapist_id INTEGER NOT NULL REFERENCES users(id),
+    report_type TEXT NOT NULL DEFAULT 'text' CHECK(report_type IN ('text', 'voice')),
+    content_encrypted TEXT,
+    audio_file_ref TEXT,
+    transcription_status TEXT,
+    encryption_key_id INTEGER REFERENCES encryption_keys(id),
+    payload_version INTEGER DEFAULT 1,
+    is_final INTEGER NOT NULL DEFAULT 0,
+    acceptance_status TEXT NOT NULL DEFAULT 'pending' CHECK(acceptance_status IN ('pending', 'accepted', 'rejected')),
+    therapist_comment_id INTEGER,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_assignment_reports_assignment ON assignment_reports(assignment_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_assignment_reports_client ON assignment_reports(client_id, created_at DESC)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_assignment_reports_therapist ON assignment_reports(therapist_id, created_at DESC)');
+
   // T-26: AI source disclaimers.
   // When AI summarizes a session using the therapist's personal knowledge base
   // (T-09 RAG hits), or when an exercise card is generated with AI assistance

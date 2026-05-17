@@ -3,6 +3,133 @@ import { useTranslation } from 'react-i18next';
 import { fetchApi } from '../utils/fetchApi';
 import { formatUserDate } from '../utils/formatDate';
 import LoadingSpinner from './LoadingSpinner';
+import useWebSocket from '../hooks/useWebSocket';
+
+/**
+ * AssignmentReportsFeed — T-04 (feature #362).
+ *
+ * Inline chronological feed of freeform client progress reports for a single
+ * assignment. Mounted lazily under the assignment row when the therapist
+ * clicks "Show reports". Receives a WebSocket "assignment_report_created" /
+ * "assignment_report_transcribed" event from the parent panel via the
+ * `wsTick` prop so it can refetch in real-time without polling.
+ */
+function AssignmentReportsFeed({ clientId, assignmentId, wsTick }) {
+  const { t } = useTranslation();
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const url = `/api/clients/${clientId}/assignments/${assignmentId}/reports`;
+
+  const fetchReports = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetchApi(url);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || t('assignment.report.errorLoad'));
+      }
+      setReports(Array.isArray(data.reports) ? data.reports : []);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [url, t]);
+
+  useEffect(() => {
+    fetchReports();
+  }, [fetchReports, wsTick]);
+
+  if (loading && reports.length === 0) {
+    return (
+      <div className="mt-3 pl-3 border-l-2 border-teal-200" data-testid={`reports-feed-${assignmentId}`}>
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <p
+        data-testid={`reports-feed-error-${assignmentId}`}
+        className="mt-3 text-sm text-rose-600 pl-3 border-l-2 border-rose-200"
+      >
+        {error}
+      </p>
+    );
+  }
+
+  if (reports.length === 0) {
+    return (
+      <p
+        data-testid={`reports-feed-empty-${assignmentId}`}
+        className="mt-3 text-sm text-stone-400 pl-3 border-l-2 border-stone-200"
+      >
+        {t('assignment.report.empty')}
+      </p>
+    );
+  }
+
+  return (
+    <ul
+      data-testid={`reports-feed-${assignmentId}`}
+      className="mt-3 pl-3 border-l-2 border-teal-200 space-y-2"
+    >
+      {reports.map((r) => {
+        const transcriptPending = r.report_type === 'voice'
+          && r.has_audio
+          && (!r.content || r.content.length === 0)
+          && r.transcription_status !== 'completed';
+        return (
+          <li
+            key={r.id}
+            data-testid={`report-row-${r.id}`}
+            className="bg-white border border-stone-200 rounded p-2"
+          >
+            <div className="flex items-center gap-2 flex-wrap text-[11px] text-stone-500">
+              <span className="font-medium text-stone-700">
+                {r.report_type === 'voice'
+                  ? `🎤 ${t('assignment.report.typeVoice')}`
+                  : `✍️ ${t('assignment.report.typeText')}`}
+              </span>
+              <span>· {formatUserDate(r.created_at)}</span>
+              {r.is_final && (
+                <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">
+                  {t('assignment.report.finalBadge')}
+                </span>
+              )}
+              {transcriptPending && (
+                <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-stone-100 text-stone-600 font-semibold">
+                  {t('assignment.report.transcribing')}
+                </span>
+              )}
+              {r.transcription_status === 'failed' && (
+                <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700 font-semibold">
+                  {t('assignment.report.transcribeFailed')}
+                </span>
+              )}
+            </div>
+            {r.content && r.content.length > 0 ? (
+              <p
+                data-testid={`report-content-${r.id}`}
+                className="mt-1 text-sm text-stone-800 whitespace-pre-wrap"
+              >
+                {r.content}
+              </p>
+            ) : transcriptPending ? (
+              <p className="mt-1 text-sm text-stone-400 italic">
+                {t('assignment.report.transcribingHint')}
+              </p>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 /**
  * AssignmentsPanel — T-03 (feature #361).
@@ -63,6 +190,32 @@ function AssignmentsPanel({ mode = 'client', sessionId = null, clientId, canEdit
 
   // ── Per-row action state (abandon / delete) ─────────────────────────────
   const [busyId, setBusyId] = useState(null);
+
+  // T-04: per-assignment expanded "reports" feed. Map: assignmentId -> tick.
+  // The tick is incremented whenever a WS event arrives for that assignment,
+  // which is passed to <AssignmentReportsFeed> as a re-fetch trigger.
+  const [expandedReports, setExpandedReports] = useState({});
+  const [reportTicks, setReportTicks] = useState({});
+  const { on: wsOn } = useWebSocket();
+
+  // Subscribe to T-04 WebSocket events so an expanded feed refreshes when a
+  // new report arrives or finishes transcription.
+  useEffect(() => {
+    const handle = (msg) => {
+      if (!msg || !msg.assignment_id) return;
+      setReportTicks((prev) => ({
+        ...prev,
+        [msg.assignment_id]: (prev[msg.assignment_id] || 0) + 1,
+      }));
+    };
+    const off1 = wsOn('assignment_report_created', handle);
+    const off2 = wsOn('assignment_report_transcribed', handle);
+    return () => { off1(); off2(); };
+  }, [wsOn]);
+
+  function toggleReports(assignmentId) {
+    setExpandedReports((prev) => ({ ...prev, [assignmentId]: !prev[assignmentId] }));
+  }
 
   // Build the client/session-scoped API URL used to list this panel's
   // assignments.
@@ -520,6 +673,27 @@ function AssignmentsPanel({ mode = 'client', sessionId = null, clientId, canEdit
                     >
                       🗑
                     </button>
+                  )}
+                </div>
+
+                {/* T-04: Reports toggle + feed */}
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    data-testid={`assignment-reports-toggle-${a.id}`}
+                    onClick={() => toggleReports(a.id)}
+                    className="text-xs font-medium text-teal-700 hover:text-teal-900 hover:underline"
+                  >
+                    {expandedReports[a.id]
+                      ? `▾ ${t('assignment.report.hide')}`
+                      : `▸ ${t('assignment.report.show')}`}
+                  </button>
+                  {expandedReports[a.id] && (
+                    <AssignmentReportsFeed
+                      clientId={clientId}
+                      assignmentId={a.id}
+                      wsTick={reportTicks[a.id] || 0}
+                    />
                   )}
                 </div>
               </li>

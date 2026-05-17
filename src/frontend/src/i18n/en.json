@@ -1834,6 +1834,24 @@
       "every_n_days": "Every N days",
       "weekly": "Weekly",
       "on_demand": "On demand"
+    },
+    "report": {
+      "title": "Progress reports",
+      "show": "Show reports",
+      "hide": "Hide reports",
+      "empty": "No reports yet. The client can send freeform text or voice updates via the bot.",
+      "typeText": "Text report",
+      "typeVoice": "Voice report",
+      "finalBadge": "Final",
+      "transcribing": "Transcribing",
+      "transcribingHint": "Transcribing the voice note — it will appear here once Whisper returns the text.",
+      "transcribeFailed": "Transcription failed",
+      "errorLoad": "Failed to load reports",
+      "acceptanceStatus": {
+        "pending": "Pending review",
+        "accepted": "Accepted",
+        "rejected": "Rejected"
+      }
     }
   }
 }

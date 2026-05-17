@@ -44,6 +44,12 @@ const pendingConsents = {};
 // Track active exercise sessions (telegramId -> deliveryId)
 const activeExercises = {};
 
+// T-04: Track active assignment-report sessions. When the client taps
+// "Write report" on an assignment, we set activeReports[telegramId] = assignmentId
+// so that the next text OR voice message is routed to the report endpoint
+// instead of the diary endpoint. Cleared after one message (single-shot).
+const activeReports = {};
+
 // Track active profile edit sessions (telegramId -> 'name' | 'phone')
 const activeProfileEdits = {};
 
@@ -172,6 +178,7 @@ if (!token || token === 'your-telegram-bot-token') {
       // Client commands (default for all private chats)
       await bot.setMyCommands([
         { command: 'assignments', description: 'My assignments' },
+        { command: 'report', description: 'Send a progress report' },
         { command: 'exercises', description: 'My exercises' },
         { command: 'sessions', description: 'My recent sessions' },
         { command: 'history', description: 'Diary history' },
@@ -760,6 +767,69 @@ if (!token || token === 'your-telegram-bot-token') {
     }
   }
 
+  // T-04: /report [assignment_id] — shortcut to start writing a freeform
+  // progress report for an active assignment without going through
+  // /assignments → tap → tap.
+  //
+  //   /report                      → list active assignments, each as an
+  //                                  inline button that arms the report flow.
+  //   /report <assignment_id>      → arm the flow immediately for that id.
+  bot.onText(/^\/report(?:\s+(\S+))?$/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+    const lang = await getUserLang(telegramId);
+    const explicitId = match && match[1] ? parseInt(match[1], 10) : null;
+
+    try {
+      const result = await api.get(`/api/bot/assignments/${telegramId}`);
+      const assignments = (result.data && result.data.assignments) || [];
+
+      if (assignments.length === 0) {
+        bot.sendMessage(chatId, t(lang, 'reportNoAssignments'));
+        return;
+      }
+
+      // If the user passed an id, validate it and arm immediately.
+      if (Number.isInteger(explicitId) && explicitId > 0) {
+        const target = assignments.find((a) => Number(a.id) === explicitId);
+        if (!target) {
+          bot.sendMessage(chatId, t(lang, 'reportAssignmentNotActive'));
+          return;
+        }
+        activeReports[telegramId] = explicitId;
+        bot.sendMessage(chatId, t(lang, 'assignmentReportPrompt')(explicitId));
+        return;
+      }
+
+      // No id provided — show inline picker.
+      let text = t(lang, 'reportPickHeader') + '\n\n';
+      const inlineButtons = [];
+      assignments.forEach((a, i) => {
+        const exerciseTitle = a.exercise
+          ? (lang === 'ru' ? (a.exercise.title_ru || a.exercise.title_en)
+            : lang === 'es' ? (a.exercise.title_es || a.exercise.title_en)
+            : lang === 'uk' ? (a.exercise.title_uk || a.exercise.title_en)
+            : a.exercise.title_en)
+          : null;
+        const displayTitle = (a.title && a.title.trim()) ? a.title : (exerciseTitle || `Assignment #${a.id}`);
+        text += `${i + 1}. *${displayTitle}*\n`;
+        inlineButtons.push([{
+          text: `${i + 1}. ${displayTitle}`,
+          callback_data: `assignment_report_${a.id}`,
+        }]);
+      });
+
+      bot.sendMessage(chatId, text, {
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: inlineButtons },
+      });
+    } catch (error) {
+      const errorMsg = (error.response && error.response.data && error.response.data.error)
+        || t(lang, 'assignmentsFailed');
+      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+    }
+  });
+
   // /timezone command - view and change timezone
   bot.onText(/\/timezone/, async (msg) => {
     const chatId = msg.chat.id;
@@ -1109,10 +1179,13 @@ if (!token || token === 'your-telegram-bot-token') {
     if (data.startsWith('assignment_report_')) {
       const assignmentId = data.replace('assignment_report_', '');
       const lang = await getUserLang(telegramId);
-      // Reuse the diary text-capture path: the next text message will be
-      // captured as a diary entry, which the therapist will see linked to the
-      // client (no extra storage required for the pre-T-05 path). We send
-      // helpful guidance.
+      // T-04: Mark this assignment as "active for the next message" so the
+      // next text OR voice message from this client is captured as a
+      // progress report tied to the assignment (instead of a diary entry).
+      const aidInt = parseInt(assignmentId, 10);
+      if (Number.isInteger(aidInt) && aidInt > 0) {
+        activeReports[telegramId] = aidInt;
+      }
       bot.sendMessage(chatId, t(lang, 'assignmentReportPrompt')(assignmentId));
       bot.answerCallbackQuery(callbackQuery.id);
       return;
@@ -1686,6 +1759,30 @@ if (!token || token === 'your-telegram-bot-token') {
         console.error('Voice file download failed, saving file_ref only:', dlErr.message);
       }
 
+      // T-04: If the client is in "writing report" mode, route the voice
+      // message to the assignment-report endpoint instead of saving as a
+      // diary entry. The server will run the same Whisper pipeline.
+      if (activeReports[telegramId]) {
+        const assignmentId = activeReports[telegramId];
+        delete activeReports[telegramId];
+        try {
+          await api.post(`/api/bot/assignments/${assignmentId}/reports`, {
+            telegram_id: String(telegramId),
+            report_type: 'voice',
+            content: `[Voice message, duration: ${duration}s]`,
+            file_ref: fileId,
+            file_data: fileData,
+            file_ext: fileExt,
+          });
+          bot.sendMessage(chatId, t(lang, 'reportVoiceSaved'));
+          return;
+        } catch (error) {
+          const errorMsg = error.response?.data?.error || t(lang, 'reportFailed');
+          bot.sendMessage(chatId, `❌ ${errorMsg}`);
+          return;
+        }
+      }
+
       // Submit voice diary entry via backend API (auto-transcription is triggered server-side)
       const result = await api.post('/api/bot/diary', {
         telegram_id: String(telegramId),
@@ -2051,6 +2148,26 @@ if (!token || token === 'your-telegram-bot-token') {
         } catch (error) {
           delete activeExercises[telegramId];
           const errorMsg = error.response?.data?.error || t(lang, 'exerciseCompleteFailed');
+          bot.sendMessage(chatId, `❌ ${errorMsg}`);
+          return;
+        }
+      }
+
+      // T-04: If user is in "writing a report" mode, route this text to the
+      // assignment report endpoint instead of saving as a diary entry. One-shot.
+      if (activeReports[telegramId]) {
+        const assignmentId = activeReports[telegramId];
+        delete activeReports[telegramId];
+        try {
+          await api.post(`/api/bot/assignments/${assignmentId}/reports`, {
+            telegram_id: String(telegramId),
+            report_type: 'text',
+            content: msg.text,
+          });
+          bot.sendMessage(chatId, t(lang, 'reportSaved'));
+          return;
+        } catch (error) {
+          const errorMsg = error.response?.data?.error || t(lang, 'reportFailed');
           bot.sendMessage(chatId, `❌ ${errorMsg}`);
           return;
         }

@@ -1575,6 +1575,155 @@ router.post('/assignments/:assignment_id/complete', botAuth, (req, res) => {
   }
 });
 
+// =====================================================================
+// T-04: Bot endpoints for freeform progress reports per assignment
+// =====================================================================
+
+const assignmentReports = require('../services/assignmentReports');
+
+function resolveClientByTelegram(db, telegramId) {
+  const r = db.exec(
+    "SELECT id, role FROM users WHERE telegram_id = ? AND role = 'client'",
+    [String(telegramId)]
+  );
+  if (r.length === 0 || r[0].values.length === 0) return null;
+  return { id: r[0].values[0][0] };
+}
+
+// POST /api/bot/assignments/:assignment_id/reports — client submits a
+// freeform text or voice progress report. Body:
+//   { telegram_id, report_type: 'text'|'voice', content?, file_data? (base64),
+//     file_ref?, file_ext?, is_final? }
+// Returns the created report row (with masked encrypted fields). For voice
+// reports, transcription kicks off asynchronously.
+router.post('/assignments/:assignment_id/reports', botAuth, (req, res) => {
+  try {
+    const assignmentId = parseInt(req.params.assignment_id, 10);
+    if (!Number.isInteger(assignmentId) || assignmentId <= 0) {
+      return res.status(400).json({ error: 'Invalid assignment id' });
+    }
+    const {
+      telegram_id, report_type, content, file_data, file_ref, file_ext, is_final,
+    } = req.body || {};
+    if (!telegram_id) {
+      return res.status(400).json({ error: 'telegram_id is required' });
+    }
+    const type = report_type || 'text';
+    if (!assignmentReports.VALID_REPORT_TYPES.includes(type)) {
+      return res.status(400).json({ error: 'Invalid report_type' });
+    }
+
+    const db = getDatabase();
+    const client = resolveClientByTelegram(db, telegram_id);
+    if (!client) {
+      return res.status(404).json({ error: 'Client not found. Please register first with /start.' });
+    }
+
+    const isFinal = is_final === true || is_final === 1 || is_final === '1';
+
+    if (type === 'text') {
+      // Plain text report.
+      const report = assignmentReports.createTextReportAsClient({
+        clientId: client.id,
+        assignmentId,
+        content,
+        isFinal,
+      });
+      return res.status(201).json({ report });
+    }
+
+    // Voice report — write the encrypted audio to disk first (mirrors the
+    // diary path), then create the report row referencing the .enc filename.
+    let audioFileRef = null;
+    if (file_data) {
+      try {
+        const ext = file_ext || '.ogg';
+        const opaqueId = crypto.randomUUID();
+        const filename = `${opaqueId}${ext}`;
+        const tempPath = path.join(DIARY_FILES_DIR, filename);
+
+        const buffer = Buffer.from(file_data, 'base64');
+        fs.writeFileSync(tempPath, buffer);
+        encryptDiaryFileOnDisk(tempPath);
+        audioFileRef = `${filename}.enc`;
+        logger.info(`[T-04] Encrypted assignment-report audio: ${audioFileRef} (${buffer.length} bytes)`);
+      } catch (fileErr) {
+        logger.error('[T-04] Failed to encrypt voice report audio: ' + fileErr.message);
+        // Fall through — report is still created (without audio) so the bot
+        // doesn't hard-fail. transcription_status will reflect the issue.
+      }
+    }
+
+    const initialContent = (content && typeof content === 'string') ? content.trim() : null;
+    const report = assignmentReports.createVoiceReportAsClient({
+      clientId: client.id,
+      assignmentId,
+      audioFileRef,
+      initialContent,
+      isFinal,
+    });
+
+    // Fire-and-forget transcription if we have an audio file.
+    if (audioFileRef) {
+      assignmentReports.processReportTranscription(report.id)
+        .then((updated) => {
+          if (updated) {
+            logger.info(`[T-04] Voice report ${report.id} transcribed (${(updated.content || '').length} chars)`);
+          } else {
+            logger.warn(`[T-04] Voice report ${report.id} transcription returned null`);
+          }
+        })
+        .catch((err) => {
+          logger.warn(`[T-04] Voice report ${report.id} transcription error: ${err.message}`);
+        });
+    }
+
+    res.status(201).json({ report });
+  } catch (error) {
+    if (error.code === 'invalid_input') {
+      return res.status(400).json({ error: error.message });
+    }
+    if (error.code === 'forbidden') {
+      return res.status(403).json({ error: error.message });
+    }
+    if (error.code === 'not_found') {
+      return res.status(404).json({ error: error.message });
+    }
+    logger.error('Bot create assignment report error: ' + error.message);
+    res.status(500).json({ error: 'Failed to create assignment report' });
+  }
+});
+
+// GET /api/bot/assignments/:assignment_id/reports?telegram_id=... — client
+// fetches their own reports for an assignment (for the bot to render).
+router.get('/assignments/:assignment_id/reports', botAuth, (req, res) => {
+  try {
+    const assignmentId = parseInt(req.params.assignment_id, 10);
+    if (!Number.isInteger(assignmentId) || assignmentId <= 0) {
+      return res.status(400).json({ error: 'Invalid assignment id' });
+    }
+    const telegramId = req.query.telegram_id || (req.body && req.body.telegram_id);
+    if (!telegramId) {
+      return res.status(400).json({ error: 'telegram_id is required' });
+    }
+    const db = getDatabase();
+    const client = resolveClientByTelegram(db, telegramId);
+    if (!client) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+    const base = assignmentReports.findAssignmentBase(assignmentId);
+    if (!base) return res.status(404).json({ error: 'Assignment not found' });
+    if (Number(base.client_id) !== Number(client.id)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const reports = assignmentReports.listReportsForAssignment(assignmentId, { order: 'asc' });
+    res.json({ assignment_id: assignmentId, reports, total: reports.length });
+  } catch (error) {
+    logger.error('Bot list assignment reports error: ' + error.message);
+    res.status(500).json({ error: 'Failed to list reports' });
+  }
+});
+
 // POST /api/bot/voice-query - Voice-based NL query for therapist
 // Accepts voice transcript text (already transcribed by bot/Telegram) and processes as NL query
 // Gated to Pro/Premium subscription tiers

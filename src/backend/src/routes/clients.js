@@ -9,6 +9,7 @@ const { verifyClientConsent } = require('../utils/consentCheck');
 const telegramNotify = require('../utils/telegramNotify');
 const inquiriesService = require('../services/inquiries');
 const assignmentsService = require('../services/assignments');
+const assignmentReports = require('../services/assignmentReports');
 const supervisionShare = require('../services/supervisionShare');
 
 const router = express.Router();
@@ -2856,6 +2857,181 @@ router.delete('/:id/assignments/:assignmentId', (req, res) => {
   } catch (error) {
     logger.error('Delete assignment error: ' + error.message);
     res.status(500).json({ error: 'Failed to delete assignment' });
+  }
+});
+
+// =====================================================================
+// T-04: ASSIGNMENT REPORTS — freeform progress reports (feature #362)
+// =====================================================================
+//
+// Each report is a small text or voice message the client posts to the bot
+// while working on an assignment. The therapist sees a chronological feed.
+// All endpoints are scoped to (therapist, client, assignment) and go through
+// the standard consent gate.
+
+function assertAssignmentOwnership(therapistId, clientId, assignmentId) {
+  const a = assignmentsService.getAssignment(therapistId, clientId, assignmentId);
+  if (!a) return { error: 'Assignment not found', status: 404 };
+  return { assignment: a };
+}
+
+// GET /api/clients/:id/assignments/:aid/reports — chronological feed
+router.get('/:id/assignments/:aid/reports', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = parseInt(req.params.id, 10);
+    const assignmentId = parseInt(req.params.aid, 10);
+    if (!Number.isFinite(clientId) || clientId <= 0) {
+      return res.status(400).json({ error: 'Invalid client id' });
+    }
+    if (!Number.isFinite(assignmentId) || assignmentId <= 0) {
+      return res.status(400).json({ error: 'Invalid assignment id' });
+    }
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'list_assignment_reports');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+    const own = assertAssignmentOwnership(therapistId, clientId, assignmentId);
+    if (own.error) return res.status(own.status).json({ error: own.error });
+
+    const order = (req.query.order || 'asc').toString();
+    const reports = assignmentReports.listReportsForAssignment(assignmentId, { order });
+    res.json({ assignment_id: assignmentId, reports, total: reports.length });
+  } catch (error) {
+    logger.error('List assignment reports error: ' + error.message);
+    res.status(500).json({ error: 'Failed to list assignment reports' });
+  }
+});
+
+// POST /api/clients/:id/assignments/:aid/reports — therapist-side creation
+// (catch-up notes / testing). Body: { content, is_final? }
+router.post('/:id/assignments/:aid/reports', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = parseInt(req.params.id, 10);
+    const assignmentId = parseInt(req.params.aid, 10);
+    if (!Number.isFinite(clientId) || clientId <= 0) {
+      return res.status(400).json({ error: 'Invalid client id' });
+    }
+    if (!Number.isFinite(assignmentId) || assignmentId <= 0) {
+      return res.status(400).json({ error: 'Invalid assignment id' });
+    }
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'create_assignment_report');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+    const own = assertAssignmentOwnership(therapistId, clientId, assignmentId);
+    if (own.error) return res.status(own.status).json({ error: own.error });
+
+    const body = req.body || {};
+    const isFinal = body.is_final === true || body.is_final === 1 || body.is_final === '1';
+    const report = assignmentReports.createReportAsTherapist({
+      therapistId, clientId, assignmentId,
+      content: body.content,
+      isFinal,
+    });
+    res.status(201).json(report);
+  } catch (error) {
+    if (error.code === 'invalid_input') {
+      return res.status(400).json({ error: error.message });
+    }
+    if (error.code === 'forbidden') {
+      return res.status(403).json({ error: error.message });
+    }
+    if (error.code === 'not_found') {
+      return res.status(404).json({ error: error.message });
+    }
+    logger.error('Create assignment report error: ' + error.message);
+    res.status(500).json({ error: 'Failed to create assignment report' });
+  }
+});
+
+// GET /api/clients/:id/assignments/:aid/reports/:rid — single report
+router.get('/:id/assignments/:aid/reports/:rid', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = parseInt(req.params.id, 10);
+    const assignmentId = parseInt(req.params.aid, 10);
+    const reportId = parseInt(req.params.rid, 10);
+    if (!Number.isFinite(reportId) || reportId <= 0) {
+      return res.status(400).json({ error: 'Invalid report id' });
+    }
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'view_assignment_report');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+    const own = assertAssignmentOwnership(therapistId, clientId, assignmentId);
+    if (own.error) return res.status(own.status).json({ error: own.error });
+
+    const result = assignmentReports.getReportForTherapist(therapistId, reportId);
+    if (result.notFound) return res.status(404).json({ error: 'Report not found' });
+    if (result.forbidden) return res.status(403).json({ error: 'Forbidden' });
+    if (Number(result.report.assignment_id) !== assignmentId) {
+      return res.status(404).json({ error: 'Report not found in this assignment' });
+    }
+    res.json(result.report);
+  } catch (error) {
+    logger.error('Get assignment report error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch assignment report' });
+  }
+});
+
+// PATCH /api/clients/:id/assignments/:aid/reports/:rid/acceptance — therapist
+// review action (pending|accepted|rejected). Body: { status }.
+router.patch('/:id/assignments/:aid/reports/:rid/acceptance', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = parseInt(req.params.id, 10);
+    const assignmentId = parseInt(req.params.aid, 10);
+    const reportId = parseInt(req.params.rid, 10);
+    if (!Number.isFinite(reportId) || reportId <= 0) {
+      return res.status(400).json({ error: 'Invalid report id' });
+    }
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'review_assignment_report');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+    const own = assertAssignmentOwnership(therapistId, clientId, assignmentId);
+    if (own.error) return res.status(own.status).json({ error: own.error });
+
+    const status = (req.body || {}).status;
+    const result = assignmentReports.setAcceptanceStatus(therapistId, reportId, status);
+    if (result.notFound) return res.status(404).json({ error: 'Report not found' });
+    if (result.forbidden) return res.status(403).json({ error: 'Forbidden' });
+    res.json(result.report);
+  } catch (error) {
+    if (error.code === 'invalid_input') {
+      return res.status(400).json({ error: error.message });
+    }
+    logger.error('Update report acceptance error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update acceptance status' });
+  }
+});
+
+// DELETE /api/clients/:id/assignments/:aid/reports/:rid — therapist removes
+router.delete('/:id/assignments/:aid/reports/:rid', (req, res) => {
+  try {
+    const therapistId = req.user.id;
+    const clientId = parseInt(req.params.id, 10);
+    const assignmentId = parseInt(req.params.aid, 10);
+    const reportId = parseInt(req.params.rid, 10);
+    if (!Number.isFinite(reportId) || reportId <= 0) {
+      return res.status(400).json({ error: 'Invalid report id' });
+    }
+    const consentCheck = verifyClientConsent(therapistId, clientId, 'delete_assignment_report');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
+    }
+    const own = assertAssignmentOwnership(therapistId, clientId, assignmentId);
+    if (own.error) return res.status(own.status).json({ error: own.error });
+
+    const result = assignmentReports.deleteReport(therapistId, reportId);
+    if (result.notFound) return res.status(404).json({ error: 'Report not found' });
+    if (result.forbidden) return res.status(403).json({ error: 'Forbidden' });
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Delete assignment report error: ' + error.message);
+    res.status(500).json({ error: 'Failed to delete assignment report' });
   }
 });
 
