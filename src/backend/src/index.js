@@ -331,6 +331,26 @@ if (process.env.NODE_ENV !== 'production') {
       res.json({ rows });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
+
+  // DEV: Run arbitrary SELECT query on the database (read-only, dev-only) (#388 encryption audit)
+  app.post('/api/dev/db-query', (req, res) => {
+    try {
+      const { sql, params: qParams = [] } = req.body;
+      if (!sql) return res.status(400).json({ error: 'sql required' });
+      // Safety: only allow SELECT statements
+      const trimmed = sql.trim().toUpperCase();
+      if (!trimmed.startsWith('SELECT') && !trimmed.startsWith('PRAGMA')) {
+        return res.status(400).json({ error: 'Only SELECT and PRAGMA statements allowed' });
+      }
+      const { getDatabase } = require('./db/connection');
+      const db = getDatabase();
+      const r = db.exec(sql, qParams);
+      if (!r.length || !r[0].values.length) return res.json({ rows: [] });
+      const cols = r[0].columns;
+      const rows = r[0].values.map(v => Object.fromEntries(cols.map((c, i) => [c, v[i]])));
+      res.json({ rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
 }
 
 // 404 handler
