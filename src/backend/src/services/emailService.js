@@ -93,6 +93,7 @@ const TEMPLATES_DIR = path.join(__dirname, '..', 'templates', 'emails');
 function baseLayout(bodyHtml, locale) {
   const footerText = locale === 'ru' ? 'Вы получили это письмо от PR-TOP.'
     : locale === 'es' ? 'Ha recibido este correo de PR-TOP.'
+    : locale === 'uk' ? 'Ви отримали цей лист від PR-TOP.'
     : 'You received this email from PR-TOP.';
 
   return `<!DOCTYPE html>
@@ -150,7 +151,8 @@ function sosAlertTemplate(data, locale) {
   const titles = {
     en: 'SOS Alert - Immediate Attention Required',
     ru: 'SOS - Требуется немедленное внимание',
-    es: 'Alerta SOS - Se requiere atención inmediata'
+    es: 'Alerta SOS - Se requiere atención inmediata',
+    uk: 'SOS — Потрібна негайна увага'
   };
 
   const bodies = {
@@ -189,6 +191,18 @@ function sosAlertTemplate(data, locale) {
         ${data.message ? `<tr><td>Mensaje</td><td>${escapeHtml(data.message)}</td></tr>` : ''}
       </table>
       <p>Por favor, contacte a su cliente lo antes posible. Puede ver los detalles en su <a href="${data.dashboardUrl || '#'}">panel de PR-TOP</a>.</p>
+    `,
+    uk: `
+      <h2 style="color: #dc2626; margin-top: 0;">&#x1F6A8; SOS Тривога</h2>
+      <div class="alert-box urgent">
+        <p style="margin: 0; font-weight: 600;">Ваш клієнт активував екстрений сигнал і може потребувати негайної підтримки.</p>
+      </div>
+      <table class="details">
+        <tr><td>Клієнт</td><td>${data.clientIdentifier || 'Невідомий'}</td></tr>
+        <tr><td>Час</td><td>${data.timestamp || new Date().toISOString()}</td></tr>
+        ${data.message ? `<tr><td>Повідомлення</td><td>${escapeHtml(data.message)}</td></tr>` : ''}
+      </table>
+      <p>Будь ласка, зв'яжіться з вашим клієнтом якомога швидше. Деталі доступні в <a href="${data.dashboardUrl || '#'}">панелі PR-TOP</a>.</p>
     `
   };
 
@@ -207,7 +221,8 @@ function welcomeTemplate(data, locale) {
   const titles = {
     en: 'Welcome to PR-TOP!',
     ru: 'Добро пожаловать в PR-TOP!',
-    es: '¡Bienvenido a PR-TOP!'
+    es: '¡Bienvenido a PR-TOP!',
+    uk: 'Ласкаво просимо до PR-TOP!'
   };
 
   const bodies = {
@@ -255,6 +270,21 @@ function welcomeTemplate(data, locale) {
       </div>
       <p>Su período de prueba está activo por <strong>${data.trialDays || 14} días</strong>.</p>
       <a href="${data.dashboardUrl || '#'}" class="btn">Ir al Panel</a>
+    `,
+    uk: `
+      <h2>Ласкаво просимо до PR-TOP!</h2>
+      <p>Дякуємо за реєстрацію, <strong>${escapeHtml(data.email || '')}</strong>. Ваш акаунт терапевта готовий.</p>
+      <div class="info-box">
+        <p style="margin: 0; font-weight: 600;">Початок роботи:</p>
+        <ul style="margin: 8px 0 0 0; padding-left: 20px;">
+          <li>Налаштуйте Telegram бота для зв'язку з клієнтами</li>
+          <li>Створіть коди запрошень для клієнтів</li>
+          <li>Налаштуйте параметри сповіщень та ескалації</li>
+          <li>Вивчіть посібник терапевта</li>
+        </ul>
+      </div>
+      <p>Ваш пробний період активний протягом <strong>${data.trialDays || 14} днів</strong>.</p>
+      <a href="${data.dashboardUrl || '#'}" class="btn">Перейти до панелі</a>
     `
   };
 
@@ -276,7 +306,8 @@ function paymentReceiptTemplate(data, locale) {
   const titles = {
     en: `Payment Receipt - PR-TOP (${currency} ${amount})`,
     ru: `Квитанция об оплате - PR-TOP (${currency} ${amount})`,
-    es: `Recibo de Pago - PR-TOP (${currency} ${amount})`
+    es: `Recibo de Pago - PR-TOP (${currency} ${amount})`,
+    uk: `Квитанція про оплату - PR-TOP (${currency} ${amount})`
   };
 
   const bodies = {
@@ -315,6 +346,18 @@ function paymentReceiptTemplate(data, locale) {
         ${data.paymentIntentId ? `<tr><td>ID de transacción</td><td style="font-family: monospace; font-size: 12px;">${escapeHtml(data.paymentIntentId)}</td></tr>` : ''}
       </table>
       <p>Si tiene alguna pregunta sobre este cargo, contacte con soporte.</p>
+    `,
+    uk: `
+      <h2>Квитанція про оплату</h2>
+      <p>Дякуємо за оплату. Деталі:</p>
+      <table class="details">
+        <tr><td>Сума</td><td><strong>${currency} ${amount}</strong></td></tr>
+        <tr><td>Тариф</td><td>${escapeHtml(data.plan || 'Pro')}</td></tr>
+        <tr><td>Дата</td><td>${data.date || new Date().toISOString().split('T')[0]}</td></tr>
+        ${data.nextBilling ? `<tr><td>Наступний платіж</td><td>${data.nextBilling}</td></tr>` : ''}
+        ${data.paymentIntentId ? `<tr><td>ID транзакції</td><td style="font-family: monospace; font-size: 12px;">${escapeHtml(data.paymentIntentId)}</td></tr>` : ''}
+      </table>
+      <p>Якщо у вас є питання щодо цього платежу, зверніться до служби підтримки.</p>
     `
   };
 
@@ -333,7 +376,8 @@ function subscriptionExpiryTemplate(data, locale) {
   const titles = {
     en: 'Your PR-TOP subscription is expiring soon',
     ru: 'Ваша подписка PR-TOP скоро истекает',
-    es: 'Su suscripción de PR-TOP está por vencer'
+    es: 'Su suscripción de PR-TOP está por vencer',
+    uk: 'Ваша підписка PR-TOP незабаром закінчується'
   };
 
   const bodies = {
@@ -363,6 +407,15 @@ function subscriptionExpiryTemplate(data, locale) {
       <p>Para seguir usando PR-TOP sin interrupciones, actualice o renueve su suscripción.</p>
       <a href="${data.upgradeUrl || '#'}" class="btn">Actualizar ahora</a>
       <p style="font-size: 13px; color: #6b7280;">Si no renueva, perderá acceso a funciones premium después de la fecha de vencimiento. Sus datos se conservarán.</p>
+    `,
+    uk: `
+      <h2>Підписка незабаром закінчується</h2>
+      <div class="alert-box">
+        <p style="margin: 0;">Ваша підписка <strong>${escapeHtml(data.plan || 'trial')}</strong> закінчується <strong>${data.expiryDate || 'незабаром'}</strong>.</p>
+      </div>
+      <p>Щоб продовжити використання PR-TOP без перерв, будь ласка, оновіть або продовжте підписку.</p>
+      <a href="${data.upgradeUrl || '#'}" class="btn">Оновити зараз</a>
+      <p style="font-size: 13px; color: #6b7280;">Якщо ви не продовжите підписку, доступ до преміум-функцій буде обмежено після дати закінчення. Ваші дані будуть збережені.</p>
     `
   };
 
@@ -382,7 +435,8 @@ function passwordResetTemplate(data, locale) {
   const titles = {
     en: 'Reset your PR-TOP password',
     ru: 'Сброс пароля PR-TOP',
-    es: 'Restablecer su contraseña de PR-TOP'
+    es: 'Restablecer su contraseña de PR-TOP',
+    uk: 'Скидання пароля PR-TOP'
   };
 
   const bodies = {
@@ -408,6 +462,14 @@ function passwordResetTemplate(data, locale) {
       <a href="${escapeHtml(resetUrl)}" class="btn">Restablecer contraseña</a>
       <p style="font-size: 13px; color: #6b7280;">Este enlace expirará en <strong>1 hora</strong>. Si no solicitó un restablecimiento, puede ignorar este correo.</p>
       <p style="font-size: 12px; color: #9ca3af; margin-top: 24px;">Si el botón no funciona, copie y pegue este enlace en su navegador:<br>
+      <span style="word-break: break-all; font-family: monospace; font-size: 11px;">${escapeHtml(resetUrl)}</span></p>
+    `,
+    uk: `
+      <h2>Скидання пароля</h2>
+      <p>Ми отримали запит на скидання вашого пароля. Натисніть кнопку нижче, щоб встановити новий пароль:</p>
+      <a href="${escapeHtml(resetUrl)}" class="btn">Скинути пароль</a>
+      <p style="font-size: 13px; color: #6b7280;">Це посилання дійсне протягом <strong>1 години</strong>. Якщо ви не запитували скидання пароля, просто проігноруйте цей лист.</p>
+      <p style="font-size: 12px; color: #9ca3af; margin-top: 24px;">Якщо кнопка не працює, скопіюйте та вставте це посилання у браузер:<br>
       <span style="word-break: break-all; font-family: monospace; font-size: 11px;">${escapeHtml(resetUrl)}</span></p>
     `
   };

@@ -7,6 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const emailService = require('../services/emailService');
+const { t } = require('../i18n');
 
 const router = express.Router();
 
@@ -230,14 +231,14 @@ router.post('/login', async (req, res) => {
     );
 
     if (result.length === 0 || result[0].values.length === 0) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: t('auth.invalidCredentials', req.locale) });
     }
 
     const user = result[0].values[0];
     const isValid = await bcrypt.compare(password, user[2]);
 
     if (!isValid) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: t('auth.invalidCredentials', req.locale) });
     }
 
     // Check if user is blocked
