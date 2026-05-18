@@ -7270,3 +7270,87 @@ any results from clients not in that consented set. KB chunks (client_id=NULL) a
 - Feature #393: PASSING — 56/56 assertions, consent filter bug fixed,
   full search regression verified including NL query expansion and tier gating
 - Stats: 393/397 features passing (98.99%)
+
+## Session 2026-05-18 — Feature #394: Regression sweep: i18n coverage (EN/RU/ES/UK)
+
+### Scope
+Full i18n regression sweep across all 4 layers: frontend SPA translations, backend API
+error messages, Telegram bot replies, and transactional email templates. All 4 verification
+steps from the feature spec plus 10-section automated audit (66 assertions).
+
+### Bugs found and fixed
+
+**Bug 1: 16 missing landing.newsletter* keys in RU/ES/UK frontend translations**
+  The EN translation file had 16 newsletter-related keys added in a recent edit;
+  the other 3 locales were never updated. All 16 keys added with proper translations
+  to ru.json, es.json, uk.json (newsletterTitle, newsletterDesc, newsletterPlaceholder,
+  newsletterSubmit, newsletterSubmitting, newsletterSuccess, newsletterAlreadySubscribed,
+  newsletterError, newsletterConfirmTitle, newsletterConfirmDesc, newsletterConfirmAlready,
+  newsletterConfirmError, newsletterUnsubscribeTitle, newsletterUnsubscribeDesc,
+  newsletterUnsubscribeError, newsletterPrivacy).
+
+**Bug 2: Email templates missing Ukrainian language**
+  5 of 7 email templates (sosAlert, welcome, paymentReceipt, subscriptionExpiry,
+  passwordReset) only had EN/RU/ES; viewerWelcome and leadVerification already had all 4.
+  Fixed: Ukrainian translations added to all 5 templates plus the baseLayout footer.
+
+**Bug 3: auth.js login error not localized**
+  The POST /api/auth/login handler returned hardcoded "Invalid credentials" regardless
+  of the Accept-Language header. Fixed: imported t() from the i18n module in auth.js
+  and replaced both hardcoded strings with t('auth.invalidCredentials', req.locale).
+  Login now returns "Неверный email или пароль" (RU), "Email o contrasena incorrectos"
+  (ES), "Невірний email або пароль" (UA) per the request locale.
+
+### Audit results (66/66 assertions)
+
+**Section 1 — Frontend SPA key coverage:**
+  EN: 1730 keys; RU/ES/UA each match all 1730 keys after fix.
+  No empty translation values in any locale. RU values differ from EN (real translations).
+
+**Section 2 — Backend API key coverage:**
+  53 keys; all present in RU/ES/UA; t() resolves all keys without fallbacks.
+
+**Section 3 — API errors localized:**
+  Login wrong creds + Accept-Language: ru -> Cyrillic error confirmed.
+  Login wrong creds + Accept-Language: es -> Spanish error confirmed.
+  Login wrong creds + Accept-Language: uk -> Ukrainian error confirmed.
+
+**Section 4 — Bot i18n key coverage:**
+  168 EN keys; RU/ES/UA each match all 168 keys.
+  All 12 function-type keys callable in all non-EN locales and return non-empty strings.
+
+**Section 5 — Bot replies localize per client language:**
+  Registered 4 test clients (EN/RU/ES/UA) via bot API.
+  Bot diary entry accepted for all 4 locales; user.language persisted correctly.
+
+**Section 6 — Bot source code integration:**
+  Bot index.js references 20 non-EN locale usages; reads user.language for localization.
+
+**Section 7 — Email templates:**
+  All 7 templates confirmed to have Ukrainian translations after fix.
+  baseLayout footer has Ukrainian text.
+
+**Sections 8-10 — Code audit:**
+  All 7 API routes use t() for errors.
+  Dashboard.jsx, ClientList.jsx, Login.jsx, Register.jsx all use useTranslation.
+  LanguageSwitcher component includes all 4 locales (EN/RU/ES/UA).
+
+### Browser UI verification
+  - Landing page in Russian: "Держите практику на высоте" — correct
+  - Landing page in Ukrainian: "Тримайте практику на висоті" — correct
+  - Login page in Ukrainian: fully translated (Вхід, Електронна пошта, Увійти, etc.)
+  - Dashboard in Ukrainian: all nav, stats, labels translated to Ukrainian
+  - Zero JS errors (Umami analytics 400s are expected dev-mode noise only)
+
+### Files changed
+  src/frontend/src/i18n/ru.json    — +16 newsletter keys
+  src/frontend/src/i18n/es.json    — +16 newsletter keys
+  src/frontend/src/i18n/uk.json    — +16 newsletter keys
+  src/backend/src/services/emailService.js — added UA locale to 5 templates + baseLayout
+  src/backend/src/routes/auth.js   — import t(), use t() for localized login errors
+  _t394_i18n_audit.js              — 66-assertion i18n regression audit
+  _t394_find_identical.js          — helper: find RU keys identical to EN
+
+### Current status
+- Feature #394: PASSING — 66/66 assertions, all 3 bugs fixed, browser verified
+- Stats: 394/397 features passing (99.2%)
