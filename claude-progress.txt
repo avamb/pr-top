@@ -6970,3 +6970,84 @@ All five verification steps pass cleanly. No fixes required.
 ### Current status
 - Feature #389: PASSING — 133/133 assertions, full bot regression verified
 - Stats: 389/397 features passing (98.0%)
+
+## Session 2026-05-18 — Feature #390: Regression sweep: session media pipeline (upload → transcription → summary)
+
+### Scope
+End-to-end regression audit of the audio/video upload, Whisper transcription, and AI
+summarization chain. Verified all 5 feature steps via a 75-assertion HTTP audit script
+(_t390_session_media_audit.js) plus browser UI smoke test.
+
+### Audit results (75/75 assertions)
+
+**Step 1 — Upload (audio mp3, video webm, failure modes):**
+  - POST /api/sessions with 2MB mp3 → 201, audio_ref = UUID.mp3.enc (opaque)
+  - POST /api/sessions with 500KB webm → 201, audio_ref = UUID.webm.enc
+  - After upload (1.5s delay): status='complete', has_transcript=true, has_summary=true
+    (dev-mode transcription + auto-summary chain completed synchronously)
+  - 101MB oversized file → 413 "File too large. Maximum size is 100MB."
+  - application/pdf mime type → 400
+  - Missing client_id → 400
+  - No audio file in body → 400
+  - No auth headers → 401/403
+
+**Step 2 — Transcription stored encrypted:**
+  - DB inspection via /api/dev/db-query: transcript_encrypted = N:iv:tag:ct ciphertext
+  - No plaintext [DEV MODE] text in encrypted column
+  - encryption_key_id set, payload_version >= 1
+  - GET /api/sessions/:id/transcript → decrypted plaintext returned
+  - Contains '[DEV MODE' marker (correct dev mode output)
+  - Without auth → 401
+  - Manual POST /transcribe re-trigger → 200
+
+**Step 3 — Summary stored encrypted:**
+  - DB inspection: summary_encrypted = N:iv:tag:ct ciphertext
+  - No plaintext in encrypted column
+  - GET /api/sessions/:id/summary → decrypted plaintext returned
+  - Contains '[DEV MODE' marker
+  - Without auth → 401
+  - Manual POST /summarize re-trigger → 200
+
+**Step 4 — Streaming playback:**
+  - GET /api/sessions/:id/stream without auth → 401
+  - With auth → 200, body is non-empty buffer
+  - Accept-Ranges: bytes header present
+  - Cache-Control: no-store header present
+  - Content-Type: audio/mpeg for mp3 uploads
+  - Range request (bytes=0-1023) → 206 with correct Content-Range header
+  - Byte range body size matches requested range
+  - Video upload stream → 200, Content-Type: audio/webm
+  - Cross-therapist stream access → 403 (ownership isolation)
+  - Non-existent session stream → 404
+
+**Step 5 — Failure modes:**
+  - Summarize/transcribe non-existent session → 404
+  - GET summary non-existent → 404
+  - Transcribe/summarize other therapist's session → 403
+  - GET session other therapist → 403
+  - DELETE without auth → 401/403
+
+**Step 6 — DELETE cleanup:**
+  - DELETE session → 200
+  - GET deleted session → 404 (record gone)
+
+**Step 7 — Mock data grep:**
+  - Zero globalThis/devStore/mockDb/fakeData patterns in sessions.js, transcription.js,
+    summarization.js. Dev mode placeholders are explicit "[DEV MODE]" text (correct
+    fallback pattern), not bypass of real encryption/storage.
+
+**Step 8 — Persistence:**
+  - Session readable after re-fetch (SQLite persistence confirmed — restart covered by #388)
+
+### Browser UI smoke test
+  - Dashboard loads with real stats (0 sessions for new account)
+  - Session detail page for other therapist's session → "Record Unavailable / Access denied" (correct 403 handling)
+  - Zero session-pipeline JS errors in console (Umami 400s are analytics dev-mode noise, unrelated)
+
+### Files created
+  _t390_session_media_audit.js  — 75-assertion regression audit
+  _t390_debug.js               — one-time invite code debug helper (retained for reference)
+
+### Current status
+- Feature #390: PASSING — 75/75 assertions, full session media pipeline verified
+- Stats: 390/397 features passing (98.2%)
