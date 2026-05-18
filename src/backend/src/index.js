@@ -351,6 +351,48 @@ if (process.env.NODE_ENV !== 'production') {
       res.json({ rows });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
+
+  // DEV: Run scheduler jobs on-demand for testing (#391 subscription regression)
+  app.post('/api/dev/run-scheduler', (req, res) => {
+    try {
+      const { job } = req.body;
+      const validJobs = ['trial-expiration', 'subscription-downgrade', 'expiry-warning', 'diary-reminder'];
+      if (!job || !validJobs.includes(job)) {
+        return res.status(400).json({ error: 'job must be one of: ' + validJobs.join(', ') });
+      }
+      const jobMap = {
+        'trial-expiration': scheduler.runTrialExpiration,
+        'subscription-downgrade': scheduler.runSubscriptionDowngrade,
+        'expiry-warning': scheduler.runExpiryWarning,
+        'diary-reminder': scheduler.runDiaryReminder
+      };
+      const result = jobMap[job]();
+      res.json({ job, result });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // DEV: Set subscription period end for testing expiry warnings
+  app.post('/api/dev/set-subscription', (req, res) => {
+    try {
+      const { therapist_id, status, plan, trial_ends_at, current_period_end, stripe_customer_id, stripe_subscription_id } = req.body;
+      if (!therapist_id) return res.status(400).json({ error: 'therapist_id required' });
+      const { getDatabase, saveDatabaseAfterWrite: save } = require('./db/connection');
+      const db = getDatabase();
+      const parts = ['UPDATE subscriptions SET updated_at = datetime(\'now\')'];
+      const params = [];
+      if (status) { parts.push(', status = ?'); params.push(status); }
+      if (plan)   { parts.push(', plan = ?');   params.push(plan); }
+      if (trial_ends_at)        { parts.push(', trial_ends_at = ?');        params.push(trial_ends_at); }
+      if (current_period_end)   { parts.push(', current_period_end = ?');   params.push(current_period_end); }
+      if (stripe_customer_id)   { parts.push(', stripe_customer_id = ?');   params.push(stripe_customer_id); }
+      if (stripe_subscription_id) { parts.push(', stripe_subscription_id = ?'); params.push(stripe_subscription_id); }
+      parts.push('WHERE therapist_id = ?');
+      params.push(therapist_id);
+      db.run(parts.join(''), params);
+      save();
+      res.json({ success: true, therapist_id });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
 }
 
 // 404 handler
