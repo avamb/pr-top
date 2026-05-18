@@ -6816,3 +6816,70 @@ dev-only block during prior session), which runs queries in-process.
 ### Current status
 - Feature #387: PASSING — 42/42 assertions, all consent enforcement intact
 - Stats: 387/397 features passing (97.5%)
+
+## Session 2026-05-18 — Feature #388: Regression sweep: encryption at application layer (Class A data)
+
+### Scope
+Verified that diary entries, private notes, transcripts, AI summaries, client context, SOS
+messages, and exercise responses are still written encrypted and decrypted only on authorized
+read paths. All 5 verification steps from the feature spec, plus mock-data grep and server
+restart persistence test.
+
+### New dev endpoint added
+`POST /api/dev/db-query` (SELECT/PRAGMA only, dev-mode only) — allows audit scripts to
+inspect raw SQLite column values without a shell dependency. Added to the existing dev-only
+block in `src/backend/src/index.js`.
+
+### Audit results (70/70 assertions)
+
+**Step 1 — Direct DB inspection:**
+  - diary_entries.content_encrypted, transcript_encrypted: all ciphertext (format 1:iv:tag:ct)
+  - therapist_notes.note_encrypted: all ciphertext
+  - sessions.transcript_encrypted, summary_encrypted: all ciphertext
+  - client_context.*_encrypted fields: all ciphertext
+  - sos_events.message_encrypted: all ciphertext
+  - Re-run after writes: no raw plaintext found in any encrypted column (LIKE grep check)
+
+**Step 2 — Bot write → DB row → Therapist API round-trip:**
+  - POST /api/bot/diary → 201, entry ID returned
+  - DB row: content_encrypted is ciphertext, != original plaintext, encryption_key_id set, payload_version >= 1
+  - GET /api/clients/:id/diary → 200, decrypted content = original text
+  - POST /api/clients/:id/notes → 201; DB raw = ciphertext; API returns decrypted = plaintext
+  - PUT /api/clients/:id/context → 201; DB anamnesis_encrypted = ciphertext, != plaintext
+
+**Step 3 — Class B metadata plaintext:**
+  - diary_entries: id (int), client_id (int), entry_type (text), created_at/updated_at (datetime) all plaintext
+  - therapist_notes: id, therapist_id, created_at all plaintext
+  - encryption_keys: key_version (int), status ('active') plaintext — queryable for key management
+
+**Step 4 — Key rotation:**
+  - GET /api/encryption/active-version → 200 (version was 3 at test time)
+  - POST /api/encryption/rotate → 200, new_version = old + 1 (4)
+  - Old key status changed to 'rotated'; new key status 'active'
+  - encrypt() uses new key_version; decrypt() round-trip correct
+  - Old diary entry written before rotation still decrypts correctly
+  - New diary entry written after rotation uses new encryption_key_id
+
+**Step 5 — File storage opaque IDs and auth-gated access:**
+  - sessions.audio_ref: UUID-based filenames (opaque, no original name exposure)
+  - Diary voice files: audio_file_ref ends with .enc
+  - GET /api/sessions/:id/audio without auth → 401
+  - GET /api/diary/:id/audio without auth → 401
+  - GET /api/clients/:id/diary/:entryId/audio without auth → 401
+
+**Mock-data grep:** Zero hits for globalThis, devStore, mockDb, fakeData, isDevelopment
+across encryption.js, bot.js, clients.js, sessions.js, transcription.js, summarization.js.
+
+**Server restart persistence:** Diary entry #65 (ciphertext "3:CRr6...") written before
+backend kill, verified present with identical ciphertext after fresh restart. SQLite
+file persistence confirmed; not in-memory.
+
+### Files changed
+  src/backend/src/index.js      — added /api/dev/db-query endpoint (+19 lines)
+  _t388_encryption_audit.js     — new 70-assertion audit script
+  _t388_restart_test.js         — helper: write/read mode for restart persistence
+
+### Current status
+- Feature #388: PASSING — 70/70 assertions, all Class A encryption intact,
+  key rotation functional, file storage opaque+auth-gated, restart persistence confirmed
+- Stats: 388/397 features passing (97.7%)
