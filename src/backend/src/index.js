@@ -310,6 +310,27 @@ if (process.env.NODE_ENV !== 'production') {
       res.json({ success: true, email, user_id, role });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
+
+  // DEV: Query audit logs for testing consent enforcement (#387)
+  app.post('/api/dev/audit-query', (req, res) => {
+    try {
+      const { action, actor_id, target_id, limit: lim = 30 } = req.body;
+      const { getDatabase } = require('./db/connection');
+      const db = getDatabase();
+      const parts = ['SELECT action, actor_id, target_type, target_id, details_encrypted, created_at FROM audit_logs WHERE 1=1'];
+      const params = [];
+      if (action) { parts.push('AND action = ?'); params.push(action); }
+      if (actor_id) { parts.push('AND actor_id = ?'); params.push(actor_id); }
+      if (target_id) { parts.push('AND target_id = ?'); params.push(target_id); }
+      parts.push('ORDER BY created_at DESC LIMIT ?');
+      params.push(lim);
+      const r = db.exec(parts.join(' '), params);
+      if (!r.length || !r[0].values.length) return res.json({ rows: [] });
+      const cols = r[0].columns;
+      const rows = r[0].values.map(v => Object.fromEntries(cols.map((c, i) => [c, v[i]])));
+      res.json({ rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
 }
 
 // 404 handler
