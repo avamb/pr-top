@@ -7193,3 +7193,80 @@ multi-tab, PWA manifest, service worker, and InstallPrompt all working.
 ### Current status
 - Feature #392: PASSING — 75/75 assertions, full regression verified
 - Stats: 392/397 features passing (98.7%)
+
+## Session 2026-05-18 — Feature #393: Regression sweep: search (vector + NL query expansion)
+
+### Scope
+End-to-end regression audit of semantic vector search and Pro/Premium NL query expansion.
+All 4 feature verification steps covered via a 56-assertion audit script
+(_t393_search_audit.js) plus browser UI verification.
+
+### Real bug found and fixed: revoked-consent data leaked in global search
+
+**Root cause:** semanticSearch() in vectorStore.js filtered by therapist_id but NOT by
+consent_therapist_access. When a client revoked consent, the bot set therapist_id=NULL
+and consent_therapist_access=0 on the user row, but the embedding in vector_embeddings
+still had the old therapist_id. A global search (no client_id filter) would return
+these stale embeddings — exposing data from clients who explicitly revoked consent.
+
+**Fix applied:** src/backend/src/routes/search.js — post-search consent filter added.
+After semanticSearch() returns results, collect unique client_ids, query which ones still
+have therapist_id = currentTherapist AND consent_therapist_access = 1, and filter out
+any results from clients not in that consented set. KB chunks (client_id=NULL) always kept.
+
+### Audit results (56/56 assertions)
+
+**Step 1 — Re-index test corpus and run baseline vector queries:**
+  - 6 diary entries + 1 therapist note created and auto-indexed
+  - GET /api/search/stats -> 200, total > 0, diary_entry type present
+  - POST /api/search with compound-key query -> results with similarity score, source_type
+  - POST /api/search with client_id filter -> narrows to that client's data
+  - POST /api/search with source_type=diary_entry -> all results are diary_entry
+  - Invalid source_type -> 400; empty query -> 400; >1000 char query -> 400
+  - No auth -> 403 (CSRF check before auth for POST); GET stats without auth -> 401
+  - Therapist A does NOT see Therapist B's data (therapist_id isolation confirmed)
+  - Vector search latency < 500ms (got 88ms)
+
+**Step 2 — NL query tier gating:**
+  - Basic plan -> 403 with current_plan='basic', required_plans=['pro','premium']
+  - Trial plan -> 403 (default post-registration)
+  - Pro plan -> passes tier gate; 404 for nonexistent client (not 403)
+  - Premium plan -> passes tier gate
+  - Real NL query "anxiety depression sleep": total_matches > 0
+  - expanded_terms includes synonyms for 'anxiety' (anxious, worry, panic, fear...)
+  - expanded_terms includes synonyms for 'sleep' (insomnia, nightmare, tired, fatigue...)
+  - Results include diary and/or note entries; similarity_score in [0,1]
+  - query_tokens returned; includes 'anxiety'; search_time_ms present
+  - NL query latency < 500ms (got 156ms)
+
+**Step 3 — Consent filtering (includes bug fix verification):**
+  - Consented client_id search -> 200
+  - Other therapist's client by client_id -> 403
+  - Data IS found BEFORE consent revocation
+  - After revocation: global search -> 0 results (consent filter bug FIXED)
+  - After revocation: explicit client_id -> 403
+  - NL query for revoked client -> 403 or 404 (unlinked)
+  - Cross-therapist NL isolation -> 404
+  - Audit log: semantic_search and nl_query events recorded
+
+**Step 4 — Latency baseline:**
+  - Vector search: 88ms < 500ms
+  - NL query: 156ms < 500ms
+  - Stats endpoint: 44ms < 200ms
+
+**Mock data grep:** Zero hits across search.js, query.js, vectorStore.js, nlQuery.js.
+
+### Browser UI verification
+  - Logged into dashboard: Pro Plan badge shown, zero JS console errors
+  - Clients page: real data (0 clients for fresh account), Pro limit=30 shown
+
+### Files changed
+  src/backend/src/routes/search.js   — post-search consent filter added (+28 lines)
+  _t393_search_audit.js              — 56-assertion regression audit
+  _t393_debug.js                     — consent filter debug helper
+  _t393_browser_login.js             — browser test account helper
+
+### Current status
+- Feature #393: PASSING — 56/56 assertions, consent filter bug fixed,
+  full search regression verified including NL query expansion and tier gating
+- Stats: 393/397 features passing (98.99%)
