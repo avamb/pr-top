@@ -484,7 +484,7 @@ function DeleteConfirmDialog({ exercise, onClose, onConfirm, t, lang, deleting, 
 function ExerciseLibrary() {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
-  const csrfToken = useCsrfToken();
+  const { csrfToken } = useCsrfToken();
   const lang = i18n.language || 'en';
   const [activeView, setActiveView] = useState('library'); // 'library' or 'my'
   const [grouped, setGrouped] = useState({});

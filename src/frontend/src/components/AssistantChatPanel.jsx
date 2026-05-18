@@ -293,7 +293,7 @@ function ConversationHistoryList({ onSelect, onDelete, onNewChat, conversations,
 export default function AssistantChatPanel() {
   const { t, i18n } = useTranslation();
   const location = useLocation();
-  const csrfToken = useCsrfToken();
+  const { csrfToken } = useCsrfToken();
 
   // Zustand store
   const isOpen = useAssistantStore(s => s.isOpen);
