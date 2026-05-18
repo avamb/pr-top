@@ -6662,4 +6662,103 @@ lightbox owns the blob from fetch to unmount.
   found and fixed with mini-fixes, 4 perf-only / nice-to-have items
   documented for future work, all cross-cutting flows verified end-to-end
   against the real DB + encryption layer + dev-mode Telegram notify).
+- Stats: 385/397 features passing after this session.
+
+## Session 2026-05-18 — Feature #386: Regression sweep: auth and session flows
+
+### Scope
+Regression audit of all authentication and session flows: registration,
+login, logout, JWT/CSRF handling, password reset, invite code, rate
+limiting, log sanitization. 70-assertion API audit script + browser
+automation end-to-end.
+
+### API audit results (70/70 pass)
+
+Step 2 Registration:
+  - No CSRF token on POST -> 403 (enforcement working)
+  - Invalid email -> 400; weak password (no uppercase) -> 400
+  - Valid registration -> 201; cookie: HttpOnly, SameSite=Strict, no
+    Secure in dev (correct); JWT in response body
+  - Duplicate email -> 409; client role -> 400 (blocked)
+
+Step 3 Login:
+  - No CSRF -> 403; wrong password -> 401 "Invalid credentials"
+  - Non-existent email -> same 401 (no user enumeration)
+  - Valid login -> 200 + JWT + HttpOnly SameSite=Strict cookie
+
+Step 4 /api/auth/me:
+  - No token -> 401; valid token -> 200; invalid JWT -> 401
+
+Step 5 CSRF behavior:
+  - Each GET /api/csrf-token returns a unique 64-hex token
+  - Invalid token on POST -> 403
+  - Requests with Authorization: Bearer bypass CSRF (design intent)
+
+Step 6 Logout:
+  - POST /api/auth/logout -> 200, clears session_token cookie
+
+Step 7 Password reset:
+  - Non-existent email -> generic 200 (no enumeration)
+  - Invalid token -> 400; weak new password -> 400
+  - Valid reset -> 200; token one-time-use (reuse -> 400)
+  - Login with new password -> 200; old password -> 401
+
+Step 8 Invite code:
+  - GET /api/invite-code without auth -> 401
+  - GET /api/invite-code -> 200, 8-char code
+  - GET /api/invite-code/link -> 200, Telegram deep-link
+  - POST /api/invite-code/regenerate -> 200, new distinct code
+
+Step 9 Rate limiting:
+  - Rate-limit headers present on auth responses (limit: 1000 in dev)
+
+Step 10 Log sanitization:
+  - No plaintext passwords in logs
+  - No raw JWT cookie values in logs
+  - Password reset link logged in dev mode (auth.js:738, intentional)
+
+Step 11 Protected routes:
+  - /api/clients, /api/sessions/list -> 401 without auth
+
+### Real bug found and fixed: useCsrfToken destructuring error (4 files)
+
+Root cause: useCsrfToken() returns { csrfToken, isLoading }. Four files
+called `const csrfToken = useCsrfToken()` without destructuring, assigning
+the whole object. Then `headers['X-CSRF-Token'] = csrfToken` set the
+header to "[object Object]" -> backend returned 403.
+
+Impact:
+  - ForgotPassword.jsx: forgot-password form always got 403 in the browser
+  - ResetPassword.jsx: same 403 on password reset
+  - ExerciseLibrary.jsx: broken CSRF on library form submissions
+  - AssistantChatPanel.jsx: object passed to callbacks
+
+Fix applied to 4 files:
+  - const csrfToken = useCsrfToken()
+  + const { csrfToken, isLoading: csrfLoading } = useCsrfToken()
+  Also: disabled={loading || csrfLoading} on submit buttons in
+  ForgotPassword and ResetPassword (matching Login/Register pattern).
+
+Verification:
+  - grep for bad pattern in src/frontend/src/ -> 0 results
+  - npm --prefix src/frontend run build -> success (1086 modules, 0 errors)
+  - Browser automation:
+      Register -> Dashboard
+      Logout -> landing page
+      Forgot password form -> success banner (was 403, now fixed)
+      Reset password with valid token -> success
+      Login with new post-reset password -> Dashboard
+
+### Files changed
+  src/frontend/src/pages/ForgotPassword.jsx    (+3/-3)
+  src/frontend/src/pages/ResetPassword.jsx     (+3/-3)
+  src/frontend/src/pages/ExerciseLibrary.jsx   (+1/-1)
+  src/frontend/src/components/AssistantChatPanel.jsx (+1/-1)
+
+### Current status
+- Feature #386: PASSING (auth regression sweep — 70/70 API checks pass;
+  real CSRF-destructuring bug found in 4 frontend files and fixed; browser
+  UI tested end-to-end across registration, login, logout, forgot-password,
+  reset-password; invite code deep-link verified; rate-limit headers confirmed).
+- Stats: 386/397 features passing (97.2%).
 - Stats: 385/385 features passing (100%).
