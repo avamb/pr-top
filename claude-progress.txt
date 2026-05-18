@@ -6883,3 +6883,90 @@ file persistence confirmed; not in-memory.
 - Feature #388: PASSING — 70/70 assertions, all Class A encryption intact,
   key rotation functional, file storage opaque+auth-gated, restart persistence confirmed
 - Stats: 388/397 features passing (97.7%)
+
+## Session 2026-05-18 — Feature #389: Regression sweep: Telegram bot client interactions
+
+### Scope
+End-to-end smoke test of all five bot verification steps using HTTP calls to the
+backend bot-API endpoints (simulating what the Telegram bot would send):
+  1. Link a test client via invite code (5-checkbox consent flow)
+  2. Send text, voice, and video diary entries
+  3. Trigger SOS and confirm therapist receives multi-channel alert
+  4. Complete an assigned exercise
+  5. Verify bot replies in the client's chosen language (EN/RU/ES/UK)
+
+### Approach
+All five steps verified through the real HTTP bot API endpoints (port 3001) with
+the BOT_API_KEY header. No Telegram API token required — the bot routes are
+exercised directly at the transport layer. Test script: _t389_bot_regression.js
+(133 assertions, zero mock patterns).
+
+### Verification results (133/133 pass)
+
+**Step 1 — Link client via invite code:**
+  - Therapist registered via web API + invite code retrieved (8-char alphanumeric)
+  - Therapist telegram_id linked via /api/dev/set-telegram-id
+  - Client bot-registered with telegram_id; /api/bot/connect resolves invite code
+    → returns requires_consent=true + therapist.id
+  - POST /api/bot/consent with consent_version=1 + SHA-256 hash → linked=true
+  - GET /api/bot/user confirms therapist_id, consent_therapist_access=true,
+    consent_version=1
+  - Invalid invite code → 404 (no leak of therapist data)
+
+**Step 2 — Text, voice, video diary entries:**
+  - Text: POST /api/bot/diary (entry_type=text) → 201, entry.id returned
+  - Voice: POST /api/bot/diary (entry_type=voice, file_data=base64) → 201,
+    file encrypted on disk (DIARY_FILES_DIR .enc file)
+  - Video: POST /api/bot/diary (entry_type=video, file_data=base64) → 201
+  - All 3 entries appear in GET /api/clients/:id/diary (therapist view)
+  - Decrypted content matches original plaintext (round-trip correct)
+  - DB raw: content_encrypted is ciphertext (N:iv:tag:ct format), not plaintext
+  - Bot history endpoint GET /api/bot/diary/:telegram_id returns >= 3 entries
+  - Cross-client access blocked: GET /api/clients/99999/diary → 403/404
+
+**Step 3 — SOS trigger + multi-channel alert:**
+  - POST /api/bot/sos → 201, sos_event { id, client_id, therapist_id, status=triggered }
+  - DB: message_encrypted is ciphertext, not plaintext (Class A data)
+  - audit_logs: sos_triggered + sos_notification_sent entries created
+  - Dedup: 2nd SOS within 30s → 200 deduplicated=true (no duplicate notification)
+  - Therapist dashboard: GET /api/clients/:id/sos → 200, SOS visible
+  - Unauthenticated SOS list → 401
+
+**Step 4 — Exercise assignment and completion:**
+  - GET /api/exercises (therapist) → library has >= 1 seeded exercise
+  - POST /api/clients/:id/exercises → 201, delivery.id returned
+  - GET /api/bot/exercises/:telegram_id → pending exercise visible, status=sent
+  - POST /api/bot/exercises/:delivery_id/acknowledge → 200, status=acknowledged
+  - POST /api/bot/exercises/:delivery_id/respond → 200, status=completed,
+    response_encrypted=true
+  - Therapist view: GET /api/clients/:id/exercises → delivery status=completed
+  - DB: response_encrypted is ciphertext (not plaintext)
+  - audit_logs: exercise_completed entry created
+  - Double-complete is graceful (does not 500)
+
+**Step 5 — Language (EN/RU/ES/UK):**
+  - Registered 4 clients with language={en,ru,es,uk}
+  - GET /api/bot/user confirms each language persisted correctly
+  - DB: all 4 telegram_ids have correct language column
+  - bot i18n module (src/bot/src/i18n.js): 7 key messages verified across 4 locales
+    — all defined, EN != RU (real translations, not fallback-only)
+  - Function-type keys (welcomeBack, alreadyRegistered, welcomeTherapist): callable
+    in all 4 locales, return non-empty locale-aware strings
+  - PUT /api/bot/profile with {language} field → 400 (not a supported field by design;
+    language is set at registration time only)
+  - Bot sessions endpoint: GET /api/bot/sessions/:telegram_id → 200
+
+**Mock-data grep:** Zero hits for globalThis, devStore, dev-store, mockDb, mockData,
+fakeData, sampleData, dummyData, isDevelopment, isDev in routes/bot.js,
+bot/index.js, and i18n.js.
+
+### No bugs found
+All five verification steps pass cleanly. No fixes required.
+
+### Files created
+  _t389_bot_regression.js  — 133-assertion audit script
+  _t389_healthcheck.js     — simple health check helper
+
+### Current status
+- Feature #389: PASSING — 133/133 assertions, full bot regression verified
+- Stats: 389/397 features passing (98.0%)
