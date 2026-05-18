@@ -55,6 +55,33 @@ router.post('/', (req, res) => {
 
     const result = semanticSearch(query.trim(), options);
 
+    // Post-search consent filter: when no specific client_id was requested,
+    // the vector store filters by therapist_id but does NOT check current
+    // consent_therapist_access. A client who revoked consent after their data
+    // was embedded would still appear in results. Remove those rows here so
+    // therapists never see data from clients who have revoked or never granted
+    // consent. KB chunks (client_id = null) are always kept.
+    if (req.user.role !== 'superadmin' && result.results && result.results.length > 0) {
+      const clientIdsInResults = [...new Set(
+        result.results.filter(r => r.client_id != null).map(r => r.client_id)
+      )];
+      if (clientIdsInResults.length > 0) {
+        const db = getDatabase();
+        const placeholders = clientIdsInResults.map(() => '?').join(',');
+        const consentCheck = db.exec(
+          `SELECT id FROM users WHERE id IN (${placeholders}) AND therapist_id = ? AND consent_therapist_access = 1 AND role = 'client'`,
+          [...clientIdsInResults, therapistId]
+        );
+        const consentedIds = new Set(
+          consentCheck.length > 0 ? consentCheck[0].values.map(r => r[0]) : []
+        );
+        result.results = result.results.filter(r =>
+          r.client_id == null || consentedIds.has(r.client_id)
+        );
+        result.total = result.results.length;
+      }
+    }
+
     // Audit log
     try {
       const db = getDatabase();
