@@ -7051,3 +7051,80 @@ summarization chain. Verified all 5 feature steps via a 75-assertion HTTP audit 
 ### Current status
 - Feature #390: PASSING — 75/75 assertions, full session media pipeline verified
 - Stats: 390/397 features passing (98.2%)
+
+## Session 2026-05-18 — Feature #391: Regression sweep: subscription tier gating and Stripe webhooks
+
+### Scope
+End-to-end regression audit of all subscription billing functionality: plan limits,
+Stripe webhook handling, scheduler jobs, downgrade path, and receipt email rendering.
+
+### New dev endpoints added (src/backend/src/index.js)
+- POST /api/dev/run-scheduler: triggers scheduler jobs on-demand for testing
+- POST /api/dev/set-subscription: sets arbitrary subscription fields for test state setup
+
+### Audit results (78/78 pass)
+
+**Step 1a — Client count limits:**
+  - Trial plan (limit=3): 3 clients succeed, 4th returns 403 "Client limit reached"
+  - Basic plan (limit=10): additional clients allowed after upgrade
+  - Premium plan (unlimited): no limit enforced
+  - GET /subscription/limits returns correct limit=3 for trial
+
+**Step 1b — Session upload limits:**
+  - checkSessionLimit() returns correct counts from sessions table
+  - Sessions route enforces session limit before allowing uploads
+
+**Step 1c — Pro/Premium NL query tier gating:**
+  - Trial and Basic: POST /api/query returns 403 with current_plan + required_plans fields
+  - Pro and Premium: tier gate passed (404 on non-existent client, not 403)
+
+**Step 2 — Stripe webhook events (5 types):**
+  - payment_intent.succeeded: 200, payment row inserted, subscription active, receipt email triggered
+  - customer.subscription.updated: 200, period dates updated in subscriptions table
+  - invoice.payment_succeeded: 200 (handled gracefully)
+  - payment_intent.payment_failed: 200, subscription set to past_due, failed payment recorded
+  - customer.subscription.deleted: 200, subscription set to expired
+  - POST /subscription/checkout in dev mode: auto-completes upgrade with payment record
+
+**Step 3 — Expiry warning scheduler:**
+  - Subscription expiring within 3-day window: warned count >= 1 on first run
+  - Audit log entry for warning created; second run deduplicates correctly
+
+**Step 3b — Trial expiration scheduler:**
+  - Expired trial (ends_at in past): runTrialExpiration marks it expired
+  - Subscription status changes to expired; audit log entry created
+
+**Step 4 — Downgrade path:**
+  - Pro to Basic: scheduled (pending_plan=basic, plan=pro until period end)
+  - is_downgrade:true, scheduled:true; current access (NL query) still works
+  - Pro to Premium: immediate upgrade (plan=premium, scheduled:false)
+  - Downgrade with 12 clients exceeding basic limit of 10: downgrade warning returned
+
+**Step 5 — Receipt email:**
+  - Webhook triggers sendPaymentReceipt call; payment recorded (amount=4900)
+  - Template renders EN/RU/ES with amount/plan/date/transactionId fields
+  - Dev mode: logs "SMTP not configured. Would send to..." in server log
+
+**Step 6 — Plans catalog:**
+  - GET /plans: 3 plans (basic=$19, pro=$49, premium=$99) with correct amounts
+  - GET /stripe-status: configured=true, dev_mode=true
+
+### Browser UI verification
+  - Subscription page: Trial Plan (3 clients/5 sessions), all plan cards with prices
+  - Upgrade to Pro: "Successfully upgraded to Pro plan!" toast, plan badge updates,
+    payment history shows $49.00 succeeded
+  - Downgrade to Basic: "Downgrade to Basic scheduled" toast, button disabled,
+    access-until date shown correctly
+  - Zero subscription-related JS console errors
+
+### No bugs found
+All 5 verification steps pass cleanly. Plan limits, webhook processing, scheduler
+jobs, downgrade path, and receipt email are all functioning correctly.
+
+### Files changed
+  src/backend/src/index.js  — added run-scheduler and set-subscription dev endpoints
+  _t391_subscription_audit.js  — new 78-assertion audit script
+
+### Current status
+- Feature #391: PASSING — 78/78 assertions, full subscription tier gating verified
+- Stats: 391/397 features passing (98.5%)
