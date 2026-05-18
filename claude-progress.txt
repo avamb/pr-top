@@ -6762,3 +6762,57 @@ Verification:
   reset-password; invite code deep-link verified; rate-limit headers confirmed).
 - Stats: 386/397 features passing (97.2%).
 - Stats: 385/385 features passing (100%).
+
+## Session 2026-05-18 — Feature #387: Regression sweep: consent enforcement on client data routes
+
+### Scope
+Regression audit confirming consent gating still blocks unauthorized access to client diary,
+notes, transcripts, and summaries after recent code changes.
+
+### What was verified (42/42 assertions)
+
+**Step 1 — REST reads WITHOUT consent → 403:**
+  GET /diary, /context, /sessions, /exercises, POST /notes, PUT /context,
+  POST /exercises (send) — all return 403 when consent_therapist_access=0
+
+**Step 4 — Signed-file stream without consent → 403:**
+  - Bot creates diary text entry (client write, no consent needed)
+  - GET /diary/:id/stream with linked-but-no-consent therapist → 403
+  - POST /assignments/.../attachments/.../stream → 403 before 404
+
+**Grant → revoke mid-session (Step 2):**
+  - bot/consent grant → 200, all routes now return 200
+  - bot/revoke-consent → 200, all routes immediately return 403 again
+  - Notes list: 200 after revoke (design-intent: therapist retains read of own notes)
+
+**Step 5 — WebSocket:**
+  - Valid therapist JWT → 'connected' message (no consent gate needed, push-only)
+  - Invalid JWT → close code 4001
+
+**Step 8 — Cross-therapist isolation:**
+  - Therapist B cannot read therapist A's client data (diary, context, notes, stream) → 403
+
+**Step 3 — Export consent gate:**
+  - GET /export/client/:id?format=json → 403 when consent=0
+
+**Step 9 — SOS bypass (design intent):**
+  - GET /clients/:id/sos with consent=0 but linked → 200 (emergency access by design)
+
+**Steps 6 & 7 — Audit log verification:**
+  - 15 access_denied entries for therapist A, all with reason=consent_not_granted
+  - 5 consent_granted entries with client_id + therapist_id + consent_version
+  - 1 consent_revoked entry with client_id + therapist_id
+
+### Bug fixed: Windows execSync timeout in dbQuery helper
+The previous `_t387_consent_audit.js` draft used `execSync('node tmp.js')` to query
+audit logs. On Windows this results in `spawnSync ETIMEDOUT`. Fixed by replacing it
+with HTTP calls to the existing `/api/dev/audit-query` endpoint (added in index.js
+dev-only block during prior session), which runs queries in-process.
+
+### Files changed
+  _t387_consent_audit.js          — new comprehensive test, 42 assertions
+  src/backend/src/index.js        — /api/dev/audit-query endpoint (already added)
+
+### Current status
+- Feature #387: PASSING — 42/42 assertions, all consent enforcement intact
+- Stats: 387/397 features passing (97.5%)
