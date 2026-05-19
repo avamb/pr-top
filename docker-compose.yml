@@ -1,4 +1,26 @@
 services:
+  # === Nginx Reverse Proxy (single entry point for all traffic) ===
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/locations.conf:/etc/nginx/conf.d/locations.conf:ro
+      - nginx-certs:/etc/nginx/certs:ro
+    depends_on:
+      - frontend
+      - backend
+      - umami
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/api/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
   # === Backend API ===
   backend:
     build:
@@ -83,13 +105,14 @@ services:
     environment:
       - DATABASE_URL=${UMAMI_DATABASE_URL:-postgresql://umami:umami@umami-db:5432/umami}
       - APP_SECRET=${UMAMI_APP_SECRET:-replace-me-with-a-random-string}
+      - APP_BASE_PATH=/analytics
     expose:
       - "3000"
     depends_on:
       umami-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/heartbeat', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/analytics/api/heartbeat', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -122,4 +145,6 @@ volumes:
   backend-backups:
     driver: local
   umami-db-data:
+    driver: local
+  nginx-certs:
     driver: local

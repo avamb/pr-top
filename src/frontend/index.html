@@ -14,7 +14,8 @@
     <title>PR-TOP — A service that will take your PRACTICE to the TOP level</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <!-- Umami Analytics (privacy-first, cookieless, GDPR-compliant) -->
-    <script defer src="https://app.pr-top.com/script.js" data-website-id="%VITE_UMAMI_WEBSITE_ID%"></script>
+    <!-- Script served via nginx reverse proxy at /analytics/script.js to avoid AdBlock -->
+    <script defer src="/analytics/script.js" data-website-id="%VITE_UMAMI_WEBSITE_ID%"></script>
   </head>
   <body class="bg-background text-text">
     <div id="root"></div>
