@@ -53,7 +53,7 @@ app.use(cors({
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.RATE_LIMIT_MAX ? parseInt(process.env.RATE_LIMIT_MAX) : (process.env.NODE_ENV === 'development' ? 10000 : 500),
+  max: process.env.RATE_LIMIT_MAX ? parseInt(process.env.RATE_LIMIT_MAX) : (process.env.NODE_ENV !== 'production' ? 10000 : 500),
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: true, // Include `X-RateLimit-*` headers
   message: { error: 'Too many requests, please try again later.', retryAfter: '15 minutes' },
@@ -71,7 +71,7 @@ app.use('/api/', limiter);
 // Auth-specific rate limiting (stricter for login/register)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.AUTH_RATE_LIMIT_MAX ? parseInt(process.env.AUTH_RATE_LIMIT_MAX) : (process.env.NODE_ENV === 'development' ? 1000 : 50),
+  max: process.env.AUTH_RATE_LIMIT_MAX ? parseInt(process.env.AUTH_RATE_LIMIT_MAX) : (process.env.NODE_ENV !== 'production' ? 1000 : 50),
   standardHeaders: true,
   legacyHeaders: true,
   handler: (req, res, next, options) => {

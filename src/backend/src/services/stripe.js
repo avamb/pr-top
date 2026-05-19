@@ -71,9 +71,9 @@ function getStripeClient() {
 }
 
 /**
- * Check if running in development mode (no real Stripe keys)
+ * Check if running with placeholder Stripe keys (no real Stripe integration)
  */
-function isDevMode() {
+function isStripeTestMode() {
   return devMode;
 }
 
@@ -277,6 +277,6 @@ module.exports = {
   getCustomer,
   createCheckoutSession,
   isConfigured,
-  isDevMode,
+  isStripeTestMode,
   PLAN_PRICES
 };

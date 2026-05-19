@@ -144,7 +144,7 @@ function detectTimezone(msg) {
 
 if (!token || token === 'your-telegram-bot-token') {
   console.error('ERROR: TELEGRAM_BOT_TOKEN is not set. Please configure it in .env');
-  console.log('Bot is in MOCK mode - API endpoints still work for testing.');
+  console.log('Bot token not configured - API endpoints still work for testing.');
   // Don't exit - allow the bot module to be imported for testing
 } else {
   const bot = new TelegramBot(token, { polling: true });

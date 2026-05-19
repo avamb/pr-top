@@ -4,7 +4,7 @@
 const express = require('express');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
-const { createCustomer, getCustomer, createCheckoutSession, isConfigured, isDevMode, getStripeClient, PLAN_PRICES } = require('../services/stripe');
+const { createCustomer, getCustomer, createCheckoutSession, isConfigured, isStripeTestMode, getStripeClient, PLAN_PRICES } = require('../services/stripe');
 const { getClientLimit, getClientCount, checkClientLimit } = require('../utils/planLimits');
 const jwt = require('jsonwebtoken');
 
@@ -32,9 +32,9 @@ function requireAuth(req, res, next) {
 router.get('/stripe-status', (req, res) => {
   res.json({
     configured: isConfigured(),
-    dev_mode: isDevMode(),
+    dev_mode: isStripeTestMode(),
     message: isConfigured()
-      ? (isDevMode() ? 'Stripe running in development mode' : 'Stripe is configured and ready')
+      ? (isStripeTestMode() ? 'Stripe running in development mode' : 'Stripe is configured and ready')
       : 'Stripe is not configured. Set STRIPE_SECRET_KEY in environment.'
   });
 });
@@ -496,7 +496,7 @@ router.post('/checkout', requireAuth, async (req, res) => {
     });
 
     // In dev mode, automatically complete the upgrade
-    if (isDevMode()) {
+    if (isStripeTestMode()) {
       const now = new Date();
       const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
       db.run(
@@ -525,8 +525,8 @@ router.post('/checkout', requireAuth, async (req, res) => {
       checkout_url: session.url,
       session_id: session.id,
       plan,
-      dev_mode: isDevMode(),
-      auto_completed: isDevMode()
+      dev_mode: isStripeTestMode(),
+      auto_completed: isStripeTestMode()
     });
   } catch (error) {
     logger.error('Checkout error: ' + error.message);

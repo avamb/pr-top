@@ -42,8 +42,8 @@ function requireSuperadmin(req, res, next) {
 // Require development mode OR superadmin for debug endpoints
 // In production, only superadmins can access encrypt/decrypt test endpoints
 function requireDevOrSuperadmin(req, res, next) {
-  const isDev = !process.env.NODE_ENV || process.env.NODE_ENV === 'development';
-  if (isDev) {
+  const notInProduction = !process.env.NODE_ENV || process.env.NODE_ENV !== 'production';
+  if (notInProduction) {
     return next();
   }
   // In production, only superadmin can access debug endpoints
