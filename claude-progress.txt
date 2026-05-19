@@ -7594,3 +7594,55 @@ and a complete happy-path scenario end-to-end. Audit script: _t396_docker_smoke_
 - Feature #396: PASSING - 98/98 assertions, 5 bugs fixed, browser verified
 - Stats: 396/397 features passing (99.7%)
 - Stats: 395/397 features passing (99.5%)
+
+## Session 2026-05-19 — Feature #397: Re-enable testing agents and rerun feature verification
+
+### Scope
+Final pre-release verification sweep. Re-ran all major audit scripts and wrote a new
+comprehensive 14-section final verification script (_t397_final_verification.js, 75 assertions).
+
+### Prior audit scripts re-run (all passing)
+  _t388_encryption_audit.js    70/70  ✅
+  _t389_bot_regression.js     133/133 ✅
+  _t390_session_media_audit.js  75/75  ✅
+  _t391_subscription_audit.js   78/78  ✅
+  _t392_ws_pwa_audit.js         75/75  ✅
+  _t393_search_audit.js         56/56  ✅
+  _t394_i18n_audit.js           66/66  ✅
+  _t395_admin_audit.js         121/121 ✅
+  _t396_docker_smoke_test.js    98/98  ✅
+  ─────────────────────────────────
+  Total prior audits:          772/772
+
+### New final verification script (75/75 assertions)
+  Section 1:  Infrastructure health (DB connected, 38 tables, WebSocket, Stripe)
+  Section 2:  Auth flow (register, login, CSRF, 401/403 enforcement)
+  Section 3:  Client management (invite code, bot connect, consent with therapist_id)
+  Section 4:  Diary entries (bot create, therapist decrypt, content verified)
+  Section 5:  SOS lifecycle (bot trigger, therapist visibility)
+  Section 6:  Therapist notes (create, list, decrypt)
+  Section 7:  Semantic search (stats, query, results array)
+  Section 8:  Subscriptions (/subscription/current, /subscription/plans, 3 plans)
+  Section 9:  Admin panel (login, stats, audit logs, RBAC 403 enforcement)
+  Section 10: i18n (RU/ES localized errors, 4-locale newsletter keys)
+  Section 11: Mock data grep (globalThis/devStore/mockDb/mockData — all clean)
+  Section 12: Docker Compose (nginx, Umami APP_BASE_PATH, analytics path)
+  Section 13: Encryption at rest (diary/notes not stored as plaintext)
+  Section 14: WebSocket health metrics present
+
+### Browser verification
+  - Landing page: "Keep Your Practice on Top" renders correctly
+  - Login page: full form, CSRF working
+  - Admin dashboard: 1088 therapists, 233 clients, 2227 audit logs (real data)
+  - Therapist dashboard: invite code, Quick Stats, Recent Activity
+
+### Zero real console errors
+  Only expected dev-mode noise: React Router v7 future flags (benign),
+  Umami analytics 404 (expected — Umami not running in dev).
+
+### Files created
+  _t397_final_verification.js  — 14-section, 75-assertion final verification script
+  _t397_debug.js               — debug helper for bot flow investigation
+
+### FINAL STATUS: 397/397 features passing (100%)
+All features verified. Project is ready for release.
