@@ -7354,3 +7354,86 @@ steps from the feature spec plus 10-section automated audit (66 assertions).
 ### Current status
 - Feature #394: PASSING — 66/66 assertions, all 3 bugs fixed, browser verified
 - Stats: 394/397 features passing (99.2%)
+
+## Session 2026-05-19 — Feature #395: Regression sweep: admin panel and audit logs
+
+### Scope
+End-to-end regression audit of all superadmin functionality: admin route access control,
+AI provider switching, audit log viewer, and manual backup with encryption verification.
+121-assertion audit script (_t395_admin_audit.js) plus browser UI verification.
+
+### Audit results (121/121 pass)
+
+**Step 0 — Superadmin login + RBAC:**
+  - POST /api/auth/login admin@pr-top.com/Admin123! → 200, JWT token, role=superadmin
+  - Therapist token: GET /api/admin/therapists → 403 (correct RBAC enforcement)
+  - No auth token → 401
+
+**Step 1 — All /admin/* routes return 200:**
+  16 GET endpoints verified: therapists, stats/users, stats/subscriptions, stats/utm,
+  settings, settings/assistant-ai, logs/audit, logs/system, logs/audit/actions,
+  backup/status, backups, ai/models, ai/usage, ai/usage/summary, ai/usage/daily,
+  ai/limits — all return 200 with correct data shapes.
+  - stats/users: therapists/clients/blocked/audit_log_entries counts all present
+  - stats/subscriptions: plan distribution, revenue metrics, recent payments all present
+  - backup/status: backup_count and retention_limit both numeric
+
+**Step 2 — AI provider switching:**
+  - GET /api/admin/ai/models: all 4 providers listed (openai, anthropic, google, openrouter)
+  - Current settings object has summarization, transcription, assistant sections
+  - PUT with anthropic/claude-3-haiku-20240307 → persisted and confirmed in follow-up GET
+  - PUT with google/gemini-1.5-flash → persisted correctly
+  - PUT with openrouter/mistralai/mistral-7b-instruct → persisted correctly
+  - PUT back to openai/gpt-4o-mini → persisted correctly
+  - GET /api/admin/ai/test?provider=openai → configured=false (no API key in dev mode)
+  - GET /api/admin/ai/test?provider=anthropic → configured=false (no API key)
+  - Unknown provider → 400; no provider param → 400
+  - Smoke summary: registered therapist, created client, uploaded 2KB fake mp3,
+    POST /api/sessions/:id/summarize → 200, GET /api/sessions/:id/summary → 200,
+    summary contains "[DEV MODE] Session Summary" (correct dev-mode fallback)
+
+**Step 3 — Audit log viewer:**
+  - GET /api/admin/logs/audit → 200, array of entries, total=2116
+  - Log entries have id, action, created_at fields
+  - Distinct actions endpoint: 77 unique action types including consent_granted,
+    manual_backup, update_ai_models, sos_triggered, session_summarized, etc.
+  - Filter by update_ai_models → total > 0 (events from our step 2 switches)
+  - Pagination: per_page=5 respected, 5 or fewer results returned
+  - Date filter: date_from=today → returns events from this session
+  - System logs: 200, array with total count, filterable by level=info
+
+**Step 4 — Manual backup + encrypted artifact:**
+  - POST /api/admin/backup → 200, filename=prtop_backup_2026-05-19_*.db.gz.enc
+  - File on disk: 1.37MB (realistic encrypted+compressed DB size)
+  - File NOT starting with "SQLite" magic bytes → confirmed encrypted
+  - First 16 bytes are random AES-CBC IV, non-zero bytes confirmed
+  - Backup count incremented by 1; last_backup, last_backup_size, total_size present
+  - Retention limit = 30 (BACKUP_RETENTION_COUNT default)
+  - Backup appears in GET /api/admin/backups list
+  - manual_backup audit event recorded in audit log
+
+**Step 5 — Admin therapist management:**
+  - PUT /api/admin/therapists/:id/plan {plan:pro} → 200, is_manual_override=true
+  - DELETE /api/admin/therapists/:id/plan-override → 200, plan=trial, is_manual_override=false
+  - PUT block → 200; PUT unblock → 200
+  - PUT /api/admin/settings {trial_duration_days:14} → 200, updated array returned
+  - Unknown setting key → errors array in response (graceful)
+  - PUT /api/admin/ai/limits {limit_usd:100} → 200, limit_usd=100 persisted
+
+**Mock data grep:** Zero hits for globalThis, devStore, mockDb, mockData, isDevelopment
+across admin.js, backupService.js, aiProviders/index.js, AdminDashboard.jsx, AdminAuditLogs.jsx
+
+**Browser UI verification:**
+  - Admin Dashboard: 1057 therapists, 195 clients, 2116 audit log entries (real DB data)
+  - Therapists page: 1057 registered, t395_* test accounts visible at top
+  - Audit Logs page: 2116 entries, recent events from this session visible
+  - AI Model Configuration: all 4 providers shown (Not Configured in dev mode), OpenAI Active
+  - Platform Settings: trial_duration_days=14, trial_client_limit=3 (our updates visible)
+  - Zero real JS console errors (Umami analytics 400 is expected dev-mode noise)
+
+### Files created
+  _t395_admin_audit.js  — 121-assertion audit script
+
+### Current status
+- Feature #395: PASSING — 121/121 assertions, full admin panel regression verified
+- Stats: 395/397 features passing (99.5%)
