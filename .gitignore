@@ -67,6 +67,9 @@ test_*.csv
 test_*.webm
 verify_*.js
 _test_*.js
+_test_*.csv
+_test_*.json
+_test_*.txt
 regression_test_*.js
 create_test_*.js
 
@@ -82,6 +85,9 @@ tmp_*.txt
 regtest_*.js
 regtest_*.json
 regtest_*.txt
+_regtest_*.js
+_regtest_*.json
+_regtest_*.txt
 csrf_*.json
 csrf_*.txt
 login_f*.json
@@ -92,12 +98,31 @@ watch_db.js
 restart_test_email.txt
 Projectsdev-psy-bot*
 
+# AutoForge task runner scripts (_t<N>_*.js pattern)
+_t[0-9]*.js
+_t[0-9]*.json
+_t[0-9]*.txt
+_t[0-9]*.csv
+
+# AutoForge utility scripts with underscore prefix
+_check_*.js
+_find_*.js
+_kill_*.js
+_health_*.txt
+_health_*.js
+_f[0-9]*_*.js
+_rt_*.js
+_seed_*.js
+
 # Temporary response/data files
 *_resp.json
 *_resp.txt
 *_resp2.txt
 *_response.txt
 cookies*.txt
+.cookies*.txt
+.csrf*.json
+.*_email.txt
 tz_import_*.json
 diary_response.json
 login_resp.json
