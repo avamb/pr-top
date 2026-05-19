@@ -7437,3 +7437,69 @@ across admin.js, backupService.js, aiProviders/index.js, AdminDashboard.jsx, Adm
 ### Current status
 - Feature #395: PASSING — 121/121 assertions, full admin panel regression verified
 - Stats: 395/397 features passing (99.5%)
+
+## Session 2026-05-19 — Feature #4: No mock data patterns in codebase
+
+### Scope
+Static analysis scan of the entire codebase for prohibited mock/placeholder data
+patterns. All 7 grep checks from the feature spec run via ripgrep (which respects
+.gitignore and excludes node_modules).
+
+### Grep results
+
+**CHECK 1 — globalThis.:** No matches ✅
+**CHECK 2 — devStore|DevStore|dev-store|mockDb|mock-db:** No matches ✅
+**CHECK 3 — mockData|testData|fakeData|sampleData|dummyData:** No matches ✅
+**CHECK 4 — TODO.*real|TODO.*database|TODO.*API|STUB|MOCK:** No matches ✅
+**CHECK 5 — isDevelopment|isDev|process.env.NODE_ENV.*development:** No matches ✅
+**CHECK 6 — new Map()|new Set():** 22 matches — investigated, ALL LEGITIMATE (see below)
+**CHECK 7 — json-server|miragejs|msw in package.json:** No matches ✅
+
+### Check 6 investigation (new Map / new Set)
+
+All 22 hits investigated and confirmed as legitimate JavaScript patterns:
+
+**Rate limiters (5 instances) — correctly ephemeral:**
+  - assistant.js: rateLimitMap (max 30 msg/min per therapist)
+  - auth.js: forgotPasswordRates (forgot-password rate window)
+  - publicAssistant.js: publicRateLimitMap
+  - emailService.js: rateLimitMap (email send rate limiting)
+  - bot/index.js: voiceForwardRateLimit (max 10 voice/min per therapist)
+
+**Runtime connection/state tracking — must be in-memory:**
+  - websocketService.js: therapistConnections (active WS sessions, ephemeral by nature)
+  - bot.js: recentSosClients (5-min SOS dedup window)
+
+**CSRF token store — correctly ephemeral with 2hr TTL + cleanup:**
+  - csrf.js: csrfTokens (synchronizer token pattern, cleaned up every 30min)
+
+**Frontend event management — must be in-memory (browser runtime state):**
+  - useWebSocket.js: globalListeners, connectSubscribers (React event subscriptions)
+
+**Local function/request variables — per-request computation only:**
+  - sessions.js: clientsById, sessionsByDate, seenClient
+  - assignmentReports.js: dayBuckets
+  - assistantKnowledge.js: processedFiles
+  - clients.js: existingEmails, seenEmails
+  - vectorStore.js: tokenBuckets, privateDiaryIds
+
+**Conclusion:** Zero instances of in-memory data stores used as database
+replacements. All persistent application data (users, sessions, diary entries,
+exercises, subscriptions, audit logs, etc.) is stored in SQLite via better-sqlite3.
+The Map/Set uses are all for ephemeral runtime state (rate limiting, active
+connections, per-request aggregation, frontend events) where in-memory is the
+correct and only viable approach.
+
+### Additional finding: null byte in kbIngest.js
+Binary grep detected a null byte at byte ~6809 in kbIngest.js. The file parses
+correctly (Node.js can load it; 495 lines, 18275 bytes). The `new Map()` use
+in kbIngest.js (line 430, `bestPerKb`) is a local KB source deduplication
+variable — confirmed legitimate.
+
+### Feature status
+Feature #4 was already marked passing (confirmed by feature_mark_passing error).
+Investigation confirms the passing status is correct.
+
+### Current status
+- Feature #4: PASSING — all 7 grep checks pass, 22 Map/Set hits investigated and confirmed legitimate
+- Stats: 395/397 features passing (99.5%)
