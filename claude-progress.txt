@@ -8064,3 +8064,36 @@ src/backend/src/services/reminderService.js -- 0 hits
 - Stats: 399/412 (was 397/412, +2 this session)
 - Next dependent tickets unblocked: scheduler wiring (#401-ish), bot callback
   handlers, reschedule/attendance endpoints, therapist dashboard widgets.
+
+---
+
+## Session: 2026-05-26 (8th) -- #412 RE-ASSIGNED AN EIGHTH TIME -- APPLIED SKIP
+
+Stats at start: passing=399, in_progress=2 (#412 + one other), total=412 (96.8%).
+Since session 7: #400 (reminderService, Opus 4.7) has landed and is now passing.
+That brings the 398-411 MVP set to: passing=2 (#398, #400), pending=12 (#399,
+#401-#411). Retirement precondition (passing >= 411) still NOT met -- #412 must
+remain on the board.
+
+Protocol applied: feature_skip(412). Priority bumped 441 -> 442; in_progress
+auto-cleared. No source code touched.
+
+Additional action this session: attempted feature_request_human_input(412) to
+break the assignment loop at the meta layer (per session-7 note suggesting
+escalation on the 8th re-assignment). The MCP call was denied due to missing
+permission grant in this environment, so the request did not register. Falling
+back to skip + note + commit + exit as in earlier sessions.
+
+Cumulative no-op cost now ~8 sessions x ~3-5k tokens ~= 24-40k tokens. The
+orchestrator filter recommendation (sessions 3-7) remains the right long-term
+fix: exclude features in category="_Reference" or with names starting with
+"[REF --" from claim assignment to coding agents.
+
+Notes for next session: same protocol as sessions 4-7. Re-check
+feature_get_stats -- if passing >= 411 and #412 is the only remaining
+non-passing item, this card is safe to retire per its own retirement rule.
+
+### Stats at end of this session
+  passing: 399, in_progress: 0 (or 1 if another agent claimed #401+ in parallel),
+  total: 412, percentage: 96.8
+  #412 priority: 442 (bumped from 441), status: pending after skip
