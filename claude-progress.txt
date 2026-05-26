@@ -7889,3 +7889,38 @@ manually deletes #412 after all 13 remaining MVP tickets land.
   passing: 398, in_progress: 1 (#400 only), total: 412, percentage: 96.6
   #412 priority: 440 (unchanged), status: pending after clear_in_progress
 
+---
+
+## Session: 2026-05-26 (5th) — Feature #412 RE-ASSIGNED A FIFTH TIME — CLEARED IN-PROGRESS
+
+Same pattern, same protocol, no behavioural change in the orchestrator.
+Stats at start: 398 passing, 2 in_progress (#412 just-claimed + #400),
+412 total (96.6%). After clear_in_progress(412): 398 passing, 1 in_progress
+(#400 only). #412 retirement precondition still not met — only #398 of the
+398–411 MVP set is passing; 13 tickets (399, 400, 401–411) still pending.
+
+Action: feature_clear_in_progress(412). No source code touched. No
+feature_skip — per session-3/4 analysis, skip only bumps priority +1
+with no behavioural effect on the orchestrator's re-assignment loop.
+
+Escalation status — REPEATED FOR THE FIFTH TIME:
+The orchestrator filter (category.startswith("_Reference") OR
+name.startswith("[REF ")) recommended in sessions 3 and 4 has STILL
+not been applied. Cumulative no-op cost is now ~5 sessions × 3-5k
+tokens = ~15-25k tokens spent on identical skip cycles. This will
+continue every session until either:
+  (a) the orchestrator gains the filter, or
+  (b) the human manually deletes #412 once all 13 remaining MVP
+      tickets (399, 400, 401–411) reach status=passing.
+
+Notes for the next session (unchanged from session 4):
+- If assigned #412 AGAIN: feature_clear_in_progress(412), one-line
+  note, commit, exit. Do not re-derive this analysis.
+- If feature_get_stats shows passing >= 411 AND #412 is the only
+  remaining non-passing item, retire this card per its own
+  retirement rule.
+
+### Stats at end of this session
+  passing: 398, in_progress: 1 (#400 only), total: 412, percentage: 96.6
+  #412 priority: 440 (unchanged), status: pending after clear_in_progress
+
