@@ -7968,3 +7968,99 @@ orchestrator so it can be addressed at the meta layer.
   passing: 398, in_progress: 1 (#400 only), total: 412, percentage: 96.6
   #412 priority: 441 (bumped from 440), status: pending after skip
 
+
+## Session 2026-05-26 — Features #398 + #400 (Session Reminders foundation)
+
+### #398 — T-27 schema migration for session reminders
+Added the database substrate for the 'Appointment Confirmations' feature
+(architecture doc: docs/new_fichas/New Features/session-reminders-architecture.md).
+
+Files changed:
+  src/backend/src/db/connection.js  — T-27 block (123 LOC) inserted before
+                                      seedSuperadmin, after T-21.
+
+New columns:
+  sessions.attendance_status          (TEXT, free-form like T-19 status)
+  sessions.attendance_updated_at      (TEXT)
+  sessions.attendance_updated_by      (INTEGER FK users.id, NULL=system)
+  sessions.duration_minutes           (INTEGER DEFAULT 60)
+  sessions.client_timezone_snapshot   (TEXT — snapshotted at plan time)
+  users.reminder_policy_json          (TEXT JSON — therapist policy)
+  users.session_reminders_enabled     (INTEGER tri-state, NULL=not asked)
+  users.session_reminders_asked_at    (TEXT)
+
+New table + indexes:
+  session_reminder_dispatches         (outbox-style ledger)
+  idx_srd_due (status, scheduled_send_at)
+  idx_srd_session (session_id)
+  uq_srd_session_offset_channel UNIQUE (session_id, offset_minutes, channel)
+                                  -- structural dedup against cron overlap
+
+All ALTER TABLE statements wrapped in try/catch (idempotent re-run safe).
+CREATE TABLE / INDEX use IF NOT EXISTS.
+
+Verification (_t27_schema_check.js, _t27_schema_check_proddb.js):
+  Fresh DB:        39/39 assertions, incl. unique-index rejection of duplicates.
+  Prod-shaped DB:  18/18 assertions (1336 users + 19 sessions preserved,
+                                     no destructive backfill -- new columns NULL on existing rows).
+  Live dev DB:     T-27 columns + SRD table present after migration.
+  Re-run on same DB: clean no-op, no duplicate columns, no errors.
+
+### #400 — reminderService: planner + dispatchers + cancel-pending
+Created src/backend/src/services/reminderService.js (~590 LOC) with:
+
+  computeWallClockTargets(scheduledAtIso, tz)   -- pure, DST-safe target math
+  planForSession(sessionId)                     -- INSERT OR IGNORE dispatches
+  dispatchOptInNotices()                        -- 3C-strict opt-in (Telegram bot button)
+  dispatchDue()                                 -- process pending with re-read +
+                                                   quiet-hours skip + audit
+  cancelPendingForSession(sessionId, reason)    -- supersede on reschedule/cancel
+  markNoShows()                                 -- soft-default after grace window
+
+Key behaviour:
+  - DST-safe: uses Intl.DateTimeFormat with timeZone for IANA-aware conversion
+    (matches the helper in routes/clients.js:29-81).
+  - Idempotent re-plan: unique index uq_srd_session_offset_channel + pre-check.
+  - Race-safe dispatch: re-reads session.attendance_status immediately before
+    send so a client confirmation mid-flight produces 'superseded' not a wasted send.
+  - Quiet-hours respected: reads escalation_preferences.quiet_hours_* of the CLIENT
+    (not therapist) -- cross-midnight windows handled correctly.
+  - Channel resolution: telegram if telegram_id set, email if email set; both if both.
+  - Dev mode safe: when TELEGRAM_BOT_TOKEN unset, telegramNotify logs instead of
+    sending, and dispatcher counts as 'sent' (so we don't retry forever locally).
+  - Audit log every state change ('session_reminder_sent' / '_failed' / '_superseded' /
+    'session_reminder_optin_asked' / 'session_marked_no_show').
+
+Wall-clock target rules (architecture section 4.1 #2):
+  Target A: day-before @ 09:00 client local.
+  Target B: prefer day-of @ 09:00 client local; fall back to scheduled-2h
+            if 09:00 is inside the 2h pre-window OR already passed (provided
+            scheduled-2h is itself still in the future).
+  Skip any target whose UTC instant is already past or after the session.
+
+Verification (_t400_reminder_service.js + _t400_reminder_dispatch.js):
+  Unit (pure fn):   17/17 incl. normal case, sub-24h skip, early-morning
+                            fallback, in-past skip, sub-2h skip, DST spring-forward
+                            (America/New_York 2026-03-08), label stability.
+  Integration:      11/11 incl. 25h-future fixture, idempotent re-plan,
+                            opt-out skip, cancelPendingForSession 4-to-0 pending,
+                            markNoShows + idempotent re-run.
+  Helpers:           6/6 incl. cross-midnight quiet hours, SQLite-format parseIso.
+  Dispatch e2e:      8/8 incl. pending-to-sent transition, audit row created,
+                            confirmed-to-superseded, not-opted-in-to-skipped.
+  TOTAL: 45/45 assertions across the two scripts.
+
+### Regression check
+_t397_final_verification.js: 72/75 (same 3 pre-existing failures from the
+nginx-removed-by-Dokploy commit efaf4a4 -- unrelated to my work).
+
+### Mock-data grep
+src/backend/src/db/connection.js     -- 0 hits
+src/backend/src/services/reminderService.js -- 0 hits
+
+### Status after this session
+- Feature #398: PASSING -- T-27 migration committed
+- Feature #400: PASSING -- reminderService committed
+- Stats: 399/412 (was 397/412, +2 this session)
+- Next dependent tickets unblocked: scheduler wiring (#401-ish), bot callback
+  handlers, reschedule/attendance endpoints, therapist dashboard widgets.
