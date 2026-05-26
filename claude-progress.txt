@@ -8097,3 +8097,31 @@ non-passing item, this card is safe to retire per its own retirement rule.
   passing: 399, in_progress: 0 (or 1 if another agent claimed #401+ in parallel),
   total: 412, percentage: 96.8
   #412 priority: 442 (bumped from 441), status: pending after skip
+
+---
+
+## Session: 2026-05-26 (9th) -- #412 RE-ASSIGNED A NINTH TIME -- APPLIED SKIP
+
+Stats at start: passing=399, in_progress=3, total=412 (96.8%).
+Since session 8: no additional MVP-set tickets (398-411) have moved to passing.
+Currently 398 and 400 are passing; 399 and 401-411 still pending. Retirement
+precondition (passing >= 411) NOT met -- #412 must remain on the board.
+
+Protocol applied: feature_skip(412). Priority bumped 442 -> 443; in_progress
+auto-cleared by the skip. No source code touched.
+
+Cumulative no-op cost now ~9 sessions x ~3-5k tokens = ~27-45k tokens. The
+orchestrator filter recommendation (sessions 3-7) remains the right long-term
+fix: exclude features in category="_Reference" or with names starting with
+"[REF --" from claim assignment to coding agents. The feature_request_human_input
+escalation attempted in session 8 was denied by environment permissions, so
+that channel is not available from inside the coding agent.
+
+Notes for next session: same protocol. Re-check feature_get_stats first --
+if passing >= 411 and #412 is the only remaining non-passing item, this card
+is safe to retire per its own retirement rule (which requires deletion, which
+coding agents cannot perform -- so the human still needs to delete it).
+
+### Stats at end of session 9
+  passing: 399, total: 412, percentage: 96.8 (no change -- skip is metadata-only)
+  #412 priority: 443 (bumped from 442), status: pending after skip
