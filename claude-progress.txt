@@ -9243,3 +9243,32 @@ starts with "[REF" from coding-agent assignment pool.
 ### Stats at end of session 50
   passing: 399, total: 412, percentage: 96.8 (no change -- skip is metadata-only)
   #412 priority: 484 (bumped from 483), status: pending after skip
+
+
+## Session: 2026-05-26 (51st) -- #412 RE-ASSIGNED A FIFTY-FIRST TIME -- APPLIED SKIP
+
+Stats at start: passing=399, in_progress=3, total=412 (96.8%).
+Identical to end of sessions 49 and 50. Retirement precondition
+(all of 398-411 passing) verified still NOT met -- spot-checked
+feature_get_by_id for all MVP tickets:
+  #398 passing ✓, #399 pending, #400 passing ✓, #401 in_progress,
+  #402 pending, #403 pending, #404 pending, #405 pending,
+  #406 in_progress, #407 pending, #408 pending, #409 pending,
+  #410 pending, #411 pending.
+Card must stay on the board.
+
+Action: feature_claim_and_get(412) confirmed [REF -- DO NOT IMPLEMENT]
+reference card, category="_Reference", already_claimed=true,
+in_progress=true (orchestrator pre-claimed before this session).
+Called feature_clear_in_progress(412) to release the claim, then
+feature_skip(412) to bump priority per established precedent.
+Priority bumped 484 -> 485. No source code touched.
+
+Cumulative no-op cost now ~51 sessions. Orchestrator filter
+recommendation (sessions 3-50) STILL not applied. Suggested fix
+unchanged: exclude category starts with "_" OR name starts with
+"[REF" from coding-agent assignment pool.
+
+### Stats at end of session 51
+  passing: 399, total: 412, percentage: 96.8 (no change -- skip is metadata-only)
+  #412 priority: 485 (bumped from 484), status: pending after skip
