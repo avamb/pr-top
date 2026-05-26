@@ -9146,3 +9146,25 @@ unchanged: exclude category starts with "_" OR name starts with "[REF".
 ### Stats at end of session 46
   passing: 399, total: 412, percentage: 96.8 (no change -- skip is metadata-only)
   #412 priority: 480 (bumped from 479), status: pending after skip
+
+
+## Session: 2026-05-26 (47th) -- #412 RE-ASSIGNED A FORTY-SEVENTH TIME -- APPLIED SKIP
+
+Stats at start: passing=399, in_progress=3, total=412 (96.8%).
+Identical to end of session 46. Retirement precondition (all of 398-411
+passing) verified still NOT met -- feature_get_by_id(411) returned
+passes=false. Card must stay on the board.
+
+Action: feature_get_by_id(412) confirmed [REF -- DO NOT IMPLEMENT]
+reference card, category="_Reference", in_progress=true (orchestrator
+re-claimed it). Called feature_skip(412), which also clears the
+in_progress flag. Priority bumped 480 -> 481. No source code touched.
+
+Cumulative no-op cost now ~47 sessions. Orchestrator filter
+recommendation (sessions 3-46) STILL not applied. Suggested fix
+unchanged: exclude category starts with "_" OR name starts with "[REF"
+from coding-agent assignment pool.
+
+### Stats at end of session 47
+  passing: 399, total: 412, percentage: 96.8 (no change -- skip is metadata-only)
+  #412 priority: 481 (bumped from 480), status: pending after skip
