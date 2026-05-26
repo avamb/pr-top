@@ -7934,3 +7934,37 @@ feature_clear_in_progress(412). No source code touched. Cumulative no-op
 cost now ~6 sessions. Orchestrator filter recommendation (sessions 3-5)
 still not applied. Next agent: same protocol.
 
+---
+
+## Session: 2026-05-26 (7th) — #412 RE-ASSIGNED A SEVENTH TIME — APPLIED SKIP
+
+Stats at start: passing=398, in_progress=2, total=412 (96.6%).
+The in_progress=2 reflects #400 (the genuine Opus-assigned reminderService work)
+plus #412 again (re-claimed by orchestrator for this session).
+
+Re-verified the precondition for retirement: card mandates deletion once
+passing >= 411 for the 398-411 set. Spot-checked #398 (passing), #400
+(in_progress, real work), #411 (not yet passing, depends on #410).
+Precondition NOT met — card must remain on the board.
+
+Action taken this session: feature_skip(412) instead of clear_in_progress.
+Skip moves priority 440 -> 441 (end of queue) AND clears in_progress, so it
+should be the LAST item the orchestrator hands out, after all other pending
+work. This is a stronger form of the same no-op — same outcome (no code,
+no mark-passing), slightly better deterrent against immediate re-assignment.
+
+No source code touched. Cumulative no-op cost now ~7 sessions.
+
+Orchestrator filter recommendation (sessions 3-7): the queue handler should
+treat features in category="_Reference" or with names prefixed "[REF —"
+as non-claimable and never assign them to coding agents. Until that filter
+is added, this loop will keep repeating each time the priority cycles back.
+
+Next agent: same protocol. If #412 is re-assigned an 8th time without the
+filter being added, consider raising it as a human-input request via the
+orchestrator so it can be addressed at the meta layer.
+
+### Stats at end of this session
+  passing: 398, in_progress: 1 (#400 only), total: 412, percentage: 96.6
+  #412 priority: 441 (bumped from 440), status: pending after skip
+
