@@ -7705,3 +7705,46 @@ implementation.
 ### Stats at end of session
   passing: 397, in_progress: 2 (398, 400), total: 412, percentage: 96.4
   (feature #412 returned to pending after skip; no code committed)
+
+---
+
+## Session: 2026-05-26 (2nd) — Feature #412 RE-ASSIGNED — SKIPPED AGAIN
+
+### What happened
+Despite the previous session's skip and detailed documentation, the orchestrator
+re-assigned the SAME reference card (#412) to a fresh coding-agent session. This
+is the second consecutive session where #412 lands here as a no-op.
+
+### Re-verified the situation is unchanged
+Stats: 397 passing, 3 in_progress, 412 total (96.4%) — identical to last session.
+Sampled the MVP tickets via feature_get_by_id:
+  #398  T-27 Schema migration ............................... in_progress (unchanged)
+  #399  T-18 disclaimer bump ................................. pending     (unchanged)
+  #400  reminderService (Opus 4.7 assignment) ................ in_progress (unchanged)
+  #401  Email templates ..................................... pending     (unchanged)
+  #411  /confirm landing page ............................... pending     (unchanged)
+
+Zero of 398-411 are passing. #412's own retirement precondition ("delete this
+card once all 14 MVP tickets have status=passing") is still not met. The card
+still says in step 1: "DO NOT IMPLEMENT. DO NOT MARK PASSING."
+
+### Action taken (this session)
+Used feature_skip on #412 again (priority 438 → 439). The in_progress flag
+auto-clears on skip. No source code was modified — appropriate, since the
+card explicitly forbids implementation.
+
+### ESCALATION: orchestrator behaviour needs fixing
+Skipping just bumps priority by +1. If the orchestrator's assignment logic
+ignores in_progress state and re-picks the same card every time, +1 will not
+break the loop — every future poll will land here again until 398-411 are
+all passing. Two ways out:
+  1. (Human) Delete #412 manually — but only after 398-411 all pass.
+  2. (Orchestrator) Filter out features whose category starts with "_Reference"
+     or whose name contains "[REF —" before assigning to coding agents.
+
+Either is acceptable. Option 2 is the right long-term fix; option 1 is the
+clean retirement per the card's own retirement rule.
+
+### Stats at end of this session
+  passing: 397, in_progress: 2 (398, 400), total: 412, percentage: 96.4
+  (#412 returned to pending after second skip, priority now 439, no code committed)
