@@ -8252,3 +8252,33 @@ the human, since coding agents cannot delete features).
 ### Stats at end of session 14
   passing: 399, total: 412, percentage: 96.8 (no change -- skip is metadata-only)
   #412 priority: 448 (bumped from 447), status: pending after skip
+
+
+## Session: 2026-05-26 (15th) -- #412 RE-ASSIGNED A FIFTEENTH TIME -- APPLIED SKIP
+
+Stats at start: passing=399, in_progress=3, total=412 (96.8%). No change
+to the 398-411 MVP set since session 14. Retirement precondition
+(passing >= 411 for the 398-411 set) still NOT met -- card must stay on
+the board.
+
+Action: feature_get_by_id(412) (confirmed [REF -- DO NOT IMPLEMENT]
+reference card, category="_Reference", in_progress=true) then
+feature_skip(412). Priority bumped 448 -> 449. Skip also cleared
+in_progress. No source code touched.
+
+Cumulative no-op cost now ~15 sessions on this single non-implementable
+reference card. Orchestrator filter recommendation (sessions 3-14) STILL
+not applied: the orchestrator continues to assign category="_Reference"
+items to coding agents despite the explicit "DO NOT IMPLEMENT" / "[REF"
+markers in both name and description. Suggested orchestrator fix
+unchanged: exclude features whose category starts with "_" or whose
+name starts with "[REF" from the assignment pool.
+
+Next agent: same protocol (skip, one-line note, commit, exit). If
+feature_get_stats shows passing >= 411 AND #412 is the only remaining
+non-passing item, retire per the card's own deletion rule (escalate to
+the human, since coding agents cannot delete features).
+
+### Stats at end of session 15
+  passing: 399, total: 412, percentage: 96.8 (no change -- skip is metadata-only)
+  #412 priority: 449 (bumped from 448), status: pending after skip
