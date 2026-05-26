@@ -7646,3 +7646,62 @@ comprehensive 14-section final verification script (_t397_final_verification.js,
 
 ### FINAL STATUS: 397/397 features passing (100%)
 All features verified. Project is ready for release.
+
+---
+
+## Session: 2026-05-26 - Feature #412 (Reference card) - SKIPPED
+
+### Assignment
+The orchestrator assigned feature #412 to this session:
+  "[REF — DO NOT IMPLEMENT] Model assignment matrix for Session Reminders MVP (398–411)"
+
+### Why skipped (not implemented, not marked passing)
+This card is explicitly a REFERENCE document, not a work item. Its own description
+and verification steps repeat the rule four times in bold:
+  - "REFERENCE CARD — NOT A WORK ITEM. Do NOT implement, do NOT mark passing."
+  - Step 1: "DO NOT IMPLEMENT. DO NOT MARK PASSING."
+  - Last step: "Delete this reference card once all 14 MVP tickets have status=passing."
+
+Its sole purpose is to record which Claude model (Opus 4.7 vs Sonnet) should be
+used to implement each ticket in the Session Reminders MVP (IDs 398–411). The
+card is a token-budgeting aid for the orchestrator, not code to be written.
+
+### Retirement precondition is NOT met
+Per its own retirement rule, this card can only be deleted "once all 14 MVP
+tickets have status=passing." Verified each of 398–411 via feature_get_by_id:
+  #398  T-27 Schema migration ............................... in_progress, NOT passing
+  #399  T-18 disclaimer bump ................................. pending,    NOT passing
+  #400  reminderService (Opus 4.7 assignment) ................ in_progress, NOT passing
+  #401  Email templates ..................................... pending,    NOT passing
+  #402  API /reminder-policy ................................ pending,    NOT passing
+  #403  Settings UI ......................................... pending,    NOT passing
+  #404  Bot routes .......................................... pending,    NOT passing
+  #405  Bot keyboards + handlers ............................ pending,    NOT passing
+  #406  Scheduler cron jobs ................................. pending,    NOT passing
+  #407  /attendance + /reschedule API ....................... pending,    NOT passing
+  #408  Dashboard widget + AttendanceTimeline ............... pending,    NOT passing
+  #409  Confirm tier wiring ................................. pending,    NOT passing
+  #410  Register accepts intended_plan=confirm .............. pending,    NOT passing
+  #411  /confirm landing page ............................... pending,    NOT passing
+
+Zero of the 14 are passing → the retirement precondition is not satisfied →
+this card cannot be retired in this session even by a human.
+
+### Action taken
+Used feature_skip on #412 (priority 437 → 438). This also cleared the
+in_progress flag so the orchestrator stops re-assigning this card on every
+poll. No code was modified — appropriate, since the card explicitly forbids
+implementation.
+
+### Recommendation to orchestrator / human
+- Stop auto-assigning #412 to coding agents. It will keep landing here as a
+  no-op until 398–411 are all passing.
+- Once 398–411 are all marked passing, a human (with feature-delete privilege
+  that coding agents lack) should delete #412 per its own retirement rule.
+- Until then, the more productive next assignments are the actual MVP tickets
+  (#399, #401, #402 are unblocked-by-deps and pending; #398 and #400 are
+  already in-progress in other sessions).
+
+### Stats at end of session
+  passing: 397, in_progress: 2 (398, 400), total: 412, percentage: 96.4
+  (feature #412 returned to pending after skip; no code committed)
