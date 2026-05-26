@@ -1825,6 +1825,129 @@ function applySchema(db) {
   )`);
   db.run('CREATE INDEX IF NOT EXISTS idx_assignment_report_attachments_report ON assignment_report_attachments(report_id, created_at ASC)');
 
+  // T-27: Session reminders / "Appointment Confirmations" feature foundation.
+  // ---------------------------------------------------------------------------
+  // Adds the schema substrate for a before-session reminder & attendance flow
+  // ("Confirm meeting" / "Подтверждение встречи"). All columns and the new
+  // session_reminder_dispatches table are added in this single block.
+  // Follows the existing T-XX idempotent ALTER TABLE pattern (try/catch +
+  // ADD COLUMN), so a re-run on an already-migrated DB is a no-op.
+  //
+  // Architecture doc: docs/new_fichas/New Features/session-reminders-architecture.md §5.
+  // All other session-reminder tickets (#399..#412+) depend on this migration.
+  //
+  // sessions:
+  //   - attendance_status: free-form text; allowed values used by application code:
+  //       null (default), 'confirmed', 'reschedule_requested', 'cancelled_by_client',
+  //       'cancelled_by_therapist', 'no_show', 'attended'.
+  //       No CHECK constraint (matches T-19 pattern — status fields are free-form
+  //       to allow future state additions without a destructive migration).
+  //   - attendance_updated_at: ISO TEXT, set whenever attendance_status changes.
+  //   - attendance_updated_by: FK users(id); 0 / NULL = system-driven (e.g. auto
+  //     no-show sweep, supersede on reschedule). client_id when client tapped a bot
+  //     button. therapist_id when therapist marked attended/no_show in dashboard.
+  //   - duration_minutes: defaults to 60; used by reminder offset planning and
+  //     no-show sweep grace window (scheduled_at + duration + 30min).
+  //   - client_timezone_snapshot: snapshot of users.timezone at planning time so
+  //     a later tz change by the client does not retroactively move pending
+  //     reminders. NULL means "not yet planned" — planner fills it in on first run.
+  //
+  // users (therapist policy):
+  //   - reminder_policy_json: JSON blob — matches existing escalation_preferences
+  //     pattern; avoids 10+ new columns. Shape: {enabled, tone, allow_client_reschedule,
+  //     allow_client_release, reschedule_lead_hours, release_lead_hours, custom_templates}.
+  //     NULL = use system defaults.
+  //
+  // users (client tri-state — SEPARATE from existing reminders_enabled which is
+  //   for diary reminders, per architecture decision 3C-strict):
+  //   - session_reminders_enabled: NULL = not asked yet (one-shot opt-in notice will
+  //     be sent); 0 = client declined; 1 = client opted in.
+  //   - session_reminders_asked_at: ISO TEXT timestamp of when the opt-in notice
+  //     was first dispatched. NULL = never asked. Used to throttle re-asks and
+  //     surface "still waiting" state in the therapist dashboard.
+  //
+  // session_reminder_dispatches: new outbox-style table for planned + sent reminders.
+  //   - Unique index (session_id, offset_minutes, channel) prevents duplicate
+  //     dispatches under cron overlap or process restart.
+  //   - status: 'pending' | 'sent' | 'failed' | 'skipped' | 'superseded'.
+  //   - message_ref: stores Telegram message_id (or email send-id) so the dispatcher
+  //     can later edit the original message (replace buttons with a confirmation
+  //     footer when the client clicks).
+  //   - retry_count: incremented by the retry sweep (max 2 retries per dispatch).
+  //   - ON DELETE CASCADE on session_id so deleting a session cleans up its
+  //     planned reminders.
+  try {
+    db.run('ALTER TABLE sessions ADD COLUMN attendance_status TEXT');
+    logger.info('T-27: added attendance_status column to sessions');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE sessions ADD COLUMN attendance_updated_at TEXT');
+    logger.info('T-27: added attendance_updated_at column to sessions');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE sessions ADD COLUMN attendance_updated_by INTEGER REFERENCES users(id)');
+    logger.info('T-27: added attendance_updated_by column to sessions');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE sessions ADD COLUMN duration_minutes INTEGER DEFAULT 60');
+    logger.info('T-27: added duration_minutes column to sessions');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE sessions ADD COLUMN client_timezone_snapshot TEXT');
+    logger.info('T-27: added client_timezone_snapshot column to sessions');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE users ADD COLUMN reminder_policy_json TEXT');
+    logger.info('T-27: added reminder_policy_json column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE users ADD COLUMN session_reminders_enabled INTEGER');
+    logger.info('T-27: added session_reminders_enabled column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE users ADD COLUMN session_reminders_asked_at TEXT');
+    logger.info('T-27: added session_reminders_asked_at column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  // session_reminder_dispatches: outbox/ledger for planned and sent session
+  // reminders. CREATE TABLE IF NOT EXISTS is idempotent by definition; the
+  // unique index is the structural guarantee against duplicate dispatches.
+  db.run(`CREATE TABLE IF NOT EXISTS session_reminder_dispatches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    therapist_id INTEGER NOT NULL REFERENCES users(id),
+    client_id INTEGER NOT NULL REFERENCES users(id),
+    offset_minutes INTEGER NOT NULL,
+    scheduled_send_at TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    sent_at TEXT,
+    error TEXT,
+    message_ref TEXT,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_srd_due ON session_reminder_dispatches(status, scheduled_send_at)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_srd_session ON session_reminder_dispatches(session_id)');
+  db.run('CREATE UNIQUE INDEX IF NOT EXISTS uq_srd_session_offset_channel ON session_reminder_dispatches(session_id, offset_minutes, channel)');
+  logger.info('T-27: session_reminder_dispatches table + 3 indexes ensured');
+
   // Seed default superadmin account if not exists
   seedSuperadmin(db);
 
