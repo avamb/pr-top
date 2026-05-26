@@ -7748,3 +7748,86 @@ clean retirement per the card's own retirement rule.
 ### Stats at end of this session
   passing: 397, in_progress: 2 (398, 400), total: 412, percentage: 96.4
   (#412 returned to pending after second skip, priority now 439, no code committed)
+
+---
+
+## Session: 2026-05-26 (3rd) — Feature #412 RE-ASSIGNED A THIRD TIME — SKIPPED
+
+### What happened
+The orchestrator has now re-assigned reference card #412 for the THIRD consecutive
+session. The two previous sessions both skipped it with extensive documentation
+and an explicit escalation request to filter "_Reference" / "[REF —" features
+out of coding-agent assignment. Neither change appears to have been applied to
+the orchestrator yet.
+
+### Situation is identical to the previous two sessions
+Stats before skip: 397 passing, 3 in_progress (398, 400, 412), total 412 (96.4%).
+After skip: 397 passing, 2 in_progress (398, 400) — identical to end of 2nd
+session.
+
+Sampled all 14 MVP tickets (398–411) via feature_get_summary in a single batch:
+  #398  T-27 Schema migration ............................... in_progress  (unchanged)
+  #399  T-18 disclaimer bump ................................. pending      (unchanged)
+  #400  reminderService (Opus 4.7) .......................... in_progress  (unchanged)
+  #401  Email templates ..................................... pending      (unchanged)
+  #402  API /reminder-policy ................................ pending      (unchanged)
+  #403  Settings UI ......................................... pending      (unchanged)
+  #404  Bot routes .......................................... pending      (unchanged)
+  #405  Bot keyboards + handlers ............................ pending      (unchanged)
+  #406  Scheduler cron jobs ................................. pending      (unchanged)
+  #407  /attendance + /reschedule API ....................... pending      (unchanged)
+  #408  Dashboard widget + AttendanceTimeline ............... pending      (unchanged)
+  #409  Confirm tier wiring ................................. pending      (unchanged)
+  #410  Register accepts intended_plan=confirm .............. pending      (unchanged)
+  #411  /confirm landing page ............................... pending      (unchanged)
+
+Zero of 398–411 are passing — exactly the same as both previous sessions.
+The retirement precondition stated on the card itself is still not met.
+
+### Action taken (this session)
+Called feature_skip(412). Priority bumped 439 → 440. in_progress flag auto-
+cleared. No source code touched. No git commit (no working-tree changes).
+
+The skip+1 mechanism is not breaking the orchestrator loop — confirmed.
+
+### ESCALATION (now repeated 3x)
+The orchestrator continues to assign #412 to every fresh coding-agent session.
+This wastes a non-trivial amount of context per assignment to repeat the
+same "this is a reference card, cannot implement, cannot mark passing,
+retirement precondition not met" analysis. Required fixes, in order of
+preference:
+
+  1. (Orchestrator code) Add an assignment-time filter:
+        feature.category.startswith("_Reference")  → exclude
+        feature.name.startswith("[REF ")            → exclude
+     This is the right long-term fix. Until applied, every session burns
+     ~3-5k tokens skipping this card.
+
+  2. (Human one-shot) Delete #412 manually. Allowed by the card's own
+     retirement rule only AFTER 398–411 all pass, which they do not.
+     So this is NOT recommended right now — it would violate the card's
+     own deletion precondition.
+
+  3. (Stopgap) Increase the skip priority delta from +1 to something
+     larger than total_pending (e.g. +1000) so #412 truly lands at the
+     back of the queue regardless of assignment policy.
+
+Recommendation: implement (1). Until then, this session, like the previous
+two, is a no-op.
+
+### Productive next-assignment suggestions for the orchestrator
+The MVP tickets that ARE ready to work on (deps satisfied, not in_progress):
+  - #399  T-18 disclaimer bump        (deps: 398 — but 398 is in_progress, so
+                                       actually still blocked until #398 lands;
+                                       could be progressed via Sonnet once #398
+                                       passes)
+
+All other tickets in 401–411 currently depend on either #398 or #400 (both
+in_progress), so the productive path is for the orchestrator to wait for
+those two to land, then unblock the cascade. Assigning #412 to a coding
+agent never moves the project forward.
+
+### Stats at end of this session
+  passing: 397, in_progress: 2 (398, 400), total: 412, percentage: 96.4
+  #412 priority: 440 (was 439), status: pending after skip, no code committed
+
