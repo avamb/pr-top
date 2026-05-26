@@ -7831,3 +7831,61 @@ agent never moves the project forward.
   passing: 397, in_progress: 2 (398, 400), total: 412, percentage: 96.4
   #412 priority: 440 (was 439), status: pending after skip, no code committed
 
+---
+
+## Session: 2026-05-26 (4th) — Feature #412 RE-ASSIGNED A FOURTH TIME — CLEARED IN-PROGRESS
+
+### Quick status
+Stats at start: 398 passing, 2 in_progress (412 + 1 other), total 412 (96.6%).
+Since the 3rd skip session, #398 (T-27 schema migration) landed and is now
+passing — visible in git log as commit 9ce9780. Progress is happening on the
+MVP, just not through #412.
+
+After clearing in_progress on #412:
+  passing: 398, in_progress: 1 (#400 reminderService, Opus 4.7), total 412 (96.6%)
+
+### What happened
+Orchestrator assigned reference card #412 to this coding-agent session for
+the fourth consecutive time. Card text remains "DO NOT IMPLEMENT. DO NOT MARK
+PASSING. Delete this reference card once all 14 MVP tickets have status=passing."
+13 of the 14 MVP tickets (398–411) are still not passing, so the card's own
+retirement precondition is not met. Cannot delete; must not mark passing.
+
+### Action taken (this session)
+Called feature_clear_in_progress(412) instead of feature_skip(412) this time.
+Rationale: previous three sessions already confirmed skip+1 does not break
+the orchestrator loop — the card just gets re-assigned at priority N+1 next
+poll. Skipping again would only bump priority 440 → 441 with no behavioural
+change. Clearing in_progress achieves the same end state (pending, priority
+440) without burning the priority counter further.
+
+No source code touched. No git commit beyond this progress-notes update.
+
+### Escalation status — REPEATED FOR THE FOURTH TIME
+The orchestrator filter (escalation item #1 in previous sessions) has still
+not been applied. Reproducing the recommendation verbatim:
+
+  (Orchestrator code) Add an assignment-time filter:
+      feature.category.startswith("_Reference")  → exclude
+      feature.name.startswith("[REF ")            → exclude
+  This is the right long-term fix. Until applied, every session burns
+  ~3-5k tokens skipping this card.
+
+Cost incurred so far: 4 sessions × ~3-5k tokens each = ~12-20k tokens
+spent on identical no-op skip cycles. This will continue every session
+until either (a) the orchestrator gains the filter, or (b) the human
+manually deletes #412 after all 13 remaining MVP tickets land.
+
+### Notes for the next session
+- If you (the next coding agent) are assigned #412 AGAIN: just call
+  feature_clear_in_progress(412), append a one-line note to this file,
+  commit, and exit. Do not re-derive this analysis.
+- If #398 AND #400 are both passing by then, you may also delete #412
+  per its own retirement rule — but only if ALL of 398–411 are passing.
+  Check feature_get_stats; if passing >= 411 and #412 is the only
+  remaining non-passing item, this card is safe to retire.
+
+### Stats at end of this session
+  passing: 398, in_progress: 1 (#400 only), total: 412, percentage: 96.6
+  #412 priority: 440 (unchanged), status: pending after clear_in_progress
+
