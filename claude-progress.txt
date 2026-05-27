@@ -12450,3 +12450,67 @@ STANDING RECOMMENDATION (now ignored for 142 consecutive sessions):
 The orchestrator should filter out features where category starts
 with "_" OR name starts with "[REF" before assigning to coding
 agents. A single WHERE clause would eliminate this churn forever.
+
+================================================================
+Session 146 (2026-05-27) - Feature #412 skipped (AGAIN)
+================================================================
+
+Assigned: #412 "[REF — DO NOT IMPLEMENT] Model assignment matrix
+for Session Reminders MVP (398–411)"
+
+146th consecutive session with this REF card assigned. Card text
+unchanged and explicit:
+  "REFERENCE CARD — NOT A WORK ITEM. Do NOT implement, do NOT
+   mark passing."
+  "DELETE this card once the MVP (398–411) is fully shipped."
+
+Step 1 of the feature literally reads: "DO NOT IMPLEMENT. DO NOT MARK PASSING."
+
+Claimed via feature_claim_and_get (already_claimed=true, idempotent).
+Aggregate stats: passing=401, total=412, 97.3% (unchanged from
+session 145). in_progress was 3 at session start.
+Self-delete precondition (all 14 of 398-411 passing) is still NOT
+met; 11 features remain non-passing (412 - 401 = 11).
+
+Self-delete precondition still not met. Skip remains correct action.
+
+Action taken: feature_skip(412). Priority 580 -> 581. In-progress
+flag cleared by skip. No code, no servers, no browser tests, no
+commits to src/.
+
+Stats at end of session 146:
+  passing: 401, total: 412, percentage: 97.3 (unchanged from 145)
+  in_progress: cleared (was set by claim, reset by skip)
+  #412 priority: 581 (bumped from 580), status: pending
+
+STANDING RECOMMENDATION (now ignored for 143 consecutive sessions):
+The orchestrator should filter out features where category starts
+with "_" OR name starts with "[REF" before assigning to coding
+agents. A single WHERE clause would eliminate this churn forever.
+
+
+## Session: 2026-05-27 -- #401 + #406 verification (post-c59a731)
+
+Assigned features #401 (email templates) and #406 (scheduler cron jobs) in batch.
+During initial implementation, prepared full diff: utils/signedLinks.js, services/
+emailService.js additions, routes/publicAttendance.js, services/scheduler.js cron
+wiring, plus _t401_email_smoke.js with 214 assertions covering token round-trip,
+template rendering across 4 locales x 3 tones, rate-limit + console fallback,
+and publicAttendance handler integration tests for all flows (confirm, release,
+reschedule, optin_yes, optin_no) with idempotency + tamper rejection.
+
+When attempting to git-commit, discovered the working tree was already clean --
+stats had jumped from 399 to 401 passing and commit c59a731 by another agent
+implemented BOTH features with the same shape but slightly different LOC counts
+(publicAttendance 400 vs my ~330; signedLinks 219 vs my ~190; emailService +258).
+
+Re-ran _t401_email_smoke.js against the already-committed implementation: 214/214
+assertions still pass. Both #401 and #406 confirmed passing in the feature DB.
+
+_t401_email_smoke.js is gitignored (matches the .tmp_ pattern), so it lives only
+on this worktree and serves as a regression harness for the next agent who works
+on #404/#405/etc. that touch the same templates or endpoint.
+
+### Stats at end of this session
+  passing: 401, in_progress: 2 (others), total: 412, percentage: 97.3
+  No new commits authored this session (work already landed in c59a731).
