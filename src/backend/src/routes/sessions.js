@@ -15,6 +15,14 @@ const { checkSessionLimit } = require('../utils/planLimits');
 const { logger } = require('../utils/logger');
 const { verifyClientConsent } = require('../utils/consentCheck');
 const assignmentsService = require('../services/assignments');
+const reminderService = require('../services/reminderService');
+
+let telegramNotify;
+try {
+  telegramNotify = require('../utils/telegramNotify');
+} catch (e) {
+  telegramNotify = null;
+}
 
 // Configure multer for audio file uploads
 // Files are stored in a non-public directory with opaque (random) filenames
@@ -1439,6 +1447,222 @@ router.post('/:id/assignments', authenticate, requireRole('therapist', 'superadm
     }
     logger.error('Create session assignment error: ' + error.message);
     res.status(500).json({ error: 'Failed to create session assignment' });
+  }
+});
+
+// POST /api/sessions/:id/attendance — therapist marks attendance status
+// Allowed status values: attended | no_show | cancelled_by_therapist | cancelled_by_client
+// Viewer-role users are blocked by requireRole (not in allowed list → 403).
+router.post('/:id/attendance', authenticate, requireRole('therapist', 'superadmin'), async (req, res) => {
+  try {
+    const db = getDatabase();
+    const sessionId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(sessionId) || sessionId <= 0) {
+      return res.status(400).json({ error: 'Invalid session id' });
+    }
+
+    const ALLOWED_STATUSES = ['attended', 'no_show', 'cancelled_by_therapist', 'cancelled_by_client'];
+    const status = req.body && typeof req.body.status === 'string' ? req.body.status.trim() : null;
+    if (!status || !ALLOWED_STATUSES.includes(status)) {
+      return res.status(400).json({
+        error: `status is required and must be one of: ${ALLOWED_STATUSES.join(', ')}`
+      });
+    }
+    const reason = req.body && typeof req.body.reason === 'string' ? req.body.reason.trim().slice(0, 500) : null;
+
+    // Fetch session
+    const sessRes = db.exec(
+      'SELECT id, therapist_id, client_id, attendance_status FROM sessions WHERE id = ?',
+      [sessionId]
+    );
+    if (!sessRes.length || !sessRes[0].values.length) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    const [, therapistId, clientId, prevStatus] = sessRes[0].values[0];
+
+    // Ownership check (superadmin bypasses)
+    if (req.user.role !== 'superadmin' && therapistId !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Consent check
+    if (req.user.role !== 'superadmin' && clientId) {
+      const consentCheck = verifyClientConsent(req.user.id, clientId, 'session_attendance_update');
+      if (!consentCheck.allowed) {
+        return res.status(consentCheck.status).json({ error: consentCheck.error });
+      }
+    }
+
+    // Update attendance fields
+    db.run(
+      `UPDATE sessions
+          SET attendance_status      = ?,
+              attendance_updated_at  = datetime('now'),
+              attendance_updated_by  = ?,
+              updated_at             = datetime('now')
+        WHERE id = ?`,
+      [status, req.user.id, sessionId]
+    );
+
+    // On cancellation → supersede pending reminders
+    if (status === 'cancelled_by_therapist' || status === 'cancelled_by_client') {
+      reminderService.cancelPendingForSession(sessionId, status);
+    }
+
+    // Audit log with before/after state
+    db.run(
+      `INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at)
+       VALUES (?, 'session_attendance_update', 'session', ?, ?, datetime('now'))`,
+      [req.user.id, sessionId, JSON.stringify({
+        prev_status: prevStatus || null,
+        new_status: status,
+        reason: reason || null
+      })]
+    );
+    saveDatabaseAfterWrite();
+
+    logger.info(`Therapist ${req.user.id} set attendance_status=${status} on session ${sessionId}`);
+    res.json({ success: true, session_id: sessionId, attendance_status: status });
+  } catch (error) {
+    logger.error('Session attendance update error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update attendance status' });
+  }
+});
+
+// POST /api/sessions/:id/reschedule — therapist moves a session to a new time
+// Body: { new_scheduled_at: ISO string (future), notify_client?: boolean (default true) }
+// Viewer-role users are blocked by requireRole (not in allowed list → 403).
+router.post('/:id/reschedule', authenticate, requireRole('therapist', 'superadmin'), async (req, res) => {
+  try {
+    const db = getDatabase();
+    const sessionId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(sessionId) || sessionId <= 0) {
+      return res.status(400).json({ error: 'Invalid session id' });
+    }
+
+    // Validate new_scheduled_at
+    const rawNewAt = req.body && typeof req.body.new_scheduled_at === 'string'
+      ? req.body.new_scheduled_at.trim()
+      : null;
+    if (!rawNewAt) {
+      return res.status(400).json({ error: 'new_scheduled_at is required' });
+    }
+    const newScheduledAtDate = new Date(rawNewAt);
+    if (isNaN(newScheduledAtDate.getTime())) {
+      return res.status(400).json({ error: 'new_scheduled_at must be a valid ISO 8601 timestamp' });
+    }
+    if (newScheduledAtDate.getTime() <= Date.now()) {
+      return res.status(400).json({ error: 'new_scheduled_at must be a future timestamp' });
+    }
+    // Normalise to SQLite-friendly UTC string
+    const newScheduledAtSql = newScheduledAtDate.toISOString().replace('T', ' ').substring(0, 19);
+
+    // notify_client defaults to true
+    const notifyClient = req.body && req.body.notify_client !== undefined
+      ? !!req.body.notify_client
+      : true;
+
+    // Fetch session
+    const sessRes = db.exec(
+      'SELECT id, therapist_id, client_id, scheduled_at FROM sessions WHERE id = ?',
+      [sessionId]
+    );
+    if (!sessRes.length || !sessRes[0].values.length) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    const [, therapistId, clientId, prevScheduledAt] = sessRes[0].values[0];
+
+    // Ownership check (superadmin bypasses)
+    if (req.user.role !== 'superadmin' && therapistId !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Consent check
+    if (req.user.role !== 'superadmin' && clientId) {
+      const consentCheck = verifyClientConsent(req.user.id, clientId, 'session_reschedule');
+      if (!consentCheck.allowed) {
+        return res.status(consentCheck.status).json({ error: consentCheck.error });
+      }
+    }
+
+    // 1. Supersede pending reminder dispatches for the old slot
+    reminderService.cancelPendingForSession(sessionId, 'rescheduled');
+
+    // 2. Update sessions: new time, clear tz snapshot (force re-snapshot) + reset attendance cycle
+    db.run(
+      `UPDATE sessions
+          SET scheduled_at              = ?,
+              client_timezone_snapshot  = NULL,
+              attendance_status         = NULL,
+              attendance_updated_at     = NULL,
+              attendance_updated_by     = NULL,
+              updated_at                = datetime('now')
+        WHERE id = ?`,
+      [newScheduledAtSql, sessionId]
+    );
+
+    // 3. Re-plan reminder dispatches for the new slot
+    reminderService.planForSession(sessionId).catch(err => {
+      logger.warn(`[sessions] planForSession(${sessionId}) after reschedule failed: ${err.message}`);
+    });
+
+    // 4. Optionally notify the client via Telegram
+    let notifySent = false;
+    if (notifyClient && clientId) {
+      try {
+        const clientRes = db.exec(
+          'SELECT telegram_id, language FROM users WHERE id = ?',
+          [clientId]
+        );
+        if (clientRes.length && clientRes[0].values.length) {
+          const [clientTelegramId, clientLang] = clientRes[0].values[0];
+          if (clientTelegramId && telegramNotify) {
+            const lang = ['en', 'ru', 'es', 'uk'].includes(clientLang) ? clientLang : 'en';
+            // Format the new time in a human-readable UTC string
+            const newAtFormatted = newScheduledAtDate.toUTCString().replace(' GMT', ' UTC');
+            const text = (
+              lang === 'ru'
+                ? `📅 Ваш терапевт перенёс сеанс.\n\n*Новое время:* ${newAtFormatted}`
+                : lang === 'es'
+                ? `📅 Tu terapeuta reprogramó la sesión.\n\n*Nueva hora:* ${newAtFormatted}`
+                : lang === 'uk'
+                ? `📅 Ваш терапевт переніс сеанс.\n\n*Новий час:* ${newAtFormatted}`
+                : `📅 Your therapist rescheduled your session.\n\n*New time:* ${newAtFormatted}`
+            );
+            const result = await telegramNotify.sendMessage(clientTelegramId, text, {
+              parse_mode: 'Markdown'
+            });
+            notifySent = !!(result && result.sent);
+          }
+        }
+      } catch (notifyErr) {
+        logger.warn(`[sessions] reschedule notify failed for session ${sessionId}: ${notifyErr.message}`);
+      }
+    }
+
+    // Audit log with before/after state
+    db.run(
+      `INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at)
+       VALUES (?, 'session_rescheduled', 'session', ?, ?, datetime('now'))`,
+      [req.user.id, sessionId, JSON.stringify({
+        prev_scheduled_at: prevScheduledAt || null,
+        new_scheduled_at: newScheduledAtSql,
+        notify_client: notifyClient,
+        notify_sent: notifySent
+      })]
+    );
+    saveDatabaseAfterWrite();
+
+    logger.info(`Therapist ${req.user.id} rescheduled session ${sessionId} to ${newScheduledAtSql}`);
+    res.json({
+      success: true,
+      session_id: sessionId,
+      new_scheduled_at: newScheduledAtSql,
+      notify_sent: notifySent
+    });
+  } catch (error) {
+    logger.error('Session reschedule error: ' + error.message);
+    res.status(500).json({ error: 'Failed to reschedule session' });
   }
 });
 
