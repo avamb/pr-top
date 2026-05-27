@@ -9627,3 +9627,53 @@ card stops getting auto-assigned every cycle.
 ### Stats at end of session 64
   passing: 399, total: 412, percentage: 96.8 (no change -- skip is metadata-only)
   #412 priority: 498 (bumped from 497), status: pending after skip
+
+
+## Session: 2026-05-27 (65th) -- #412 RE-ASSIGNED A SIXTY-FIFTH TIME -- APPLIED SKIP
+
+Stats at start: passing=399, in_progress=3, total=412 (96.8%).
+Unchanged from end of session 64. Card #412 is still the
+[REF -- DO NOT IMPLEMENT] model-assignment matrix for the
+Session-Reminders MVP (398-411). Retirement precondition (all of
+398-411 passing) still not met. Spot-checked all 14 MVP tickets:
+  #398 T-27 Schema migration .................. PASSING
+  #399 T-18 disclaimer bump ................... pending
+  #400 reminderService ........................ PASSING
+  #401 Email templates ........................ in_progress
+  #402 API /reminder-policy ................... pending
+  #403 Settings UI ............................ pending
+  #404 Bot routes ............................. pending
+  #405 Bot keyboards .......................... pending
+  #406 Scheduler 4 cron jobs .................. in_progress
+  #407 API /attendance + /reschedule .......... pending
+  #408 Dashboard widget ....................... pending
+  #409 Subscription Confirm tier .............. pending
+  #410 Auth register intended_plan=confirm .... pending
+  #411 Standalone /confirm landing page ....... pending
+  -> 2/14 passing, 2/14 in_progress, 10/14 pending.
+Zero MVP progress since session 64. Same two in-progress
+tickets (#401, #406) remain claimed -- still no completions
+from those parallel workers since session 63 either.
+
+The card's own step 1 says: "DO NOT IMPLEMENT. DO NOT MARK
+PASSING." The card's own description says: "DELETE this card
+once the MVP (398-411) is fully shipped." Only the
+orchestrator/human can delete features, and the precondition
+is nowhere close to met (12/14 MVP tickets still not passing).
+
+Action: feature_claim_and_get(412) confirmed already_claimed=true
+(orchestrator pre-claimed before this session) and card content
+is unchanged. Called feature_skip(412) -- skip clears
+in_progress as a side effect. Priority bumped 498 -> 499. No
+source code touched. No tests run. No commits other than this
+progress note + the skip metadata update.
+
+Cumulative no-op cost now ~65 sessions. Orchestrator filter
+recommendation from sessions 3-64 STILL not applied. Suggested
+fix unchanged: exclude category starts with "_" OR name starts
+with "[REF" from coding-agent assignment pool, so the reference
+card stops getting auto-assigned every cycle.
+
+### Stats at end of session 65
+  passing: 399, total: 412, percentage: 96.8 (no change -- skip is metadata-only)
+  #412 priority: 499 (bumped from 498), status: pending after skip
