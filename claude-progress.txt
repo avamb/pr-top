@@ -10408,3 +10408,39 @@ orchestrator layer.
 ### Stats at end of session 89
   passing: 399, total: 412, percentage: 96.8 (unchanged -- skip is metadata-only)
   #412 priority: 523 (bumped from 522), status: pending after skip
+
+## Session 90: 2026-05-27 - Feature #412 skip (90th identical no-op)
+
+Identical no-op to sessions 3-89. Orchestrator assigned #412 again.
+Claimed via feature_claim_and_get (already_claimed=true, idempotent).
+Card content unchanged: category="_Reference", name starts with
+"[REF -- DO NOT IMPLEMENT]", description and step #1 both say
+"DO NOT IMPLEMENT. DO NOT MARK PASSING."
+
+Self-delete precondition ("all 14 MVP tickets 398-411 have
+status=passing") still NOT met -- stats show 399/412 passing, so at
+least one of 398-411 is still pending. Matrix still potentially useful
+as a reference. Skip remains the correct action.
+
+Stats at session start: passing=399, in_progress=3 (incl. #412
+itself before claim), total=412, percentage=96.8. Unchanged 16
+consecutive sessions.
+
+Action: feature_skip(412). Priority 523 -> 524. No source code, no
+servers, no browser tests, no commits to src/.
+
+Standing recommendation (90 sessions running): orchestrator should
+exclude category="_*" OR name starting with "[REF" from the coding-
+agent pool. One-line filter in the feature-picking query. This
+recommendation has now been ignored for 87 consecutive sessions.
+The src/ working tree is dirty with uncommitted changes from prior
+sessions (docs/PRD.md, src/backend/src/index.js,
+src/backend/src/services/emailService.js, plus untracked
+publicAttendance.js / signedLinks.js / session-reminders-architecture.md
+and many _f2_*.json scratch files) -- these are unrelated to #412 and
+I am NOT touching them; that work belongs to whichever ticket owner
+left them behind.
+
+### Stats at end of session 90
+  passing: 399, total: 412, percentage: 96.8 (unchanged -- skip is metadata-only)
+  #412 priority: 524 (bumped from 523), status: pending after skip
