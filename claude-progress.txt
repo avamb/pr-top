@@ -1,4 +1,53 @@
 ================================================================
+Session 172 (2026-05-27) - Feature #399 PASSING
+================================================================
+
+Assigned: #399 "T-18 disclaimer bump: add consent_session_reminders to onboarding"
+
+IMPLEMENTATION:
+
+1. src/bot/src/index.js:
+   - CONSENT_TEXT_VERSION bumped from 1 to 2
+   - CONSENT_POINTS extended with 'sessionReminders' (6th point).
+     Used camelCase (not snake_case) to avoid the lastIndexOf('_') parsing
+     bug in the consent_chk callback handler.
+   - CONSENT_POINTS_PRECHECKED = new Set(['sessionReminders']) — new
+     constant for opt-out pre-checking model.
+   - sendConsentPrompt: initial checked state now uses
+     CONSENT_POINTS_PRECHECKED.has(pt) so sessionReminders starts ticked.
+   - buildConsentBodyText: added consentDisclaimerSessionReminders as
+     point 6 between encryption and footer.
+   - Updated stale comment "5 checkboxes" -> "6 checkboxes" in callback handler.
+
+2. src/bot/src/i18n.js (all 4 locales: EN, RU, ES, UK):
+   - consentDisclaimerHeader: "all five" -> "all six" (localized)
+   - consentDisclaimerSessionReminders: new 6th point disclosure text
+     EN: "Reminders about your upcoming sessions may be sent to you via
+         Telegram and email. You can opt out at any time."
+   - consentDisclaimerFooter: "five boxes" -> "six boxes" (localized)
+   - consentCheckboxSessionReminders: new checkbox label per locale
+   - consentNotAllChecked: "5" -> "6" (localized)
+
+3. src/backend/src/db/connection.js:
+   - Added T-399 migration note and logger.info() call at startup
+     confirming consent_version 2 is active (no schema change needed;
+     version gate lives entirely in bot CONSENT_TEXT_VERSION constant).
+
+VERIFICATION (curl smoke tests against port 3099 test backend):
+- ST1: Backend starts, T-399 migration log appears on startup ✓
+- ST2: New client connects with consent_version=2 -> stored as 2 ✓
+- ST3: Old client with consent_version=1 -> detected (1 < 2), re-prompted ✓
+- ST4: Old client re-consents at version 2 -> consent_version updated to 2 ✓
+- No mock data patterns found in changed files ✓
+
+COMMIT: 7337030 "feat(#399): bump consent_version to 2, add sessionReminders 6th checkbox"
+
+Stats at end of session 172:
+  passing: 407, total: 411, percentage: 99.0 (UP from 406/98.8%)
+  in_progress: 0
+  #399 status: passing
+
+================================================================
 Session 169 (2026-05-27) - Feature #402 PASSING
 ================================================================
 
