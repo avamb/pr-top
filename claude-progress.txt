@@ -10699,3 +10699,60 @@ prior sessions (unrelated to #412) -- not touching those.
   passing: 399, total: 412, percentage: 96.8 (unchanged -- skip is metadata-only)
   in_progress: 2 (was 3 incl. #412; reset by skip)
   #412 priority: 531 (bumped from 530), status: pending after skip
+
+## Session 98: 2026-05-27 - Feature #412 (REF card) - SKIPPED (96th identical no-op)
+
+### Claimed: #412 [REF -- DO NOT IMPLEMENT] Model assignment matrix for Session Reminders MVP (398-411)
+
+Same reference card as the last 95 sessions. The card's own text:
+  "REFERENCE CARD -- NOT A WORK ITEM. Do NOT implement, do NOT
+   mark passing."
+  "DELETE this card once the MVP (398-411) is fully shipped."
+
+Stats at session start: passing=399, in_progress=3 (incl. #412
+itself after claim), total=412, percentage=96.8. Unchanged 24
+consecutive sessions.
+
+Spot-checked MVP ticket statuses again (no change since session 96):
+  #398 passing, #399 NOT, #400 passing, #411 NOT.
+Only 2 of 14 MVP tickets passing -- self-delete precondition
+clearly still not met. Skip remains the correct action.
+
+Action: feature_skip(412). Priority 531 -> 532. No source code,
+no servers, no browser tests, no commits to src/.
+
+Standing recommendation (97 sessions running): orchestrator should
+exclude category="_*" OR name starting with "[REF" from the coding-
+agent pool. One-line filter in the feature-picking query. This
+recommendation has now been ignored for 95 consecutive sessions.
+
+### Stats at end of session 98
+  passing: 399, total: 412, percentage: 96.8 (unchanged -- skip is metadata-only)
+  in_progress: 2 (was 3 incl. #412; reset by skip)
+  #412 priority: 532 (bumped from 531), status: pending after skip
+
+## Session 99: 2026-05-27 - Feature #412 (REF card) - SKIPPED (97th identical no-op)
+
+### Claimed: #412 [REF -- DO NOT IMPLEMENT] Model assignment matrix for Session Reminders MVP (398-411)
+
+Same reference card as the last 96 sessions. The card text is
+explicit: "REFERENCE CARD -- NOT A WORK ITEM. Do NOT implement,
+do NOT mark passing." and "DELETE this card once the MVP
+(398-411) is fully shipped."
+
+Stats at session start: passing=399, in_progress=3 (incl. #412
+itself after claim), total=412, percentage=96.8. Unchanged 25
+consecutive sessions.
+
+Action: feature_skip(412). Priority 532 -> 533. No source code,
+no servers, no browser tests, no commits to src/.
+
+Standing recommendation (98 sessions running): orchestrator should
+exclude category="_*" OR name starting with "[REF" from the coding-
+agent pool. One-line filter in the feature-picking query. This
+recommendation has now been ignored for 96 consecutive sessions.
+
+### Stats at end of session 99
+  passing: 399, total: 412, percentage: 96.8 (unchanged -- skip is metadata-only)
+  in_progress: 2 (was 3 incl. #412; reset by skip)
+  #412 priority: 533 (bumped from 532), status: pending after skip
