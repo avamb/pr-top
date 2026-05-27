@@ -11994,5 +11994,99 @@ Stats at end of session 134:
 
 STANDING RECOMMENDATION (now ignored for 131 consecutive sessions):
 The orchestrator should filter out features where category starts
+with "_" OR name starts with "[REF" before assigning to coding agents.
+A single WHERE clause would eliminate this churn forever.
+
+================================================================
+Session 118 (2026-05-27) - Features #401 and #406 BOTH PASSING
+================================================================
+
+Assigned: #401 + #406 (batch assignment, Session Reminders / Backend)
+
+=== FEATURE #401: Email templates (session_reminder + session_reminders_optin) ===
+
+Status: PASSING
+All implementation was already present from prior sessions:
+- sessionReminderOptInTemplate() -- EN/RU/ES/UK, 2 CTA buttons
+- sessionReminderTemplate() -- EN/RU/ES/UK, 3 tones (neutral/warm/brief), 3 CTA buttons
+- sendSessionReminderOptIn() and sendSessionReminder() exported from emailService.js
+- signedLinks.js: generateAttendanceToken, verifyAttendanceToken, buildAttendanceUrl
+- publicAttendance.js: GET /api/public/attendance-link?token=... with HMAC validation
+- Rate limiting (10/min/recipient) and console fallback already in place
+
+Smoke tests: template rendering all locales/tones, signed link round-trip,
+HTTP endpoint returns 400 + localised error for invalid token. All passed.
+Marked passing via feature_mark_passing(401).
+
+=== FEATURE #406: Scheduler: 4 new cron jobs + plan-agnostic trial fix ===
+
+Status: PASSING
+
+CHANGES:
+1. src/backend/src/services/scheduler.js:
+   - Added reminderService lazy-require
+   - refactored runTrialExpiration(): plan-agnostic query uses
+     WHERE (s.status='trialing' OR (s.plan='trial' AND s.status='active'))
+   - Added runPlanReminders() -- every 15 min -- planForSession for sessions
+     in [now, now+72h] where client session_reminders_enabled=1
+   - Added runDispatchOptInNotices() -- every 10 min -- dispatchOptInNotices
+   - Added runDispatchDueReminders() -- every 5 min -- dispatchDue
+   - Added runMarkNoShows() -- hourly -- markNoShows
+   - Registered all 4 in start(). Now 10 total jobs (was 6).
+
+2. src/backend/src/db/connection.js (T-28 migration):
+   - Detects if subscriptions CHECK constraint already has 'trialing'
+   - If not: rebuilds table via CREATE->INSERT SELECT->DROP->RENAME
+   - CASE WHEN plan='trial' AND status='active' THEN 'trialing' backfills rows
+   - Recreates idx_subscriptions_therapist after rename
+
+Verification:
+- "T-28: subscriptions rebuilt with trialing status + legacy rows backfilled" in logs
+- "All scheduled tasks registered (10 jobs)" in logs
+- Live DB: schema has trialing, INSERT trialing succeeds, 0 legacy rows, 98 trialing rows
+- All 4 job functions exported from scheduler module
+
+Marked passing via feature_mark_passing(406).
+
+Commit: c59a731
+"feat: implement session reminder email templates + scheduler cron jobs (#401, #406)"
+5 files changed, 1098 insertions(+), 7 deletions(-)
+
+Stats: passing=401, total=412, 97.3%
+
+================================================================
+Session 135 (2026-05-27) - Feature #412 skipped (AGAIN)
+================================================================
+
+Assigned: #412 "[REF - DO NOT IMPLEMENT] Model assignment matrix
+for Session Reminders MVP (398-411)"
+
+135th consecutive session with this REF card assigned. Card text
+unchanged and explicit:
+  "REFERENCE CARD - NOT A WORK ITEM. Do NOT implement, do NOT
+   mark passing."
+  "DELETE this card once the MVP (398-411) is fully shipped."
+
+Step 1 of the feature literally reads: "DO NOT IMPLEMENT. DO NOT MARK PASSING."
+
+Claimed via feature_claim_and_get (already_claimed=true, idempotent).
+Aggregate stats: passing=401, total=412, 97.3% (up from 97.1% in
+session 134 - one more ticket passed). Self-delete precondition
+(all 14 of 398-411 passing) is still NOT met; 11 features remain
+non-passing overall (412 - 401 = 11).
+
+Self-delete precondition still not met. Skip remains correct action.
+
+Action taken: feature_skip(412). Priority 568 -> 569. In-progress
+flag cleared by skip. No code, no servers, no browser tests, no
+commits to src/.
+
+Stats at end of session 135:
+  passing: 401, total: 412, percentage: 97.3 (up from 97.1)
+  in_progress: 0 (was 1 incl. #412; cleared by skip)
+  #412 priority: 569 (bumped from 568), status: pending
+
+STANDING RECOMMENDATION (now ignored for 132 consecutive sessions):
+The orchestrator should filter out features where category starts
 with "_" OR name starts with "[REF" before assigning to coding
 agents. A single WHERE clause would eliminate this churn forever.
