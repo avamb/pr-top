@@ -212,7 +212,18 @@ Connect clients with one link — simple and secure.
     btnHelp: '❓ Help',
     btnOpenDashboard: '🌐 Open dashboard',
     diaryHint: '📝 Write a text, send a voice or video — it will become a diary entry. Your therapist will see it before the next session.',
-    dashboardLink: '🌐 Open the web dashboard to manage clients, view diaries, and analytics.'
+    dashboardLink: '🌐 Open the web dashboard to manage clients, view diaries, and analytics.',
+    // T-405 Session reminder keyboards & callback footers
+    reminderBotConfirmBtn: '✅ Confirm',
+    reminderBotRescheduleBtn: '🔄 Reschedule',
+    reminderBotReleaseBtn: '🆓 Cancel slot',
+    reminderBotOptinOkBtn: '✅ Yes, remind me',
+    reminderBotOptinNoBtn: '🔕 No thanks',
+    reminderBotConfirmFooter: '✅ Got it! See you at the session.',
+    reminderBotRescheduleFooter: '🔄 I have let your therapist know you need to reschedule. They will message you with a new time.',
+    reminderBotReleaseFooter: '🆓 Thank you for letting us know in advance. I have informed your therapist.',
+    reminderBotOptinOkFooter: '✅ Great! You will now receive session reminders.',
+    reminderBotOptinNoFooter: '🔕 Understood. You can turn reminders back on in your profile settings.'
   },
   ru: {
     botAbout: 'PR-TOP — платформа для психотерапевтов. Контекст клиента, дневники, упражнения, SOS-кнопка. Шифрование и GDPR.',
@@ -428,7 +439,18 @@ Connect clients with one link — simple and secure.
     btnHelp: '❓ Помощь',
     btnOpenDashboard: '🌐 Открыть панель',
     diaryHint: '📝 Напишите текст, отправьте голосовое или видео — это станет записью в дневнике. Терапевт увидит её к следующей сессии.',
-    dashboardLink: '🌐 Откройте веб-панель для управления клиентами, просмотра дневников и аналитики.'
+    dashboardLink: '🌐 Откройте веб-панель для управления клиентами, просмотра дневников и аналитики.',
+    // T-405 Session reminder keyboards & callback footers
+    reminderBotConfirmBtn: '✅ Подтвердить',
+    reminderBotRescheduleBtn: '🔄 Перенести',
+    reminderBotReleaseBtn: '🆓 Освободить место',
+    reminderBotOptinOkBtn: '✅ Да, напоминайте',
+    reminderBotOptinNoBtn: '🔕 Нет, спасибо',
+    reminderBotConfirmFooter: '✅ Спасибо! До встречи завтра.',
+    reminderBotRescheduleFooter: 'Я передал вашему специалисту, что вы просите перенос. Он напишет вам с новым временем.',
+    reminderBotReleaseFooter: 'Спасибо, что предупредили заранее. Я сообщу вашему специалисту.',
+    reminderBotOptinOkFooter: '✅ Отлично! Вы будете получать напоминания о сессиях.',
+    reminderBotOptinNoFooter: '🔕 Понял. Вы можете включить напоминания позже в настройках.'
   },
   es: {
     botAbout: 'PR-TOP — plataforma para psicoterapeutas. Contexto del cliente, diarios, ejercicios, botón SOS. Cifrado y RGPD.',
@@ -644,7 +666,18 @@ Conecta clientes con un enlace — simple y seguro.
     btnHelp: '❓ Ayuda',
     btnOpenDashboard: '🌐 Abrir panel',
     diaryHint: '📝 Escribe un texto, envía una nota de voz o video — se guardará como entrada de diario. Tu terapeuta lo verá antes de la próxima sesión.',
-    dashboardLink: '🌐 Abre el panel web para gestionar clientes, ver diarios y analítica.'
+    dashboardLink: '🌐 Abre el panel web para gestionar clientes, ver diarios y analítica.',
+    // T-405 Session reminder keyboards & callback footers
+    reminderBotConfirmBtn: '✅ Confirmar',
+    reminderBotRescheduleBtn: '🔄 Reprogramar',
+    reminderBotReleaseBtn: '🆓 Liberar plaza',
+    reminderBotOptinOkBtn: '✅ Sí, recuérdamelo',
+    reminderBotOptinNoBtn: '🔕 No, gracias',
+    reminderBotConfirmFooter: '✅ ¡Entendido! Nos vemos en la sesión.',
+    reminderBotRescheduleFooter: '🔄 He comunicado a tu terapeuta que necesitas reprogramar. Te escribirá con un nuevo horario.',
+    reminderBotReleaseFooter: '🆓 Gracias por avisarnos con antelación. He informado a tu terapeuta.',
+    reminderBotOptinOkFooter: '✅ ¡Perfecto! A partir de ahora recibirás recordatorios de sesiones.',
+    reminderBotOptinNoFooter: '🔕 Entendido. Puedes activar los recordatorios más tarde en la configuración.'
   },
   uk: {
     botAbout: 'PR-TOP — платформа для психотерапевтів. Контекст клієнта, щоденники, вправи, SOS-кнопка. Шифрування та GDPR.',
@@ -861,7 +894,18 @@ Conecta clientes con un enlace — simple y seguro.
     btnHelp: '❓ Допомога',
     btnOpenDashboard: '🌐 Відкрити панель',
     diaryHint: '📝 Напишіть текст, надішліть голосове або відео — це стане записом у щоденнику. Терапевт побачить його до наступної сесії.',
-    dashboardLink: '🌐 Відкрийте веб-панель для керування клієнтами, перегляду щоденників та аналітики.'
+    dashboardLink: '🌐 Відкрийте веб-панель для керування клієнтами, перегляду щоденників та аналітики.',
+    // T-405 Session reminder keyboards & callback footers
+    reminderBotConfirmBtn: '✅ Підтвердити',
+    reminderBotRescheduleBtn: '🔄 Перенести',
+    reminderBotReleaseBtn: '🆓 Звільнити місце',
+    reminderBotOptinOkBtn: '✅ Так, нагадуйте',
+    reminderBotOptinNoBtn: '🔕 Ні, дякую',
+    reminderBotConfirmFooter: '✅ Дякую! До зустрічі на сесії.',
+    reminderBotRescheduleFooter: '🔄 Я повідомив вашого терапевта, що ви просите перенос. Він напише вам із новим часом.',
+    reminderBotReleaseFooter: '🆓 Дякую, що попередили заздалегідь. Я повідомлю вашого терапевта.',
+    reminderBotOptinOkFooter: '✅ Чудово! Тепер ви отримуватимете нагадування про сесії.',
+    reminderBotOptinNoFooter: '🔕 Зрозуміло. Ви можете увімкнути нагадування пізніше в налаштуваннях.'
   }
 };
 

@@ -69,9 +69,50 @@ function buildButtonActionMap() {
 // Pre-build the action map at module load
 const BUTTON_ACTION_MAP = buildButtonActionMap();
 
+/**
+ * Inline keyboard for a session reminder message.
+ * Sent by reminderService when dispatching a reminder to a client.
+ * Three buttons, each on its own row:
+ *   ✅ confirm_session_<sid>
+ *   🔄 reschedule_session_<sid>
+ *   🆓 release_session_<sid>
+ * @param {string|number} sessionId - The session ID
+ * @param {string} lang - Language code (en, ru, es, uk)
+ * @returns {object} inline_keyboard reply_markup
+ */
+function sessionReminderKeyboard(sessionId, lang) {
+  return {
+    inline_keyboard: [
+      [{ text: t(lang, 'reminderBotConfirmBtn'), callback_data: `confirm_session_${sessionId}` }],
+      [{ text: t(lang, 'reminderBotRescheduleBtn'), callback_data: `reschedule_session_${sessionId}` }],
+      [{ text: t(lang, 'reminderBotReleaseBtn'), callback_data: `release_session_${sessionId}` }]
+    ]
+  };
+}
+
+/**
+ * Inline keyboard for the session reminders opt-in message.
+ * Two buttons side-by-side:
+ *   ✅ optin_session_reminders_ok  |  🔕 optin_session_reminders_no
+ * @param {string} lang - Language code (en, ru, es, uk)
+ * @returns {object} inline_keyboard reply_markup
+ */
+function sessionOptInKeyboard(lang) {
+  return {
+    inline_keyboard: [
+      [
+        { text: t(lang, 'reminderBotOptinOkBtn'), callback_data: 'optin_session_reminders_ok' },
+        { text: t(lang, 'reminderBotOptinNoBtn'), callback_data: 'optin_session_reminders_no' }
+      ]
+    ]
+  };
+}
+
 module.exports = {
   getClientKeyboard,
   getTherapistKeyboard,
   getKeyboardForRole,
-  BUTTON_ACTION_MAP
+  BUTTON_ACTION_MAP,
+  sessionReminderKeyboard,
+  sessionOptInKeyboard
 };

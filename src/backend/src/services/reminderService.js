@@ -415,9 +415,12 @@ async function dispatchOptInNotices() {
       const noBtn   = lang === 'ru' ? '🔕 Не присылать'  : lang === 'es' ? '🔕 No enviar'     : lang === 'uk' ? '🔕 Не надсилати' : '🔕 Don\'t';
 
       const replyMarkup = {
+        // T-405: use optin_session_reminders_ok / optin_session_reminders_no
+        // (exact match in bot callback_query handler — no clientId suffix needed
+        //  because telegram_user_id from callbackQuery.from.id is sufficient)
         inline_keyboard: [[
-          { text: okBtn, callback_data: `optin_session_reminders_yes:${clientId}` },
-          { text: noBtn, callback_data: `optin_session_reminders_no:${clientId}` },
+          { text: okBtn, callback_data: 'optin_session_reminders_ok' },
+          { text: noBtn, callback_data: 'optin_session_reminders_no' },
         ]],
       };
 

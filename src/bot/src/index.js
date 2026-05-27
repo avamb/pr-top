@@ -1492,6 +1492,111 @@ if (!token || token === 'your-telegram-bot-token') {
       return;
     }
 
+    // T-405: Handle session reminder confirmation/reschedule/release callbacks
+    // Prefixes: confirm_session_<sid>, reschedule_session_<sid>, release_session_<sid>
+    if (data.startsWith('confirm_session_') || data.startsWith('reschedule_session_') || data.startsWith('release_session_')) {
+      const lang = await getUserLang(telegramId);
+      let action, sessionId, footerKey;
+
+      if (data.startsWith('confirm_session_')) {
+        sessionId = data.replace('confirm_session_', '');
+        action = 'confirm';
+        footerKey = 'reminderBotConfirmFooter';
+      } else if (data.startsWith('reschedule_session_')) {
+        sessionId = data.replace('reschedule_session_', '');
+        action = 'request_reschedule';
+        footerKey = 'reminderBotRescheduleFooter';
+      } else {
+        sessionId = data.replace('release_session_', '');
+        action = 'release';
+        footerKey = 'reminderBotReleaseFooter';
+      }
+
+      try {
+        await api.post('/api/bot/session-attendance', {
+          telegram_user_id: String(telegramId),
+          session_id: sessionId,
+          action
+        });
+
+        const footer = t(lang, footerKey);
+
+        // Remove inline buttons from the reminder message (best-effort)
+        try {
+          await bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
+            chat_id: chatId,
+            message_id: callbackQuery.message.message_id
+          });
+        } catch (editMarkupErr) {
+          // 400 = message not modified or can't be edited — acceptable
+        }
+
+        // Append confirmation footer to the original message
+        try {
+          const originalText = callbackQuery.message.text || '';
+          await bot.editMessageText(originalText + '\n\n' + footer, {
+            chat_id: chatId,
+            message_id: callbackQuery.message.message_id
+          });
+        } catch (editTextErr) {
+          // If message can't be edited (e.g. too old), send a new message instead
+          await bot.sendMessage(chatId, footer);
+        }
+      } catch (err) {
+        console.error(`[SessionReminder] ${action} session_id=${sessionId} failed:`, err.message);
+        const errMsg = (err.response && err.response.data && err.response.data.error) || 'Failed to process. Please try again.';
+        bot.sendMessage(chatId, '❌ ' + errMsg);
+      }
+
+      bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
+
+    // T-405: Handle session reminders opt-in / opt-out callbacks
+    if (data === 'optin_session_reminders_ok' || data === 'optin_session_reminders_no') {
+      const lang = await getUserLang(telegramId);
+      const optIn = data === 'optin_session_reminders_ok';
+      const footerKey = optIn ? 'reminderBotOptinOkFooter' : 'reminderBotOptinNoFooter';
+
+      try {
+        await api.post('/api/bot/session-reminders-optin', {
+          telegram_user_id: String(telegramId),
+          action: optIn ? 'opt_in' : 'opt_out'
+        });
+
+        const footer = t(lang, footerKey);
+
+        // Remove inline buttons (best-effort)
+        try {
+          await bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
+            chat_id: chatId,
+            message_id: callbackQuery.message.message_id
+          });
+        } catch (editMarkupErr) {
+          // acceptable
+        }
+
+        // Append confirmation footer to the original message
+        try {
+          const originalText = callbackQuery.message.text || '';
+          await bot.editMessageText(originalText + '\n\n' + footer, {
+            chat_id: chatId,
+            message_id: callbackQuery.message.message_id
+          });
+        } catch (editTextErr) {
+          // Fall back to a fresh message
+          await bot.sendMessage(chatId, footer);
+        }
+      } catch (err) {
+        console.error(`[SessionReminder] optin ${data} failed:`, err.message);
+        const errMsg = (err.response && err.response.data && err.response.data.error) || 'Failed to process. Please try again.';
+        bot.sendMessage(chatId, '❌ ' + errMsg);
+      }
+
+      bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
+
     // Handle role selection callbacks
     if (data === 'role_therapist' || data === 'role_client') {
       const role = data === 'role_therapist' ? 'therapist' : 'client';
