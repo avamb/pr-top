@@ -13678,3 +13678,72 @@ Stats at end of session 173:
   passing: 408, total: 411, percentage: 99.3 (UP from 407/99.0%)
   in_progress: 0
   #403 status: passing
+
+================================================================
+Session 174 (2026-05-27) - Feature #405 PASSING
+================================================================
+
+Assigned: #405 "Bot: session reminder keyboards + callback handlers"
+
+IMPLEMENTATION:
+
+1. src/bot/src/keyboards.js - added two inline keyboard factories:
+   - sessionReminderKeyboard(sessionId, lang): 3-button keyboard per spec §8.2
+     Row 1: [✅ confirm_session_<sid>]
+     Row 2: [🔄 reschedule_session_<sid>]
+     Row 3: [🆓 release_session_<sid>]
+     Uses i18n keys: reminderBotConfirmBtn / RescheduleBtn / ReleaseBtn
+   - sessionOptInKeyboard(lang): 2-button keyboard
+     Row 1: [✅ optin_session_reminders_ok] [🔕 optin_session_reminders_no]
+     Uses i18n keys: reminderBotOptinOkBtn / OptinNoBtn
+   - Both exported in module.exports
+
+2. src/bot/src/i18n.js - added 10 new reminderBot* keys per locale:
+   reminderBotConfirmBtn, reminderBotRescheduleBtn, reminderBotReleaseBtn,
+   reminderBotOptinOkBtn, reminderBotOptinNoBtn,
+   reminderBotConfirmFooter, reminderBotRescheduleFooter, reminderBotReleaseFooter,
+   reminderBotOptinOkFooter, reminderBotOptinNoFooter
+   Full EN/RU/ES/UK coverage (40 keys total)
+   RU footers exactly match spec: "Спасибо! До встречи завтра.",
+   "Я передал вашему специалисту, что вы просите перенос...", etc.
+
+3. src/bot/src/index.js - added two new callback_query handlers (before role_therapist):
+   a) confirm_session_* / reschedule_session_* / release_session_*:
+      - POSTs to /api/bot/session-attendance with correct action
+      - editMessageReplyMarkup({inline_keyboard:[]}) to remove buttons (best-effort)
+      - editMessageText to append footer; falls back to sendMessage on 400 error
+      - Error handler with answerCallbackQuery
+   b) optin_session_reminders_ok / optin_session_reminders_no:
+      - POSTs to /api/bot/session-reminders-optin with opt_in/opt_out
+      - Same edit-or-fallback pattern
+      - Error handler with answerCallbackQuery
+
+4. src/backend/src/services/reminderService.js - fixed optin callback_data:
+   Changed from optin_session_reminders_yes:${clientId} / optin_session_reminders_no:${clientId}
+   to optin_session_reminders_ok / optin_session_reminders_no (no clientId suffix)
+   Telegram user ID from callbackQuery.from.id is sufficient for lookup.
+   The session reminder buttons (confirm/reschedule/release) were already correct.
+
+VERIFICATION:
+  - node --check: all 3 modified bot files pass syntax check
+  - Unit tests (.test_405.js): 9 assertions pass
+    - sessionReminderKeyboard: 3 rows, correct callback_data for each action
+    - sessionOptInKeyboard: 2 buttons, correct callback_data
+    - All 10 i18n keys present in all 4 locales
+    - RU strings contain spec text ("Спасибо", "перенос", "предупредили")
+  - Integration tests (.test_405_integration.js): 8 tests pass
+    - Missing fields → 400, invalid action → 400, nonexistent user → 404
+    - No auth header → 401
+  - Happy-path tests (.test_405_happypath.js): 11 tests pass
+    - confirm → 200, ok=true, new_status=confirmed
+    - request_reschedule → 200, ok=true
+    - release → 200, ok=true
+    - opt_in → 200, new_status=opted_in
+    - opt_out → 200, new_status=opted_out
+
+COMMIT: 5affabc "feat(#405): bot session reminder keyboards + callback handlers"
+
+Stats at end of session 174:
+  passing: 409, total: 411, percentage: 99.5 (UP from 408/99.3%)
+  in_progress: 0
+  #405 status: passing
