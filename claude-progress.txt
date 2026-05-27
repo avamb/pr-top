@@ -1,3 +1,42 @@
+================================================================
+Session 159 (2026-05-27) - Feature #412 skipped (AGAIN)
+================================================================
+
+Assigned: #412 "[REF — DO NOT IMPLEMENT] Model assignment matrix
+for Session Reminders MVP (398–411)"
+
+159th consecutive session with this REF card assigned. Card text
+unchanged and explicit:
+  "REFERENCE CARD — NOT A WORK ITEM. Do NOT implement, do NOT
+   mark passing."
+  "DELETE this card once the MVP (398–411) is fully shipped."
+
+Step 1 of the feature literally reads: "DO NOT IMPLEMENT. DO NOT MARK PASSING."
+
+Claimed via feature_claim_and_get (already_claimed=true, idempotent).
+Aggregate stats: passing=403, total=412, 97.8% (unchanged from
+session 158). in_progress was 3 at session start.
+Self-delete precondition (all 14 of 398-411 passing):
+  412 - 403 = 9 non-passing features remain. Still not met.
+
+Self-delete precondition still not met. Skip remains correct action.
+
+Action taken: feature_skip(412). Priority 593 -> 594. In-progress
+flag cleared by skip. No code, no servers, no browser tests, no
+commits to src/.
+
+Stats at end of session 159:
+  passing: 403, total: 412, percentage: 97.8 (unchanged from 158)
+  in_progress: cleared (was set by claim, reset by skip)
+  #412 priority: 594 (bumped from 593), status: pending
+
+STANDING RECOMMENDATION (now ignored for 156 consecutive sessions):
+The orchestrator should filter out features where category starts
+with "_" OR name starts with "[REF" before assigning to coding
+agents. A single WHERE clause would eliminate this churn forever.
+
+================================================================
+
 ## Session: 2026-05-17 - Feature #379 (T-21 Photo attachments to reports) - PASSING
 
 ### Completed: T-21 — Photo attachments on assignment reports
@@ -13000,3 +13039,40 @@ Smoke tests:
 Stats at end of session 140:
   passing: 403, total: 412, percentage: 97.8 (UP from 401)
   Features #409 and #410 now passing
+
+================================================================
+Session 158 (2026-05-27) - Feature #412 skipped (AGAIN)
+================================================================
+
+Assigned: #412 "[REF — DO NOT IMPLEMENT] Model assignment matrix
+for Session Reminders MVP (398–411)"
+
+158th consecutive session with this REF card assigned. Card text
+unchanged and explicit:
+  "REFERENCE CARD — NOT A WORK ITEM. Do NOT implement, do NOT
+   mark passing."
+  "DELETE this card once the MVP (398–411) is fully shipped."
+
+Step 1 of the feature literally reads: "DO NOT IMPLEMENT. DO NOT MARK PASSING."
+
+Claimed via feature_claim_and_get (already_claimed=true, idempotent).
+Aggregate stats: passing=403, total=412, 97.8% (unchanged from
+session 157). in_progress was 3 at session start.
+Self-delete precondition (all 14 of 398-411 passing):
+  412 - 403 = 9 non-passing features remain. Still not met.
+
+Self-delete precondition still not met. Skip remains correct action.
+
+Action taken: feature_skip(412). Priority 592 -> 593. In-progress
+flag cleared by skip. No code, no servers, no browser tests, no
+commits to src/.
+
+Stats at end of session 158:
+  passing: 403, total: 412, percentage: 97.8 (unchanged from 157)
+  in_progress: cleared (was set by claim, reset by skip)
+  #412 priority: 593 (bumped from 592), status: pending
+
+STANDING RECOMMENDATION (now ignored for 155 consecutive sessions):
+The orchestrator should filter out features where category starts
+with "_" OR name starts with "[REF" before assigning to coding
+agents. A single WHERE clause would eliminate this churn forever.
