@@ -13461,3 +13461,99 @@ STANDING RECOMMENDATION (now ignored for 165 consecutive sessions):
 The orchestrator should filter out features where category starts
 with "_" OR name starts with "[REF" before assigning to coding
 agents. A single WHERE clause would eliminate this churn forever.
+
+================================================================
+Session 170 (2026-05-27) - Feature #404 PASSING
+================================================================
+
+Assigned: #404 "Bot routes: session-attendance + session-reminders-optin"
+
+IMPLEMENTATION:
+  Added two new POST endpoints to src/backend/src/routes/bot.js:
+
+  1. POST /api/bot/session-attendance
+     Body: { telegram_user_id, session_id, action: 'confirm'|'request_reschedule'|'release', note? }
+     - Looks up client by telegram_user_id (role=client, consent_therapist_access=1 required)
+     - Verifies session belongs to client (sessions.client_id = client.id)
+     - confirm  → attendance_status='confirmed', attendance_updated_at, attendance_updated_by=client_id, audit-log
+     - request_reschedule → attendance_status='reschedule_requested', WS emit to therapist
+     - release  → attendance_status='cancelled_by_client', cancelPendingForSession(), WS emit (priority=high)
+     - Returns { ok: true, new_status: '...' }
+
+  2. POST /api/bot/session-reminders-optin
+     Body: { telegram_user_id, action: 'opt_in'|'opt_out' }
+     - opt_in  → users.session_reminders_enabled=1, then planForSession() for ALL upcoming sessions
+     - opt_out → users.session_reminders_enabled=0
+     - Returns { ok: true, new_status: 'opted_in'|'opted_out' }
+
+  Also added: const reminderService = require('../services/reminderService') at top of bot.js
+
+VERIFICATION:
+  - Started test backend on port 3099 (since port 3001 was in use)
+  - curl smoke-tested all 5 happy-path cases: confirm, request_reschedule, release, opt_in, opt_out
+  - Verified auth check (wrong key → 401), missing fields, invalid actions all return proper errors
+  - Verified DB state: session attendance_status=cancelled_by_client, user session_reminders_enabled=0
+  - 3 audit_logs entries created for session_attendance_update actions
+  - No errors in backend log
+
+COMMIT: b731b95 "feat(#404): add POST /api/bot/session-attendance and /session-reminders-optin bot routes"
+
+Stats at end of session 170:
+  passing: 405, total: 411, percentage: 98.5
+  in_progress: cleared (mark_passing clears it)
+  #404 status: passing
+
+================================================================
+Session 171 (2026-05-27) - Feature #407 PASSING
+================================================================
+
+Assigned: #407 "API: POST /api/sessions/:id/attendance and /reschedule"
+
+IMPLEMENTATION:
+  Added two new POST endpoints to src/backend/src/routes/sessions.js:
+
+  1. POST /api/sessions/:id/attendance
+     Body: { status: 'attended'|'no_show'|'cancelled_by_therapist'|'cancelled_by_client', reason? }
+     - Validates status against allowlist (400 if invalid/missing)
+     - Verifies therapist owns session (403 for other therapists)
+     - Superadmin bypasses ownership check
+     - Consent check for non-superadmin
+     - Updates attendance_status, attendance_updated_at=now(), attendance_updated_by=req.user.id
+     - On cancelled_* → reminderService.cancelPendingForSession(sessionId, status)
+     - Audit log with prev_status/new_status/reason in details_encrypted
+     - Viewer role blocked by requireRole allowlist (403)
+
+  2. POST /api/sessions/:id/reschedule
+     Body: { new_scheduled_at: ISO string (future), notify_client?: boolean (default true) }
+     - Validates new_scheduled_at: required, valid ISO, must be in the future
+     - Verifies therapist owns session (403 for other therapists)
+     - Superadmin bypasses ownership check
+     - cancelPendingForSession(id, 'rescheduled') — supersedes old dispatches
+     - UPDATE sessions SET scheduled_at, client_timezone_snapshot=NULL (force re-snapshot),
+       attendance_status=NULL, attendance_updated_at=NULL, attendance_updated_by=NULL
+     - planForSession(id) — creates new reminder dispatches for new slot
+     - If notify_client=true (default): sends Telegram message with localised text
+       (EN/RU/ES/UK inline, same pattern as reminderService.js)
+     - Audit log with prev/new scheduled_at, notify_client, notify_sent
+
+  Also added at top of sessions.js:
+    - const reminderService = require('../services/reminderService')
+    - let telegramNotify (try/catch fallback like reminderService)
+
+VERIFICATION:
+  - Started test backend on port 3099 (src/backend/src/index.js)
+  - 14 smoke tests all passing:
+    attendance: ST1 attended, ST2 no_show, ST3 cancelled_by_therapist, ST4 cancelled_by_client
+    attendance validation: ST5 invalid status→400, ST6 missing status→400
+    attendance auth: ST7 no-auth→403 (CSRF gate), ST8 wrong therapist→403
+    reschedule: ST9 48h ahead→200, attendance_status reset to NULL confirmed
+    reschedule validation: ST10 past timestamp→400, ST11 missing field→400, ST12 invalid ISO→400
+    reschedule auth: ST13 no-auth→403 (CSRF gate), ST14 wrong therapist→403
+  - No errors in backend log
+
+COMMIT: a74e54f "feat(#407): add POST /api/sessions/:id/attendance and /reschedule"
+
+Stats at end of session 171:
+  passing: 406, total: 411, percentage: 98.8 (UP from 405/98.5%)
+  in_progress: 0
+  #407 status: passing
