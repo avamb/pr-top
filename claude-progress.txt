@@ -9967,3 +9967,41 @@ overhead and counting.
 ### Stats at end of session 75
   passing: 399, total: 412, percentage: 96.8 (unchanged -- skip is metadata-only)
   #412 priority: 509 (bumped from 508), status: pending after skip
+
+## Session: 2026-05-27 - Feature #412 SKIPPED (session 76, still a reference card)
+
+Same no-op as sessions 3-75. Orchestrator assigned #412 again. Claimed via
+feature_claim_and_get (already_claimed=true, idempotent). Card unchanged:
+  - category="_Reference"
+  - name starts with "[REF -- DO NOT IMPLEMENT]"
+  - description+step #1: "DO NOT IMPLEMENT. DO NOT MARK PASSING."
+  - passes=false, in_progress=true (pre-claimed by orchestrator)
+
+Project stats at session start: passing=399, in_progress=3, total=412,
+percentage=96.8. Unchanged from end of session 75. The card's own delete
+condition ("delete this card once 398-411 are fully shipped") is still
+not met -- MVP retirement still pending, so the reference matrix is
+still potentially useful to other agents picking up the remaining MVP
+tickets. Skipping (not "passing", not "failing") remains the correct
+action.
+
+Observed uncommitted work-in-progress from other agents in the worktree
+(docs/PRD.md, src/backend/src/index.js, src/backend/src/services/
+emailService.js modified; new files publicAttendance.js, signedLinks.js,
+session-reminders-architecture.md untracked). NOT touched by this
+session -- they belong to whichever agent is working the MVP tickets
+and committing them here would corrupt their staging area.
+
+Action: feature_skip(412) called. Priority bumped 509 -> 510. No source
+code touched, no servers started, no browser automation. Single-action
+session: skip + this note.
+
+Orchestrator filter recommendation (unchanged across ~76 sessions):
+exclude category starting with "_" OR name starting with "[REF" from
+the coding-agent assignment pool. This remains the cheapest fix with
+the highest cumulative ROI in the project -- 76 sessions of pure
+overhead and counting.
+
+### Stats at end of session 76
+  passing: 399, total: 412, percentage: 96.8 (unchanged -- skip is metadata-only)
+  #412 priority: 510 (bumped from 509), status: pending after skip
