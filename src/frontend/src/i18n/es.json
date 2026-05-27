@@ -1924,5 +1924,52 @@
         "close": "Cerrar"
       }
     }
+  },
+  "reminders": {
+    "settings": {
+      "sectionTitle": "Recordatorios de sesión",
+      "sectionDesc": "Configura recordatorios automáticos de sesión para tus clientes. Los recordatorios se envían por Telegram y email simultáneamente.",
+      "enableLabel": "Activar recordatorios de sesión",
+      "scheduleInfo": "Los recordatorios se envían a las 09:00 el día anterior y el día de la sesión (no más tarde de 2 horas antes del inicio). Telegram y email simultáneamente.",
+      "toneLabel": "Tono del mensaje",
+      "tone": {
+        "neutral": "Neutral",
+        "warm": "Cálido",
+        "brief": "Breve"
+      },
+      "toneHint": {
+        "neutral": "Equilibrado y profesional.",
+        "warm": "Amigable y alentador — ideal para TCC y enfoques humanistas.",
+        "brief": "Corto y directo — ideal para enfoques estructurados."
+      },
+      "rescheduleLeadLabel": "Permitir al cliente solicitar reprogramación hasta {{hours}}h antes de la sesión",
+      "releaseLeadLabel": "Permitir al cliente liberar su lugar hasta {{hours}}h antes de la sesión",
+      "templateOverridesLabel": "Plantillas de mensajes personalizadas (por idioma)",
+      "templateOverridesHint": "Déjalo en blanco para usar la plantilla predeterminada. Admite los marcadores {client_name}, {session_time}, {therapist_name}.",
+      "templateKey": {
+        "day_before": "Recordatorio del día anterior",
+        "day_of": "Recordatorio del día de la sesión",
+        "opt_in": "Solicitud de suscripción"
+      },
+      "templatePlaceholder": "Dejar en blanco para usar la plantilla predeterminada…",
+      "saving": "Guardando…",
+      "save": "Guardar política de recordatorios",
+      "saved": "Política de recordatorios guardada.",
+      "saveError": "No se pudo guardar la política. Por favor, inténtalo de nuevo.",
+      "pendingList": {
+        "title": "Pendientes de respuesta",
+        "desc": "Clientes que recibieron la solicitud de suscripción pero aún no han respondido.",
+        "loading": "Cargando…",
+        "fetchError": "No se pudo cargar la lista de clientes.",
+        "empty": "No hay clientes pendientes — todos al día.",
+        "awaitingBadge": "Esperando respuesta",
+        "askedAt": "Enviado el {{date}}",
+        "resendBtn": "Reenviar solicitud",
+        "resending": "Enviando…",
+        "resendSuccess": "¡En cola para reenviar!",
+        "resendError": "No se pudo reenviar. Por favor, inténtalo de nuevo.",
+        "rateLimited": "Enviado recientemente — espera 48 h antes de reenviar."
+      }
+    }
   }
 }

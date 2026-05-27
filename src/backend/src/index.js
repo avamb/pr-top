@@ -186,6 +186,14 @@ app.get('/api/health', async (req, res) => {
   });
 });
 
+// GET /api/features — public feature flag endpoint for the frontend
+// Exposes FEATURE_* env vars (boolean values only, no secrets).
+app.get('/api/features', (req, res) => {
+  res.json({
+    FEATURE_SESSION_REMINDERS: process.env.FEATURE_SESSION_REMINDERS === 'on'
+  });
+});
+
 // Mount route handlers
 app.use('/api/auth', authRoutes);
 app.use('/api/assistant', require('./routes/publicAssistant')); // Public chat (no auth, mounted before auth-gated assistant routes)

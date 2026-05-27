@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import LoadingSpinner from '../components/LoadingSpinner';
 import KnowledgeBaseSection from '../components/KnowledgeBaseSection';
+import ReminderPolicyForm from '../components/ReminderPolicyForm';
+import PendingOptInList from '../components/PendingOptInList';
 import { formatUserDateOnly } from '../utils/formatDate';
 
 const API_URL = '/api';
@@ -130,6 +132,11 @@ export default function Settings() {
   const [savingReminders, setSavingReminders] = useState(false);
   const [remindersSuccess, setRemindersSuccess] = useState(null);
 
+  // Feature flags from /api/features (FEATURE_SESSION_REMINDERS=on)
+  const [featureFlags, setFeatureFlags] = useState({});
+  // Session reminder policy (from GET /api/settings/reminder-policy)
+  const [reminderPolicy, setReminderPolicy] = useState(null);
+
   // T-26: AI source disclaimer transparency toggle. Controls whether the
   // "Generated with AI based on: <sources>" block renders next to AI-authored
   // summaries and exercises. Defaults to true (transparency-on) so the
@@ -157,6 +164,8 @@ export default function Settings() {
     fetchProfile(token);
     fetchReferralLink(token);
     fetchSummarySettings(token);
+    fetchFeatureFlags();
+    fetchReminderPolicy(token);
 
     return () => {
       if (abortControllerRef.current) {
@@ -188,6 +197,32 @@ export default function Settings() {
       }
     } catch (e) {
       // Non-fatal — leave defaults in place.
+    }
+  }
+
+  // Fetch feature flags from /api/features (public, no auth required)
+  async function fetchFeatureFlags() {
+    try {
+      const res = await fetch(`${API_URL}/features`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setFeatureFlags(data || {});
+    } catch (e) {
+      // Non-fatal
+    }
+  }
+
+  // Fetch the therapist's session reminder policy
+  async function fetchReminderPolicy(token) {
+    try {
+      const res = await fetch(`${API_URL}/settings/reminder-policy`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) return; // 403 = plan not eligible; just hide the section
+      const data = await res.json();
+      if (data?.reminder_policy) setReminderPolicy(data.reminder_policy);
+    } catch (e) {
+      // Non-fatal
     }
   }
 
@@ -852,6 +887,32 @@ export default function Settings() {
                     </button>
                   </div>
                 </form>
+              </div>
+            )}
+
+            {/* Session Reminders Policy Section
+                Gated by FEATURE_SESSION_REMINDERS=on env var.
+                Shows the ReminderPolicyForm (PUT /api/settings/reminder-policy)
+                and PendingOptInList (GET /api/clients?filter=pending_optin). */}
+            {featureFlags.FEATURE_SESSION_REMINDERS &&
+             (profile.role === 'therapist' || profile.role === 'superadmin') &&
+             reminderPolicy !== null && (
+              <div className="bg-white rounded-lg shadow-md p-8 mb-6" data-testid="session-reminders-section">
+                <h3 className="text-lg font-semibold text-stone-700 mb-1">{t('reminders.settings.sectionTitle')}</h3>
+                <p className="text-sm text-stone-500 mb-5">{t('reminders.settings.sectionDesc')}</p>
+
+                <ReminderPolicyForm
+                  initialPolicy={reminderPolicy}
+                  onSaved={setReminderPolicy}
+                />
+
+                <div className="mt-8 pt-6 border-t border-gray-200">
+                  <h4 className="text-sm font-semibold text-stone-600 uppercase tracking-wide mb-1">
+                    {t('reminders.settings.pendingList.title')}
+                  </h4>
+                  <p className="text-xs text-stone-400 mb-3">{t('reminders.settings.pendingList.desc')}</p>
+                  <PendingOptInList />
+                </div>
               </div>
             )}
 

@@ -227,7 +227,10 @@ router.post('/solo', (req, res) => {
 });
 
 // GET /api/clients - List therapist's linked clients
-// Supports: ?search=term&page=1&per_page=25&language=en
+// Supports: ?search=term&page=1&per_page=25&language=en&filter=pending_optin
+// filter=pending_optin → only clients who have been sent the opt-in prompt
+//   (session_reminders_asked_at IS NOT NULL) but haven't responded yet
+//   (session_reminders_enabled IS NULL).
 router.get('/', (req, res) => {
   try {
     const db = getDatabase();
@@ -240,6 +243,7 @@ router.get('/', (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page) || 25));
     const languageFilter = req.query.language || '';
+    const filterParam = req.query.filter || '';
 
     // Build query with optional filters (use u. prefix for aliased queries)
     let whereClause = "u.therapist_id = ? AND u.role = 'client'";
@@ -253,6 +257,11 @@ router.get('/', (req, res) => {
     if (languageFilter) {
       whereClause += " AND u.language = ?";
       params.push(languageFilter);
+    }
+
+    // filter=pending_optin: clients who received the opt-in prompt but haven't replied
+    if (filterParam === 'pending_optin') {
+      whereClause += " AND u.session_reminders_asked_at IS NOT NULL AND u.session_reminders_enabled IS NULL";
     }
 
     // Get total count
@@ -272,7 +281,7 @@ router.get('/', (req, res) => {
               )) AS last_activity,
               u.first_name, u.last_name, u.phone, u.telegram_username,
               (SELECT COUNT(*) FROM sos_events WHERE client_id = u.id AND status != 'resolved') AS active_sos_count,
-              u.mode
+              u.mode, u.session_reminders_asked_at
        FROM users u
        WHERE ${whereClause}
        ORDER BY active_sos_count DESC, last_activity DESC NULLS LAST, u.created_at DESC
@@ -294,7 +303,8 @@ router.get('/', (req, res) => {
       phone: row[10] || '',
       telegram_username: row[11] || '',
       active_sos_count: row[12] || 0,
-      mode: row[13] || 'bot_connected'
+      mode: row[13] || 'bot_connected',
+      session_reminders_asked_at: row[14] || null
     }));
 
     // Also include limit info
@@ -3467,6 +3477,75 @@ router.delete('/:id/supervision-share/:linkId', (req, res) => {
   } catch (error) {
     logger.error('Revoke supervision share error: ' + error.message);
     res.status(500).json({ error: 'Failed to revoke share link' });
+  }
+});
+
+// POST /api/clients/:id/resend-opt-in
+// Re-queues the session-reminders opt-in prompt for a client who hasn't
+// responded yet. Rate-limited to once per 48 h per client: if
+// session_reminders_asked_at is within the last 48 hours the request
+// returns 429. On success, sets session_reminders_asked_at = NULL so the
+// cron picks the client up again on its next run (same as a fresh opt-in).
+router.post('/:id/resend-opt-in', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+    const clientId = parseInt(req.params.id, 10);
+
+    if (!Number.isFinite(clientId) || clientId <= 0) {
+      return res.status(400).json({ error: 'Invalid client id' });
+    }
+
+    // Verify therapist owns this client
+    const clientResult = db.exec(
+      "SELECT id, session_reminders_asked_at, session_reminders_enabled FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
+      [clientId, therapistId]
+    );
+
+    if (!clientResult.length || !clientResult[0].values.length) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+
+    const [, askedAt, remindersEnabled] = clientResult[0].values[0];
+
+    // If client has already opted in or out, resend doesn't make sense
+    if (remindersEnabled !== null && remindersEnabled !== undefined) {
+      return res.status(400).json({
+        error: 'Client has already responded to the opt-in prompt. Use the bot or attendance flow to change their preference.'
+      });
+    }
+
+    // Rate limit: block if asked_at is within the last 48 hours
+    if (askedAt) {
+      const askedAtMs = new Date(askedAt + (askedAt.endsWith('Z') ? '' : 'Z')).getTime();
+      const fortyEightHoursAgo = Date.now() - 48 * 60 * 60 * 1000;
+      if (askedAtMs > fortyEightHoursAgo) {
+        return res.status(429).json({
+          error: 'Opt-in prompt was sent recently. Please wait 48 hours before resending.',
+          asked_at: askedAt
+        });
+      }
+    }
+
+    // Reset asked_at to NULL so the reminder cron re-sends the opt-in message
+    db.run(
+      "UPDATE users SET session_reminders_asked_at = NULL, updated_at = datetime('now') WHERE id = ?",
+      [clientId]
+    );
+    saveDatabaseAfterWrite();
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'resend_optin_prompt', 'user', ?, ?, datetime('now'))",
+      [therapistId, clientId, JSON.stringify({ prev_asked_at: askedAt || null })]
+    );
+    saveDatabaseAfterWrite();
+
+    logger.info(`Therapist ${therapistId} requested resend of opt-in prompt for client ${clientId}`);
+    res.json({ ok: true, message: 'Opt-in prompt will be resent on the next scheduler run.' });
+  } catch (error) {
+    logger.error('Resend opt-in error: ' + error.message);
+    res.status(500).json({ error: 'Failed to resend opt-in prompt' });
   }
 });
 

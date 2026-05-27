@@ -1924,5 +1924,52 @@
         "close": "Close"
       }
     }
+  },
+  "reminders": {
+    "settings": {
+      "sectionTitle": "Session Reminders",
+      "sectionDesc": "Configure automated session reminders for your clients. Reminders are sent via Telegram and email simultaneously.",
+      "enableLabel": "Enable session reminders",
+      "scheduleInfo": "Reminders are sent at 09:00 the day before and on the day of the session (no later than 2 hours before the start). Telegram and email simultaneously.",
+      "toneLabel": "Message tone",
+      "tone": {
+        "neutral": "Neutral",
+        "warm": "Warm",
+        "brief": "Brief"
+      },
+      "toneHint": {
+        "neutral": "Balanced and professional.",
+        "warm": "Friendly and encouraging — good for CBT, humanistic approaches.",
+        "brief": "Short and to-the-point — good for structured approaches."
+      },
+      "rescheduleLeadLabel": "Allow client to request reschedule up to {{hours}}h before session",
+      "releaseLeadLabel": "Allow client to release their slot up to {{hours}}h before session",
+      "templateOverridesLabel": "Custom message templates (per language)",
+      "templateOverridesHint": "Leave blank to use the built-in default. Supports {client_name}, {session_time}, {therapist_name} placeholders.",
+      "templateKey": {
+        "day_before": "Day-before reminder",
+        "day_of": "Day-of reminder",
+        "opt_in": "Opt-in prompt"
+      },
+      "templatePlaceholder": "Leave blank to use default template…",
+      "saving": "Saving…",
+      "save": "Save Reminder Policy",
+      "saved": "Reminder policy saved.",
+      "saveError": "Failed to save reminder policy. Please try again.",
+      "pendingList": {
+        "title": "Pending Opt-In",
+        "desc": "Clients who received the opt-in prompt but haven't responded yet.",
+        "loading": "Loading…",
+        "fetchError": "Could not load pending clients.",
+        "empty": "No clients awaiting a response — all up to date.",
+        "awaitingBadge": "Awaiting response",
+        "askedAt": "Asked {{date}}",
+        "resendBtn": "Resend request",
+        "resending": "Sending…",
+        "resendSuccess": "Queued for resend!",
+        "resendError": "Could not resend. Please try again.",
+        "rateLimited": "Sent recently — please wait 48 h before resending."
+      }
+    }
   }
 }
