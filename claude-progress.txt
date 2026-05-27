@@ -12922,3 +12922,81 @@ STANDING RECOMMENDATION (now ignored for 154 consecutive sessions):
 The orchestrator should filter out features where category starts
 with "_" OR name starts with "[REF" before assigning to coding
 agents. A single WHERE clause would eliminate this churn forever.
+
+================================================================
+Session 140 (2026-05-27) - Features #409 and #410 BOTH PASSING
+================================================================
+
+Assigned: #409, #410 (batch — Session Reminders / Subscription)
+
+=== FEATURE #409: Confirm tier wiring + canUseSessionReminders plan gate ===
+
+Status: PASSING
+
+CHANGES:
+1. src/backend/src/services/stripe.js:
+   - Added confirm: { amount: 900, currency: 'usd', name: 'Confirm', interval: 'month' }
+     to PLAN_PRICES
+
+2. src/backend/src/utils/planLimits.js:
+   - Added confirm: { clients: 25, sessions_per_month: 0 } to DEFAULT_LIMITS
+   - Added canUseSessionReminders(therapistId): returns true for plan in
+     {trial, confirm, basic, pro, premium} AND status in {active, trialing}
+
+3. src/backend/src/db/connection.js:
+   - Added confirm_client_limit=25, confirm_session_limit=0, confirm_price_monthly=900
+     to defaultSettings
+   - Added T-409 migration: rebuilds subscriptions table to add 'confirm' to
+     plan CHECK constraint (same pattern as T-28)
+
+4. src/backend/src/routes/subscription.js:
+   - Added 'confirm' to validPlans at lines 291 and 451
+   - Set confirm: 0.5 in planOrder
+
+5. src/backend/src/routes/admin.js:
+   - Added 'confirm' to validPlans
+
+6. src/backend/src/routes/settings.js:
+   - Added GET/PUT /api/settings/reminder-policy with canUseSessionReminders gate
+     (403 if plan access denied)
+
+7. src/backend/src/services/reminderService.js:
+   - Added canUseSessionReminders check in dispatchOptInNotices (skip candidates)
+   - Added canUseSessionReminders check in dispatchDue (skip to 'skipped' status)
+
+8. src/frontend/src/pages/Subscription.jsx:
+   - Added confirm to PLAN_DETAILS (name: 'Confirm', price: '$9/mo', clients: 25, sessions: 0)
+   - Added confirm: 0.5 to PLAN_ORDER
+
+Smoke tests:
+- ST1: confirm-plan user (admin override) -> GET /reminder-policy returns 200 ✅
+- ST2: cancelled subscription -> blocked (402 from subscription middleware) ✅
+- ST3: basic-plan user -> GET /reminder-policy returns 200 ✅
+- PT: PUT /reminder-policy updates and persists policy ✅
+- Frontend: Confirm tier card shows correctly between Trial and Basic ✅
+
+=== FEATURE #410: Auth register accepts intended_plan=confirm ===
+
+Status: PASSING
+
+CHANGES:
+1. src/backend/src/routes/auth.js:
+   - Extended POST /api/auth/register to accept intended_plan from body
+   - Allowlist: ['confirm'] — unknown/missing falls back to standard Trial
+   - When intended_plan='confirm': creates subscription plan='confirm'
+     status='trialing', trial_ends_at = now+7d, stripe_customer_id=NULL
+   - Returns next_action='await_stripe_checkout' in response
+   - Audit-logs with action='register_confirm_landing'
+   - Updates leads.source='landing_confirm' if email exists in leads table
+
+Smoke tests:
+- ST1: intended_plan=confirm -> plan='confirm', status='trialing',
+       trial_ends_at=~7d, next_action='await_stripe_checkout' ✅
+- ST2: no intended_plan -> plan='trial', status='active', no next_action ✅
+- ST3: intended_plan='basic' (not in allowlist) -> falls back to trial, no error ✅
+- Scheduler regression: runTrialExpiration queries status='trialing'
+  (T-28 refactor) — confirm subscriptions will be picked up automatically ✅
+
+Stats at end of session 140:
+  passing: 403, total: 412, percentage: 97.8 (UP from 401)
+  Features #409 and #410 now passing
