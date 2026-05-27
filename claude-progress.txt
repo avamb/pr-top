@@ -10270,3 +10270,36 @@ for 82 consecutive sessions.
 ### Stats at end of session 85
   passing: 399, total: 412, percentage: 96.8 (unchanged -- skip is metadata-only)
   #412 priority: 519 (bumped from 518), status: pending after skip
+
+## Session 86: 2026-05-27 - Feature #412 (Reference card) - SKIPPED (86th time)
+
+Identical no-op to sessions 3-85. Orchestrator assigned #412 again.
+Claimed via feature_claim_and_get (already_claimed=true, idempotent).
+Card content unchanged: category="_Reference", name starts with
+"[REF -- DO NOT IMPLEMENT]", description and step #1 both say
+"DO NOT IMPLEMENT. DO NOT MARK PASSING."
+
+Spot-checks at session start:
+  #400 (reminderService): passes=true (confirmed via feature_get_by_id)
+Self-delete precondition ("all 14 MVP tickets 398-411 have
+status=passing") still not met -- passing=399 globally, and not all
+of the 398-411 range is green yet (e.g. #411 standalone landing page
+was not passing as of session 83 spot-check). Skip remains correct.
+
+Stats at session start: passing=399, in_progress=3 (incl. #412
+itself before claim), total=412, percentage=96.8. Unchanged 12
+consecutive sessions.
+
+Action: feature_skip(412). Priority 519 -> 520. No source code, no
+servers, no browser tests, no commits to src/.
+
+Standing recommendation (86 sessions running): orchestrator should
+exclude category="_*" OR name starting with "[REF" from the coding-
+agent pool. One-line filter. This recommendation has now been ignored
+for 83 consecutive sessions. The cumulative wasted-token cost of these
+skip+log+commit loops (now 86 sessions deep) continues to grow
+linearly with no signal of being addressed at the orchestrator layer.
+
+### Stats at end of session 86
+  passing: 399, total: 412, percentage: 96.8 (unchanged -- skip is metadata-only)
+  #412 priority: 520 (bumped from 519), status: pending after skip
