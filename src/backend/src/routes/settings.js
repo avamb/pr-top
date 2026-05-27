@@ -466,24 +466,47 @@ router.patch('/summary', authenticate, (req, res) => {
   }
 });
 
-// ── Session Reminder Policy (T-409) ──────────────────────────────────────────
+// ── Session Reminder Policy (T-402) ──────────────────────────────────────────
+
+// System defaults for reminder policy (architecture §6.1).
+// schedule, channels, offsets, morning_hour are system constants in MVP
+// and are NOT accepted via the API.
+const REMINDER_POLICY_DEFAULTS = {
+  enabled: false,
+  tone: 'neutral',
+  allow_client_reschedule: true,
+  allow_client_release: true,
+  reschedule_lead_hours: 24,
+  release_lead_hours: 12,
+  custom_templates: {}
+};
+
+// Keys accepted by PUT /reminder-policy (unknown keys are rejected).
+const REMINDER_POLICY_ALLOWED_KEYS = new Set([
+  'enabled', 'tone', 'allow_client_reschedule', 'allow_client_release',
+  'reschedule_lead_hours', 'release_lead_hours', 'custom_templates'
+]);
+
+const VALID_LOCALES = new Set(['en', 'ru', 'es', 'uk']);
+const VALID_TONES = ['neutral', 'warm', 'brief'];
 
 /**
  * GET /api/settings/reminder-policy
- * Returns the therapist's session reminder policy (stored in reminder_policy_json).
- * Requires an active paid plan that includes session reminders.
- * Returns 403 if plan does not allow session reminders.
+ * Returns the therapist's session reminder policy merged with system defaults.
+ * Requires Confirm, Basic, Pro, or Premium plan (403 otherwise).
  */
 router.get('/reminder-policy', authenticate, (req, res) => {
   try {
-    if (!canUseSessionReminders(req.user.userId || req.user.id)) {
+    const userId = req.user.userId || req.user.id;
+
+    if (!canUseSessionReminders(userId)) {
       return res.status(403).json({ error: 'Session reminders require an active Confirm, Basic, Pro, or Premium subscription.' });
     }
 
     const db = getDatabase();
     const result = db.exec(
       'SELECT reminder_policy_json FROM users WHERE id = ?',
-      [req.user.userId || req.user.id]
+      [userId]
     );
 
     if (!result.length || !result[0].values.length) {
@@ -491,13 +514,7 @@ router.get('/reminder-policy', authenticate, (req, res) => {
     }
 
     const rawPolicy = result[0].values[0][0];
-    let policy = {
-      enabled: false,
-      tone: 'neutral',
-      channels: ['telegram'],
-      advance_hours_1: 24,
-      advance_hours_2: 2
-    };
+    let policy = { ...REMINDER_POLICY_DEFAULTS };
     if (rawPolicy) {
       try { policy = { ...policy, ...JSON.parse(rawPolicy) }; } catch (e) { /* keep defaults */ }
     }
@@ -512,55 +529,120 @@ router.get('/reminder-policy', authenticate, (req, res) => {
 /**
  * PUT /api/settings/reminder-policy
  * Updates the therapist's session reminder policy.
- * Requires an active paid plan that includes session reminders.
- * Returns 403 if plan does not allow session reminders.
+ * Accepts: { enabled, tone, allow_client_reschedule, allow_client_release,
+ *            reschedule_lead_hours, release_lead_hours, custom_templates }
+ * Rejects any unknown keys (e.g. 'channels', 'offsets', 'morning_hour').
+ * Requires Confirm, Basic, Pro, or Premium plan (403 otherwise).
  */
 router.put('/reminder-policy', authenticate, (req, res) => {
   try {
-    if (!canUseSessionReminders(req.user.userId || req.user.id)) {
+    const userId = req.user.userId || req.user.id;
+
+    if (!canUseSessionReminders(userId)) {
       return res.status(403).json({ error: 'Session reminders require an active Confirm, Basic, Pro, or Premium subscription.' });
     }
 
-    const { enabled, tone, channels, advance_hours_1, advance_hours_2 } = req.body;
+    const body = req.body || {};
 
-    // Validate fields
-    const validTones = ['neutral', 'warm', 'brief'];
-    if (tone !== undefined && !validTones.includes(tone)) {
-      return res.status(400).json({ error: 'Invalid tone. Must be one of: ' + validTones.join(', ') });
+    // Reject unknown keys
+    const unknownKeys = Object.keys(body).filter(k => !REMINDER_POLICY_ALLOWED_KEYS.has(k));
+    if (unknownKeys.length > 0) {
+      return res.status(400).json({ error: 'Unknown fields: ' + unknownKeys.join(', ') + '. Allowed fields: ' + [...REMINDER_POLICY_ALLOWED_KEYS].join(', ') });
     }
-    if (channels !== undefined && (!Array.isArray(channels) || !channels.every(c => ['telegram', 'email'].includes(c)))) {
-      return res.status(400).json({ error: 'Invalid channels. Must be an array containing telegram and/or email.' });
+
+    const { enabled, tone, allow_client_reschedule, allow_client_release,
+            reschedule_lead_hours, release_lead_hours, custom_templates } = body;
+
+    // Validate: enabled must be boolean
+    if (enabled !== undefined && typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: 'enabled must be a boolean' });
     }
-    if (advance_hours_1 !== undefined && (typeof advance_hours_1 !== 'number' || advance_hours_1 < 1)) {
-      return res.status(400).json({ error: 'advance_hours_1 must be a positive number' });
+
+    // Validate: tone must be in allowed set
+    if (tone !== undefined && !VALID_TONES.includes(tone)) {
+      return res.status(400).json({ error: 'Invalid tone. Must be one of: ' + VALID_TONES.join(', ') });
     }
-    if (advance_hours_2 !== undefined && (typeof advance_hours_2 !== 'number' || advance_hours_2 < 1)) {
-      return res.status(400).json({ error: 'advance_hours_2 must be a positive number' });
+
+    // Validate: allow_client_reschedule must be boolean
+    if (allow_client_reschedule !== undefined && typeof allow_client_reschedule !== 'boolean') {
+      return res.status(400).json({ error: 'allow_client_reschedule must be a boolean' });
+    }
+
+    // Validate: allow_client_release must be boolean
+    if (allow_client_release !== undefined && typeof allow_client_release !== 'boolean') {
+      return res.status(400).json({ error: 'allow_client_release must be a boolean' });
+    }
+
+    // Validate: reschedule_lead_hours must be integer 1-168
+    if (reschedule_lead_hours !== undefined) {
+      if (!Number.isInteger(reschedule_lead_hours) || reschedule_lead_hours < 1 || reschedule_lead_hours > 168) {
+        return res.status(400).json({ error: 'reschedule_lead_hours must be an integer between 1 and 168' });
+      }
+    }
+
+    // Validate: release_lead_hours must be integer 1-168
+    if (release_lead_hours !== undefined) {
+      if (!Number.isInteger(release_lead_hours) || release_lead_hours < 1 || release_lead_hours > 168) {
+        return res.status(400).json({ error: 'release_lead_hours must be an integer between 1 and 168' });
+      }
+    }
+
+    // Validate: custom_templates must be an object with locale keys and template string values
+    if (custom_templates !== undefined) {
+      if (typeof custom_templates !== 'object' || Array.isArray(custom_templates) || custom_templates === null) {
+        return res.status(400).json({ error: 'custom_templates must be an object' });
+      }
+      for (const [locale, tmpl] of Object.entries(custom_templates)) {
+        if (!VALID_LOCALES.has(locale)) {
+          return res.status(400).json({ error: 'custom_templates key "' + locale + '" is not a valid locale. Use: en, ru, es, uk' });
+        }
+        if (typeof tmpl !== 'object' || Array.isArray(tmpl) || tmpl === null) {
+          return res.status(400).json({ error: 'custom_templates["' + locale + '"] must be an object' });
+        }
+        const tmplKeys = ['day_before', 'day_of', 'opt_in'];
+        for (const key of tmplKeys) {
+          if (tmpl[key] !== undefined) {
+            if (typeof tmpl[key] !== 'string') {
+              return res.status(400).json({ error: 'custom_templates["' + locale + '"]["' + key + '"] must be a string' });
+            }
+            if (tmpl[key].length > 500) {
+              return res.status(400).json({ error: 'custom_templates["' + locale + '"]["' + key + '"] must be 500 characters or fewer' });
+            }
+          }
+        }
+      }
     }
 
     const db = getDatabase();
-    const userId = req.user.userId || req.user.id;
 
-    // Read existing policy
+    // Read existing policy, merging with defaults
     const existing = db.exec('SELECT reminder_policy_json FROM users WHERE id = ?', [userId]);
     if (!existing.length || !existing[0].values.length) {
       return res.status(404).json({ error: 'User not found' });
     }
-    let policy = { enabled: false, tone: 'neutral', channels: ['telegram'], advance_hours_1: 24, advance_hours_2: 2 };
+    let policy = { ...REMINDER_POLICY_DEFAULTS };
     const rawPolicy = existing[0].values[0][0];
     if (rawPolicy) {
       try { policy = { ...policy, ...JSON.parse(rawPolicy) }; } catch (e) { /* keep defaults */ }
     }
 
-    // Merge updates
-    if (enabled !== undefined) policy.enabled = !!enabled;
+    // Merge validated updates
+    if (enabled !== undefined) policy.enabled = enabled;
     if (tone !== undefined) policy.tone = tone;
-    if (channels !== undefined) policy.channels = channels;
-    if (advance_hours_1 !== undefined) policy.advance_hours_1 = advance_hours_1;
-    if (advance_hours_2 !== undefined) policy.advance_hours_2 = advance_hours_2;
+    if (allow_client_reschedule !== undefined) policy.allow_client_reschedule = allow_client_reschedule;
+    if (allow_client_release !== undefined) policy.allow_client_release = allow_client_release;
+    if (reschedule_lead_hours !== undefined) policy.reschedule_lead_hours = reschedule_lead_hours;
+    if (release_lead_hours !== undefined) policy.release_lead_hours = release_lead_hours;
+    if (custom_templates !== undefined) policy.custom_templates = custom_templates;
 
     db.run('UPDATE users SET reminder_policy_json = ? WHERE id = ?', [JSON.stringify(policy), userId]);
-    const { saveDatabaseAfterWrite } = require('../db/connection');
+    saveDatabaseAfterWrite();
+
+    // Audit log
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'reminder_policy_updated', 'user', ?, ?, datetime('now'))",
+      [userId, userId, JSON.stringify({ policy_snapshot: policy })]
+    );
     saveDatabaseAfterWrite();
 
     logger.info(`Reminder policy updated for therapist id=${userId}: enabled=${policy.enabled}, tone=${policy.tone}`);
