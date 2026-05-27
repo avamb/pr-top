@@ -1948,6 +1948,68 @@ function applySchema(db) {
   db.run('CREATE UNIQUE INDEX IF NOT EXISTS uq_srd_session_offset_channel ON session_reminder_dispatches(session_id, offset_minutes, channel)');
   logger.info('T-27: session_reminder_dispatches table + 3 indexes ensured');
 
+  // T-28 (Feature #406): Add 'trialing' to subscriptions.status CHECK constraint.
+  // Stripe-aligned status lifecycle: trialing → active → past_due → canceled/expired.
+  // Existing rows with plan='trial' AND status='active' are backfilled to status='trialing'
+  // so the scheduler's trial-expiration job can use a plan-agnostic WHERE status='trialing'
+  // clause without needing to know about specific plan names.
+  //
+  // Implementation: SQLite ALTER TABLE cannot modify CHECK constraints, so we rebuild
+  // the table via CREATE → INSERT SELECT → DROP → RENAME (the standard SQLite approach).
+  // Foreign_keys is disabled for the duration so the DROP doesn't cascade.
+  try {
+    const schemaRes = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='subscriptions'");
+    const existingSql = (schemaRes.length > 0 && schemaRes[0].values.length > 0)
+      ? String(schemaRes[0].values[0][0])
+      : '';
+    if (!existingSql.includes("'trialing'")) {
+      // Rebuild the table with the updated CHECK constraint.
+      db.run('PRAGMA foreign_keys = OFF');
+      db.run(`CREATE TABLE IF NOT EXISTS subscriptions_t28 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        therapist_id INTEGER NOT NULL REFERENCES users(id),
+        stripe_customer_id TEXT,
+        stripe_subscription_id TEXT,
+        plan TEXT DEFAULT 'trial' CHECK(plan IN ('trial', 'basic', 'pro', 'premium')),
+        status TEXT DEFAULT 'trialing' CHECK(status IN ('active', 'trialing', 'canceled', 'past_due', 'expired')),
+        trial_ends_at TEXT,
+        current_period_start TEXT,
+        current_period_end TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        pending_plan TEXT,
+        stripe_payment_method_id TEXT,
+        canceled_at TEXT,
+        is_manual_override INTEGER DEFAULT 0,
+        override_reason TEXT
+      )`);
+      // Copy all rows; backfill plan='trial' AND status='active' → status='trialing'.
+      db.run(`INSERT INTO subscriptions_t28
+        (id, therapist_id, stripe_customer_id, stripe_subscription_id,
+         plan, status, trial_ends_at, current_period_start, current_period_end,
+         created_at, updated_at, pending_plan, stripe_payment_method_id,
+         canceled_at, is_manual_override, override_reason)
+        SELECT
+          id, therapist_id, stripe_customer_id, stripe_subscription_id,
+          plan,
+          CASE WHEN plan = 'trial' AND status = 'active' THEN 'trialing' ELSE status END,
+          trial_ends_at, current_period_start, current_period_end,
+          created_at, updated_at,
+          pending_plan, stripe_payment_method_id,
+          canceled_at, is_manual_override, override_reason
+        FROM subscriptions`);
+      db.run('DROP TABLE subscriptions');
+      db.run('ALTER TABLE subscriptions_t28 RENAME TO subscriptions');
+      db.run('CREATE INDEX IF NOT EXISTS idx_subscriptions_therapist ON subscriptions(therapist_id)');
+      db.run('PRAGMA foreign_keys = ON');
+      logger.info('T-28: subscriptions rebuilt with trialing status + legacy rows backfilled');
+    } else {
+      logger.debug('T-28: subscriptions already has trialing status — skipping rebuild');
+    }
+  } catch (e) {
+    logger.warn('T-28: subscriptions rebuild failed (non-fatal, scheduler uses OR fallback): ' + e.message);
+  }
+
   // Seed default superadmin account if not exists
   seedSuperadmin(db);
 

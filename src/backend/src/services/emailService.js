@@ -634,6 +634,209 @@ function leadVerificationTemplate(data, locale) {
   };
 }
 
+/**
+ * Session reminder opt-in email template (architecture §7.4 — email
+ * counterpart to the bot inline-button opt-in flow). The email invites
+ * the client to opt in to (or decline) session reminders. Two CTA
+ * buttons → signed-link URLs supplied by the caller.
+ *
+ * data: { client_name, therapist_name, optin_url, decline_url }
+ */
+function sessionReminderOptInTemplate(data, locale) {
+  const l = locale || 'en';
+  const clientName    = data.client_name    || '';
+  const therapistName = data.therapist_name || '';
+  const optinUrl      = data.optin_url      || '#';
+  const declineUrl    = data.decline_url    || '#';
+
+  const titles = {
+    en: 'Session reminders from your therapist',
+    ru: 'Напоминания о сессиях от вашего терапевта',
+    es: 'Recordatorios de sesión de tu terapeuta',
+    uk: 'Нагадування про сесії від вашого терапевта',
+  };
+
+  // Greeting handles empty client_name gracefully.
+  const greetings = {
+    en: clientName ? `Hi ${escapeHtml(clientName)},` : 'Hi,',
+    ru: clientName ? `Здравствуйте, ${escapeHtml(clientName)}!` : 'Здравствуйте!',
+    es: clientName ? `Hola, ${escapeHtml(clientName)}.` : '¡Hola!',
+    uk: clientName ? `Вітаю, ${escapeHtml(clientName)}!` : 'Вітаю!',
+  };
+
+  const intros = {
+    en: `Your therapist ${escapeHtml(therapistName) || 'on PR-TOP'} has turned on <strong>session reminders</strong>. With your permission, we will send you a short note the day before and on the day of each upcoming session so you don't have to keep checking the calendar.`,
+    ru: `Ваш терапевт ${escapeHtml(therapistName) || 'на PR-TOP'} включил <strong>напоминания о сессиях</strong>. С вашего согласия мы будем присылать короткое сообщение накануне и в день каждой запланированной встречи — чтобы вам не приходилось всё держать в голове.`,
+    es: `Tu terapeuta ${escapeHtml(therapistName) || 'en PR-TOP'} ha activado los <strong>recordatorios de sesión</strong>. Con tu permiso, te enviaremos un aviso breve el día antes y el día de cada sesión próxima para que no tengas que recordarlo todo.`,
+    uk: `Ваш терапевт ${escapeHtml(therapistName) || 'на PR-TOP'} увімкнув <strong>нагадування про сесії</strong>. З вашого дозволу ми будемо надсилати коротке повідомлення напередодні та в день кожної запланованої зустрічі.`,
+  };
+
+  const ctaYes = {
+    en: '✅ OK, remind me',
+    ru: '✅ Хорошо, напоминайте',
+    es: '✅ Sí, recuérdame',
+    uk: '✅ Так, нагадуйте',
+  };
+  const ctaNo = {
+    en: '🔕 No, thanks',
+    ru: '🔕 Нет, спасибо',
+    es: '🔕 No, gracias',
+    uk: '🔕 Ні, дякую',
+  };
+
+  // Reassuring footnote. Per architecture §11 ("Emotional harm from misfired
+  // automation") and Appendix A, we never use the words "fine", "penalty",
+  // "violation", or "no-show" in client-facing copy — even in reassuring
+  // negations. Keep the message friendly and opt-out-friendly.
+  const footnotes = {
+    en: 'You can change your mind at any time by asking your therapist. This is just a gentle reminder — nothing more.',
+    ru: 'Вы можете передумать в любой момент — просто скажите об этом терапевту. Это лишь мягкое напоминание, не более.',
+    es: 'Puedes cambiar de opinión en cualquier momento avisando a tu terapeuta. Esto es solo un recordatorio amable, nada más.',
+    uk: 'Ви можете передумати в будь-який момент — просто скажіть про це терапевту. Це лише м\'яке нагадування, не більше.',
+  };
+
+  const body = `
+    <h2>${escapeHtml(titles[l] || titles.en)}</h2>
+    <p>${greetings[l] || greetings.en}</p>
+    <p>${intros[l] || intros.en}</p>
+    <div style="margin: 24px 0;">
+      <a href="${escapeHtml(optinUrl)}" class="btn" style="background:#10b981;margin-right:8px;">${ctaYes[l] || ctaYes.en}</a>
+      <a href="${escapeHtml(declineUrl)}" class="btn" style="background:#6b7280;">${ctaNo[l] || ctaNo.en}</a>
+    </div>
+    <p style="font-size:13px;color:#6b7280;">${footnotes[l] || footnotes.en}</p>
+  `;
+
+  return {
+    subject: titles[l] || titles.en,
+    html: baseLayout(body, l),
+  };
+}
+
+/**
+ * Session reminder email template (architecture §4.1 #3 — email counterpart
+ * to the Telegram inline keyboard). Three CTA buttons:
+ *   ✅ I'll be there  → confirm_url
+ *   🔄 Reschedule     → reschedule_url
+ *   🆓 Release slot   → release_url
+ *
+ * Tone variants (neutral / warm / brief) drive the body copy.
+ *
+ * data: {
+ *   client_name, therapist_name,
+ *   session_local_time_string,   // pre-formatted in client tz, e.g. "Tomorrow at 18:00" or "Today at 09:30"
+ *   confirm_url, reschedule_url, release_url,
+ *   tone,                         // 'neutral' | 'warm' | 'brief'
+ * }
+ */
+function sessionReminderTemplate(data, locale) {
+  const l    = locale || 'en';
+  const tone = (data.tone === 'warm' || data.tone === 'brief') ? data.tone : 'neutral';
+
+  const clientName    = data.client_name    || '';
+  const therapistName = data.therapist_name || '';
+  const whenStr       = data.session_local_time_string || '';
+  const confirmUrl    = data.confirm_url    || '#';
+  const rescheduleUrl = data.reschedule_url || '#';
+  const releaseUrl    = data.release_url    || '#';
+
+  const titles = {
+    en: `Session reminder — ${whenStr || 'upcoming session'}`,
+    ru: `Напоминание о сессии — ${whenStr || 'предстоящая встреча'}`,
+    es: `Recordatorio de sesión — ${whenStr || 'próxima sesión'}`,
+    uk: `Нагадування про сесію — ${whenStr || 'майбутня зустріч'}`,
+  };
+
+  // Three tone presets × four locales — each preset has greeting + body.
+  // Warm: friendly, first-name; Neutral: professional, plain; Brief: terse, one line.
+  const greetings = {
+    warm: {
+      en: clientName ? `Hi ${escapeHtml(clientName)},` : 'Hi there,',
+      ru: clientName ? `Привет, ${escapeHtml(clientName)}!` : 'Привет!',
+      es: clientName ? `¡Hola, ${escapeHtml(clientName)}!` : '¡Hola!',
+      uk: clientName ? `Привіт, ${escapeHtml(clientName)}!` : 'Привіт!',
+    },
+    neutral: {
+      en: clientName ? `Hello ${escapeHtml(clientName)},` : 'Hello,',
+      ru: clientName ? `Здравствуйте, ${escapeHtml(clientName)}!` : 'Здравствуйте!',
+      es: clientName ? `Hola, ${escapeHtml(clientName)}.` : 'Hola.',
+      uk: clientName ? `Вітаю, ${escapeHtml(clientName)}!` : 'Вітаю!',
+    },
+    brief: {
+      en: '',
+      ru: '',
+      es: '',
+      uk: '',
+    },
+  };
+
+  const bodies = {
+    warm: {
+      en: `${whenStr ? `<strong>${escapeHtml(whenStr)}</strong> ` : ''}you have a session with ${escapeHtml(therapistName) || 'your therapist'}. Looking forward to seeing you! Let us know below — will you make it?`,
+      ru: `${whenStr ? `<strong>${escapeHtml(whenStr)}</strong> ` : ''}у вас встреча с ${escapeHtml(therapistName) || 'вашим терапевтом'}. Будем рады видеть вас! Подтвердите, пожалуйста, что планируете прийти.`,
+      es: `${whenStr ? `<strong>${escapeHtml(whenStr)}</strong> ` : ''}tienes sesión con ${escapeHtml(therapistName) || 'tu terapeuta'}. ¡Nos vemos pronto! Cuéntanos — ¿podrás venir?`,
+      uk: `${whenStr ? `<strong>${escapeHtml(whenStr)}</strong> ` : ''}у вас зустріч із ${escapeHtml(therapistName) || 'вашим терапевтом'}. Будемо раді бачити! Підтвердьте, будь ласка, що зможете прийти.`,
+    },
+    neutral: {
+      en: `This is a reminder that ${whenStr ? `<strong>${escapeHtml(whenStr)}</strong> ` : ''}you have a scheduled session with ${escapeHtml(therapistName) || 'your therapist'}. Please confirm your attendance below.`,
+      ru: `Напоминаем, что ${whenStr ? `<strong>${escapeHtml(whenStr)}</strong> ` : ''}у вас запланирована встреча с ${escapeHtml(therapistName) || 'терапевтом'}. Пожалуйста, подтвердите своё присутствие.`,
+      es: `Te recordamos que ${whenStr ? `<strong>${escapeHtml(whenStr)}</strong> ` : ''}tienes una sesión programada con ${escapeHtml(therapistName) || 'tu terapeuta'}. Por favor, confirma tu asistencia abajo.`,
+      uk: `Нагадуємо, що ${whenStr ? `<strong>${escapeHtml(whenStr)}</strong> ` : ''}у вас запланована зустріч із ${escapeHtml(therapistName) || 'терапевтом'}. Будь ласка, підтвердьте свою присутність.`,
+    },
+    brief: {
+      en: `${whenStr ? `<strong>${escapeHtml(whenStr)}</strong>` : 'Upcoming session'}${therapistName ? ` with ${escapeHtml(therapistName)}` : ''}.`,
+      ru: `${whenStr ? `<strong>${escapeHtml(whenStr)}</strong>` : 'Предстоящая встреча'}${therapistName ? ` с ${escapeHtml(therapistName)}` : ''}.`,
+      es: `${whenStr ? `<strong>${escapeHtml(whenStr)}</strong>` : 'Próxima sesión'}${therapistName ? ` con ${escapeHtml(therapistName)}` : ''}.`,
+      uk: `${whenStr ? `<strong>${escapeHtml(whenStr)}</strong>` : 'Майбутня зустріч'}${therapistName ? ` з ${escapeHtml(therapistName)}` : ''}.`,
+    },
+  };
+
+  const ctaConfirm = {
+    en: '✅ I\'ll be there',
+    ru: '✅ Буду',
+    es: '✅ Confirmo',
+    uk: '✅ Буду',
+  };
+  const ctaReschedule = {
+    en: '🔄 Ask to reschedule',
+    ru: '🔄 Хочу перенести',
+    es: '🔄 Quiero mover',
+    uk: '🔄 Хочу перенести',
+  };
+  const ctaRelease = {
+    en: '🆓 Release this slot',
+    ru: '🆓 Не смогу прийти',
+    es: '🆓 No podré ir',
+    uk: '🆓 Не зможу прийти',
+  };
+
+  const footnotes = {
+    en: 'These buttons are single-use and expire after the session. If you need anything else, just message your therapist directly.',
+    ru: 'Эти кнопки одноразовые и перестают работать после встречи. Если что-то ещё — просто напишите терапевту.',
+    es: 'Estos botones son de un solo uso y caducan tras la sesión. Si necesitas algo más, escribe directamente a tu terapeuta.',
+    uk: 'Ці кнопки одноразові й перестають працювати після зустрічі. Якщо потрібно щось ще — просто напишіть терапевту.',
+  };
+
+  const greet = greetings[tone][l] || greetings[tone].en;
+  const body  = bodies[tone][l]    || bodies[tone].en;
+
+  const html = `
+    <h2>${escapeHtml(titles[l] || titles.en)}</h2>
+    ${greet ? `<p>${greet}</p>` : ''}
+    <p>${body}</p>
+    <div style="margin: 24px 0;">
+      <a href="${escapeHtml(confirmUrl)}" class="btn" style="background:#10b981;margin-right:8px;">${ctaConfirm[l] || ctaConfirm.en}</a>
+      <a href="${escapeHtml(rescheduleUrl)}" class="btn" style="background:#f59e0b;margin-right:8px;">${ctaReschedule[l] || ctaReschedule.en}</a>
+      <a href="${escapeHtml(releaseUrl)}" class="btn" style="background:#6b7280;">${ctaRelease[l] || ctaRelease.en}</a>
+    </div>
+    <p style="font-size:13px;color:#6b7280;">${footnotes[l] || footnotes.en}</p>
+  `;
+
+  return {
+    subject: titles[l] || titles.en,
+    html: baseLayout(html, l),
+  };
+}
+
 // ── Utility ────────────────────────────────────────────────────────────────
 
 function escapeHtml(str) {
@@ -726,6 +929,12 @@ async function sendEmail(to, templateName, templateData, locale) {
       break;
     case 'lead_verification':
       template = leadVerificationTemplate(templateData, l);
+      break;
+    case 'session_reminder_optin':
+      template = sessionReminderOptInTemplate(templateData, l);
+      break;
+    case 'session_reminder':
+      template = sessionReminderTemplate(templateData, l);
       break;
     default:
       logger.warn(`[EMAIL] Unknown template: ${templateName}`);
@@ -833,6 +1042,46 @@ async function sendLeadVerificationEmail(email, verificationToken, locale) {
   return sendEmail(email, 'lead_verification', { verifyUrl }, locale);
 }
 
+/**
+ * Send a session-reminder opt-in invitation email.
+ *
+ * Architecture §7.4 (email counterpart to the bot inline-button flow).
+ *
+ * @param {string} toEmail
+ * @param {string} locale - 'en' | 'ru' | 'es' | 'uk' (fallback 'en')
+ * @param {object} data
+ * @param {string} [data.client_name]
+ * @param {string} [data.therapist_name]
+ * @param {string} data.optin_url   - signed link the client clicks to opt in
+ * @param {string} data.decline_url - signed link the client clicks to decline
+ * @returns {Promise<{sent:boolean, messageId?:string, error?:string}>}
+ */
+async function sendSessionReminderOptIn(toEmail, locale, data) {
+  return sendEmail(toEmail, 'session_reminder_optin', data || {}, locale);
+}
+
+/**
+ * Send the actual session reminder email (counterpart to the Telegram inline
+ * keyboard with three CTAs).
+ *
+ * Architecture §4.1 #3.
+ *
+ * @param {string} toEmail
+ * @param {string} locale - 'en' | 'ru' | 'es' | 'uk' (fallback 'en')
+ * @param {object} data
+ * @param {string} [data.client_name]
+ * @param {string} [data.therapist_name]
+ * @param {string} [data.session_local_time_string] - pre-formatted in client tz
+ * @param {string} data.confirm_url
+ * @param {string} data.reschedule_url
+ * @param {string} data.release_url
+ * @param {string} [data.tone='neutral'] - one of 'neutral' | 'warm' | 'brief'
+ * @returns {Promise<{sent:boolean, messageId?:string, error?:string}>}
+ */
+async function sendSessionReminder(toEmail, locale, data) {
+  return sendEmail(toEmail, 'session_reminder', data || {}, locale);
+}
+
 module.exports = {
   isConfigured,
   sendEmail,
@@ -842,5 +1091,12 @@ module.exports = {
   sendPaymentReceipt,
   sendSubscriptionExpiryWarning,
   sendPasswordReset,
-  sendLeadVerificationEmail
+  sendLeadVerificationEmail,
+  sendSessionReminderOptIn,
+  sendSessionReminder,
+  // Exposed for unit testing of template rendering.
+  _templates: {
+    sessionReminderOptInTemplate,
+    sessionReminderTemplate,
+  },
 };

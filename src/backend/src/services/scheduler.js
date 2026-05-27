@@ -33,6 +33,13 @@ try {
   backupService = null;
 }
 
+let reminderService;
+try {
+  reminderService = require('./reminderService');
+} catch (e) {
+  reminderService = null;
+}
+
 const SCHEDULER_ENABLED = process.env.SCHEDULER_ENABLED !== 'false'; // default true
 const GRACE_PERIOD_DAYS = parseInt(process.env.SUBSCRIPTION_GRACE_PERIOD_DAYS || '7', 10);
 const EXPIRY_WARNING_DAYS = parseInt(process.env.SUBSCRIPTION_EXPIRY_WARNING_DAYS || '3', 10);
@@ -42,18 +49,24 @@ const scheduledTasks = [];
 
 /**
  * Job 1: Trial expiration
- * Find trial subscriptions where trial_ends_at < now AND status = 'active', set status = 'expired'
+ * Find trialing subscriptions where trial_ends_at < now, set status = 'expired'.
+ *
+ * Plan-agnostic: we key off status='trialing' (Stripe-aligned) rather than
+ * plan='trial'. The T-28 migration backfills legacy rows, so this query
+ * catches both old and new trials without knowing about specific plan names.
+ * Backwards-compatible OR fallback retained for safety during upgrade window.
  */
 function runTrialExpiration() {
   try {
     const db = getDatabase();
     const now = new Date().toISOString();
 
-    // Find expired trials
+    // Find expired trials (plan-agnostic: status='trialing' per T-28 refactor).
+    // OR fallback handles any legacy rows not yet backfilled by the migration.
     const expired = db.exec(
       `SELECT s.id, s.therapist_id, s.trial_ends_at
        FROM subscriptions s
-       WHERE s.plan = 'trial' AND s.status = 'active'
+       WHERE (s.status = 'trialing' OR (s.plan = 'trial' AND s.status = 'active'))
        AND s.trial_ends_at IS NOT NULL AND s.trial_ends_at < ?`,
       [now]
     );
@@ -353,9 +366,121 @@ function runCsrfCleanup() {
   }
 }
 
+// ── Reminder-service jobs (Feature #406) ──────────────────────────────────
+
 /**
- * Start all scheduled jobs
+ * Job 7: Plan reminders — every 15 min (cron: every-15 every-hour every-day)
+ * Select sessions with scheduled_at in [now, now+72h] where the client has
+ * session_reminders_enabled=1 and call reminderService.planForSession for each.
+ * planForSession is idempotent via the uq_srd_session_offset_channel unique index.
  */
+function runPlanReminders() {
+  if (!reminderService) {
+    logger.warn('[SCHEDULER] plan-reminders: reminderService not loaded, skipping');
+    return { planned: 0, error: 'reminderService_not_loaded' };
+  }
+  try {
+    const db = getDatabase();
+    const nowIso = new Date().toISOString();
+    const plusIso = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+
+    const candidates = db.exec(
+      `SELECT s.id
+         FROM sessions s
+         JOIN users u ON u.id = s.client_id
+        WHERE s.scheduled_at > ? AND s.scheduled_at < ?
+          AND u.session_reminders_enabled = 1
+          AND u.blocked_at IS NULL`,
+      [nowIso, plusIso]
+    );
+
+    if (!candidates.length || !candidates[0].values.length) {
+      logger.info('[SCHEDULER] plan-reminders: no eligible sessions in next 72h');
+      return { planned: 0 };
+    }
+
+    const ids = candidates[0].values.map(function(r) { return r[0]; });
+    // Fire-and-forget — planForSession is async but the cron job doesn't await it.
+    Promise.all(ids.map(function(id) {
+      return reminderService.planForSession(id);
+    })).then(function(results) {
+      const total = results.reduce(function(acc, r) { return acc + (r && r.planned ? r.planned : 0); }, 0);
+      logger.info('[SCHEDULER] plan-reminders: planned ' + total + ' dispatch row(s) across ' + ids.length + ' session(s)');
+    }).catch(function(err) {
+      logger.error('[SCHEDULER] plan-reminders async error: ' + err.message);
+    });
+
+    logger.info('[SCHEDULER] plan-reminders: kicked off planning for ' + ids.length + ' session(s)');
+    return { kicked: ids.length };
+  } catch (error) {
+    logger.error('[SCHEDULER] plan-reminders error: ' + error.message);
+    return { error: error.message };
+  }
+}
+
+/**
+ * Job 8: Dispatch opt-in notices — every 10 min (cron: every-10 every-hour every-day)
+ * Calls reminderService.dispatchOptInNotices to send pending opt-in invitations.
+ */
+function runDispatchOptInNotices() {
+  if (!reminderService) {
+    logger.warn('[SCHEDULER] dispatch-opt-in-notices: reminderService not loaded, skipping');
+    return { dispatched: 0, error: 'reminderService_not_loaded' };
+  }
+  try {
+    reminderService.dispatchOptInNotices().then(function(result) {
+      logger.info('[SCHEDULER] dispatch-opt-in-notices: ' + JSON.stringify(result));
+    }).catch(function(err) {
+      logger.error('[SCHEDULER] dispatch-opt-in-notices async error: ' + err.message);
+    });
+    return { kicked: true };
+  } catch (error) {
+    logger.error('[SCHEDULER] dispatch-opt-in-notices error: ' + error.message);
+    return { error: error.message };
+  }
+}
+
+/**
+ * Job 9: Dispatch due reminders — every 5 min (cron: every-5 every-hour every-day)
+ * Calls reminderService.dispatchDue to send reminders that are now due.
+ */
+function runDispatchDueReminders() {
+  if (!reminderService) {
+    logger.warn('[SCHEDULER] dispatch-due-reminders: reminderService not loaded, skipping');
+    return { dispatched: 0, error: 'reminderService_not_loaded' };
+  }
+  try {
+    reminderService.dispatchDue().then(function(result) {
+      logger.info('[SCHEDULER] dispatch-due-reminders: ' + JSON.stringify(result));
+    }).catch(function(err) {
+      logger.error('[SCHEDULER] dispatch-due-reminders async error: ' + err.message);
+    });
+    return { kicked: true };
+  } catch (error) {
+    logger.error('[SCHEDULER] dispatch-due-reminders error: ' + error.message);
+    return { error: error.message };
+  }
+}
+
+/**
+ * Job 10: Mark no-shows (hourly, 0 * * * *)
+ * Calls reminderService.markNoShows to mark sessions as no_show after grace period.
+ */
+function runMarkNoShows() {
+  if (!reminderService) {
+    logger.warn('[SCHEDULER] mark-no-shows: reminderService not loaded, skipping');
+    return { marked: 0, error: 'reminderService_not_loaded' };
+  }
+  try {
+    const result = reminderService.markNoShows();
+    logger.info('[SCHEDULER] mark-no-shows: ' + JSON.stringify(result));
+    return result;
+  } catch (error) {
+    logger.error('[SCHEDULER] mark-no-shows error: ' + error.message);
+    return { error: error.message };
+  }
+}
+
 /**
  * Job 6: Database backup
  * Create encrypted compressed backup of the SQLite database
@@ -434,8 +559,32 @@ function start() {
     runDatabaseBackup();
   }, { name: 'database-backup' }));
 
+  // Job 7: Plan reminders — every 15 minutes
+  scheduledTasks.push(cron.schedule('*/15 * * * *', function() {
+    logger.info('[SCHEDULER] Running plan-reminders job...');
+    runPlanReminders();
+  }, { name: 'plan-reminders' }));
+
+  // Job 8: Dispatch opt-in notices — every 10 minutes
+  scheduledTasks.push(cron.schedule('*/10 * * * *', function() {
+    logger.info('[SCHEDULER] Running dispatch-opt-in-notices job...');
+    runDispatchOptInNotices();
+  }, { name: 'dispatch-opt-in-notices' }));
+
+  // Job 9: Dispatch due reminders — every 5 minutes
+  scheduledTasks.push(cron.schedule('*/5 * * * *', function() {
+    logger.info('[SCHEDULER] Running dispatch-due-reminders job...');
+    runDispatchDueReminders();
+  }, { name: 'dispatch-due-reminders' }));
+
+  // Job 10: Mark no-shows — hourly
+  scheduledTasks.push(cron.schedule('0 * * * *', function() {
+    logger.info('[SCHEDULER] Running mark-no-shows job...');
+    runMarkNoShows();
+  }, { name: 'mark-no-shows' }));
+
   logger.info('[SCHEDULER] All scheduled tasks registered (' + scheduledTasks.length + ' jobs)');
-  logger.info('[SCHEDULER] Jobs: trial-expiration (2:00), subscription-downgrade (2:15), expiry-warning (9:00), diary-reminder (10:00), csrf-cleanup (hourly), database-backup (' + backupCron + ')');
+  logger.info('[SCHEDULER] Jobs: trial-expiration (2:00), subscription-downgrade (2:15), expiry-warning (9:00), diary-reminder (10:00), csrf-cleanup (hourly), database-backup (' + backupCron + '), plan-reminders (*/15), dispatch-opt-in-notices (*/10), dispatch-due-reminders (*/5), mark-no-shows (hourly)');
 }
 
 /**
@@ -458,5 +607,10 @@ module.exports = {
   runExpiryWarning,
   runDiaryReminder,
   runCsrfCleanup,
-  runDatabaseBackup
+  runDatabaseBackup,
+  // Reminder service jobs (Feature #406)
+  runPlanReminders,
+  runDispatchOptInNotices,
+  runDispatchDueReminders,
+  runMarkNoShows,
 };
