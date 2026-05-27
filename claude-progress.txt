@@ -13606,3 +13606,75 @@ Stats at end of session 171:
   passing: 406, total: 411, percentage: 98.8 (UP from 405/98.5%)
   in_progress: 0
   #407 status: passing
+
+================================================================
+Session 173 (2026-05-27) - Feature #403 PASSING
+================================================================
+
+Assigned: #403 "Settings UI: Session reminders section + pending opt-in list"
+
+IMPLEMENTATION:
+
+1. NEW COMPONENT: src/frontend/src/components/ReminderPolicyForm.jsx
+   - Props: initialPolicy (from GET /api/settings/reminder-policy), onSaved callback
+   - Master enable toggle (PUT /api/settings/reminder-policy)
+   - Read-only info row about schedule (09:00 day before + day of, 2h before cutoff)
+   - Tone radio group: Neutral/Warm/Brief with contextual hint text
+   - Two sliders: reschedule_lead_hours (1-72h, default 24) and release_lead_hours (1-48h, default 12)
+   - Template overrides accordion (collapsed): EN/RU/ES/UK tabs, 3 textareas per locale
+   - Optimistic save: success toast on 200, revert + error toast on failure
+
+2. NEW COMPONENT: src/frontend/src/components/PendingOptInList.jsx
+   - Fetches GET /api/clients?filter=pending_optin
+   - Shows empty state when 0 results
+   - Resend button calls POST /api/clients/:id/resend-opt-in
+   - Surfaces 429 rate limit as inline error
+
+3. BACKEND: GET /api/features (index.js)
+   - Public endpoint, returns { FEATURE_SESSION_REMINDERS: boolean }
+   - Reads FEATURE_SESSION_REMINDERS env var (set to "on" in .env)
+
+4. BACKEND: GET /api/clients?filter=pending_optin (clients.js)
+   - WHERE session_reminders_asked_at IS NOT NULL AND session_reminders_enabled IS NULL
+   - Returns session_reminders_asked_at in response
+
+5. BACKEND: POST /api/clients/:id/resend-opt-in (clients.js)
+   - 404 if client not found under this therapist
+   - 400 if client already responded (enabled != null)
+   - 429 if asked_at within last 48h (rate limit)
+   - On success: sets asked_at=NULL for cron re-send, audit log, returns { ok: true }
+
+6. FRONTEND: Settings.jsx
+   - Imports ReminderPolicyForm + PendingOptInList
+   - featureFlags state from GET /api/features
+   - reminderPolicy state from GET /api/settings/reminder-policy
+   - Section gated by featureFlags.FEATURE_SESSION_REMINDERS
+
+7. i18n: All 4 locales (en/ru/es/uk)
+   - New top-level "reminders.settings.*" namespace
+   - Keys: sectionTitle, sectionDesc, enableLabel, scheduleInfo, toneLabel,
+     tone.{neutral,warm,brief}, toneHint.{neutral,warm,brief},
+     rescheduleLeadLabel, releaseLeadLabel, templateOverridesLabel,
+     templateOverridesHint, templateKey.{day_before,day_of,opt_in},
+     templatePlaceholder, saving, save, saved, saveError,
+     pendingList.{title,desc,loading,fetchError,empty,awaitingBadge,
+     askedAt,resendBtn,resending,resendSuccess,resendError,rateLimited}
+
+VERIFICATION:
+  - 24 backend smoke tests (test_403.js) all passing
+  - 9 rate-limit + edge case tests (test_403_ratelimit.js) all passing
+  - Browser testing via playwright-cli (port 3003 proxying to 3098):
+    Section renders with toggle, info row, tone radios, sliders
+    Template accordion opens showing EN/RU/ES/UK tabs
+    Pending Opt-In shows empty state "No clients awaiting a response"
+    Toggle ON + Save shows "Reminder policy saved." success toast
+    Page refresh confirms toggle persists as ON
+  - No mock data patterns in new components
+  - Pre-existing console error (Umami) not related to our changes
+
+COMMIT: eedc88e "feat(#403): Settings UI session reminders..."
+
+Stats at end of session 173:
+  passing: 408, total: 411, percentage: 99.3 (UP from 407/99.0%)
+  in_progress: 0
+  #403 status: passing
