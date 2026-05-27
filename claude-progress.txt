@@ -9709,3 +9709,44 @@ card stops getting auto-assigned every cycle.
 ### Stats at end of session 66
   passing: 399, total: 412, percentage: 96.8 (no change -- skip is metadata-only)
   #412 priority: 500 (bumped from 499), status: pending after skip
+
+
+## Session: 2026-05-27 (67th) -- #412 RE-ASSIGNED A SIXTY-SEVENTH TIME -- APPLIED SKIP
+
+Stats at start: passing=399, in_progress=3, total=412 (96.8%).
+Unchanged from end of session 66. Card #412 is still the
+[REF -- DO NOT IMPLEMENT] model-assignment matrix for the
+Session-Reminders MVP (398-411). Retirement precondition (all of
+398-411 passing) still not met.
+
+Spot-checked the three MVP tickets that previously had non-pending
+status to confirm zero MVP progress between sessions 66 and 67:
+  #399 T-18 disclaimer bump ................... pending (unchanged)
+  #401 Email templates ........................ in_progress (unchanged)
+  #406 Scheduler 4 cron jobs .................. in_progress (unchanged)
+Same two parallel workers (#401, #406) still claimed, still no
+completions. MVP still 2/14 passing (only #398, #400).
+
+The card's own step 1 says: "DO NOT IMPLEMENT. DO NOT MARK
+PASSING." The card's own description says: "DELETE this card
+once the MVP (398-411) is fully shipped." Only the
+orchestrator/human can delete features.
+
+Action: feature_claim_and_get(412) confirmed already_claimed=true
+(orchestrator pre-claimed before this session) and card content
+is unchanged. Called feature_skip(412) -- skip clears
+in_progress as a side effect. Priority bumped 500 -> 501. No
+source code touched. No tests run. No commits other than this
+progress note + the skip metadata update.
+
+Cumulative no-op cost now ~67 sessions. Orchestrator filter
+recommendation from sessions 3-66 STILL not applied. Suggested
+fix unchanged: exclude category starts with "_" OR name starts
+with "[REF" from coding-agent assignment pool, so the reference
+card stops getting auto-assigned every cycle. At ~67 sessions
+of pure overhead, this is now by far the most expensive
+configuration bug in the project's history.
+
+### Stats at end of session 67
+  passing: 399, total: 412, percentage: 96.8 (no change -- skip is metadata-only)
+  #412 priority: 501 (bumped from 500), status: pending after skip
