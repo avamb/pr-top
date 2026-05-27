@@ -33,8 +33,14 @@ const userLangCache = {};
 // re-consent on their next bot interaction. Version 1 is the first version
 // of the extended (5-checkbox) consent flow; legacy single-Yes/No clients
 // are stored as version 0 and re-prompted automatically.
-const CONSENT_TEXT_VERSION = 1;
-const CONSENT_POINTS = ['storage', 'ai', 'supervision', 'revoke', 'encryption'];
+// Version 2 (T-399): added sessionReminders checkbox (6th point, conceptually
+// "consent_session_reminders"). Using camelCase because the callback_data
+// format "consent_chk_<tid>_<point>" is parsed with lastIndexOf('_'), so
+// point names must not contain underscores.
+const CONSENT_TEXT_VERSION = 2;
+const CONSENT_POINTS = ['storage', 'ai', 'supervision', 'revoke', 'encryption', 'sessionReminders'];
+// Points that are pre-checked by default (client can still un-tick them).
+const CONSENT_POINTS_PRECHECKED = new Set(['sessionReminders']);
 
 // In-memory state for the multi-checkbox consent flow.
 // Keyed by telegramId. Cleared on completion / cancel / timeout.
@@ -200,10 +206,11 @@ if (!token || token === 'your-telegram-bot-token') {
 
   // === Extracted handler functions (shared by slash commands and keyboard buttons) ===
 
-  // T-18: Build the full consent disclaimer body shown before the 5 checkboxes.
+  // T-18: Build the full consent disclaimer body shown before the 6 checkboxes.
   // This is one Telegram message (Markdown). The body string is *also* hashed
   // via SHA-256 so the audit log can store an integrity hash of exactly what
   // the client agreed to (`consent_text_hash` column on users).
+  // T-399: added consentDisclaimerSessionReminders as point 6.
   function buildConsentBodyText(lang, therapistName) {
     const headerFn = t(lang, 'consentDisclaimerHeader');
     const head = typeof headerFn === 'function' ? headerFn(therapistName, CONSENT_TEXT_VERSION) : headerFn;
@@ -219,6 +226,8 @@ if (!token || token === 'your-telegram-bot-token') {
       t(lang, 'consentDisclaimerRevoke'),
       '',
       t(lang, 'consentDisclaimerEncryption'),
+      '',
+      t(lang, 'consentDisclaimerSessionReminders'),
       '',
       t(lang, 'consentDisclaimerFooter')
     ];
@@ -256,7 +265,8 @@ if (!token || token === 'your-telegram-bot-token') {
   // version-bump re-consent on existing connections.
   async function sendConsentPrompt(chatId, telegramId, lang, therapistId, therapistName, mode) {
     const checked = {};
-    CONSENT_POINTS.forEach(pt => { checked[pt] = false; });
+    // T-399: session_reminders is pre-checked by default (opt-out model).
+    CONSENT_POINTS.forEach(pt => { checked[pt] = CONSENT_POINTS_PRECHECKED.has(pt); });
     pendingConsents[telegramId] = {
       therapistId: parseInt(therapistId, 10),
       therapistName,
@@ -1328,8 +1338,8 @@ if (!token || token === 'your-telegram-bot-token') {
     }
 
     // T-18: Handle multi-checkbox consent flow callbacks.
-    // - consent_chk_<tid>_<point>: toggle one of the 5 checkboxes
-    // - consent_continue_<tid>: submit consent if all 5 are ticked
+    // - consent_chk_<tid>_<point>: toggle one of the 6 checkboxes
+    // - consent_continue_<tid>: submit consent if all 6 are ticked
     // - consent_cancel_<tid>: cancel and clear pending state
     if (data.startsWith('consent_chk_')) {
       const lang = await getUserLang(telegramId);

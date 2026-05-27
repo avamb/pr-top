@@ -1488,6 +1488,15 @@ function applySchema(db) {
     // Best-effort
   }
 
+  // T-399: consent_version bumped from 1 → 2 in bot/src/index.js (added
+  // session_reminders checkbox as the 6th consent point). No schema change
+  // is required here — the version gate lives entirely in the bot constant
+  // CONSENT_TEXT_VERSION. Existing clients with consent_version < 2 will be
+  // re-prompted on their next bot interaction by the requireConsentUpToDate
+  // guard (unchanged mechanism from T-18). This comment is a migration note
+  // for audit trail purposes only.
+  logger.info('T-399: consent_version 2 active (session_reminders checkbox added); existing clients with consent_version < 2 will be re-prompted by bot');
+
   // T-06: Solo mode (therapist-only "smart notebook").
   // Some therapists (psychoanalysts, those working with paranoid clients) cannot
   // bring the client into the bot. Solo mode lets the therapist create a "client"
