@@ -9876,3 +9876,34 @@ the highest cumulative ROI in the project.
 ### Stats at end of session 72
   passing: 399, total: 412, percentage: 96.8 (unchanged -- skip is metadata-only)
   #412 priority: 506 (bumped from 505), status: pending after skip
+
+## Session: 2026-05-27 - Feature #412 SKIPPED (session 73, still a reference card)
+
+Same no-op as sessions 3-72. Orchestrator assigned #412 again. Claimed via
+feature_claim_and_get (already_claimed=true, idempotent). Card is unchanged:
+  - category="_Reference"
+  - name starts with "[REF -- DO NOT IMPLEMENT]"
+  - description+step #1: "DO NOT IMPLEMENT. DO NOT MARK PASSING."
+  - passes=false, in_progress=true (pre-claimed by orchestrator)
+
+Cross-checked MVP tickets 398-411 to verify the card's own delete condition
+("delete this card once 398-411 are fully shipped") is NOT yet met:
+  - passing: #398 (T-27 schema), #400 (reminderService)
+  - in_progress: #401 (email templates), #406 (scheduler)
+  - pending: #399, #402, #403, #404, #405, #407, #408, #409, #410, #411
+So the reference matrix is still potentially useful to other agents picking
+up the remaining 10 pending MVP tickets; skipping (not "passing") is the
+correct action.
+
+Action: feature_skip(412) called. Priority bumped 506 -> 507. No source
+code touched, no servers started, no browser automation. Single-action
+session: skip + this note.
+
+Orchestrator filter recommendation (unchanged across ~73 sessions):
+exclude category starting with "_" OR name starting with "[REF" from
+the coding-agent assignment pool. This remains the cheapest fix with
+the highest cumulative ROI in the project.
+
+### Stats at end of session 73
+  passing: 399, total: 412, percentage: 96.8 (unchanged -- skip is metadata-only)
+  #412 priority: 507 (bumped from 506), status: pending after skip
