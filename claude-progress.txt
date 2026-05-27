@@ -1,4 +1,56 @@
 ================================================================
+Session 169 (2026-05-27) - Feature #402 PASSING
+================================================================
+
+Assigned: #402 "API: GET/PUT /api/settings/reminder-policy"
+Category: Session Reminders / Backend
+
+PROBLEM FOUND:
+  Prior implementation (T-409 session 140) had the WRONG schema:
+  { enabled, tone, channels: ['telegram'], advance_hours_1: 24, advance_hours_2: 2 }
+
+  Feature #402 spec (architecture §6.1) requires:
+  { enabled, tone, allow_client_reschedule, allow_client_release,
+    reschedule_lead_hours, release_lead_hours, custom_templates }
+
+CHANGES (src/backend/src/routes/settings.js lines 469-655):
+  - Replaced REMINDER_POLICY_DEFAULTS with correct spec fields
+  - GET /reminder-policy: uses new defaults, returns merged policy
+  - PUT /reminder-policy:
+    * REMINDER_POLICY_ALLOWED_KEYS Set - rejects unknown keys (400)
+      (channels, offsets, morning_hour all blocked)
+    * Validates enabled (boolean), tone (neutral/warm/brief enum)
+    * Validates allow_client_reschedule/release (boolean)
+    * Validates reschedule_lead_hours/release_lead_hours (integer 1-168)
+    * Validates custom_templates (object, locale keys en/ru/es/uk,
+      template values { day_before, day_of, opt_in } strings <=500 chars)
+    * Writes audit log: action='reminder_policy_updated',
+      actor_id=therapist_id, details_encrypted=policy snapshot
+  - JWT + CSRF already applied via app.use('/api/', csrfProtection)
+    and app.use('/api/settings', requireActiveSubscription, ...)
+
+SMOKE TESTS (13/13 PASS):
+  ST1:  GET returns correct defaults (no channels/advance_hours fields)
+  ST2:  PUT valid body (enabled=true, tone=warm, reschedule_lead_hours=48)
+  ST3:  GET after PUT returns persisted values
+  ST4:  PUT tone=INVALID -> 400
+  ST5:  PUT channels=['telegram'] (unknown key) -> 400
+  ST6:  PUT reschedule_lead_hours=0 -> 400
+  ST7:  PUT reschedule_lead_hours=169 -> 400
+  ST8:  PUT enabled='yes' (not boolean) -> 400
+  ST9:  PUT valid custom_templates -> 200
+  ST10: PUT custom_templates with locale 'fr' -> 400
+  ST11: PUT template string 501 chars -> 400
+  ST12: PUT morning_hour=9 (unknown key) -> 400
+  ST13: Unauthenticated GET -> 401
+
+Audit log verified: reminder_policy_updated entries written with
+correct actor_id, target_id, and policy snapshot in details_encrypted.
+
+Commit: d90433b
+Stats: passing=404, total=411, percentage=98.3 (UP from 403/98.1%)
+
+================================================================
 Session 166 (2026-05-27) - Feature #412 skipped (AGAIN)
 ================================================================
 
@@ -13369,6 +13421,43 @@ Stats at end of session 167:
   #412 priority: 602 (bumped from 601), status: pending
 
 STANDING RECOMMENDATION (now ignored for 164 consecutive sessions):
+The orchestrator should filter out features where category starts
+with "_" OR name starts with "[REF" before assigning to coding
+agents. A single WHERE clause would eliminate this churn forever.
+
+================================================================
+Session 168 (2026-05-27) - Feature #412 skipped (AGAIN)
+================================================================
+
+Assigned: #412 "[REF — DO NOT IMPLEMENT] Model assignment matrix
+for Session Reminders MVP (398–411)"
+
+168th consecutive session with this REF card assigned. Card text
+unchanged and explicit:
+  "REFERENCE CARD — NOT A WORK ITEM. Do NOT implement, do NOT
+   mark passing."
+  "DELETE this card once the MVP (398–411) is fully shipped."
+
+Step 1 of the feature literally reads: "DO NOT IMPLEMENT. DO NOT MARK PASSING."
+
+Claimed via feature_claim_and_get (already_claimed=true, idempotent).
+Aggregate stats: passing=403, total=412, 97.8% (unchanged from
+session 167). in_progress was 1 at session start (us only).
+Self-delete precondition (all 14 of 398-411 passing):
+  412 - 403 = 9 non-passing features remain. Still not met.
+
+Self-delete precondition still not met. Skip remains correct action.
+
+Action taken: feature_skip(412). Priority 603 -> 604. In-progress
+flag cleared by skip. No code, no servers, no browser tests, no
+commits to src/.
+
+Stats at end of session 168:
+  passing: 403, total: 412, percentage: 97.8 (unchanged from 167)
+  in_progress: cleared (was set by claim, reset by skip)
+  #412 priority: 604 (bumped from 603), status: pending
+
+STANDING RECOMMENDATION (now ignored for 165 consecutive sessions):
 The orchestrator should filter out features where category starts
 with "_" OR name starts with "[REF" before assigning to coding
 agents. A single WHERE clause would eliminate this churn forever.
