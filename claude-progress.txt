@@ -9424,3 +9424,30 @@ unchanged: exclude category starts with "_" OR name starts with
 ### Stats at end of session 57
   passing: 399, total: 412, percentage: 96.8 (no change -- skip is metadata-only)
   #412 priority: 491 (bumped from 490), status: pending after skip
+
+
+## Session: 2026-05-27 (58th) -- #412 RE-ASSIGNED A FIFTY-EIGHTH TIME -- APPLIED SKIP
+
+Stats at start: passing=399, in_progress=3, total=412 (96.8%).
+Identical to end of session 57. Retirement precondition (all of
+398-411 passing) verified still NOT met. Spot-checked each of the
+14 MVP tickets via feature_get_by_id: only #398 (T-27 schema) and
+#400 (reminderService) are passing. The other 12 (#399, #401-411)
+remain passes=false. #401 and #406 are currently in_progress with
+other agents. Card must stay on the board.
+
+Action: feature_claim_and_get(412) confirmed [REF -- DO NOT IMPLEMENT]
+reference card, category="_Reference", already_claimed=true,
+in_progress=true (orchestrator pre-claimed before this session).
+Called feature_skip(412) directly (skip clears in_progress as a
+side effect) to bump priority per established precedent.
+Priority bumped 491 -> 492. No source code touched.
+
+Cumulative no-op cost now ~58 sessions. Orchestrator filter
+recommendation (sessions 3-57) STILL not applied. Suggested fix
+unchanged: exclude category starts with "_" OR name starts with
+"[REF" from coding-agent assignment pool.
+
+### Stats at end of session 58
+  passing: 399, total: 412, percentage: 96.8 (no change -- skip is metadata-only)
+  #412 priority: 492 (bumped from 491), status: pending after skip
