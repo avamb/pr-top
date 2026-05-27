@@ -13113,3 +13113,40 @@ STANDING RECOMMENDATION (now ignored for 155 consecutive sessions):
 The orchestrator should filter out features where category starts
 with "_" OR name starts with "[REF" before assigning to coding
 agents. A single WHERE clause would eliminate this churn forever.
+
+================================================================
+Session 161 (2026-05-27) - Feature #412 skipped (AGAIN)
+================================================================
+
+Assigned: #412 "[REF — DO NOT IMPLEMENT] Model assignment matrix
+for Session Reminders MVP (398–411)"
+
+161st consecutive session with this REF card assigned. Card text
+unchanged and explicit:
+  "REFERENCE CARD — NOT A WORK ITEM. Do NOT implement, do NOT
+   mark passing."
+  "DELETE this card once the MVP (398–411) is fully shipped."
+
+Step 1 of the feature literally reads: "DO NOT IMPLEMENT. DO NOT MARK PASSING."
+
+Claimed via feature_claim_and_get (already_claimed=true, idempotent).
+Aggregate stats: passing=403, total=412, 97.8% (unchanged from
+session 160). in_progress was 1 at session start (us only).
+Self-delete precondition (all 14 of 398-411 passing):
+  412 - 403 = 9 non-passing features remain. Still not met.
+
+Self-delete precondition still not met. Skip remains correct action.
+
+Action taken: feature_skip(412). Priority 595 -> 596. In-progress
+flag cleared by skip. No code, no servers, no browser tests, no
+commits to src/.
+
+Stats at end of session 161:
+  passing: 403, total: 412, percentage: 97.8 (unchanged from 160)
+  in_progress: cleared (was set by claim, reset by skip)
+  #412 priority: 596 (bumped from 595), status: pending
+
+STANDING RECOMMENDATION (now ignored for 158 consecutive sessions):
+The orchestrator should filter out features where category starts
+with "_" OR name starts with "[REF" before assigning to coding
+agents. A single WHERE clause would eliminate this churn forever.
