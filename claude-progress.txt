@@ -9782,3 +9782,22 @@ card stops getting auto-assigned every cycle.
 ### Stats at end of session 68
   passing: 399, total: 412, percentage: 96.8 (no change -- skip is metadata-only)
   #412 priority: 502 (bumped from 501), status: pending after skip
+
+## Session: 2026-05-27 - Feature #412 SKIPPED (session 69, still a reference card)
+
+Same no-op as sessions 3-68. Orchestrator assigned #412 again. Claimed it via
+feature_claim_and_get (already_claimed=true, idempotent), confirmed it is byte-
+identical: category="_Reference", name starts with "[REF -- DO NOT IMPLEMENT]",
+description and step #1 both say "DO NOT IMPLEMENT. DO NOT MARK PASSING."
+
+Called feature_skip(412). Priority bumped 502 -> 503. No source touched, no
+servers started, no browser automation, no commit. The card itself says a
+human must delete it once #398-#411 are all passing.
+
+Orchestrator filter recommendation (unchanged across ~69 sessions): exclude
+category starting with "_" OR name starting with "[REF" from the coding-agent
+assignment pool so this reference card stops being claimed every cycle.
+
+### Stats at end of session 69
+  passing: 399, total: 412, percentage: 96.8 (unchanged -- skip is metadata-only)
+  #412 priority: 503 (bumped from 502), status: pending after skip
