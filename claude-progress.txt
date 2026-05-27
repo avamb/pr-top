@@ -10036,3 +10036,34 @@ filter by two orders of magnitude.
 ### Stats at end of session 77
   passing: 399, total: 412, percentage: 96.8 (unchanged -- skip is metadata-only)
   #412 priority: 511 (bumped from 510), status: pending after skip
+
+## Session: 2026-05-27 - Feature #412 SKIPPED (session 78)
+
+Identical no-op to sessions 3-77. Orchestrator assigned #412 yet again.
+Claimed via feature_claim_and_get (already_claimed=true, idempotent).
+Card unchanged: category="_Reference", name starts with "[REF -- DO NOT
+IMPLEMENT]", description and step #1 both say "DO NOT IMPLEMENT. DO NOT
+MARK PASSING."
+
+Project stats at session start: passing=399, in_progress=3, total=412,
+percentage=96.8. Identical to sessions 75-77. MVP retirement (398-411
+all passing) still not complete, so the matrix is still potentially
+useful and its self-delete precondition is not met. Skip remains the
+correct action -- mark_passing would violate the card's own
+instructions and the rule requiring browser verification of real
+functionality; mark_failing would falsely flag the card as a broken
+test; delete is forbidden by my role.
+
+Action: feature_skip(412) called. Priority bumped 511 -> 512. No source
+code touched, no servers started, no browser automation, no commits to
+src/.
+
+Orchestrator filter recommendation (now 78 sessions of identical
+advice): exclude category starting with "_" OR name starting with
+"[REF" from the coding-agent assignment pool. One line of Python in
+the orchestrator's feature-picking query. Cumulative cost of 78
+wasted sessions vastly exceeds the cost of writing this filter.
+
+### Stats at end of session 78
+  passing: 399, total: 412, percentage: 96.8 (unchanged -- skip is metadata-only)
+  #412 priority: 512 (bumped from 511), status: pending after skip
