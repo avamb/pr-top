@@ -10754,5 +10754,34 @@ recommendation has now been ignored for 96 consecutive sessions.
 
 ### Stats at end of session 99
   passing: 399, total: 412, percentage: 96.8 (unchanged -- skip is metadata-only)
-  in_progress: 2 (was 3 incl. #412; reset by skip)
+  in_progress: 2 (was 3 incl. #412; cleared by skip)
   #412 priority: 533 (bumped from 532), status: pending after skip
+
+================================================================
+Session 100 (2026-05-27) - Feature #412 skipped (AGAIN)
+================================================================
+
+Assigned: #412 "[REF -- DO NOT IMPLEMENT] Model assignment matrix
+for Session Reminders MVP (398-411)"
+
+This is the 100th consecutive session in which the orchestrator
+has handed feature #412 to a coding agent. The feature description
+and steps are explicit:
+  "DO NOT IMPLEMENT. DO NOT MARK PASSING."
+  "DELETE this card once the MVP (398-411) is fully shipped."
+
+It is a reference card documenting which model (Opus/Sonnet) to
+use on tickets 398-411. It is not a work item.
+
+Action taken: feature_skip(412). Priority 533 -> 534. No code,
+no servers, no browser tests, no commits to src/.
+
+Stats at end of session 100:
+  passing: 399, total: 412, percentage: 96.8 (unchanged)
+  in_progress: 2 (cleared from #412 by skip)
+  #412 priority: 534 (bumped from 533), status: pending
+
+STANDING RECOMMENDATION (now ignored for 97 consecutive sessions):
+The orchestrator should filter out features where category starts
+with "_" OR name starts with "[REF" before assigning to coding
+agents. A single WHERE clause would eliminate this churn forever.
