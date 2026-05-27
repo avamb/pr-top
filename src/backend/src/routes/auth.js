@@ -39,7 +39,7 @@ function extractToken(req) {
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, role, language, timezone, utm_source, utm_medium, utm_campaign, utm_content, utm_term } = req.body;
+    const { email, password, role, language, timezone, utm_source, utm_medium, utm_campaign, utm_content, utm_term, intended_plan } = req.body;
 
     // Validate required fields individually
     const missingFields = [];
@@ -134,27 +134,79 @@ router.post('/register', async (req, res) => {
     const user = result[0].values[0];
     const userId = user[0];
 
-    // Create trial subscription for therapists
+    // Resolve intended_plan — only 'confirm' is accepted from the public signup flow.
+    // Any other value (unknown plan, missing, etc.) silently falls back to the default Trial.
+    const INTENDED_PLAN_ALLOWLIST = ['confirm'];
+    const useConfirmPlan = INTENDED_PLAN_ALLOWLIST.includes(intended_plan);
+
+    // Check for acquisition source marker (header OR query param)
+    const acquisitionSource = req.headers['x-acquisition-source'] || req.query.source || null;
+
+    // Create subscription for therapists
     let trialDays = 14;
+    let subscriptionPlan = 'trial';
+    let nextAction = undefined;
+
     if (userRole === 'therapist') {
-      try {
-        const settingsResult = db.exec("SELECT value FROM platform_settings WHERE key = 'trial_duration_days'");
-        if (settingsResult.length > 0 && settingsResult[0].values.length > 0) {
-          trialDays = parseInt(settingsResult[0].values[0][0], 10) || 14;
-        }
-      } catch (e) {
-        logger.warn('Could not read trial_duration_days setting, using default 14');
-      }
-
       const now = new Date();
-      const trialEnd = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
 
-      db.run(
-        `INSERT INTO subscriptions (therapist_id, plan, status, trial_ends_at, current_period_start, current_period_end, created_at, updated_at)
-         VALUES (?, 'trial', 'active', ?, ?, ?, ?, ?)`,
-        [userId, trialEnd.toISOString(), now.toISOString(), trialEnd.toISOString(), now.toISOString(), now.toISOString()]
-      );
-      logger.info(`Trial subscription created for therapist id=${userId}, expires ${trialEnd.toISOString()}`);
+      if (useConfirmPlan) {
+        // Confirm landing-page flow: create trialing subscription (7-day free trial).
+        // stripe_customer_id / current_period_start / current_period_end are filled in
+        // later when Stripe Checkout completes.
+        const confirmTrialEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        db.run(
+          `INSERT INTO subscriptions (therapist_id, plan, status, trial_ends_at, current_period_start, current_period_end, stripe_customer_id, created_at, updated_at)
+           VALUES (?, 'confirm', 'trialing', ?, NULL, NULL, NULL, ?, ?)`,
+          [userId, confirmTrialEnd.toISOString(), now.toISOString(), now.toISOString()]
+        );
+        logger.info(`Confirm subscription (trialing) created for therapist id=${userId}, trial ends ${confirmTrialEnd.toISOString()}`);
+        subscriptionPlan = 'confirm';
+        nextAction = 'await_stripe_checkout';
+
+        // Update leads table entry for this email if it exists: mark source as landing_confirm.
+        try {
+          db.run(
+            "UPDATE leads SET source = 'landing_confirm' WHERE email = ?",
+            [normalizedEmail]
+          );
+        } catch (e) {
+          logger.warn(`Could not update leads source for ${normalizedEmail}: ${e.message}`);
+        }
+
+        // Audit-log the confirm-landing registration.
+        db.run(
+          "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'register_confirm_landing', 'user', ?, ?, datetime('now'))",
+          [userId, userId, JSON.stringify({ email: normalizedEmail, acquisition_source: acquisitionSource || null })]
+        );
+      } else {
+        // Standard Trial flow
+        try {
+          const settingsResult = db.exec("SELECT value FROM platform_settings WHERE key = 'trial_duration_days'");
+          if (settingsResult.length > 0 && settingsResult[0].values.length > 0) {
+            trialDays = parseInt(settingsResult[0].values[0][0], 10) || 14;
+          }
+        } catch (e) {
+          logger.warn('Could not read trial_duration_days setting, using default 14');
+        }
+
+        const trialEnd = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
+        db.run(
+          `INSERT INTO subscriptions (therapist_id, plan, status, trial_ends_at, current_period_start, current_period_end, created_at, updated_at)
+           VALUES (?, 'trial', 'active', ?, ?, ?, ?, ?)`,
+          [userId, trialEnd.toISOString(), now.toISOString(), trialEnd.toISOString(), now.toISOString(), now.toISOString()]
+        );
+        logger.info(`Trial subscription created for therapist id=${userId}, expires ${trialEnd.toISOString()}`);
+
+        // Update leads source if acquisition marker present
+        if (acquisitionSource) {
+          try {
+            db.run("UPDATE leads SET source = ? WHERE email = ?", [acquisitionSource, normalizedEmail]);
+          } catch (e) {
+            logger.warn(`Could not update leads source for ${normalizedEmail}: ${e.message}`);
+          }
+        }
+      }
     }
 
     saveDatabaseAfterWrite();
@@ -184,7 +236,7 @@ router.post('/register', async (req, res) => {
     // Set secure HttpOnly session cookie
     res.cookie('session_token', token, SESSION_COOKIE_OPTIONS);
 
-    res.status(201).json({
+    const responseBody = {
       message: 'User registered successfully',
       user: {
         id: userId,
@@ -194,7 +246,12 @@ router.post('/register', async (req, res) => {
         timezone: userTimezone
       },
       token
-    });
+    };
+    if (nextAction) {
+      responseBody.next_action = nextAction;
+    }
+
+    res.status(201).json(responseBody);
   } catch (error) {
     logger.error('Registration error: ' + error.message);
     logger.error('Stack: ' + error.stack);

@@ -1012,6 +1012,9 @@ function applySchema(db) {
     ['trial_duration_days', '14'],
     ['trial_client_limit', '3'],
     ['trial_session_limit', '5'],
+    ['confirm_client_limit', '25'],
+    ['confirm_session_limit', '0'],
+    ['confirm_price_monthly', '900'],
     ['basic_client_limit', '10'],
     ['basic_session_limit', '20'],
     ['pro_client_limit', '30'],
@@ -2008,6 +2011,62 @@ function applySchema(db) {
     }
   } catch (e) {
     logger.warn('T-28: subscriptions rebuild failed (non-fatal, scheduler uses OR fallback): ' + e.message);
+  }
+
+  // T-409 (Feature #409): Add 'confirm' to subscriptions.plan CHECK constraint.
+  // The standalone Confirm tier ($9/mo, 25 clients, reminders only) is a new plan value.
+  // SQLite CHECK constraints cannot be altered in-place, so we rebuild via the standard
+  // CREATE → INSERT SELECT → DROP → RENAME pattern.
+  try {
+    const schemaRes409 = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='subscriptions'");
+    const existingSql409 = (schemaRes409.length > 0 && schemaRes409[0].values.length > 0)
+      ? String(schemaRes409[0].values[0][0])
+      : '';
+    if (!existingSql409.includes("'confirm'")) {
+      db.run('PRAGMA foreign_keys = OFF');
+      db.run(`CREATE TABLE IF NOT EXISTS subscriptions_t409 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        therapist_id INTEGER NOT NULL REFERENCES users(id),
+        stripe_customer_id TEXT,
+        stripe_subscription_id TEXT,
+        plan TEXT DEFAULT 'trial' CHECK(plan IN ('trial', 'confirm', 'basic', 'pro', 'premium')),
+        status TEXT DEFAULT 'trialing' CHECK(status IN ('active', 'trialing', 'canceled', 'past_due', 'expired')),
+        trial_ends_at TEXT,
+        current_period_start TEXT,
+        current_period_end TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        pending_plan TEXT,
+        stripe_payment_method_id TEXT,
+        canceled_at TEXT,
+        is_manual_override INTEGER DEFAULT 0,
+        override_reason TEXT,
+        override_expires_at TEXT,
+        override_set_by INTEGER
+      )`);
+      db.run(`INSERT INTO subscriptions_t409
+        (id, therapist_id, stripe_customer_id, stripe_subscription_id,
+         plan, status, trial_ends_at, current_period_start, current_period_end,
+         created_at, updated_at, pending_plan, stripe_payment_method_id,
+         canceled_at, is_manual_override, override_reason,
+         override_expires_at, override_set_by)
+        SELECT
+          id, therapist_id, stripe_customer_id, stripe_subscription_id,
+          plan, status, trial_ends_at, current_period_start, current_period_end,
+          created_at, updated_at, pending_plan, stripe_payment_method_id,
+          canceled_at, is_manual_override, override_reason,
+          override_expires_at, override_set_by
+        FROM subscriptions`);
+      db.run('DROP TABLE subscriptions');
+      db.run('ALTER TABLE subscriptions_t409 RENAME TO subscriptions');
+      db.run('CREATE INDEX IF NOT EXISTS idx_subscriptions_therapist ON subscriptions(therapist_id)');
+      db.run('PRAGMA foreign_keys = ON');
+      logger.info('T-409: subscriptions rebuilt — confirm plan added to CHECK constraint');
+    } else {
+      logger.debug('T-409: subscriptions already has confirm plan — skipping rebuild');
+    }
+  } catch (e) {
+    logger.warn('T-409: subscriptions rebuild failed (non-fatal): ' + e.message);
   }
 
   // Seed default superadmin account if not exists

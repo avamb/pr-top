@@ -24,6 +24,7 @@
 
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
+const { canUseSessionReminders } = require('../utils/planLimits');
 
 let telegramNotify;
 try {
@@ -394,6 +395,12 @@ async function dispatchOptInNotices() {
     for (const row of candidatesRes[0].values) {
       const [clientId, telegramId, language, therapistId] = row;
 
+      // Skip if therapist's plan no longer includes session reminders.
+      if (!canUseSessionReminders(therapistId)) {
+        logger.debug(`[reminderService] dispatchOptInNotices: skip client ${clientId} — therapist ${therapistId} plan access revoked`);
+        continue;
+      }
+
       // Localised opt-in text. Keep this minimal — bot tickets will replace
       // with a proper template lookup. Fallback to EN if locale missing.
       const lang = ['en', 'ru', 'es', 'uk'].includes(language) ? language : 'en';
@@ -557,6 +564,17 @@ async function dispatchDue() {
       const [dispatchId, sessionId, therapistId, clientId, offsetLabel, scheduledSendAt, channel] = row;
 
       try {
+        // ── 0. Plan-access gate — skip dispatch if therapist's plan no longer includes reminders ──
+        if (!canUseSessionReminders(therapistId)) {
+          db.run(
+            `UPDATE session_reminder_dispatches SET status='skipped', error='therapist_plan_revoked' WHERE id=?`,
+            [dispatchId]
+          );
+          summary.skipped++;
+          logger.debug(`[reminderService] dispatchDue: skip dispatch ${dispatchId} — therapist ${therapistId} plan access revoked`);
+          continue;
+        }
+
         // ── 1. Re-read session state ──
         const sessRes = db.exec(
           `SELECT scheduled_at, attendance_status, client_timezone_snapshot

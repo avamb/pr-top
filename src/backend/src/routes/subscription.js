@@ -288,7 +288,7 @@ router.post('/change-plan', requireAuth, (req, res) => {
     const userId = req.user.userId;
     const { plan: newPlan } = req.body;
 
-    const validPlans = ['basic', 'pro', 'premium'];
+    const validPlans = ['confirm', 'basic', 'pro', 'premium'];
     if (!newPlan || !validPlans.includes(newPlan)) {
       return res.status(400).json({ error: 'Invalid plan. Must be one of: ' + validPlans.join(', ') });
     }
@@ -325,7 +325,7 @@ router.post('/change-plan', requireAuth, (req, res) => {
     }
 
     // Determine if this is an upgrade or downgrade
-    const planOrder = { trial: 0, basic: 1, pro: 2, premium: 3 };
+    const planOrder = { trial: 0, confirm: 0.5, basic: 1, pro: 2, premium: 3 };
     const isDowngrade = planOrder[newPlan] < planOrder[currentPlan];
 
     const now = new Date();
@@ -448,7 +448,7 @@ router.post('/checkout', requireAuth, async (req, res) => {
     const userId = req.user.userId;
     const { plan } = req.body;
 
-    const validPlans = ['basic', 'pro', 'premium'];
+    const validPlans = ['confirm', 'basic', 'pro', 'premium'];
     if (!plan || !validPlans.includes(plan)) {
       return res.status(400).json({ error: 'Invalid plan. Must be one of: ' + validPlans.join(', ') });
     }

@@ -6,12 +6,13 @@ import { formatUserDateOnly } from '../utils/formatDate';
 
 const PLAN_DETAILS = {
   trial: { name: 'Trial', price: 'Free', clients: 3, sessions: 5, features: ['Basic dashboard', 'Timeline view', 'SOS alerts'] },
+  confirm: { name: 'Confirm', price: '$9/mo', clients: 25, sessions: 0, features: ['Session reminders included', 'No session uploads', 'No exercises library', 'Upgradeable to Basic anytime'] },
   basic: { name: 'Basic', price: '$19/mo', clients: 10, sessions: 20, features: ['Full exercise library', 'Basic dashboard', 'Timeline view', 'SOS alerts'] },
   pro: { name: 'Pro', price: '$49/mo', clients: 30, sessions: 60, features: ['Custom exercises', 'Full analytics', 'NL queries (text + voice)', 'Timeline view', 'SOS alerts'] },
   premium: { name: 'Premium', price: '$99/mo', clients: 'Unlimited', sessions: 'Unlimited', features: ['Everything in Pro', 'Priority support', 'Full analytics + export', 'Unlimited usage'] }
 };
 
-const PLAN_ORDER = { trial: 0, basic: 1, pro: 2, premium: 3 };
+const PLAN_ORDER = { trial: 0, confirm: 0.5, basic: 1, pro: 2, premium: 3 };
 
 export default function Subscription() {
   const { t } = useTranslation();

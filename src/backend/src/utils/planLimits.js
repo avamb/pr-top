@@ -7,6 +7,7 @@ const { logger } = require('./logger');
 // Default limits if platform_settings not available
 const DEFAULT_LIMITS = {
   trial: { clients: 3, sessions_per_month: 5 },
+  confirm: { clients: 25, sessions_per_month: 0 },
   basic: { clients: 10, sessions_per_month: 20 },
   pro: { clients: 30, sessions_per_month: 60 },
   premium: { clients: Infinity, sessions_per_month: Infinity }
@@ -152,6 +153,37 @@ function checkSessionLimit(therapistId) {
   return { allowed, current, limit, plan, message };
 }
 
+/**
+ * Check if a therapist can use Session Reminders based on their active subscription.
+ *
+ * Returns true for plan ∈ {trial, confirm, basic, pro, premium}
+ * AND status ∈ {active, trialing}.
+ * Returns false for expired / cancelled / past_due or missing subscription.
+ *
+ * @param {number|string} therapistId
+ * @returns {boolean}
+ */
+function canUseSessionReminders(therapistId) {
+  try {
+    const db = getDatabase();
+    const result = db.exec(
+      `SELECT plan, status FROM subscriptions
+         WHERE therapist_id = ?
+         ORDER BY created_at DESC
+         LIMIT 1`,
+      [therapistId]
+    );
+    if (!result.length || !result[0].values.length) return false;
+    const [plan, status] = result[0].values[0];
+    const planOk = ['trial', 'confirm', 'basic', 'pro', 'premium'].includes(plan);
+    const statusOk = ['active', 'trialing'].includes(status);
+    return planOk && statusOk;
+  } catch (e) {
+    logger.warn(`canUseSessionReminders check failed for therapist ${therapistId}: ${e.message}`);
+    return false;
+  }
+}
+
 module.exports = {
   getClientLimit,
   getSessionLimit,
@@ -159,5 +191,6 @@ module.exports = {
   getSessionCount,
   checkClientLimit,
   checkSessionLimit,
+  canUseSessionReminders,
   DEFAULT_LIMITS
 };

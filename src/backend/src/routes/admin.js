@@ -65,7 +65,7 @@ router.put('/therapists/:id/plan', (req, res) => {
     const { plan, reason, expires_at } = req.body;
     const db = getDatabase();
 
-    const validPlans = ['trial', 'basic', 'pro', 'premium'];
+    const validPlans = ['trial', 'confirm', 'basic', 'pro', 'premium'];
     if (!plan || !validPlans.includes(plan)) {
       return res.status(400).json({ error: 'Invalid plan. Must be one of: ' + validPlans.join(', ') });
     }

@@ -6,6 +6,7 @@ const { logger } = require('../utils/logger');
 const { encrypt, decrypt } = require('../services/encryption');
 // T-08: Modality-specific summarization presets and validation helpers.
 const summaryPresets = require('../services/ai/summary-presets');
+const { canUseSessionReminders } = require('../utils/planLimits');
 
 const router = express.Router();
 
@@ -462,6 +463,112 @@ router.patch('/summary', authenticate, (req, res) => {
   } catch (error) {
     logger.error('Update summary settings error: ' + error.message);
     res.status(500).json({ error: 'Failed to update summary settings' });
+  }
+});
+
+// ── Session Reminder Policy (T-409) ──────────────────────────────────────────
+
+/**
+ * GET /api/settings/reminder-policy
+ * Returns the therapist's session reminder policy (stored in reminder_policy_json).
+ * Requires an active paid plan that includes session reminders.
+ * Returns 403 if plan does not allow session reminders.
+ */
+router.get('/reminder-policy', authenticate, (req, res) => {
+  try {
+    if (!canUseSessionReminders(req.user.userId || req.user.id)) {
+      return res.status(403).json({ error: 'Session reminders require an active Confirm, Basic, Pro, or Premium subscription.' });
+    }
+
+    const db = getDatabase();
+    const result = db.exec(
+      'SELECT reminder_policy_json FROM users WHERE id = ?',
+      [req.user.userId || req.user.id]
+    );
+
+    if (!result.length || !result[0].values.length) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const rawPolicy = result[0].values[0][0];
+    let policy = {
+      enabled: false,
+      tone: 'neutral',
+      channels: ['telegram'],
+      advance_hours_1: 24,
+      advance_hours_2: 2
+    };
+    if (rawPolicy) {
+      try { policy = { ...policy, ...JSON.parse(rawPolicy) }; } catch (e) { /* keep defaults */ }
+    }
+
+    res.json({ reminder_policy: policy });
+  } catch (error) {
+    logger.error('Get reminder-policy error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch reminder policy' });
+  }
+});
+
+/**
+ * PUT /api/settings/reminder-policy
+ * Updates the therapist's session reminder policy.
+ * Requires an active paid plan that includes session reminders.
+ * Returns 403 if plan does not allow session reminders.
+ */
+router.put('/reminder-policy', authenticate, (req, res) => {
+  try {
+    if (!canUseSessionReminders(req.user.userId || req.user.id)) {
+      return res.status(403).json({ error: 'Session reminders require an active Confirm, Basic, Pro, or Premium subscription.' });
+    }
+
+    const { enabled, tone, channels, advance_hours_1, advance_hours_2 } = req.body;
+
+    // Validate fields
+    const validTones = ['neutral', 'warm', 'brief'];
+    if (tone !== undefined && !validTones.includes(tone)) {
+      return res.status(400).json({ error: 'Invalid tone. Must be one of: ' + validTones.join(', ') });
+    }
+    if (channels !== undefined && (!Array.isArray(channels) || !channels.every(c => ['telegram', 'email'].includes(c)))) {
+      return res.status(400).json({ error: 'Invalid channels. Must be an array containing telegram and/or email.' });
+    }
+    if (advance_hours_1 !== undefined && (typeof advance_hours_1 !== 'number' || advance_hours_1 < 1)) {
+      return res.status(400).json({ error: 'advance_hours_1 must be a positive number' });
+    }
+    if (advance_hours_2 !== undefined && (typeof advance_hours_2 !== 'number' || advance_hours_2 < 1)) {
+      return res.status(400).json({ error: 'advance_hours_2 must be a positive number' });
+    }
+
+    const db = getDatabase();
+    const userId = req.user.userId || req.user.id;
+
+    // Read existing policy
+    const existing = db.exec('SELECT reminder_policy_json FROM users WHERE id = ?', [userId]);
+    if (!existing.length || !existing[0].values.length) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    let policy = { enabled: false, tone: 'neutral', channels: ['telegram'], advance_hours_1: 24, advance_hours_2: 2 };
+    const rawPolicy = existing[0].values[0][0];
+    if (rawPolicy) {
+      try { policy = { ...policy, ...JSON.parse(rawPolicy) }; } catch (e) { /* keep defaults */ }
+    }
+
+    // Merge updates
+    if (enabled !== undefined) policy.enabled = !!enabled;
+    if (tone !== undefined) policy.tone = tone;
+    if (channels !== undefined) policy.channels = channels;
+    if (advance_hours_1 !== undefined) policy.advance_hours_1 = advance_hours_1;
+    if (advance_hours_2 !== undefined) policy.advance_hours_2 = advance_hours_2;
+
+    db.run('UPDATE users SET reminder_policy_json = ? WHERE id = ?', [JSON.stringify(policy), userId]);
+    const { saveDatabaseAfterWrite } = require('../db/connection');
+    saveDatabaseAfterWrite();
+
+    logger.info(`Reminder policy updated for therapist id=${userId}: enabled=${policy.enabled}, tone=${policy.tone}`);
+
+    res.json({ message: 'Reminder policy updated successfully', reminder_policy: policy });
+  } catch (error) {
+    logger.error('Update reminder-policy error: ' + error.message);
+    res.status(500).json({ error: 'Failed to update reminder policy' });
   }
 });
 

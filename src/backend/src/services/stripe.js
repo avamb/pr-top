@@ -190,6 +190,7 @@ async function getCustomer(customerId) {
  * Plan pricing configuration (in cents)
  */
 const PLAN_PRICES = {
+  confirm: { amount: 900, currency: 'usd', name: 'Confirm', interval: 'month' },
   basic: { amount: 1900, currency: 'usd', name: 'Basic Plan', interval: 'month' },
   pro: { amount: 4900, currency: 'usd', name: 'Pro Plan', interval: 'month' },
   premium: { amount: 9900, currency: 'usd', name: 'Premium Plan', interval: 'month' }
