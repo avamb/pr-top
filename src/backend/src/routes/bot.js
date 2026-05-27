@@ -14,6 +14,7 @@ const telegramNotify = require('../utils/telegramNotify');
 const emailService = require('../services/emailService');
 const wsService = require('../services/websocketService');
 const assignmentsService = require('../services/assignments');
+const reminderService = require('../services/reminderService');
 
 // Directory for encrypted diary voice/video files
 const DIARY_FILES_DIR = path.resolve(__dirname, '../../data/diary_files');
@@ -2047,6 +2048,225 @@ router.put('/settings/:telegram_id', botAuth, (req, res) => {
   } catch (error) {
     logger.error('Bot settings update error: ' + error.message);
     res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+// POST /api/bot/session-attendance — Feature #404
+// Called by the bot's callback_query handler when a client taps a reminder
+// inline-keyboard button. Authenticated via x-bot-api-key.
+//
+// Body: { telegram_user_id, session_id, action: 'confirm'|'request_reschedule'|'release', note? }
+// Returns: { ok: true, new_status: '...' }
+router.post('/session-attendance', botAuth, (req, res) => {
+  try {
+    const { telegram_user_id, session_id, action, note } = req.body;
+
+    if (!telegram_user_id) {
+      return res.status(400).json({ error: 'telegram_user_id is required' });
+    }
+    if (!session_id) {
+      return res.status(400).json({ error: 'session_id is required' });
+    }
+    const validActions = ['confirm', 'request_reschedule', 'release'];
+    if (!action || !validActions.includes(action)) {
+      return res.status(400).json({ error: 'action must be one of: confirm, request_reschedule, release' });
+    }
+
+    const db = getDatabase();
+
+    // Look up the client by telegram_user_id.
+    const clientRes = db.exec(
+      'SELECT id, role, consent_therapist_access, therapist_id FROM users WHERE telegram_id = ?',
+      [String(telegram_user_id)]
+    );
+    if (!clientRes.length || !clientRes[0].values.length) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const [clientId, role, consentAccess, therapistId] = clientRes[0].values[0];
+
+    if (role !== 'client') {
+      return res.status(403).json({ error: 'Only clients may update session attendance via the bot' });
+    }
+    if (!consentAccess) {
+      return res.status(403).json({ error: 'Client has not granted therapist access consent' });
+    }
+
+    // Verify the session belongs to this client.
+    const sessionRes = db.exec(
+      'SELECT id, client_id, attendance_status FROM sessions WHERE id = ? AND client_id = ?',
+      [session_id, clientId]
+    );
+    if (!sessionRes.length || !sessionRes[0].values.length) {
+      return res.status(404).json({ error: 'Session not found or does not belong to this client' });
+    }
+    const [, , currentAttendance] = sessionRes[0].values[0];
+
+    let newStatus;
+    if (action === 'confirm') {
+      newStatus = 'confirmed';
+    } else if (action === 'request_reschedule') {
+      newStatus = 'reschedule_requested';
+    } else {
+      // action === 'release'
+      newStatus = 'cancelled_by_client';
+    }
+
+    // Update attendance_status.
+    db.run(
+      `UPDATE sessions
+          SET attendance_status = ?,
+              attendance_updated_at = datetime('now'),
+              attendance_updated_by = ?
+        WHERE id = ?`,
+      [newStatus, clientId, session_id]
+    );
+
+    // Audit log.
+    const auditDetails = JSON.stringify({
+      session_id: Number(session_id),
+      client_id: clientId,
+      action,
+      previous_status: currentAttendance || null,
+      new_status: newStatus,
+      note: note || null
+    });
+    db.run(
+      `INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at)
+       VALUES (?, 'session_attendance_update', 'session', ?, ?, datetime('now'))`,
+      [clientId, session_id, auditDetails]
+    );
+
+    saveDatabaseAfterWrite();
+
+    logger.info(`[Bot] session-attendance: client ${clientId} set session ${session_id} → ${newStatus} (action=${action})`);
+
+    // WebSocket: emit to therapist for reschedule and release actions.
+    if (therapistId) {
+      try {
+        if (action === 'request_reschedule') {
+          wsService.emitToTherapist(therapistId, {
+            type: 'session_attendance_update',
+            session_id: Number(session_id),
+            client_id: clientId,
+            attendance_status: newStatus,
+            action,
+            timestamp: new Date().toISOString()
+          });
+        } else if (action === 'release') {
+          // Higher-priority badge for release/cancellation.
+          wsService.emitToTherapist(therapistId, {
+            type: 'session_attendance_update',
+            session_id: Number(session_id),
+            client_id: clientId,
+            attendance_status: newStatus,
+            action,
+            priority: 'high',
+            timestamp: new Date().toISOString()
+          });
+        }
+      } catch (wsErr) {
+        logger.warn(`[Bot] session-attendance WS emit error: ${wsErr.message}`);
+      }
+
+      // For 'release': cancel pending reminders for the session.
+      if (action === 'release') {
+        try {
+          const cancelResult = reminderService.cancelPendingForSession(Number(session_id), 'cancelled_by_client');
+          logger.info(`[Bot] session-attendance release: cancelled ${cancelResult.cancelled} pending reminder(s) for session ${session_id}`);
+        } catch (cancelErr) {
+          logger.warn(`[Bot] session-attendance cancelPendingForSession error: ${cancelErr.message}`);
+        }
+      }
+    }
+
+    return res.json({ ok: true, new_status: newStatus });
+  } catch (error) {
+    logger.error(`[Bot] session-attendance error: ${error.message}`);
+    logger.error('Stack: ' + error.stack);
+    return res.status(500).json({ error: 'Failed to update session attendance: ' + error.message });
+  }
+});
+
+// POST /api/bot/session-reminders-optin — Feature #404
+// Called by the bot when a client responds to the one-shot opt-in notice, or
+// explicitly opts out via a bot command. Authenticated via x-bot-api-key.
+//
+// Body: { telegram_user_id, action: 'opt_in'|'opt_out' }
+// Returns: { ok: true, new_status: 'opted_in'|'opted_out' }
+router.post('/session-reminders-optin', botAuth, async (req, res) => {
+  try {
+    const { telegram_user_id, action } = req.body;
+
+    if (!telegram_user_id) {
+      return res.status(400).json({ error: 'telegram_user_id is required' });
+    }
+    const validActions = ['opt_in', 'opt_out'];
+    if (!action || !validActions.includes(action)) {
+      return res.status(400).json({ error: 'action must be one of: opt_in, opt_out' });
+    }
+
+    const db = getDatabase();
+
+    // Look up the client by telegram_user_id.
+    const clientRes = db.exec(
+      'SELECT id, role FROM users WHERE telegram_id = ?',
+      [String(telegram_user_id)]
+    );
+    if (!clientRes.length || !clientRes[0].values.length) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const [clientId, role] = clientRes[0].values[0];
+
+    if (role !== 'client') {
+      return res.status(403).json({ error: 'Only clients may update session reminder preferences' });
+    }
+
+    const newEnabled = action === 'opt_in' ? 1 : 0;
+
+    db.run(
+      `UPDATE users SET session_reminders_enabled = ?, updated_at = datetime('now') WHERE id = ?`,
+      [newEnabled, clientId]
+    );
+    saveDatabaseAfterWrite();
+
+    logger.info(`[Bot] session-reminders-optin: client ${clientId} → session_reminders_enabled=${newEnabled} (action=${action})`);
+
+    // On opt_in: immediately plan reminders for ALL upcoming sessions for this
+    // client (so the therapist doesn't wait for the 15-min planner tick).
+    if (action === 'opt_in') {
+      try {
+        const upcomingRes = db.exec(
+          `SELECT id FROM sessions
+            WHERE client_id = ?
+              AND (attendance_status IS NULL OR attendance_status NOT IN ('cancelled_by_client','cancelled_by_therapist','no_show','attended'))
+              AND scheduled_at > datetime('now')
+            ORDER BY scheduled_at ASC`,
+          [clientId]
+        );
+        if (upcomingRes.length && upcomingRes[0].values.length) {
+          const sessionIds = upcomingRes[0].values.map((r) => r[0]);
+          let planned = 0;
+          for (const sid of sessionIds) {
+            try {
+              const result = await reminderService.planForSession(sid);
+              planned += result.planned || 0;
+            } catch (planErr) {
+              logger.warn(`[Bot] session-reminders-optin planForSession(${sid}) error: ${planErr.message}`);
+            }
+          }
+          logger.info(`[Bot] session-reminders-optin: planned ${planned} reminder dispatch(es) across ${sessionIds.length} session(s) for client ${clientId}`);
+        }
+      } catch (planSweepErr) {
+        logger.warn(`[Bot] session-reminders-optin plan sweep error: ${planSweepErr.message}`);
+      }
+    }
+
+    const newStatus = action === 'opt_in' ? 'opted_in' : 'opted_out';
+    return res.json({ ok: true, new_status: newStatus });
+  } catch (error) {
+    logger.error(`[Bot] session-reminders-optin error: ${error.message}`);
+    logger.error('Stack: ' + error.stack);
+    return res.status(500).json({ error: 'Failed to update session reminder preference: ' + error.message });
   }
 });
 
