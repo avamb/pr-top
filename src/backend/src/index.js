@@ -102,6 +102,12 @@ const supervisionShareRoutes = require('./routes/supervisionShare');
 app.use('/share', supervisionShareRoutes);
 app.use('/api/share', supervisionShareRoutes);
 
+// Public attendance-link endpoint (T-27/#401): one-tap Confirm / Reschedule /
+// Release / opt-in URLs delivered via email reminders. Public, no auth, no
+// CSRF — security comes from an HMAC-signed token (utils/signedLinks.js).
+const publicAttendanceRoutes = require('./routes/publicAttendance');
+app.use('/api/public', publicAttendanceRoutes);
+
 // CSRF Protection
 app.get('/api/csrf-token', csrfTokenEndpoint);
 app.use('/api/', csrfProtection);
