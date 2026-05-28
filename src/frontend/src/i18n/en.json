@@ -2042,5 +2042,100 @@
         }
       }
     }
+  },
+  "landingConfirm": {
+    "hero": {
+      "headline": "Zero No-Shows. Happy Clients.",
+      "subheadline": "Automated session reminders via Telegram — your clients confirm, reschedule, or release their slot in one tap.",
+      "ctaBtn": "Start Free Trial"
+    },
+    "pain": {
+      "title": "Sound familiar?",
+      "card1Title": "Empty slot on Friday",
+      "card1Body": "Client forgot, you lose €80, and the time can't be filled last minute.",
+      "card2Title": "\"Can we move it?\" — the morning of",
+      "card2Body": "Late cancellations waste your day and break your focus before the next session.",
+      "card3Title": "Another reminder written by hand",
+      "card3Body": "Every week you copy-paste the same Telegram message. It's minutes that grind you down."
+    },
+    "howItWorks": {
+      "title": "How It Works",
+      "step1Title": "You add a session",
+      "step1Body": "Log the date and time in your PR-TOP dashboard. That's it.",
+      "step2Title": "Reminders send automatically",
+      "step2Body": "Your client gets a Telegram message the day before and 2 hours before the session.",
+      "step3Title": "One tap to confirm",
+      "step3Body": "Client taps ✅ to confirm, 🔄 to request a reschedule, or 🆓 to release the slot. You see the update instantly."
+    },
+    "demo": {
+      "title": "What Your Client Sees",
+      "caption": "A simple, clear Telegram message — no new apps, no logins required."
+    },
+    "price": {
+      "title": "One Plan. No Surprises.",
+      "amount": "$9",
+      "period": "/month",
+      "trial": "7-day free trial, then $9/month",
+      "includesTitle": "What's included",
+      "item1": "Session reminders for all clients",
+      "item2": "Up to 25 clients",
+      "item3": "Confirm · Reschedule · Release buttons",
+      "item4": "Attendance tracking in dashboard",
+      "item5": "EN, RU, ES, UK client messages",
+      "notIncludedTitle": "Not included in this plan",
+      "notItem1": "Audio session upload & transcription",
+      "notItem2": "Exercise library",
+      "notItem3": "Natural-language queries",
+      "ctaBtn": "Start 7-day free trial",
+      "upgradeNote": "Need more? Upgrade to Pro anytime."
+    },
+    "faq": {
+      "title": "Questions & Answers",
+      "q1": "What if the client refuses to enable reminders?",
+      "a1": "No problem — reminders are opt-in for clients. You can resend the opt-in invitation from your Settings page whenever you like.",
+      "q2": "Are my client data encrypted?",
+      "a2": "Yes. All client names, contacts, and session notes are AES-256 encrypted at the application layer. Neither Telegram's servers nor our support team can read them.",
+      "q3": "Will you add WhatsApp or SMS?",
+      "a3": "Telegram is our first channel. WhatsApp and SMS are on the roadmap — sign up and vote in the community feedback thread.",
+      "q4": "Can I upgrade to the full PR-TOP plan later?",
+      "a4": "Absolutely. Your Confirm subscription upgrades to Basic, Pro, or Premium at any time — all your data and clients transfer seamlessly.",
+      "q5": "Is there a refund if I cancel?",
+      "a5": "Yes. If you cancel within 7 days of your first charge, email support@pr-top.com and we'll issue a full refund, no questions asked.",
+      "q6": "What languages are supported?",
+      "a6": "Reminder messages are sent in the client's own language — English, Russian, Spanish, or Ukrainian. The dashboard is available in all four languages too."
+    },
+    "signup": {
+      "title": "Get Started Free",
+      "nameLabel": "Your first name",
+      "namePlaceholder": "Maria",
+      "emailLabel": "Work email",
+      "emailPlaceholder": "you@example.com",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Min 8 chars, upper, lower, number",
+      "languageLabel": "Dashboard language",
+      "timezoneLabel": "Your timezone",
+      "consentAge": "I confirm I am 18 years of age or older",
+      "consentPrivacy": "I have read and agree to the Privacy Policy and Terms of Service",
+      "consentReminders": "I agree to use Telegram session reminders for my clients",
+      "submitBtn": "Create free account",
+      "submitting": "Creating account...",
+      "orLogin": "Already have an account?",
+      "loginLink": "Log in",
+      "errors": {
+        "required": "This field is required",
+        "invalidEmail": "Please enter a valid email address",
+        "passwordWeak": "Password must be at least 8 characters with upper/lower case and a number",
+        "nameRequired": "Please enter your first name",
+        "consentRequired": "Please accept all required terms to continue",
+        "generic": "Registration failed. Please try again."
+      }
+    },
+    "stickyCta": "Try free for 7 days",
+    "meta": {
+      "title": "PR-TOP Confirm — Automated Session Reminders for Therapists",
+      "description": "Eliminate no-shows with automated Telegram session reminders. Clients confirm, reschedule, or release in one tap. Try free for 7 days.",
+      "ogTitle": "Zero No-Shows for Therapists & Coaches",
+      "ogDescription": "Automated session reminders via Telegram. $9/month after a free 7-day trial."
+    }
   }
 }

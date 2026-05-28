@@ -266,6 +266,52 @@ Superadmins manage the platform through a dedicated admin panel.
 | PWA Install Prompt | Browser-native install prompt for mobile |
 | Service Worker | Offline caching, background sync, update notifications |
 
+### 4.13 Session Reminders & Attendance Assistant *(🧪 Experimental — R&D, on trial)*
+
+> **Status:** Experimental / R&D. Internal code name: **Appointment Confirmations**.
+> Full architecture: [`docs/new_fichas/New Features/session-reminders-architecture.md`](new_fichas/New%20Features/session-reminders-architecture.md).
+> This section is a **summary**; the architecture document is the source of truth.
+
+A soft, ethical no-show prevention layer for therapists, coaches, and helping practitioners. Deliberately not a "discipline" or "fines" system — all UI copy uses neutral, supportive language ("Reminders", "Reschedule policy", "Open slots"); the words *fine*, *penalty*, *violation*, *no-show* never appear in client-facing strings.
+
+| Feature | Description |
+|---------|-------------|
+| Wall-clock-anchored reminders | Sent at 09:00 client local time the day before the session, and again on the day of (no later than 2 hours before). Quiet-hours-aware. |
+| Multi-channel dispatch | Telegram **and** email are always sent when both contact channels exist (no therapist channel toggle in MVP). |
+| One-tap client actions | Inline buttons: ✅ I'll be there / 🔄 Ask to reschedule / 🆓 Release this slot. |
+| Reschedule flow | Client *requests* via bot; therapist decides and manually updates the time. No self-service rescheduling. |
+| Slot release | Releasing the slot marks the session `cancelled_by_client`; therapist gets a manual "Offer to another client" action with a pre-filled message template. |
+| Attendance status | New per-session field separate from the existing recording lifecycle status: `null → confirmed → attended` (or `reschedule_requested`, `cancelled_by_client`, `cancelled_by_therapist`, `no_show`). |
+| Soft no-show auto-flag | After `scheduled_at + duration + 30min`, sessions without an attendance update are auto-tagged (overridable). UI label: "Не состоялась" / "Marked as not attended" — never "No-show". |
+| Therapist policy | Per-therapist JSON settings: enabled, tone preset (Neutral/Warm/Brief), client reschedule/release lead hours, optional custom templates per locale. |
+| 3C-strict client consent | New `session_reminders_enabled` tri-state column on clients. Existing clients get a one-shot bot opt-in notice (✅ Ok / 🔕 Don't); silence = no reminders. New clients tap a pre-checked consent box during the existing T-18 onboarding flow. |
+| Dashboard widget | "Upcoming — confirmation status" panel showing the next 7 days with one-click attendance overrides and pending opt-in clients. |
+| Read-only monthly stats | Confirmed / reschedules / late cancellations / no-shows for the therapist's own learning — never aggregated across therapists, never shared with clients. |
+
+**Acquisition model:**
+- This feature is **included by default** in Basic / Pro / Premium tiers.
+- It is also sold as a **standalone "Confirm" tier** (entry-level, ~$9/mo) acquired *only* via a dedicated public landing page at `/confirm` (no menu, no sidebar — full-funnel signup → 7-day trial → Stripe).
+- The Confirm tier exposes a deliberately simplified dashboard (client list + reminders + monthly stats); higher-tier features (audio upload, transcripts, exercises, NL queries, full analytics) remain locked with upgrade prompts.
+
+**Data flow & privacy:**
+- The only new client-facing communication is the *fact a session is scheduled at time T* — already known to both parties.
+- No diary, notes, summaries, anamnesis, or other Class A data is included in reminder messages.
+- T-18 consent disclaimer is bumped (`consent_version` increment) with an additive line acknowledging session-reminder dispatch via Telegram and email.
+
+**Scheduling implementation (summary):**
+- Three new cron jobs in `services/scheduler.js`: `plan-reminders` (every 15 min), `dispatch-opt-in-notices` (every 10 min), `dispatch-due-reminders` (every 5 min), plus an hourly `mark-no-shows` sweep.
+- New table `session_reminder_dispatches` with a unique index `(session_id, offset_minutes, channel)` for structural idempotency.
+- Wall-clock targets computed with IANA timezone math (DST-safe), snapshotted into `sessions.client_timezone_snapshot` at plan time.
+- On reschedule / cancellation, pending dispatches transition to `superseded`; the planner re-creates fresh rows.
+
+**Out of scope for MVP (deferred to v2+):**
+- WhatsApp / SMS channels.
+- Automatic waitlist matching.
+- Self-service rescheduling (would require an availability/working-hours model).
+- iCal / Google Calendar 2-way sync.
+- Late-cancellation fee mechanics.
+- AI-personalised message tone.
+
 ---
 
 ## 5. Security & Encryption
@@ -315,9 +361,10 @@ See Section 4.9 for full plan comparison.
 
 **Tier-Gated Features:**
 - **Trial:** 3 clients, 5 sessions/mo, basic analytics, limited export
-- **Basic:** 10 clients, 20 sessions/mo, basic analytics, limited export
-- **Pro:** 30 clients, 60 sessions/mo, full analytics, NL queries, full export
-- **Premium:** Unlimited clients/sessions, full analytics + export, NL queries, priority support
+- **Confirm** *(🧪 experimental, see §4.13):* 25 clients, 0 audio sessions/mo, session reminders only. ~$9/mo. Acquired exclusively via the standalone `/confirm` landing page (not visible in the main subscription matrix on the app dashboard). 7-day trial.
+- **Basic:** 10 clients, 20 sessions/mo, basic analytics, limited export, session reminders included
+- **Pro:** 30 clients, 60 sessions/mo, full analytics, NL queries, full export, session reminders included
+- **Premium:** Unlimited clients/sessions, full analytics + export, NL queries, priority support, session reminders included
 
 ---
 
@@ -506,10 +553,14 @@ All configuration via `.env` file. Key variable groups:
 
 | Task | Schedule | Description |
 |------|----------|-------------|
-| Trial Expiry | Daily | Downgrade expired trial accounts |
+| Trial Expiry | Daily | Downgrade expired trial accounts (plan-agnostic: keys off `status='trialing'`) |
 | Subscription Downgrade | Daily | Handle expired subscriptions |
 | Expiry Warning | Daily | Email warnings before subscription expires |
 | Diary Reminder | Daily | Remind inactive clients to journal |
+| Session Reminder Planner *(🧪 §4.13)* | Every 15 min | Build dispatch rows for upcoming sessions in client tz |
+| Session Reminder Opt-In Notices *(🧪 §4.13)* | Every 10 min | One-shot bot consent prompts for clients with `session_reminders_enabled IS NULL` |
+| Session Reminder Dispatcher *(🧪 §4.13)* | Every 5 min | Send due Telegram/email session reminders |
+| Session No-Show Sweep *(🧪 §4.13)* | Hourly | Soft-default `attendance_status='no_show'` after `scheduled_at + duration + 30min` |
 | CSRF Cleanup | Hourly | Remove expired CSRF tokens |
 | Database Backup | Configurable | Automated encrypted backups |
 

@@ -2042,5 +2042,100 @@
         }
       }
     }
+  },
+  "landingConfirm": {
+    "hero": {
+      "headline": "Cero Ausencias. Clientes Satisfechos.",
+      "subheadline": "Recordatorios de sesión automáticos por Telegram — tus clientes confirman, reprograman o cancelan con un toque.",
+      "ctaBtn": "Prueba Gratis"
+    },
+    "pain": {
+      "title": "¿Te suena familiar?",
+      "card1Title": "Hueco vacío el viernes",
+      "card1Body": "El cliente lo olvidó, pierdes dinero y ya no puedes llenar ese tiempo a última hora.",
+      "card2Title": "«¿Podemos cambiarlo?» — la mañana del día",
+      "card2Body": "Las cancelaciones tardías arruinan tu día y te descuadran antes de la próxima sesión.",
+      "card3Title": "Otro recordatorio escrito a mano",
+      "card3Body": "Cada semana copias el mismo mensaje en Telegram. Son minutos que te desgastan."
+    },
+    "howItWorks": {
+      "title": "Cómo Funciona",
+      "step1Title": "Añades una sesión",
+      "step1Body": "Registra la fecha y hora en tu dashboard de PR-TOP. Eso es todo.",
+      "step2Title": "Los recordatorios se envían solos",
+      "step2Body": "Tu cliente recibe un mensaje en Telegram el día anterior y 2 horas antes de la sesión.",
+      "step3Title": "Un toque para confirmar",
+      "step3Body": "El cliente toca ✅ para confirmar, 🔄 para pedir un cambio o 🆓 para liberar el hueco. Ves la respuesta al instante."
+    },
+    "demo": {
+      "title": "Lo Que Ve Tu Cliente",
+      "caption": "Un mensaje claro y sencillo en Telegram — sin apps nuevas, sin contraseñas."
+    },
+    "price": {
+      "title": "Un Solo Plan. Sin Sorpresas.",
+      "amount": "$9",
+      "period": "/mes",
+      "trial": "7 días gratis, luego $9/mes",
+      "includesTitle": "Qué incluye",
+      "item1": "Recordatorios de sesión para todos tus clientes",
+      "item2": "Hasta 25 clientes",
+      "item3": "Botones: Confirmar · Reprogramar · Liberar",
+      "item4": "Seguimiento de asistencia en el dashboard",
+      "item5": "Mensajes en ES, EN, RU, UK",
+      "notIncludedTitle": "No incluido en este plan",
+      "notItem1": "Subida y transcripción de audio",
+      "notItem2": "Biblioteca de ejercicios",
+      "notItem3": "Consultas en lenguaje natural",
+      "ctaBtn": "Empezar 7 días gratis",
+      "upgradeNote": "¿Necesitas más? Mejora a Pro cuando quieras."
+    },
+    "faq": {
+      "title": "Preguntas Frecuentes",
+      "q1": "¿Qué pasa si el cliente no quiere activar los recordatorios?",
+      "a1": "Los recordatorios son optativos para los clientes. Puedes reenviar la invitación desde la página de Ajustes cuando quieras.",
+      "q2": "¿Están cifrados los datos de mis clientes?",
+      "a2": "Sí. Todos los nombres, datos de contacto y notas de sesión están cifrados con AES-256 en la capa de aplicación. Ni Telegram ni nuestro soporte pueden leerlos.",
+      "q3": "¿Añadiréis WhatsApp o SMS?",
+      "a3": "Telegram es nuestro primer canal. WhatsApp y SMS están en el roadmap — regístrate y vota en el hilo de feedback.",
+      "q4": "¿Puedo pasar al plan completo de PR-TOP más adelante?",
+      "a4": "Por supuesto. Tu suscripción Confirm se mejora a Basic, Pro o Premium en cualquier momento — todos tus datos y clientes se transfieren sin problemas.",
+      "q5": "¿Hay reembolso si cancelo?",
+      "a5": "Sí. Si cancelas dentro de los 7 días tras el primer cargo, escribe a support@pr-top.com y te devolvemos el importe completo sin preguntas.",
+      "q6": "¿Qué idiomas están disponibles?",
+      "a6": "Los recordatorios se envían en el idioma del cliente — inglés, ruso, español o ucraniano. El dashboard también está disponible en los cuatro idiomas."
+    },
+    "signup": {
+      "title": "Empieza Gratis",
+      "nameLabel": "Tu nombre",
+      "namePlaceholder": "María",
+      "emailLabel": "Email de trabajo",
+      "emailPlaceholder": "tu@ejemplo.com",
+      "passwordLabel": "Contraseña",
+      "passwordPlaceholder": "Mín. 8 caracteres, mayús., minús., número",
+      "languageLabel": "Idioma del dashboard",
+      "timezoneLabel": "Tu zona horaria",
+      "consentAge": "Confirmo que tengo 18 años o más",
+      "consentPrivacy": "He leído y acepto la Política de privacidad y los Términos de servicio",
+      "consentReminders": "Acepto usar los recordatorios de sesión por Telegram para mis clientes",
+      "submitBtn": "Crear cuenta gratuita",
+      "submitting": "Creando cuenta...",
+      "orLogin": "¿Ya tienes cuenta?",
+      "loginLink": "Iniciar sesión",
+      "errors": {
+        "required": "Este campo es obligatorio",
+        "invalidEmail": "Por favor, introduce un email válido",
+        "passwordWeak": "La contraseña debe tener al menos 8 caracteres con mayúsculas, minúsculas y un número",
+        "nameRequired": "Por favor, introduce tu nombre",
+        "consentRequired": "Por favor, acepta todos los términos requeridos para continuar",
+        "generic": "Error en el registro. Inténtalo de nuevo."
+      }
+    },
+    "stickyCta": "7 días gratis",
+    "meta": {
+      "title": "PR-TOP Confirm — Recordatorios Automáticos de Sesión para Terapeutas",
+      "description": "Elimina las ausencias con recordatorios automáticos en Telegram. Los clientes confirman o reprograman con un toque. Prueba 7 días gratis.",
+      "ogTitle": "Cero ausencias para terapeutas y coaches",
+      "ogDescription": "Recordatorios de sesión automáticos por Telegram. $9/mes tras 7 días de prueba gratuita."
+    }
   }
 }

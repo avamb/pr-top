@@ -5,6 +5,7 @@ import AuthGuard from './components/guards/AuthGuard';
 import TherapistGuard from './components/guards/TherapistGuard';
 import AdminGuard from './components/guards/AdminGuard';
 import Landing from './pages/Landing';
+import LandingConfirm from './pages/LandingConfirm';
 import Register from './pages/Register';
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
@@ -81,6 +82,13 @@ function App() {
       <Routes>
         {/* Public routes - no sidebar, no guards */}
         <Route path="/" element={<Landing />} />
+
+        {/* /confirm landing page - 4 locale variants, outside AppLayout */}
+        <Route path="/confirm" element={<LandingConfirm />} />
+        <Route path="/ru/confirm" element={<LandingConfirm locale="ru" />} />
+        <Route path="/es/confirm" element={<LandingConfirm locale="es" />} />
+        <Route path="/uk/confirm" element={<LandingConfirm locale="uk" />} />
+
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />

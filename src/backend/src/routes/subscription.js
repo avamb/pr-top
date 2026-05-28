@@ -467,7 +467,10 @@ router.post('/checkout', requireAuth, async (req, res) => {
     const currentStatus = subResult[0].values[0][2];
     let customerId = subResult[0].values[0][3];
 
-    if (currentPlan === plan) {
+    // Block same-plan upgrade only when already fully active (not trialing).
+    // Trialing users on the same plan still need to complete Stripe Checkout
+    // to add payment info and activate their subscription.
+    if (currentPlan === plan && currentStatus !== 'trialing') {
       return res.status(400).json({ error: 'Already on this plan' });
     }
 
