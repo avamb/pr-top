@@ -1982,6 +1982,77 @@
         "resendError": "Не вдалося надіслати. Спробуйте ще раз.",
         "rateLimited": "Запит надіслано нещодавно — зачекайте 48 год."
       }
+    },
+    "dashboard": {
+      "widget": {
+        "title": "Майбутні — Статус підтвердження",
+        "next7Days": "Наступні 7 днів",
+        "empty": "На наступні 7 днів сесій не заплановано.",
+        "fetchError": "Не вдалося завантажити майбутні сесії.",
+        "retry": "Повторити",
+        "colClient": "Клієнт",
+        "colWhen": "Коли",
+        "colStatus": "Статус",
+        "colActions": "Дії",
+        "markAttended": "Відвідано",
+        "markNoShow": "Не з'явився",
+        "reschedule": "Перенести…",
+        "reminderSent": "✓ нагадано",
+        "reminderPending": "⏳ нагадування заплановано",
+        "status": {
+          "pending": "Очікує",
+          "confirmed": "Підтверджено",
+          "reschedule": "Запит на перенесення",
+          "cancelled": "Скасовано",
+          "attended": "Відвідано",
+          "no_show": "Не з'явився"
+        }
+      },
+      "rescheduleModal": {
+        "title": "Перенести сесію",
+        "newTimeLabel": "Нова дата та час",
+        "notifyClient": "Повідомити клієнта через Telegram",
+        "cancel": "Скасувати",
+        "confirm": "Перенести",
+        "saving": "Збереження…",
+        "errorRequired": "Будь ласка, оберіть дату та час.",
+        "errorPast": "Будь ласка, оберіть час у майбутньому.",
+        "errorFailed": "Не вдалося перенести сесію."
+      }
+    },
+    "sessionDetail": {
+      "timeline": {
+        "title": "Історія відвідуваності та нагадувань",
+        "empty": "Подій нагадування або відвідуваності ще немає.",
+        "fetchError": "Не вдалося завантажити історію.",
+        "byClient": "Клієнт",
+        "byTherapist": "Терапевт",
+        "reason": "Причина",
+        "atSessionTime": "У момент сесії",
+        "minutesBefore": "За {{n}} хв",
+        "dayBefore": "За день",
+        "hoursBefore": "За {{n}} год",
+        "reminderVia": "Нагадування через {{channel}}",
+        "sentAt": "Надіслано о {{time}}",
+        "scheduledFor": "Заплановано на {{time}}",
+        "attendanceUpdated": "{{who}} відмітив відвідуваність: {{status}}",
+        "rescheduled": "Сесію перенесено на {{newTime}}",
+        "created": "Сесію створено",
+        "dispatchStatus": {
+          "sent": "надіслано",
+          "pending": "очікує",
+          "failed": "помилка",
+          "cancelled": "скасовано"
+        },
+        "attendanceStatus": {
+          "attended": "відвідано",
+          "no_show": "не з'явився",
+          "confirmed": "підтверджено",
+          "reschedule_requested": "запит на перенесення",
+          "cancelled_by_client": "скасовано клієнтом",
+          "cancelled_by_therapist": "скасовано терапевтом"
+        }
+      }
     }
   }
 }

@@ -1982,6 +1982,77 @@
         "resendError": "Не удалось отправить. Попробуйте снова.",
         "rateLimited": "Запрос был отправлен недавно — подождите 48 ч."
       }
+    },
+    "dashboard": {
+      "widget": {
+        "title": "Предстоящие — статус подтверждения",
+        "next7Days": "Ближайшие 7 дней",
+        "empty": "На ближайшие 7 дней сессий не запланировано.",
+        "fetchError": "Не удалось загрузить предстоящие сессии.",
+        "retry": "Повторить",
+        "colClient": "Клиент",
+        "colWhen": "Когда",
+        "colStatus": "Статус",
+        "colActions": "Действия",
+        "markAttended": "Состоялась",
+        "markNoShow": "Не пришёл",
+        "reschedule": "Перенести…",
+        "reminderSent": "✓ напомнили",
+        "reminderPending": "⏳ напоминание запланировано",
+        "status": {
+          "pending": "Ожидает",
+          "confirmed": "Подтверждена",
+          "reschedule": "Запрошен перенос",
+          "cancelled": "Отменена",
+          "attended": "Состоялась",
+          "no_show": "Не пришёл"
+        }
+      },
+      "rescheduleModal": {
+        "title": "Перенести сессию",
+        "newTimeLabel": "Новые дата и время",
+        "notifyClient": "Уведомить клиента через Telegram",
+        "cancel": "Отмена",
+        "confirm": "Перенести",
+        "saving": "Сохранение…",
+        "errorRequired": "Пожалуйста, выберите дату и время.",
+        "errorPast": "Пожалуйста, выберите время в будущем.",
+        "errorFailed": "Не удалось перенести сессию."
+      }
+    },
+    "sessionDetail": {
+      "timeline": {
+        "title": "История посещаемости и напоминаний",
+        "empty": "Пока нет событий напоминания или посещаемости.",
+        "fetchError": "Не удалось загрузить историю.",
+        "byClient": "Клиент",
+        "byTherapist": "Терапевт",
+        "reason": "Причина",
+        "atSessionTime": "В момент сессии",
+        "minutesBefore": "За {{n}} мин",
+        "dayBefore": "За день",
+        "hoursBefore": "За {{n}} ч",
+        "reminderVia": "Напоминание через {{channel}}",
+        "sentAt": "Отправлено в {{time}}",
+        "scheduledFor": "Запланировано на {{time}}",
+        "attendanceUpdated": "{{who}} отметил статус: {{status}}",
+        "rescheduled": "Сессия перенесена на {{newTime}}",
+        "created": "Сессия создана",
+        "dispatchStatus": {
+          "sent": "отправлено",
+          "pending": "ожидает",
+          "failed": "ошибка",
+          "cancelled": "отменено"
+        },
+        "attendanceStatus": {
+          "attended": "состоялась",
+          "no_show": "не пришёл",
+          "confirmed": "подтверждена",
+          "reschedule_requested": "запрошен перенос",
+          "cancelled_by_client": "отменена клиентом",
+          "cancelled_by_therapist": "отменена терапевтом"
+        }
+      }
     }
   }
 }

@@ -1970,6 +1970,77 @@
         "resendError": "No se pudo reenviar. Por favor, inténtalo de nuevo.",
         "rateLimited": "Enviado recientemente — espera 48 h antes de reenviar."
       }
+    },
+    "dashboard": {
+      "widget": {
+        "title": "Próximas — Estado de confirmación",
+        "next7Days": "Próximos 7 días",
+        "empty": "No hay sesiones programadas en los próximos 7 días.",
+        "fetchError": "No se pudieron cargar las sesiones próximas.",
+        "retry": "Reintentar",
+        "colClient": "Cliente",
+        "colWhen": "Cuándo",
+        "colStatus": "Estado",
+        "colActions": "Acciones",
+        "markAttended": "Asistió",
+        "markNoShow": "No se presentó",
+        "reschedule": "Reprogramar…",
+        "reminderSent": "✓ recordado",
+        "reminderPending": "⏳ recordatorio pendiente",
+        "status": {
+          "pending": "Pendiente",
+          "confirmed": "Confirmada",
+          "reschedule": "Reprogramación solicitada",
+          "cancelled": "Cancelada",
+          "attended": "Asistió",
+          "no_show": "No se presentó"
+        }
+      },
+      "rescheduleModal": {
+        "title": "Reprogramar sesión",
+        "newTimeLabel": "Nueva fecha y hora",
+        "notifyClient": "Notificar al cliente por Telegram",
+        "cancel": "Cancelar",
+        "confirm": "Reprogramar",
+        "saving": "Guardando…",
+        "errorRequired": "Por favor selecciona una fecha y hora.",
+        "errorPast": "Por favor selecciona una hora en el futuro.",
+        "errorFailed": "No se pudo reprogramar la sesión."
+      }
+    },
+    "sessionDetail": {
+      "timeline": {
+        "title": "Historial de asistencia y recordatorios",
+        "empty": "Aún no hay eventos de recordatorio ni de asistencia.",
+        "fetchError": "No se pudo cargar el historial.",
+        "byClient": "Cliente",
+        "byTherapist": "Terapeuta",
+        "reason": "Motivo",
+        "atSessionTime": "En el momento de la sesión",
+        "minutesBefore": "{{n}} min antes",
+        "dayBefore": "El día anterior",
+        "hoursBefore": "{{n}}h antes",
+        "reminderVia": "Recordatorio por {{channel}}",
+        "sentAt": "Enviado a las {{time}}",
+        "scheduledFor": "Programado para {{time}}",
+        "attendanceUpdated": "{{who}} marcó asistencia: {{status}}",
+        "rescheduled": "Sesión reprogramada para {{newTime}}",
+        "created": "Sesión creada",
+        "dispatchStatus": {
+          "sent": "enviado",
+          "pending": "pendiente",
+          "failed": "error",
+          "cancelled": "cancelado"
+        },
+        "attendanceStatus": {
+          "attended": "asistió",
+          "no_show": "no se presentó",
+          "confirmed": "confirmada",
+          "reschedule_requested": "reprogramación solicitada",
+          "cancelled_by_client": "cancelada por el cliente",
+          "cancelled_by_therapist": "cancelada por el terapeuta"
+        }
+      }
     }
   }
 }

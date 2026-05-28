@@ -1666,6 +1666,101 @@ router.post('/:id/reschedule', authenticate, requireRole('therapist', 'superadmi
   }
 });
 
+// GET /api/sessions/:id/attendance-history
+// Returns merged timeline of audit_log entries and session_reminder_dispatches for a session.
+router.get('/:id/attendance-history', authenticate, requireRole('therapist', 'superadmin'), async (req, res) => {
+  try {
+    const db = getDatabase();
+    const sessionId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(sessionId) || sessionId <= 0) {
+      return res.status(400).json({ error: 'Invalid session id' });
+    }
+
+    // Verify session ownership
+    const sessRes = db.exec(
+      'SELECT id, therapist_id, client_id FROM sessions WHERE id = ?',
+      [sessionId]
+    );
+    if (!sessRes.length || !sessRes[0].values.length) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    const [, therapistId, clientId] = sessRes[0].values[0];
+
+    if (req.user.role !== 'superadmin' && therapistId !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const events = [];
+
+    // 1. Relevant audit_log entries for this session
+    const auditRes = db.exec(
+      `SELECT al.id, al.action, al.details_encrypted, al.created_at,
+              u.email as actor_email, u.role as actor_role
+       FROM audit_logs al
+       LEFT JOIN users u ON u.id = al.actor_id
+       WHERE al.target_type = 'session' AND al.target_id = ?
+         AND al.action IN ('session_attendance_update', 'session_rescheduled',
+                           'session_attendance_update_by_client', 'session_created')
+       ORDER BY al.created_at ASC`,
+      [sessionId]
+    );
+    if (auditRes.length > 0) {
+      for (const row of auditRes[0].values) {
+        const [id, action, detailsJson, createdAt, actorEmail, actorRole] = row;
+        let details = {};
+        try { details = JSON.parse(detailsJson || '{}'); } catch (_) {}
+        events.push({
+          type: 'audit',
+          id: `audit_${id}`,
+          action,
+          details,
+          actor_email: actorEmail || null,
+          actor_role: actorRole || null,
+          timestamp: createdAt
+        });
+      }
+    }
+
+    // 2. Session reminder dispatches for this session
+    const dispatchRes = db.exec(
+      `SELECT id, offset_minutes, scheduled_send_at, channel, status, sent_at, error, message_ref
+       FROM session_reminder_dispatches
+       WHERE session_id = ?
+       ORDER BY COALESCE(sent_at, scheduled_send_at) ASC`,
+      [sessionId]
+    );
+    if (dispatchRes.length > 0) {
+      for (const row of dispatchRes[0].values) {
+        const [id, offsetMinutes, scheduledSendAt, channel, status, sentAt, error, messageRef] = row;
+        events.push({
+          type: 'reminder_dispatch',
+          id: `dispatch_${id}`,
+          offset_minutes: offsetMinutes,
+          scheduled_send_at: scheduledSendAt,
+          channel,
+          status,
+          sent_at: sentAt || null,
+          error: error || null,
+          message_ref: messageRef || null,
+          timestamp: sentAt || scheduledSendAt
+        });
+      }
+    }
+
+    // Sort all events by timestamp ascending
+    events.sort((a, b) => {
+      const ta = a.timestamp || '';
+      const tb = b.timestamp || '';
+      return ta < tb ? -1 : ta > tb ? 1 : 0;
+    });
+
+    res.json({ session_id: sessionId, events });
+  } catch (error) {
+    logger.error('Session attendance-history error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch attendance history' });
+  }
+});
+
 // Handle multer errors
 router.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {

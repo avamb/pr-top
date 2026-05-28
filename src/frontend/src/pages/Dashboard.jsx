@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { formatUserDateOnly } from '../utils/formatDate';
+import UpcomingConfirmationsWidget from '../components/UpcomingConfirmationsWidget';
 
 const API_URL = '/api';
 
@@ -316,6 +317,8 @@ export default function Dashboard() {
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [featureFlags, setFeatureFlags] = useState({});
+  const [reminderPolicyEnabled, setReminderPolicyEnabled] = useState(false);
 
   const abortControllerRef = React.useRef(null);
 
@@ -331,6 +334,8 @@ export default function Dashboard() {
     const parsedUser = JSON.parse(storedUser);
     setUser(parsedUser);
     fetchDashboardData(token);
+    fetchFeatureFlags(token);
+    fetchReminderPolicy(token);
 
     return () => {
       // Abort any in-flight requests when component unmounts
@@ -403,6 +408,34 @@ export default function Dashboard() {
     }
   }
 
+  async function fetchFeatureFlags(token) {
+    try {
+      const res = await fetch(`${API_URL}/features`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setFeatureFlags(data || {});
+    } catch (_) {
+      // Silently degrade — feature flags default to off
+    }
+  }
+
+  async function fetchReminderPolicy(token) {
+    try {
+      const res = await fetch(`${API_URL}/settings/reminder-policy`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      // API returns { reminder_policy: { enabled: bool, ... } }
+      const policy = (data && data.reminder_policy) ? data.reminder_policy : data;
+      setReminderPolicyEnabled(!!(policy && policy.enabled));
+    } catch (_) {
+      // Silently degrade
+    }
+  }
+
   if (!user) return null;
 
   return (
@@ -458,6 +491,13 @@ export default function Dashboard() {
             </div>
           ) : null}
         </section>
+
+        {/* Session Reminders: Upcoming Confirmations Widget — gated by feature flag + policy */}
+        {featureFlags.FEATURE_SESSION_REMINDERS && reminderPolicyEnabled && (
+          <section className="mb-8">
+            <UpcomingConfirmationsWidget />
+          </section>
+        )}
 
         <section>
           <h2 className="text-lg font-semibold text-text mb-4">{t('dashboard.recentActivity')}</h2>

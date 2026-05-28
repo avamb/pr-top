@@ -7,6 +7,7 @@ import AssignmentsPanel from '../components/AssignmentsPanel';
 // T-26: AI source disclaimer block rendered under the summary when the AI
 // pipeline pulled passages from the therapist's personal KB (T-09 RAG).
 import AiSourceDisclaimer from '../components/AiSourceDisclaimer';
+import AttendanceTimeline from '../components/AttendanceTimeline';
 
 const API = '/api';
 
@@ -778,6 +779,10 @@ function SessionDetail() {
                 canEdit={true}
               />
             )}
+
+            {/* Attendance & Reminder Timeline — visible for any session that has
+                a scheduled_at (i.e. went through the reminder flow). */}
+            <AttendanceTimeline sessionId={Number(id)} />
           </div>
         ) : (
           <p className="text-stone-400">{t('sessionDetail.sessionNotFound')}</p>

@@ -418,4 +418,79 @@ router.get('/analytics', (req, res) => {
   }
 });
 
+// GET /api/dashboard/upcoming-confirmations
+// Returns sessions in the next 7 days for the logged-in therapist with
+// attendance_status, last reminder dispatch status, and client display info.
+router.get('/upcoming-confirmations', (req, res) => {
+  try {
+    const db = getDatabase();
+    const therapistId = req.user.id;
+
+    const now = new Date();
+    const sevenDaysLater = new Date(now);
+    sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
+
+    const nowSql = now.toISOString().replace('T', ' ').split('.')[0];
+    const endSql = sevenDaysLater.toISOString().replace('T', ' ').split('.')[0];
+
+    // Fetch sessions in the next 7 days with client info and attendance status
+    const sessRes = db.exec(
+      `SELECT s.id, s.scheduled_at, s.attendance_status, s.attendance_updated_at,
+              u.id as client_id, u.email, u.telegram_id, u.first_name, u.last_name
+       FROM sessions s
+       JOIN users u ON u.id = s.client_id AND u.consent_therapist_access = 1
+       WHERE s.therapist_id = ?
+         AND s.scheduled_at >= ?
+         AND s.scheduled_at <= ?
+       ORDER BY s.scheduled_at ASC
+       LIMIT 50`,
+      [therapistId, nowSql, endSql]
+    );
+
+    const sessions = [];
+    if (sessRes.length > 0) {
+      for (const row of sessRes[0].values) {
+        const [sid, scheduledAt, attendanceStatus, attendanceUpdatedAt,
+               clientId, email, telegramId, firstName, lastName] = row;
+
+        // Get last reminder dispatch for this session
+        const dispatchRes = db.exec(
+          `SELECT status, sent_at, channel, scheduled_send_at
+           FROM session_reminder_dispatches
+           WHERE session_id = ?
+           ORDER BY COALESCE(sent_at, scheduled_send_at) DESC
+           LIMIT 1`,
+          [sid]
+        );
+        let lastDispatch = null;
+        if (dispatchRes.length > 0 && dispatchRes[0].values.length > 0) {
+          const [dStatus, sentAt, channel, scheduledSendAt] = dispatchRes[0].values[0];
+          lastDispatch = { status: dStatus, sent_at: sentAt, channel, scheduled_send_at: scheduledSendAt };
+        }
+
+        const clientName = (firstName && lastName)
+          ? `${firstName} ${lastName}`.trim()
+          : firstName || lastName || email || (telegramId ? `@${telegramId}` : `Client #${clientId}`);
+
+        sessions.push({
+          session_id: sid,
+          scheduled_at: scheduledAt,
+          attendance_status: attendanceStatus || null,
+          attendance_updated_at: attendanceUpdatedAt || null,
+          client_id: clientId,
+          client_name: clientName,
+          client_email: email || null,
+          client_telegram_id: telegramId || null,
+          last_reminder: lastDispatch
+        });
+      }
+    }
+
+    res.json({ sessions });
+  } catch (error) {
+    logger.error('Dashboard upcoming-confirmations error: ' + error.message);
+    res.status(500).json({ error: 'Failed to fetch upcoming confirmations' });
+  }
+});
+
 module.exports = router;

@@ -1970,6 +1970,77 @@
         "resendError": "Could not resend. Please try again.",
         "rateLimited": "Sent recently — please wait 48 h before resending."
       }
+    },
+    "dashboard": {
+      "widget": {
+        "title": "Upcoming — Confirmation Status",
+        "next7Days": "Next 7 days",
+        "empty": "No sessions scheduled in the next 7 days.",
+        "fetchError": "Could not load upcoming sessions.",
+        "retry": "Retry",
+        "colClient": "Client",
+        "colWhen": "When",
+        "colStatus": "Status",
+        "colActions": "Actions",
+        "markAttended": "Attended",
+        "markNoShow": "No-show",
+        "reschedule": "Reschedule…",
+        "reminderSent": "✓ reminded",
+        "reminderPending": "⏳ reminder due",
+        "status": {
+          "pending": "Pending",
+          "confirmed": "Confirmed",
+          "reschedule": "Reschedule requested",
+          "cancelled": "Cancelled",
+          "attended": "Attended",
+          "no_show": "No-show"
+        }
+      },
+      "rescheduleModal": {
+        "title": "Reschedule Session",
+        "newTimeLabel": "New date & time",
+        "notifyClient": "Notify client via Telegram",
+        "cancel": "Cancel",
+        "confirm": "Reschedule",
+        "saving": "Saving…",
+        "errorRequired": "Please select a date and time.",
+        "errorPast": "Please select a time in the future.",
+        "errorFailed": "Failed to reschedule session."
+      }
+    },
+    "sessionDetail": {
+      "timeline": {
+        "title": "Attendance & Reminder Timeline",
+        "empty": "No reminder or attendance events yet.",
+        "fetchError": "Could not load timeline.",
+        "byClient": "Client",
+        "byTherapist": "Therapist",
+        "reason": "Reason",
+        "atSessionTime": "At session time",
+        "minutesBefore": "{{n}} min before",
+        "dayBefore": "Day before",
+        "hoursBefore": "{{n}}h before",
+        "reminderVia": "Reminder via {{channel}}",
+        "sentAt": "Sent at {{time}}",
+        "scheduledFor": "Scheduled for {{time}}",
+        "attendanceUpdated": "{{who}} marked attendance: {{status}}",
+        "rescheduled": "Session rescheduled to {{newTime}}",
+        "created": "Session created",
+        "dispatchStatus": {
+          "sent": "sent",
+          "pending": "pending",
+          "failed": "failed",
+          "cancelled": "cancelled"
+        },
+        "attendanceStatus": {
+          "attended": "attended",
+          "no_show": "no-show",
+          "confirmed": "confirmed",
+          "reschedule_requested": "reschedule requested",
+          "cancelled_by_client": "cancelled by client",
+          "cancelled_by_therapist": "cancelled by therapist"
+        }
+      }
     }
   }
 }
