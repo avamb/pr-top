@@ -135,3 +135,19 @@ screenshot_*.png
 # Root-level package files (project packages are in src/)
 /package.json
 /package-lock.json
+
+# Hidden/local scratch scripts and outputs (May 2026 reminder work)
+.check_*.js
+.setup_test_*.js
+.test_*.js
+.verify_test_*.js
+.find_*.js
+_f*.json
+_health_check.json
+_schema_check*.js
+_tmp_schema_check*.js
+_timing_test_*.js
+response.json
+response.txt
+src/backend/.check_*.js
+src/backend/_tmp_schema_check*.js
