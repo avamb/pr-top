@@ -13815,3 +13815,57 @@ Stats at end of session 175:
   passing: 410, total: 411, percentage: 99.8 (UP from 409/99.5%)
   in_progress: 0
   #408 status: passing
+
+================================================================
+Session 176 (2026-05-28) - Feature #411 PASSING  *** 100% COMPLETE ***
+================================================================
+
+Assigned: #411 "Standalone /confirm landing page + signup funnel + Umami events"
+
+NEW FILES:
+  src/frontend/src/components/LandingLayout.jsx       - minimal wrapper, no sidebar/auth
+  src/frontend/src/components/landing/ConfirmHero.jsx
+  src/frontend/src/components/landing/ConfirmPainHooks.jsx
+  src/frontend/src/components/landing/ConfirmHowItWorks.jsx
+  src/frontend/src/components/landing/ConfirmDemo.jsx  - static Telegram chat mockup
+  src/frontend/src/components/landing/ConfirmPriceCard.jsx
+  src/frontend/src/components/landing/ConfirmFAQ.jsx   - 6-item accordion
+  src/frontend/src/components/landing/ConfirmSignupForm.jsx
+  src/frontend/src/pages/LandingConfirm.jsx            - SEO meta + hreflang + sticky CTA
+
+MODIFIED FILES:
+  src/frontend/src/App.jsx          - 4 locale routes outside GuardedLayout
+  src/frontend/src/i18n/en.json     - landingConfirm section
+  src/frontend/src/i18n/ru.json     - landingConfirm section
+  src/frontend/src/i18n/es.json     - landingConfirm section
+  src/frontend/src/i18n/uk.json     - landingConfirm section
+  src/frontend/src/i18n/index.js    - getInitialLanguage() reads URL path before localStorage
+  src/backend/src/routes/auth.js    - 'uk' locale support; first_name field in registration
+  src/backend/src/routes/subscription.js - allow checkout when status === 'trialing'
+
+KEY FIXES DURING IMPLEMENTATION:
+  1. react-helmet-async not installed -> replaced with useEffect DOM manipulation
+  2. Language flash on /ru/confirm -> i18n init now reads URL path at module load time
+  3. 403 on register -> CSRF token missing; added useCsrfToken hook to form
+  4. 404 on checkout -> wrong URL (/create-checkout-session); fixed to /api/subscription/checkout
+  5. 400 "Already on this plan" -> trialing users blocked; fixed guard in subscription.js
+
+VERIFICATION (browser automation):
+  - /confirm (EN): "Zero No-Shows. Happy Clients." heading visible
+  - /ru/confirm (RU): Russian text from first render (no EN flash)
+  - /es/confirm (ES): Spanish text from first render
+  - /uk/confirm (UK): Ukrainian text from first render
+  - FAQ accordion: opens/closes correctly
+  - Signup flow: POST /api/auth/register -> POST /api/subscription/checkout
+    -> redirect to Stripe dev success URL -> /subscription/success shows "active" Confirm plan
+  - LandingLayout renders WITHOUT AppLayout sidebar/nav
+  - Sticky CTA bar visible on mobile
+  - Test user: test411bconfirm@example.com -> Confirm plan active
+
+COMMIT: 9ddf2ce "feat(#411): confirm landing page signup funnel locale routes"
+
+Stats at end of session 176:
+  passing: 411, total: 411, percentage: 100.0 (UP from 410/99.8%)
+  in_progress: 0
+  #411 status: passing
+  *** ALL 411 FEATURES COMPLETE - 100% ***
