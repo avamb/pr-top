@@ -13747,3 +13747,71 @@ Stats at end of session 174:
   passing: 409, total: 411, percentage: 99.5 (UP from 408/99.3%)
   in_progress: 0
   #405 status: passing
+
+================================================================
+Session 175 (2026-05-28) - Feature #408 PASSING
+================================================================
+
+Assigned: #408 "Dashboard widget + session detail attendance panel"
+
+IMPLEMENTATION (components/endpoints were built in previous sessions, verified+wired here):
+
+1. UpcomingConfirmationsWidget.jsx
+   - Calls GET /api/dashboard/upcoming-confirmations (7-day lookahead)
+   - Table: Client | Date | Attendance badge | Quick actions
+   - "Attended" btn -> POST /api/sessions/:id/attendance {status:attended}
+   - "No-show" btn -> POST /api/sessions/:id/attendance {status:no_show}
+   - "Reschedule..." -> opens RescheduleModal; auto-refresh on success
+
+2. RescheduleModal.jsx
+   - datetime-local picker pre-filled with current scheduled_at
+   - "Notify client via Telegram" checkbox (checked by default)
+   - Cancel / Reschedule buttons
+   - POST /api/sessions/:id/reschedule {new_scheduled_at, notify_client}
+
+3. AttendanceTimeline.jsx
+   - Calls GET /api/sessions/:id/attendance-history
+   - Vertical timeline merging audit_logs + session_reminder_dispatches
+   - Event types: session_created, session_attendance_update, session_rescheduled,
+     reminder_dispatch (sent/pending/failed/cancelled)
+
+4. GET /api/dashboard/upcoming-confirmations (dashboard.js)
+   - Sessions in next 7 days, attendance_status, last reminder dispatch, client name
+
+5. GET /api/sessions/:id/attendance-history (sessions.js)
+   - Merges audit_logs (relevant actions) + session_reminder_dispatches, sorted by ts
+
+6. Dashboard.jsx mounts UpcomingConfirmationsWidget gated by:
+   featureFlags.FEATURE_SESSION_REMINDERS && reminderPolicyEnabled
+
+7. SessionDetail.jsx mounts AttendanceTimeline as section below assignments
+
+8. i18n: reminders.dashboard.* + reminders.sessionDetail.* in EN/RU/ES/UK
+
+INFRASTRUCTURE FIX THIS SESSION:
+   - vite.config.js proxy was targeting port 3097 (dead) -> fixed to 3091
+   - Started fresh backend on port 3091 with FEATURE_SESSION_REMINDERS=on
+   - Old backend (port 3001) was stale code from before GET /api/features was added
+
+VERIFICATION (browser automation):
+  - Registered test therapist therapist408b@example.com
+  - Created client "Test Session408" via UI
+  - Created 2 test sessions via sql.js script (stopped backend first to avoid overwrite)
+  - Dashboard widget: shows 2 rows (Fri May 29 14:00 UTC) with Pending badges
+  - Click "Attended" on session 30: badge updates to Attended (green) immediately
+  - Click "Reschedule..." on session 31: modal opens with pre-filled date, checkbox, buttons
+  - Set new date to May 30 15:00 -> confirm: session 31 now shows "Sat, May 30, 01:00 PM"
+  - Navigate to /sessions/30: AttendanceTimeline shows
+      "Session created" (May 28, 02:40 AM)
+      "therapist408b@example.com marked attendance: attended" (May 28, 02:43 AM)
+  - Navigate to /sessions/31: AttendanceTimeline shows
+      "Session created" + "Session rescheduled to May 30, 2026, 01:00 PM"
+  - No mock data patterns in any new component
+  - Console: only pre-existing React Router warnings + audio 404 (test data, expected)
+
+COMMIT: 5340a71 "feat(#408): Dashboard upcoming-confirmations widget + SessionDetail attendance timeline"
+
+Stats at end of session 175:
+  passing: 410, total: 411, percentage: 99.8 (UP from 409/99.5%)
+  in_progress: 0
+  #408 status: passing
