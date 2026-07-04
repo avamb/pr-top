@@ -40,4 +40,44 @@ export const LOCALES = ['ru', 'uk', 'es'];
  */
 export const PUBLIC_MARKETING_PATHS = new Set(PUBLIC_ROUTES.map((r) => r.path));
 
+/**
+ * All hreflang locales including the default English root. English lives at
+ * the root ("en" -> ""), each other locale mirrors the tree under a URL prefix.
+ * This ordered list is the canonical iteration order for prerender.mjs,
+ * generate-sitemap.mjs, and Seo.jsx.
+ */
+export const HREFLANG_LOCALES = ['en', ...LOCALES];
+
+/**
+ * Return the URL path for a public marketing route under a given hreflang locale.
+ *
+ *   localePathFor('en', '/')          -> '/'
+ *   localePathFor('en', '/privacy')   -> '/privacy'
+ *   localePathFor('ru', '/')          -> '/ru'
+ *   localePathFor('ru', '/privacy')   -> '/ru/privacy'
+ *
+ * NOTE: locale roots do NOT get a trailing slash — this matches the App.jsx
+ * router config and the dist/<loc>/index.html output layout.
+ */
+export function localePathFor(locale, routePath) {
+  if (locale === 'en') return routePath;
+  if (routePath === '/') return `/${locale}`;
+  return `/${locale}${routePath}`;
+}
+
+/**
+ * Full matrix of (locale, routePath) tuples spanning HREFLANG_LOCALES x
+ * PUBLIC_ROUTES. Length is HREFLANG_LOCALES.length * PUBLIC_ROUTES.length
+ * (4 * 7 = 28 with the current manifest).
+ */
+export const LOCALIZED_ROUTES = HREFLANG_LOCALES.flatMap((locale) =>
+  PUBLIC_ROUTES.map(({ path, changefreq, priority }) => ({
+    locale,
+    basePath: path,
+    path: localePathFor(locale, path),
+    changefreq,
+    priority,
+  })),
+);
+
 export default PUBLIC_ROUTES;

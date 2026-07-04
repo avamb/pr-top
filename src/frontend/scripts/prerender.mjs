@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright';
 
-import { PUBLIC_ROUTES } from '../src/seo/routes.mjs';
+import { LOCALIZED_ROUTES } from '../src/seo/routes.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -110,7 +110,8 @@ function startStaticServer() {
 }
 
 function outputPathFor(routePath) {
-  // Root route overwrites dist/index.html; every other route becomes
+  // Root ("/") overwrites dist/index.html; every other route (including locale
+  // roots like "/ru" and localized subpaths like "/ru/privacy") becomes
   // dist/<route>/index.html so the nginx/static host serves it verbatim.
   if (routePath === '/' || routePath === '') {
     return INDEX_HTML;
@@ -178,11 +179,19 @@ async function main() {
   try {
     browser = await chromium.launch({ headless: true });
 
-    // Prerender non-root routes first, then root — this way the root route
-    // sees the pristine shell template rather than an already-prerendered one.
-    const nonRoot = PUBLIC_ROUTES.filter((r) => r.path !== '/');
-    const root    = PUBLIC_ROUTES.filter((r) => r.path === '/');
-    const ordered = [...nonRoot, ...root];
+    // Prerender in an order that keeps the pristine INDEX_HTML shell in place
+    // as the SPA fallback until the last possible moment:
+    //   1. All deep localized paths (e.g. /ru/privacy, /es/security/gdpr).
+    //   2. All locale-root paths (/ru, /uk, /es) — writes dist/<loc>/index.html.
+    //   3. The English root ("/") — writes dist/index.html, the shell itself.
+    // With this ordering, when Playwright visits any locale root, the static
+    // server hasn't written dist/<loc>/index.html yet, so the SPA fallback
+    // serves the pristine shell (dist/index.html), and the React client boots
+    // fresh into the correct route.
+    const deep     = LOCALIZED_ROUTES.filter((r) => r.basePath !== '/');
+    const localeRoots = LOCALIZED_ROUTES.filter((r) => r.basePath === '/' && r.locale !== 'en');
+    const englishRoot = LOCALIZED_ROUTES.filter((r) => r.basePath === '/' && r.locale === 'en');
+    const ordered = [...deep, ...localeRoots, ...englishRoot];
 
     for (const route of ordered) {
       try {
@@ -211,7 +220,7 @@ async function main() {
     console.error('[prerender] one or more routes failed — aborting build');
     process.exit(1);
   }
-  console.log(`[prerender] wrote ${PUBLIC_ROUTES.length} prerendered pages under ${DIST_DIR}`);
+  console.log(`[prerender] wrote ${LOCALIZED_ROUTES.length} prerendered pages under ${DIST_DIR}`);
 }
 
 main().catch((err) => {
