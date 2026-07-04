@@ -13972,3 +13972,33 @@ Stats at end of session 179:
   passing: 414, total: 426, percentage: 97.2
   in_progress: 0
   #414 status: passing
+
+================================================================
+Session 180 (2026-07-04) - Feature #416 PASSING
+================================================================
+
+Assigned: #416 F5 - Static JSON-LD structured data
+
+IMPLEMENTATION:
+1. src/frontend/index.html - added <script type="application/ld+json"> in <head>
+   with @graph of:
+     - Organization (id, name PR-TOP, url, logo icon-192.svg)
+     - WebSite (id, url, name, publisher ref, inLanguage [en, ru, es, uk])
+     - SoftwareApplication (id, name, applicationCategory HealthApplication,
+       operatingSystem "Web, Telegram", offers Offer 0 USD InStock)
+2. src/frontend/src/pages/Landing.jsx - FaqSection now emits FAQPage JSON-LD
+   via react-helmet-async <Helmet>. mainEntity built from the 5 faqKeys
+   (landing.faqQ1..Q5 / faqA1..A5) resolved through t(), so the structured
+   data follows the active i18n locale.
+
+VERIFICATION:
+- npm run build succeeded (1105 modules; sitemap regenerated).
+- Extracted <script type=application/ld+json> from dist/index.html, JSON.parse
+  succeeded, @graph types include Organization, WebSite, SoftwareApplication.
+- FAQPage JSON-LD is injected at runtime by Helmet when Landing.jsx mounts
+  (5 Question mainEntity items sourced from live i18n).
+
+Stats at end of session 180:
+  passing: 415, total: 426, percentage: 97.4
+  in_progress: 0
+  #416 status: passing

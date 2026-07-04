@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { Helmet } from 'react-helmet-async';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import AccordionItem from '../components/AccordionItem';
 import { trackUmamiEvent } from '../utils/umami';
@@ -45,8 +46,28 @@ const faqKeys = [
 function FaqSection({ t }) {
   const [openIndex, setOpenIndex] = useState(null);
 
+  // Build FAQPage JSON-LD from the i18n values so the structured data
+  // stays in sync with the visible copy and the active locale (F5).
+  const faqJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqKeys.map((fk) => ({
+      '@type': 'Question',
+      name: t(fk.q),
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: t(fk.a),
+      },
+    })),
+  };
+
   return (
     <section id="faq" aria-label="FAQ" className="py-20 bg-surface">
+      <Helmet>
+        <script type="application/ld+json">
+          {JSON.stringify(faqJsonLd)}
+        </script>
+      </Helmet>
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
           <h2 className="text-3xl sm:text-4xl font-bold text-text">

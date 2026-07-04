@@ -16,6 +16,45 @@
     <!-- Umami Analytics (privacy-first, cookieless, GDPR-compliant) -->
     <!-- Script served via nginx reverse proxy at /analytics/script.js to avoid AdBlock -->
     <script defer src="/analytics/script.js" data-website-id="%VITE_UMAMI_WEBSITE_ID%"></script>
+    <!-- Static JSON-LD structured data (F5) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://pr-top.com/#organization",
+          "name": "PR-TOP",
+          "url": "https://pr-top.com",
+          "logo": "https://pr-top.com/icons/icon-192.svg",
+          "sameAs": []
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://pr-top.com/#website",
+          "url": "https://pr-top.com",
+          "name": "PR-TOP",
+          "publisher": { "@id": "https://pr-top.com/#organization" },
+          "inLanguage": ["en", "ru", "es", "uk"]
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://pr-top.com/#software",
+          "name": "PR-TOP",
+          "applicationCategory": "HealthApplication",
+          "operatingSystem": "Web, Telegram",
+          "url": "https://pr-top.com",
+          "publisher": { "@id": "https://pr-top.com/#organization" },
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD",
+            "availability": "https://schema.org/InStock"
+          }
+        }
+      ]
+    }
+    </script>
   </head>
   <body class="bg-background text-text">
     <div id="root"></div>
