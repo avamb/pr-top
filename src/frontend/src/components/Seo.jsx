@@ -19,7 +19,8 @@ import { useLocation } from 'react-router-dom';
  *   - path           (string, optional)      -> canonical URL suffix; defaults to current pathname
  *   - noindex        (bool, optional)        -> emits robots=noindex,nofollow; otherwise index,follow
  *   - ogType         (string, optional)      -> og:type; defaults to 'website'
- *   - ogImage        (string, optional)      -> og:image + twitter:image; defaults to '/og-default.png'
+ *   - ogImage        (string, optional)      -> og:image + twitter:image; defaults to the absolute
+ *                                                URL of /images/og-default.png (1200×630 PNG)
  *   - twitterCard    (string, optional)      -> twitter:card; defaults to 'summary_large_image'
  *   - canonicalHost  (string, optional)      -> canonical host; defaults to 'https://pr-top.com'
  */
@@ -29,7 +30,9 @@ export default function Seo({
   path,
   noindex = false,
   ogType = 'website',
-  ogImage = 'https://pr-top.com/og-default.png',
+  ogImage = 'https://pr-top.com/images/og-default.png',
+  ogImageWidth = 1200,
+  ogImageHeight = 630,
   twitterCard = 'summary_large_image',
   canonicalHost = 'https://pr-top.com',
 }) {
@@ -51,6 +54,8 @@ export default function Seo({
       <meta property="og:description" content={description} />
       <meta property="og:url" content={canonicalUrl} />
       <meta property="og:image" content={ogImage} />
+      <meta property="og:image:width" content={String(ogImageWidth)} />
+      <meta property="og:image:height" content={String(ogImageHeight)} />
 
       {/* Twitter Card */}
       <meta name="twitter:card" content={twitterCard} />

@@ -14034,3 +14034,44 @@ Stats at end of session 180:
   passing: 417, total: 426, percentage: 97.9 (UP from 416/97.7%)
   in_progress: 0
   #417 status: passing
+
+================================================================
+SESSION 181 - Feature #418 (SEO Foundation F7 - OG default image)
+================================================================
+
+Goal: Produce a real 1200x630 PNG at src/frontend/public/images/og-default.png
+composed from brand primitives, wire it as the absolute default og:image in
+Seo.jsx (plus og:image:width/height), and verify dist/images/og-default.png
+matches the dimensions via an image library.
+
+IMPLEMENTATION:
+1. src/frontend/scripts/generate-og-image.mjs (NEW)
+   - Uses sharp to rasterize an inline SVG (Deep Ink background, Therapy
+     Teal logo tile, PR-TOP wordmark, tagline "Practice on Top", subline
+     "AI support for psychologists who want their practice on top.",
+     pr-top.com footer + positioning line).
+   - Writes public/images/og-default.png at exactly 1200x630 and re-reads
+     it with sharp.metadata() to fail loudly if dimensions ever drift.
+2. src/frontend/package.json
+   - Added sharp ^0.35.3 as devDependency.
+   - Prepended `node scripts/generate-og-image.mjs` to the build script so
+     the PNG is regenerated on every build before Vite copies /public.
+3. src/frontend/src/components/Seo.jsx
+   - Default ogImage switched from '/og-default.png' to the absolute URL
+     'https://pr-top.com/images/og-default.png'.
+   - Added ogImageWidth (1200) and ogImageHeight (630) props emitting
+     <meta property="og:image:width"> and <meta property="og:image:height">.
+
+VERIFICATION:
+  - Frontend production build succeeded (4.12s); build script now generates
+    the OG image, runs Vite, then writes the sitemap.
+  - sharp.metadata() on the generated dist/images/og-default.png returns
+    {width:1200, height:630, format:'png'} - dimensions verified via image
+    library, not filename.
+  - Seo.jsx default og:image is an absolute URL (https://pr-top.com/...)
+    so preview / rendered pages emit an absolute og:image tag.
+
+Stats after session 181:
+  passing: 418, total: 426, percentage: 98.1
+  in_progress: 0
+  #418 status: passing
