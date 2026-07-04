@@ -185,8 +185,8 @@ export default function Landing() {
     <div className="min-h-screen bg-background font-sans">
       <Seo
         path="/"
-        title="PR-TOP — Between-session assistant for psychologists"
-        description="PR-TOP helps therapists preserve client context between sessions with encrypted diary, transcription, and AI summaries. Therapist-controlled data flows."
+        title="PR-TOP — AI Assistant for Therapists & Psychologists | Client Diary, Session Notes, Telegram Bot"
+        description="PR-TOP helps psychologists and coaches stay connected with clients between sessions: secure client diary, AI session notes, crisis alerts and a Telegram bot. GDPR-compliant."
       />
       {/* ─── Skip to content ─── */}
       <a href="#main-content" className="skip-to-content">
@@ -224,9 +224,12 @@ export default function Landing() {
             <div className="text-center lg:text-left">
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-text leading-tight tracking-tight">
                 {t('landing.heroTitle1')}
-                <br />
+                {' '}
                 <span className="text-primary">{t('landing.heroTitle2')}</span>
               </h1>
+              <p className="mt-4 max-w-2xl mx-auto lg:mx-0 text-xl sm:text-2xl text-primary font-semibold">
+                {t('landing.heroSlogan')}
+              </p>
               <p className="mt-6 max-w-2xl mx-auto lg:mx-0 text-lg sm:text-xl text-secondary leading-relaxed">
                 {t('landing.heroDesc')}
               </p>

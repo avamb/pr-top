@@ -162,9 +162,10 @@
     "setToZeroForUnlimited": "Establezca 0 para ilimitado"
   },
   "landing": {
-    "heroTitle1": "Mantén tu práctica",
-    "heroTitle2": "en lo más alto",
-    "heroDesc": "PR-TOP es un asistente de práctica para psicólogos, terapeutas y coaches — diseñado para reducir la rutina, apoyar la continuidad entre sesiones y mantener la atención humana.",
+    "heroTitle1": "Asistente de IA para terapeutas y psicólogos:",
+    "heroTitle2": "diario del cliente, notas de sesión y bot de Telegram entre sesiones",
+    "heroSlogan": "Mantén tu práctica en lo más alto",
+    "heroDesc": "PR-TOP ayuda a psicólogos, terapeutas y coaches a mantenerse en contacto con sus clientes entre sesiones: diario cifrado del cliente, notas de sesión con IA, alertas de crisis y un bot de Telegram. Cumple con GDPR.",
     "startTrial": "Prueba gratuita",
     "learnMore": "Cómo funciona",
     "featuresTitle": "Funciones que trabajan para usted",
