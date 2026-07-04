@@ -14114,3 +14114,36 @@ Stats after session 182:
   passing: 420, total: 426, percentage: 98.6
   in_progress: 0
   #420 status: passing
+
+================================================================
+Session 183 (2026-07-04) - Feature #421 PASSING
+================================================================
+
+Assigned: #421 F10 - Docker build compatibility for prerender
+
+IMPLEMENTATION:
+1. src/frontend/package.json: added playwright ^1.58.2 to devDependencies
+   (npm resolved to 1.61.1) so `import { chromium } from 'playwright'`
+   in scripts/prerender.mjs resolves inside the container.
+2. src/frontend/Dockerfile rewritten as multi-stage:
+   - Build stage now uses mcr.microsoft.com/playwright:v1.61.1-jammy which
+     ships Node.js + pre-installed Chromium under /ms-playwright, matching
+     the playwright npm package version. Sets PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+     and PLAYWRIGHT_BROWSERS_PATH=/ms-playwright to skip the postinstall.
+   - Runtime stage remains nginx:alpine and only COPYs /app/dist. No Node,
+     no Chromium, no Playwright leaks into the final image.
+
+VERIFICATION:
+- docker build -t prtop-frontend-test src/frontend: SUCCESS. Build step
+  wrote 7 prerendered pages plus sitemap.
+- docker run + `curl -s http://localhost:18421/privacy/ | grep -i "<h1"`
+  returned `<h1 ...>Privacy Policy</h1>` in the static HTML (no JS execution
+  by curl, so the H1 came from the prerendered index.html served by nginx).
+- Final image content size: 27.8MB (nginx:alpine + dist/). Well under the
+  +50MB budget vs previous nginx-only image; Chromium clearly not present
+  in the final image.
+
+Stats after session 183:
+  passing: 421, total: 426, percentage: 98.8
+  in_progress: 0
+  #421 status: passing
