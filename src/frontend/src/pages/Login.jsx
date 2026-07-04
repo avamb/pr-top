@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useCsrfToken } from '../hooks/useCsrfToken';
 import LoadingSpinner from '../components/LoadingSpinner';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import Seo from '../components/Seo';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -118,6 +119,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4 relative">
+      <Seo path="/login" title="Sign in — PR-TOP" description="Sign in to PR-TOP." noindex />
       <div className="absolute top-4 right-4">
         <LanguageSwitcher compact />
       </div>

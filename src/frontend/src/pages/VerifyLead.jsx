@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams, Link } from 'react-router-dom';
+import Seo from '../components/Seo';
 
 /**
  * Email verification result page for leads.
@@ -42,6 +43,7 @@ export default function VerifyLead() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-white to-primary/10 flex items-center justify-center p-4">
+      <Seo path="/verify-lead" title="Verify email — PR-TOP" description="Email verification." noindex />
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
         <div className="text-5xl mb-4">{config.icon}</div>
         <h1 className={`text-2xl font-bold mb-3 text-${config.color}-700`}>

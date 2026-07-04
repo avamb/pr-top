@@ -5,6 +5,7 @@ import i18n from '../i18n';
 import { useCsrfToken } from '../hooks/useCsrfToken';
 import LoadingSpinner from '../components/LoadingSpinner';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import Seo from '../components/Seo';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -143,6 +144,7 @@ export default function Register() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4 relative">
+      <Seo path="/register" title="Register — PR-TOP" description="Create a PR-TOP therapist account." noindex />
       <div className="absolute top-4 right-4">
         <LanguageSwitcher compact />
       </div>

@@ -74,7 +74,8 @@ export default function LandingConfirm({ locale }) {
     document.title = t('landingConfirm.meta.title');
 
     const metaDesc = setMeta('name', 'description', t('landingConfirm.meta.description'));
-    const metaRobots = setMeta('name', 'robots', 'index,follow');
+    // Per SEO Foundation F3: /confirm (and locale variants) are noindex,nofollow.
+    const metaRobots = setMeta('name', 'robots', 'noindex,nofollow');
 
     // Open Graph
     const ogType = setMeta('property', 'og:type', 'website');

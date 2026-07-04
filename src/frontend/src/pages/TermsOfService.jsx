@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import Seo from '../components/Seo';
 
 function TOCItem({ number, label, id, activeSection }) {
   const isActive = activeSection === id;
@@ -75,6 +76,11 @@ export default function TermsOfService() {
 
   return (
     <div className="min-h-screen bg-white">
+      <Seo
+        path="/terms"
+        title="Terms of Service — PR-TOP"
+        description="Terms of service for using PR-TOP: therapist obligations, acceptable use, subscription terms, and liability."
+      />
       {/* Navbar */}
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">

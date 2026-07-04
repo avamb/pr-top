@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import Seo from '../components/Seo';
 
 function TOCItem({ number, label, id, activeSection }) {
   const isActive = activeSection === id;
@@ -70,6 +71,11 @@ export default function PrivacyPolicy() {
 
   return (
     <div className="min-h-screen bg-white">
+      <Seo
+        path="/privacy"
+        title="Privacy Policy — PR-TOP"
+        description="PR-TOP privacy policy: how we handle therapist and client data, encryption, retention, and your rights under GDPR."
+      />
       {/* Navbar */}
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">

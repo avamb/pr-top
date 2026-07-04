@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import Seo from '../components/Seo';
 
 export default function NotFound() {
   const location = useLocation();
@@ -9,6 +10,7 @@ export default function NotFound() {
 
   return (
     <div className="min-h-screen bg-stone-50 flex items-center justify-center px-4">
+      <Seo title="Page not found — PR-TOP" description="The page you requested does not exist." noindex />
       <div className="text-center max-w-md">
         <h1 className="text-8xl font-bold text-teal-600 mb-4">404</h1>
         <h2 className="text-2xl font-semibold text-stone-800 mb-4">Page Not Found</h2>

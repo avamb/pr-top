@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useCsrfToken } from '../hooks/useCsrfToken';
 import LoadingSpinner from '../components/LoadingSpinner';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import Seo from '../components/Seo';
 
 export default function ForgotPassword() {
   const { t } = useTranslation();
@@ -52,6 +53,7 @@ export default function ForgotPassword() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4 relative">
+      <Seo path="/forgot-password" title="Forgot password — PR-TOP" description="Request a password reset link." noindex />
       <div className="absolute top-4 right-4">
         <LanguageSwitcher compact />
       </div>

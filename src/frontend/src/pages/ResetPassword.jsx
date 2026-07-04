@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useCsrfToken } from '../hooks/useCsrfToken';
 import LoadingSpinner from '../components/LoadingSpinner';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import Seo from '../components/Seo';
 
 export default function ResetPassword() {
   const navigate = useNavigate();
@@ -94,6 +95,7 @@ export default function ResetPassword() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4 relative">
+      <Seo path="/reset-password" title="Reset password — PR-TOP" description="Set a new password." noindex />
       <div className="absolute top-4 right-4">
         <LanguageSwitcher compact />
       </div>

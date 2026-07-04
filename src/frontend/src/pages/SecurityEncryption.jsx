@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import SecurityPageLayout from '../components/SecurityPageLayout';
+import Seo from '../components/Seo';
 
 function Section({ icon, title, children }) {
   return (
@@ -23,6 +24,11 @@ export default function SecurityEncryption() {
 
   return (
     <SecurityPageLayout titleKey="security.encryptionTitle">
+      <Seo
+        path="/security/encryption"
+        title="Encryption at Rest & In Transit — PR-TOP Security"
+        description="How PR-TOP protects sensitive client data with AES application-layer encryption, TLS transport, and strict key management."
+      />
       <Section
         icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>}
         title={t('security.enc.atRestTitle')}

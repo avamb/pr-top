@@ -6,6 +6,7 @@ import AccordionItem from '../components/AccordionItem';
 import { trackUmamiEvent } from '../utils/umami';
 import PublicAssistantChatButton from '../components/PublicAssistantChatButton';
 import PublicAssistantChatPanel from '../components/PublicAssistantChatPanel';
+import Seo from '../components/Seo';
 
 /* ───────── Feature Highlights (icons only, text from i18n) ───────── */
 const highlightIcons = [
@@ -182,6 +183,11 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-background font-sans">
+      <Seo
+        path="/"
+        title="PR-TOP — Between-session assistant for psychologists"
+        description="PR-TOP helps therapists preserve client context between sessions with encrypted diary, transcription, and AI summaries. Therapist-controlled data flows."
+      />
       {/* ─── Skip to content ─── */}
       <a href="#main-content" className="skip-to-content">
         {t('nav.skipToContent')}

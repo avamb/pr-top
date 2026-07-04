@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import Seo from '../components/Seo';
 
 /**
  * SupervisionView — T-17
@@ -109,6 +110,7 @@ function SupervisionView() {
 
   return (
     <div className="min-h-screen bg-stone-50">
+      <Seo title="Supervision — PR-TOP" description="Shared supervision view." noindex />
       {/* Banner */}
       <div className="bg-indigo-700 text-white py-2 px-4 text-sm sticky top-0 z-10">
         <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-2">
