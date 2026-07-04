@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "npx vite --port 3000",
-    "build": "npx vite build",
+    "build": "npx vite build && node scripts/generate-sitemap.mjs",
     "preview": "npx vite preview"
   },
   "dependencies": {
