@@ -14075,3 +14075,42 @@ Stats after session 181:
   passing: 418, total: 426, percentage: 98.1
   in_progress: 0
   #418 status: passing
+
+================================================================
+Session 182 (2026-07-04) - Feature #420 PASSING
+================================================================
+
+Assigned: #420 F9 - Hydration correctness + app-route regression
+
+IMPLEMENTATION:
+1. src/frontend/src/main.jsx
+   - Switched from ReactDOM.createRoot to { createRoot, hydrateRoot } from
+     'react-dom/client'.
+   - Decides at boot: if #root has children AND its data-prerendered-path
+     attribute matches window.location.pathname (trailing-slash-normalized),
+     call hydrateRoot; otherwise clear stale markup and call createRoot.
+2. src/frontend/scripts/prerender.mjs
+   - Injects data-prerendered-path="<route>" onto <div id="root"> in every
+     prerendered HTML output before writing it back to dist/.
+
+RATIONALE:
+  - The F8 prerender overwrites dist/index.html with the Landing page. When
+    nginx SPA-fallback serves that file for /dashboard or /login, the old
+    boot code would try to hydrateRoot against mismatched markup. The
+    path-marker check routes those fallbacks through createRoot instead,
+    which cleanly wipes and mounts the correct route without a flash of
+    Landing content or duplicated <h1>.
+
+VERIFICATION:
+  - npm run build --prefix src/frontend succeeded (3.70s)
+  - Prerender wrote 7 pages; grep confirms every dist/**/*.html contains
+    data-prerendered-path="<expected route>" on #root
+  - Sitemap step wrote 7 URLs
+  - No lint/compile errors
+
+COMMIT: 9e263e0 "feat(#420): F9 correct SPA boot for prerendered vs fallback routes"
+
+Stats after session 182:
+  passing: 420, total: 426, percentage: 98.6
+  in_progress: 0
+  #420 status: passing
