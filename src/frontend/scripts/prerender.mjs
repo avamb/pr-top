@@ -144,7 +144,16 @@ async function prerenderRoute(browser, baseUrl, routePath) {
       { timeout: 30000 },
     );
 
-    const html = await page.content();
+    let html = await page.content();
+    // F9 — Tag the prerendered #root so the client boot code (main.jsx) can
+    // decide between hydrateRoot() (path matches) and createRoot() (path
+    // mismatch, e.g. SPA fallback served this file for /dashboard). Without
+    // this marker, the /dashboard fallback would incorrectly try to hydrate
+    // Landing markup and throw a hydration mismatch.
+    const marker = ` data-prerendered-path="${routePath}"`;
+    if (!html.includes('data-prerendered-path=')) {
+      html = html.replace('<div id="root"', `<div id="root"${marker}`);
+    }
     const outPath = outputPathFor(routePath);
     mkdirSync(dirname(outPath), { recursive: true });
     writeFileSync(outPath, html, 'utf8');
