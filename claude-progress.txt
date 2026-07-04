@@ -13869,3 +13869,35 @@ Stats at end of session 176:
   in_progress: 0
   #411 status: passing
   *** ALL 411 FEATURES COMPLETE - 100% ***
+
+================================================================
+Session 177 (2026-07-04) - Feature #412 PASSING
+================================================================
+
+Assigned: #412 "F1 - robots.txt served as a real file" (SEO Foundation)
+(Note: backlog grew to 426 features - new SEO Foundation cards added)
+
+IMPLEMENTATION:
+1. src/frontend/public/robots.txt - created per SEO_PLAN.md sec 1.1:
+   User-agent: *, Allow: /, Disallow for app/auth/admin/confirm routes
+   (dashboard, clients, sessions, exercises, analytics, settings,
+    subscription, admin, verify-lead, share/, login, register,
+    forgot-password, reset-password, confirm, ru/es/uk confirm)
+   Sitemap: https://pr-top.com/sitemap.xml
+
+2. src/frontend/nginx.conf - added exact-match locations above SPA fallback:
+   location = /robots.txt  { try_files /robots.txt =404; }
+   location = /sitemap.xml { try_files /sitemap.xml =404; default_type application/xml; }
+
+VERIFICATION:
+- npx vite build succeeded, dist/robots.txt present with expected content
+- First line: "User-agent: *"
+- Contains "Sitemap: https://pr-top.com/sitemap.xml" and "Disallow: /admin"
+- nginx.conf contains "location = /robots.txt"
+
+COMMIT: 15c6f56 "feat(#412): serve robots.txt as real file + explicit nginx locations"
+
+Stats at end of session 177:
+  passing: 412, total: 426, percentage: 96.7
+  in_progress: 0
+  #412 status: passing
