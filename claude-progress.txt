@@ -14002,3 +14002,35 @@ Stats at end of session 180:
   passing: 415, total: 426, percentage: 97.4
   in_progress: 0
   #416 status: passing
+
+================================================================
+Session 180 (2026-07-04) - Feature #417 PASSING
+================================================================
+
+Assigned: #417 "F6 - Self-hosted fonts (remove render-blocking Google Fonts)"
+
+IMPLEMENTATION:
+1. src/frontend/package.json: installed @fontsource/inter and
+   @fontsource/jetbrains-mono via npm install --prefix src/frontend
+2. src/frontend/src/main.jsx: imported inter 300/400/500/600/700 CSS +
+   jetbrains-mono 400/500 CSS. @fontsource CSS ships font-display: swap
+   by default, so no extra CSS override is required.
+3. src/frontend/index.html: removed the
+   <link href="https://fonts.googleapis.com/css2?..."> element and
+   replaced it with a comment pointing to main.jsx.
+
+VERIFICATION:
+  - npm run build --prefix src/frontend succeeded (4.43s)
+  - Grep dist/ for fonts.googleapis|fonts.gstatic: 0 hits (real files
+    served locally, no runtime call to Google CDN)
+  - dist/assets/ contains .woff2 files for Inter weights 300-700 and
+    JetBrains Mono weights 400/500 across latin, latin-ext, cyrillic,
+    cyrillic-ext, greek, greek-ext, vietnamese subsets (43+ woff2 files)
+  - Sitemap step still runs after build (7 URLs written)
+
+COMMIT: 86632a8 "feat(#417): self-hosted fonts via @fontsource (F6)"
+
+Stats at end of session 180:
+  passing: 417, total: 426, percentage: 97.9 (UP from 416/97.7%)
+  in_progress: 0
+  #417 status: passing
