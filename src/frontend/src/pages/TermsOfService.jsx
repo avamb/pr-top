@@ -78,6 +78,8 @@ export default function TermsOfService() {
     <div className="min-h-screen bg-white">
       <Seo
         path="/terms"
+        titleKey="seo.terms.title"
+        descriptionKey="seo.terms.description"
         title="Terms of Service — PR-TOP"
         description="Terms of service for using PR-TOP: therapist obligations, acceptable use, subscription terms, and liability."
       />

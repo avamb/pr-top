@@ -26,6 +26,8 @@ export default function SecurityDataSovereignty() {
     <SecurityPageLayout titleKey="security.dataSovereigntyTitle">
       <Seo
         path="/security/data-sovereignty"
+        titleKey="seo.securityDataSovereignty.title"
+        descriptionKey="seo.securityDataSovereignty.description"
         title="Data Sovereignty & Residency — PR-TOP Security"
         description="Where PR-TOP hosts client data, region choices, and how therapists remain in control of data residency and export."
       />

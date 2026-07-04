@@ -1,5 +1,35 @@
 {
   "brand": "PR-TOP",
+  "seo": {
+    "home": {
+      "title": "PR-TOP — Asistente IA para psicólogos: diario del cliente, notas de sesión, bot de Telegram",
+      "description": "PR-TOP ayuda a psicólogos y coaches a mantenerse conectados con sus clientes entre sesiones: diario del cliente seguro, notas de sesión con IA, alertas SOS y bot de Telegram. Cumple con GDPR."
+    },
+    "privacy": {
+      "title": "Política de privacidad — PR-TOP",
+      "description": "Política de privacidad de PR-TOP: cómo tratamos los datos del terapeuta y del cliente, cifrado, retención y tus derechos bajo el RGPD."
+    },
+    "terms": {
+      "title": "Términos del servicio — PR-TOP",
+      "description": "Términos de uso de PR-TOP: obligaciones del terapeuta, uso aceptable, condiciones de suscripción y responsabilidad."
+    },
+    "securityEncryption": {
+      "title": "Cifrado de datos del cliente — Seguridad PR-TOP",
+      "description": "Cómo PR-TOP protege los datos sensibles del cliente con cifrado AES en la aplicación, transporte TLS y gestión estricta de claves."
+    },
+    "securityGdpr": {
+      "title": "Cumplimiento GDPR — Seguridad PR-TOP",
+      "description": "Cómo PR-TOP implementa la minimización de datos GDPR, los derechos del interesado y el tratamiento legítimo de los datos del terapeuta y del cliente."
+    },
+    "securityAuditLog": {
+      "title": "Registro de auditoría y accesos — Seguridad PR-TOP",
+      "description": "Cómo PR-TOP registra cada acceso a los datos del cliente con registros de auditoría inalterables, disponibles para terapeutas y administradores."
+    },
+    "securityDataSovereignty": {
+      "title": "Soberanía y residencia de datos — Seguridad PR-TOP",
+      "description": "Dónde aloja PR-TOP los datos del cliente, opciones de región y cómo los terapeutas mantienen el control sobre la residencia y exportación de datos."
+    }
+  },
   "ai": {
     "disclaimer": {
       "generatedWithAi": "Generado con IA",

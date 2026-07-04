@@ -206,6 +206,8 @@ export default function Landing() {
     <div className="min-h-screen bg-background font-sans">
       <Seo
         path="/"
+        titleKey="seo.home.title"
+        descriptionKey="seo.home.description"
         title="PR-TOP — AI Assistant for Therapists & Psychologists | Client Diary, Session Notes, Telegram Bot"
         description="PR-TOP helps psychologists and coaches stay connected with clients between sessions: secure client diary, AI session notes, crisis alerts and a Telegram bot. GDPR-compliant."
       />

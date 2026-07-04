@@ -73,6 +73,8 @@ export default function PrivacyPolicy() {
     <div className="min-h-screen bg-white">
       <Seo
         path="/privacy"
+        titleKey="seo.privacy.title"
+        descriptionKey="seo.privacy.description"
         title="Privacy Policy — PR-TOP"
         description="PR-TOP privacy policy: how we handle therapist and client data, encryption, retention, and your rights under GDPR."
       />

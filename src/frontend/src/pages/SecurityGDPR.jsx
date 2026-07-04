@@ -26,6 +26,8 @@ export default function SecurityGDPR() {
     <SecurityPageLayout titleKey="security.gdprTitle">
       <Seo
         path="/security/gdpr"
+        titleKey="seo.securityGdpr.title"
+        descriptionKey="seo.securityGdpr.description"
         title="GDPR Compliance — PR-TOP Security"
         description="How PR-TOP implements GDPR data-minimization, subject rights, and lawful processing for therapist and client data."
       />

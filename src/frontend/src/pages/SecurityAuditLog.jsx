@@ -26,6 +26,8 @@ export default function SecurityAuditLog() {
     <SecurityPageLayout titleKey="security.auditLogTitle">
       <Seo
         path="/security/audit-log"
+        titleKey="seo.securityAuditLog.title"
+        descriptionKey="seo.securityAuditLog.description"
         title="Audit Log & Access Trails — PR-TOP Security"
         description="How PR-TOP records every access to client data with tamper-evident audit logs available to therapists and administrators."
       />

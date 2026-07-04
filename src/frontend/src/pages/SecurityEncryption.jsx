@@ -26,6 +26,8 @@ export default function SecurityEncryption() {
     <SecurityPageLayout titleKey="security.encryptionTitle">
       <Seo
         path="/security/encryption"
+        titleKey="seo.securityEncryption.title"
+        descriptionKey="seo.securityEncryption.description"
         title="Encryption at Rest & In Transit — PR-TOP Security"
         description="How PR-TOP protects sensitive client data with AES application-layer encryption, TLS transport, and strict key management."
       />

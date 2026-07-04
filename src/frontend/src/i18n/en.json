@@ -1,5 +1,35 @@
 {
   "brand": "PR-TOP",
+  "seo": {
+    "home": {
+      "title": "PR-TOP — AI Assistant for Therapists & Psychologists | Client Diary, Session Notes, Telegram Bot",
+      "description": "PR-TOP helps psychologists and coaches stay connected with clients between sessions: secure client diary, AI session notes, crisis alerts and a Telegram bot. GDPR-compliant."
+    },
+    "privacy": {
+      "title": "Privacy Policy — PR-TOP",
+      "description": "PR-TOP privacy policy: how we handle therapist and client data, encryption, retention, and your rights under GDPR."
+    },
+    "terms": {
+      "title": "Terms of Service — PR-TOP",
+      "description": "Terms of service for using PR-TOP: therapist obligations, acceptable use, subscription terms, and liability."
+    },
+    "securityEncryption": {
+      "title": "Encryption at Rest & In Transit — PR-TOP Security",
+      "description": "How PR-TOP protects sensitive client data with AES application-layer encryption, TLS transport, and strict key management."
+    },
+    "securityGdpr": {
+      "title": "GDPR Compliance — PR-TOP Security",
+      "description": "How PR-TOP implements GDPR data-minimization, subject rights, and lawful processing for therapist and client data."
+    },
+    "securityAuditLog": {
+      "title": "Audit Log & Access Trails — PR-TOP Security",
+      "description": "How PR-TOP records every access to client data with tamper-evident audit logs available to therapists and administrators."
+    },
+    "securityDataSovereignty": {
+      "title": "Data Sovereignty & Residency — PR-TOP Security",
+      "description": "Where PR-TOP hosts client data, region choices, and how therapists remain in control of data residency and export."
+    }
+  },
   "ai": {
     "disclaimer": {
       "generatedWithAi": "Generated with AI",
