@@ -1,5 +1,7 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import i18n from './i18n';
+import { LOCALES, PUBLIC_MARKETING_PATHS } from './seo/routes.mjs';
 import AppLayout from './components/AppLayout';
 import AuthGuard from './components/guards/AuthGuard';
 import TherapistGuard from './components/guards/TherapistGuard';
@@ -75,13 +77,93 @@ function AdminLayout({ children }) {
   );
 }
 
+/**
+ * F11 — Locale-prefix routing for public marketing pages.
+ *
+ * Public marketing routes (Landing, Security/*, Privacy, Terms) render both at
+ * the root ("/", "/privacy", ...) AND under an optional /ru, /uk, /es prefix.
+ * URL wins over localStorage for these routes: hitting /ru/privacy always
+ * displays Russian, even if the user's stored preference is English.
+ *
+ * Authenticated app routes (/dashboard, /clients, ...) intentionally keep the
+ * legacy localStorage-based behavior. When the user leaves the public tree,
+ * LocaleSync restores their stored language.
+ *
+ * Unknown locale prefixes ("/fr/privacy") don't match any Route below and
+ * cascade to the catch-all NotFound at the bottom of the tree.
+ */
+const PUBLIC_MARKETING_ROUTES = [
+  { path: '/',                          element: <Landing /> },
+  { path: '/security/encryption',       element: <SecurityEncryption /> },
+  { path: '/security/gdpr',             element: <SecurityGDPR /> },
+  { path: '/security/audit-log',        element: <SecurityAuditLog /> },
+  { path: '/security/data-sovereignty', element: <SecurityDataSovereignty /> },
+  { path: '/privacy',                   element: <PrivacyPolicy /> },
+  { path: '/terms',                     element: <TermsOfService /> },
+];
+
+function localePrefixedPath(locale, routePath) {
+  // "/" -> "/ru", "/privacy" -> "/ru/privacy"
+  return routePath === '/' ? `/${locale}` : `/${locale}${routePath}`;
+}
+
+/**
+ * Watches the URL and keeps i18n in sync with the effective language:
+ *   - /ru/**, /uk/**, /es/**   -> force that locale (URL wins).
+ *   - Public English marketing -> force 'en' (URL wins, even against
+ *                                 a lingering localStorage preference).
+ *   - Everything else (authenticated app, auth pages, ...)  ->
+ *                                 restore from localStorage if present.
+ */
+function LocaleSync() {
+  const location = useLocation();
+  React.useEffect(() => {
+    const path = location.pathname;
+    const supported = ['en', 'ru', 'es', 'uk'];
+
+    const urlLocaleMatch = path.match(/^\/(ru|es|uk)(\/|$)/);
+    if (urlLocaleMatch) {
+      const target = urlLocaleMatch[1];
+      if (i18n.language !== target) i18n.changeLanguage(target);
+      return;
+    }
+
+    if (PUBLIC_MARKETING_PATHS.has(path)) {
+      if (i18n.language !== 'en') i18n.changeLanguage('en');
+      return;
+    }
+
+    const stored = typeof localStorage !== 'undefined'
+      ? localStorage.getItem('app_language')
+      : null;
+    if (stored && supported.includes(stored) && i18n.language !== stored) {
+      i18n.changeLanguage(stored);
+    }
+  }, [location.pathname]);
+  return null;
+}
+
 function App() {
   return (
     <BrowserRouter>
+      <LocaleSync />
       <InstallPrompt />
       <Routes>
-        {/* Public routes - no sidebar, no guards */}
-        <Route path="/" element={<Landing />} />
+        {/* Public marketing routes at the root (English default). */}
+        {PUBLIC_MARKETING_ROUTES.map((r) => (
+          <Route key={r.path} path={r.path} element={r.element} />
+        ))}
+
+        {/* Same public marketing tree mirrored under each locale prefix (F11). */}
+        {LOCALES.flatMap((loc) =>
+          PUBLIC_MARKETING_ROUTES.map((r) => (
+            <Route
+              key={localePrefixedPath(loc, r.path)}
+              path={localePrefixedPath(loc, r.path)}
+              element={r.element}
+            />
+          ))
+        )}
 
         {/* /confirm landing page - 4 locale variants, outside AppLayout */}
         <Route path="/confirm" element={<LandingConfirm />} />
@@ -93,12 +175,6 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/security/encryption" element={<SecurityEncryption />} />
-        <Route path="/security/gdpr" element={<SecurityGDPR />} />
-        <Route path="/security/audit-log" element={<SecurityAuditLog />} />
-        <Route path="/security/data-sovereignty" element={<SecurityDataSovereignty />} />
-        <Route path="/privacy" element={<PrivacyPolicy />} />
-        <Route path="/terms" element={<TermsOfService />} />
         <Route path="/verify-lead" element={<VerifyLead />} />
         <Route path="/share/supervision/:token" element={<SupervisionView />} />
 

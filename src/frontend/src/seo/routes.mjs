@@ -1,8 +1,9 @@
 /**
  * Shared public-route manifest — single source of truth for:
  *   - build-time sitemap.xml generation (scripts/generate-sitemap.mjs)
- *   - static prerender step (future)
+ *   - static prerender step (scripts/prerender.mjs)
  *   - App.jsx public routing cross-reference
+ *   - App.jsx locale-prefix routing (F11)
  *
  * Only PUBLIC MARKETING routes belong here.
  * Explicitly EXCLUDED (per SEO Foundation spec F2):
@@ -22,5 +23,21 @@ export const PUBLIC_ROUTES = [
   { path: '/privacy',                     changefreq: 'yearly',  priority: 0.5 },
   { path: '/terms',                       changefreq: 'yearly',  priority: 0.5 },
 ];
+
+/**
+ * Non-English locales supported via URL prefix on the public marketing pages
+ * (F11). English lives at the root ("/", "/privacy", ...); each locale below
+ * gets a mirrored tree ("/ru", "/ru/privacy", ...) that forces i18n into that
+ * language regardless of localStorage. The authenticated app and the /confirm
+ * signup funnel handle their own locale detection.
+ */
+export const LOCALES = ['ru', 'uk', 'es'];
+
+/**
+ * Convenience Set of the exact public marketing paths (root, no locale prefix).
+ * Used by <LocaleSync> in App.jsx to distinguish "public English marketing"
+ * (URL wins, force EN) from authenticated app routes (localStorage wins).
+ */
+export const PUBLIC_MARKETING_PATHS = new Set(PUBLIC_ROUTES.map((r) => r.path));
 
 export default PUBLIC_ROUTES;

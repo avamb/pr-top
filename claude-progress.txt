@@ -14147,3 +14147,47 @@ Stats after session 183:
   passing: 421, total: 426, percentage: 98.8
   in_progress: 0
   #421 status: passing
+
+================================================================
+Session 184 (2026-07-04) - Feature #422 PASSING
+================================================================
+
+Assigned: #422 F11 - Locale-prefix routing for public marketing pages
+
+IMPLEMENTATION:
+1. src/frontend/src/seo/routes.mjs
+   - Added exports: LOCALES = ['ru','uk','es'], PUBLIC_MARKETING_PATHS (Set).
+   - Kept PUBLIC_ROUTES sitemap manifest untouched (English stays canonical
+     URL for SEO; locale trees are client-hydrated variants).
+
+2. src/frontend/src/App.jsx
+   - Extracted PUBLIC_MARKETING_ROUTES table [Landing, Security/*, Privacy,
+     Terms] so root and locale-prefixed variants share the same element.
+   - Registered the same 7 pages mirrored under /ru, /uk, /es via
+     LOCALES.flatMap(...). Unknown prefixes (e.g. /fr/privacy) do not match
+     any Route and cascade to the "*" NotFound catch-all.
+   - Added <LocaleSync/> component inside BrowserRouter that runs on every
+     URL change and sets i18n.language according to a strict priority:
+       * /ru|uk|es/**  -> i18n.changeLanguage(locale)  (URL wins)
+       * Public English marketing paths -> force 'en'  (URL wins over stale
+         localStorage on the public site)
+       * Anywhere else (/dashboard, /login, /admin, ...) -> restore language
+         from localStorage (authenticated-app behavior unchanged).
+   - Kept existing /confirm and /{ru,es,uk}/confirm routes intact.
+
+3. src/frontend/src/i18n/index.js
+   - Extended initial-language URL regex from `^/(ru|es|uk)/` to
+     `^/(ru|es|uk)(/|$)` so bare `/ru`, `/uk`, `/es` (root of a locale tree)
+     initializes correctly on first paint alongside `/ru/privacy`.
+
+VERIFICATION:
+- npm run build --prefix src/frontend succeeded (5.05s).
+- Prerender wrote 7 English marketing pages (no locale prerender required;
+  URL locale variants hydrate client-side).
+- Sitemap wrote 7 URLs (English only, per F2 spec).
+- No lint/compile errors.
+
+Stats after session 184:
+  passing: 422, total: 426, percentage: 99.1
+  in_progress: 0
+  #422 status: passing

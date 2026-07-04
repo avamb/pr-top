@@ -16,9 +16,11 @@ import uk from './uk.json';
 function getInitialLanguage() {
   const supported = ['en', 'ru', 'es', 'uk'];
 
-  // 1. URL locale prefix (e.g. /ru/confirm → 'ru')
+  // 1. URL locale prefix (e.g. /ru, /ru/, /ru/privacy, /ru/confirm → 'ru').
+  //    Matches both the /confirm signup funnel (F411) and the public marketing
+  //    locale tree (F11 — /ru/, /uk/security/*, /es/privacy, ...).
   const path = typeof window !== 'undefined' ? window.location.pathname : '/';
-  const urlLocaleMatch = path.match(/^\/(ru|es|uk)\//);
+  const urlLocaleMatch = path.match(/^\/(ru|es|uk)(\/|$)/);
   if (urlLocaleMatch && supported.includes(urlLocaleMatch[1])) {
     return urlLocaleMatch[1];
   }
