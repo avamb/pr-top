@@ -13901,3 +13901,40 @@ Stats at end of session 177:
   passing: 412, total: 426, percentage: 96.7
   in_progress: 0
   #412 status: passing
+
+================================================================
+Session 178 (2026-07-04) - Feature #413 PASSING
+================================================================
+
+Assigned: #413 "F2 — Shared public-route manifest + build-time sitemap.xml"
+
+IMPLEMENTATION:
+1. src/frontend/src/seo/routes.mjs
+   - Exports PUBLIC_ROUTES = 7 public marketing routes:
+     /, /security/encryption, /security/gdpr, /security/audit-log,
+     /security/data-sovereignty, /privacy, /terms
+   - Excludes login/register/confirm/dashboard/admin per spec
+   - Each entry: { path, changefreq, priority }
+
+2. src/frontend/scripts/generate-sitemap.mjs
+   - Reads PUBLIC_ROUTES manifest
+   - Emits dist/sitemap.xml, base https://pr-top.com
+   - <lastmod> = build date (UTC, YYYY-MM-DD)
+   - XML-escapes loc; creates dist/ if absent
+
+3. src/frontend/package.json
+   - build script now: "npx vite build && node scripts/generate-sitemap.mjs"
+
+VERIFICATION:
+- npm run build: vite builds clean, generator prints
+  "[sitemap] wrote .../dist/sitemap.xml with 7 URLs (lastmod=2026-07-04)"
+- dist/sitemap.xml starts with "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+- Contains exactly 7 <url> entries matching manifest
+- Grep for /login|/register|/confirm|/dashboard|/admin: no matches
+
+COMMIT: 0a36dc8 "feat(#413): shared public-route manifest + build-time sitemap.xml"
+
+Stats at end of session 178:
+  passing: 413, total: 426, percentage: 96.9
+  in_progress: 0
+  #413 status: passing
