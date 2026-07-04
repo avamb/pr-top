@@ -14191,3 +14191,48 @@ Stats after session 184:
   passing: 422, total: 426, percentage: 99.1
   in_progress: 0
   #422 status: passing
+
+================================================================
+Session 185 (2026-07-04) - Feature #423 PASSING
+================================================================
+
+Assigned: #423 F12 - Language switcher navigates locale URLs on public pages
+
+IMPLEMENTATION:
+1. src/frontend/src/components/LanguageSwitcher.jsx
+   - Imports react-router Link + useLocation plus PUBLIC_MARKETING_PATHS
+     and LOCALES from seo/routes.mjs.
+   - Adds three helpers: stripLocalePrefix(pathname) strips /ru, /uk, /es
+     prefixes; localeHref(basePath, code) builds /<locale>/<path>
+     (English stays at the root); isPublicMarketingPath(pathname) checks
+     whether the current URL is a public marketing route or a locale mirror.
+   - New optional useLocaleUrls prop. When undefined, auto-detects urlMode
+     from the current URL - public marketing paths get URL-anchor mode,
+     everything else keeps the legacy onClick flow.
+   - In urlMode, each dropdown option renders as react-router Link
+     with `to={/ru/privacy}`, role=option, aria-selected, and hrefLang=<code>,
+     which emits a real anchor tag with a locale-prefixed href that
+     crawlers can follow without executing JS. Clicking still records
+     the language-switch umami event before SPA-navigating; the URL
+     change then triggers the F11 LocaleSync effect which flips i18n.
+   - Legacy button/onClick/handleSelect + persistToServer path remains for
+     the authenticated Sidebar and auth pages where urlMode is false.
+
+2. src/frontend/src/components/Sidebar.jsx
+   - Passes useLocaleUrls={false} to the dashboard-side LanguageSwitcher,
+     keeping onClick-based localStorage+server flow inside the authenticated
+     app regardless of URL shape.
+
+VERIFICATION:
+- npm run build --prefix src/frontend succeeded. Post-build prerender
+  wrote 7 pages; sitemap 7 URLs; no compile/lint errors.
+- Options rendered as Link emit real anchor tags with locale-prefixed
+  hrefs (crawler-friendly) instead of JS-only onClick handlers.
+- Sidebar keeps legacy behavior via explicit prop opt-out.
+
+COMMIT: e288781 feat(#423): F12 language switcher navigates locale URLs on public pages
+
+Stats after session 185:
+  passing: 423, total: 426, percentage: 99.3
+  in_progress: 0
+  #423 status: passing
