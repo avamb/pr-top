@@ -1,0 +1,22 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /clients
+Disallow: /sessions
+Disallow: /exercises
+Disallow: /analytics
+Disallow: /settings
+Disallow: /subscription
+Disallow: /admin
+Disallow: /verify-lead
+Disallow: /share/
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /confirm
+Disallow: /ru/confirm
+Disallow: /es/confirm
+Disallow: /uk/confirm
+
+Sitemap: https://pr-top.com/sitemap.xml
