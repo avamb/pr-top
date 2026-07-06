@@ -30,7 +30,15 @@ const {
 const DEFAULT_THRESHOLD = 0.92;
 
 // Path to the pre-seeded canned FAQ (docs/assistant-kb/faq-seed.json).
-const FAQ_SEED_PATH = path.join(__dirname, '..', '..', '..', '..', 'docs', 'assistant-kb', 'faq-seed.json');
+// Must resolve the project root the SAME way assistantKnowledge does: in the
+// Docker image the repo is mounted at /app/project-root, not /app, so a plain
+// __dirname-relative path silently misses the file and seeds 0 entries.
+const _DOCKER_PROJECT_ROOT = '/app/project-root';
+const _LOCAL_PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+const _PROJECT_ROOT = fs.existsSync(path.join(_DOCKER_PROJECT_ROOT, 'src'))
+  ? _DOCKER_PROJECT_ROOT
+  : _LOCAL_PROJECT_ROOT;
+const FAQ_SEED_PATH = path.join(_PROJECT_ROOT, 'docs', 'assistant-kb', 'faq-seed.json');
 
 /**
  * Get the configured similarity threshold from platform settings.
