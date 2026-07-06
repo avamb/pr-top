@@ -14377,3 +14377,42 @@ VERIFICATION:
     JSON-LD) still pass.
 
 Stats after session 190: #429 status: passing.
+
+================================================================
+Session 191 (2026-07-06) - Feature #430 PASSING (GEO F19 IndexNow)
+================================================================
+
+Assigned: #430 F19 - IndexNow key file + ping script (GEO Plan B3)
+
+IMPLEMENTATION:
+1. src/frontend/public/5dccd79a319c83b1bc6ee6058a12e32d.txt (NEW)
+   - 32-hex random key committed as static file.
+   - Body = filename (IndexNow verification rule).
+   - Not a secret; safe to expose.
+2. src/frontend/scripts/indexnow-ping.mjs (NEW)
+   - Auto-discovers the single <32-hex>.txt file in public/ (fails
+     if 0 or >1 candidates present).
+   - Reads dist/sitemap.xml, extracts every <loc>, de-dupes preserving
+     order.
+   - Sanity check: every URL must live under host pr-top.com.
+   - Builds JSON payload { host, key, keyLocation, urlList } and
+     POSTs to https://api.indexnow.org/indexnow.
+   - --dry-run flag prints the payload to stdout without sending.
+   - Header docstring documents post-deploy invocation and rationale
+     for keeping it out of `npm run build` (Docker build stage has
+     no guaranteed egress to api.indexnow.org).
+3. src/frontend/package.json
+   - Added "indexnow": "node scripts/indexnow-ping.mjs" script.
+4. docs/seo/AGENTIC_SEO_PLAN.md §B3 rewritten to match final shape
+   (npm run indexnow + --dry-run acceptance criteria, keyLocation
+   URL, and explicit note that build does not include the ping).
+
+VERIFICATION:
+- npm run build succeeded; dist/5dccd79a319c83b1bc6ee6058a12e32d.txt
+  exists and its body equals the filename key.
+- node src/frontend/scripts/indexnow-ping.mjs --dry-run printed a
+  valid JSON payload with 28 URLs (matches sitemap count) and
+  keyLocation https://pr-top.com/5dccd79a319c83b1bc6ee6058a12e32d.txt.
+- No lint/compile errors.
+
+Stats after session 191: #430 status: passing (430/433, 99.3%).

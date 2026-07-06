@@ -87,8 +87,8 @@ Loop per page: (1) pick target query from GSC "impressions but no page" data + C
 Pages inherit the F2 route-manifest pattern, so sitemap/prerender/llms.txt pick them up with zero extra work.
 
 ### B3. IndexNow on deploy (2 h, AutoForge-able)
-Generate an IndexNow key file into `src/frontend/public/`, and add `scripts/indexnow-ping.mjs` that POSTs changed URLs (diff of sitemap vs previous build, or full list — 28+ URLs is fine) to `api.indexnow.org` (covers Bing + Yandex). Wire as a post-deploy step or a Dokploy webhook-triggered agent.
-**Acceptance:** key file served; ping returns 200; Bing Webmaster IndexNow section shows submissions.
+Generate an IndexNow key file into `src/frontend/public/` (32-hex filename, body equals the key — committed, not a secret) and add `scripts/indexnow-ping.mjs` that reads `dist/sitemap.xml`, extracts every `<loc>`, and POSTs the full list to `https://api.indexnow.org/indexnow` (JSON body: `host`, `key`, `keyLocation`, `urlList`) — covers Bing + Yandex in one call. The script is NOT part of `npm run build` on purpose: build runs inside Docker with no guaranteed egress. Exposed as `npm run indexnow` (and `npm run indexnow -- --dry-run` for verification) so it can be invoked from a Dokploy post-deploy hook, cron agent, or manually after deploy.
+**Acceptance:** key file served at `https://pr-top.com/<key>.txt`; `npm run indexnow -- --dry-run` prints a valid JSON payload with 28+ URLs and correct `keyLocation`; live ping returns 200/202; Bing Webmaster IndexNow section shows submissions.
 
 ### B4. Competitor watch (agent, monthly)
 Agent crawls competitor pricing/feature/blog pages (Upheal, Mentalyc, Twofold, Heidi, Supanote, Freed, Eleos + any new entrants found via search), diffs against last month's snapshot in `docs/seo/competitors/`, and outputs: price changes, new features, new comparison content targeting us, and required updates to our `/compare/*` pages (which then flow into B2).
