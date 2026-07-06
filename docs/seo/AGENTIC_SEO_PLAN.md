@@ -1,5 +1,7 @@
 # PR-TOP — Agentic SEO & Competitive Growth Plan (GEO + Agent-Operated SEO)
 
+> **Canonical file (agents work with this one).** A Russian mirror for the owner exists at [AGENTIC_SEO_PLAN.ru.md](AGENTIC_SEO_PLAN.ru.md) — whenever you change this file, update the mirror in the same commit.
+
 **Prepared:** 2026-07-06. Sequel to [SEO_PLAN.md](SEO_PLAN.md) (Phases 1–3 shipped to prod: prerender, locale URLs, hreflang, sitemap, JSON-LD).
 **Repo:** `C:\Projects\dev-psy-bot`, branch `dev` (Dokploy prod deploys from `prod`; promote via fast-forward merge `dev` → `prod`).
 **Scope:** three programs that run largely on agents:
