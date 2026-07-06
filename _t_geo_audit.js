@@ -5,7 +5,7 @@
 //   1. robots.txt contains 7 explicit AI-crawler blocks.
 //   2. dist/llms.txt (if it exists — conditional until F18 lands) lists every
 //      manifest route.
-//   3. sitemap.xml URL count equals manifest routes × locales (7 × 4 = 28).
+//   3. sitemap.xml URL count equals manifest routes × locales (12 × 4 = 48).
 //   4. Every prerendered page has exactly one <h1> and a meta description of
 //      length 25–160 chars.
 //   5. All JSON-LD blocks on every prerendered page parse as valid JSON.
@@ -26,16 +26,16 @@ const PUBLIC_ROUTES = [
   '/security/data-sovereignty',
   '/privacy',
   '/terms',
-];
-// F20 / F21 — EN-only comparison / alternatives routes. Prerendered and
-// sitemap-listed but with no /ru, /uk, /es mirrors.
-const EN_ONLY_ROUTES = [
+  // GEO comparison / alternatives routes — fully localized since 2026-07-06
   '/compare/upheal',
   '/alternatives/upheal',
   '/compare/mentalyc',
   '/alternatives/mentalyc',
   '/best-ai-assistant-for-therapists',
 ];
+// Legacy: kept for the loops below; empty since the comparison pages gained
+// /ru, /uk, /es mirrors.
+const EN_ONLY_ROUTES = [];
 
 const AI_CRAWLERS = [
   'GPTBot',

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Feature #426 — F15 Localization regression sweep
-// Crawls all prerendered public marketing pages (EN + RU + UK + ES x 7 routes = 28 pages)
+// Crawls all prerendered public marketing pages (EN + RU + UK + ES x 12 routes = 48 pages)
 // under src/frontend/dist/, and asserts:
 //   1. Every page has a non-empty <title>, meta description, and <h1>.
 //   2. No page emits raw i18n keys (e.g. "landing.hero.title", "seo.privacy.title").
@@ -23,6 +23,12 @@ const PUBLIC_ROUTES = [
   '/security/data-sovereignty',
   '/privacy',
   '/terms',
+  // GEO comparison / alternatives routes — fully localized since 2026-07-06
+  '/compare/upheal',
+  '/alternatives/upheal',
+  '/compare/mentalyc',
+  '/alternatives/mentalyc',
+  '/best-ai-assistant-for-therapists',
 ];
 
 let passed = 0;
@@ -83,7 +89,7 @@ function findRawKeys(html) {
   return hits;
 }
 
-section('1. All 28 prerendered pages exist and have title / description / h1');
+section('1. All 48 prerendered pages exist and have title / description / h1');
 
 const pageMeta = []; // { locale, routePath, title, description, h1, htmlLang, path }
 for (const locale of LOCALES) {

@@ -6,8 +6,9 @@ import { LOCALES } from '../seo/routes.mjs';
  * ("/privacy" -> "/ru/privacy") so navigation keeps the visitor inside the
  * language tree they are browsing. English (root tree) returns paths as-is.
  *
- * Only use for routes that exist in every locale (the PUBLIC_ROUTES tree).
- * EN-only routes (e.g. /compare/*) and app/auth routes must not be wrapped.
+ * Only use for routes that exist in every locale (the PUBLIC_ROUTES tree,
+ * including /compare/* and /alternatives/*). App/auth routes (/login,
+ * /register, ...) are not locale-prefixed and must not be wrapped.
  */
 export default function useLocalePath() {
   const { i18n } = useTranslation();

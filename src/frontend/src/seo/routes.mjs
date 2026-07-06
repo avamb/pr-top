@@ -78,19 +78,8 @@ export const PUBLIC_ROUTES = [
     summary:
       'Subscription tiers, acceptable use, therapist responsibilities and platform liability limits.',
   },
-];
-
-/**
- * F20 — English-only comparison / alternatives content.
- *
- * These GEO-targeted competitor pages ship in English first and are NOT
- * mirrored under /ru, /uk, /es (per the F20 spec: "EN-only in this wave.
- * Human reviews copy before dev->prod merge"). They still participate in
- * sitemap.xml, prerender, and llms.txt (Comparisons section) via
- * LOCALIZED_ROUTES below, but with `enOnly: true` so downstream generators
- * skip emitting hreflang alternates or locale-mirrored URLs for them.
- */
-export const EN_ONLY_ROUTES = [
+  // GEO comparison / alternatives pages — fully localized since 2026-07-06
+  // (content dictionaries live inside each page component).
   {
     path: '/compare/upheal',
     changefreq: 'monthly',
@@ -174,15 +163,19 @@ export const LLMS_SECTIONS = [
 export const LOCALES = ['ru', 'uk', 'es'];
 
 /**
+ * Legacy export: routes that exist only in English. Empty since 2026-07-06 —
+ * the comparison / alternatives pages are fully localized and live in
+ * PUBLIC_ROUTES. Kept so older generator imports keep working.
+ */
+export const EN_ONLY_ROUTES = [];
+
+/**
  * Convenience Set of the exact public marketing paths (root, no locale prefix).
  * Used by <LocaleSync> in App.jsx to distinguish "public English marketing"
  * (URL wins, force EN) from authenticated app routes (localStorage wins).
- * F20: EN-only comparison / alternatives pages are also public marketing and
- * must force EN (they have no locale mirrors).
  */
 export const PUBLIC_MARKETING_PATHS = new Set([
   ...PUBLIC_ROUTES.map((r) => r.path),
-  ...EN_ONLY_ROUTES.map((r) => r.path),
 ]);
 
 /**
@@ -212,14 +205,11 @@ export function localePathFor(locale, routePath) {
 
 /**
  * Full matrix of (locale, routePath) tuples spanning HREFLANG_LOCALES x
- * PUBLIC_ROUTES, plus the English-only F20 comparison / alternatives routes
- * appended at the tail. Length is
- *   HREFLANG_LOCALES.length * PUBLIC_ROUTES.length + EN_ONLY_ROUTES.length
- * (4 * 7 + 4 = 32 with the current manifest).
- *
- * Entries carry an `enOnly` flag so generators (sitemap.xml, prerender.mjs,
- * generate-llms.mjs) know to skip hreflang alternates for them (there are no
- * /ru, /uk, /es mirrors — attempting to emit them would produce dead URLs).
+ * PUBLIC_ROUTES. Length is
+ *   HREFLANG_LOCALES.length * PUBLIC_ROUTES.length
+ * (4 * 12 = 48 with the current manifest). The `enOnly` flag is retained for
+ * generator compatibility but is always false — every public marketing route
+ * (including /compare/* and /alternatives/*) has all four locale variants.
  */
 export const LOCALIZED_ROUTES = [
   ...HREFLANG_LOCALES.flatMap((locale) =>
@@ -232,14 +222,6 @@ export const LOCALIZED_ROUTES = [
       enOnly: false,
     })),
   ),
-  ...EN_ONLY_ROUTES.map(({ path, changefreq, priority }) => ({
-    locale: 'en',
-    basePath: path,
-    path,
-    changefreq,
-    priority,
-    enOnly: true,
-  })),
 ];
 
 export default PUBLIC_ROUTES;

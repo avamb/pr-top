@@ -105,6 +105,12 @@ const PUBLIC_MARKETING_ROUTES = [
   { path: '/security/data-sovereignty', element: <SecurityDataSovereignty /> },
   { path: '/privacy',                   element: <PrivacyPolicy /> },
   { path: '/terms',                     element: <TermsOfService /> },
+  // GEO comparison / alternatives pages — localized, mirrored under /ru|/uk|/es
+  { path: '/compare/upheal',            element: <CompareUpheal /> },
+  { path: '/alternatives/upheal',       element: <AlternativesUpheal /> },
+  { path: '/compare/mentalyc',          element: <CompareMentalyc /> },
+  { path: '/alternatives/mentalyc',     element: <AlternativesMentalyc /> },
+  { path: '/best-ai-assistant-for-therapists', element: <BestAiAssistantForTherapists /> },
 ];
 
 function localePrefixedPath(locale, routePath) {
@@ -169,13 +175,6 @@ function App() {
             />
           ))
         )}
-
-        {/* F20 — EN-only GEO comparison / alternatives pages (no locale mirrors). */}
-        <Route path="/compare/upheal" element={<CompareUpheal />} />
-        <Route path="/alternatives/upheal" element={<AlternativesUpheal />} />
-        <Route path="/compare/mentalyc" element={<CompareMentalyc />} />
-        <Route path="/alternatives/mentalyc" element={<AlternativesMentalyc />} />
-        <Route path="/best-ai-assistant-for-therapists" element={<BestAiAssistantForTherapists />} />
 
         {/* /confirm landing page - 4 locale variants, outside AppLayout */}
         <Route path="/confirm" element={<LandingConfirm />} />
