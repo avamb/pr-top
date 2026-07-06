@@ -107,6 +107,22 @@ export const EN_ONLY_ROUTES = [
     summary:
       'Ranked list of Upheal alternatives for therapists, including AI note-takers (Mentalyc, Twofold, Heidi, Supanote) and PR-TOP for between-session continuity.',
   },
+  {
+    path: '/compare/mentalyc',
+    changefreq: 'monthly',
+    priority: 0.6,
+    title: 'PR-TOP vs Mentalyc — comparison for therapists',
+    summary:
+      'Honest 2026 comparison: Mentalyc is a privacy-first AI note-taker (anonymized transcripts, HIPAA); PR-TOP adds the between-session client channel via Telegram, EU-hosted and GDPR-first.',
+  },
+  {
+    path: '/alternatives/mentalyc',
+    changefreq: 'monthly',
+    priority: 0.6,
+    title: 'Mentalyc alternatives (2026) — Upheal, Twofold, Heidi, Supanote, PR-TOP',
+    summary:
+      'Ranked list of Mentalyc alternatives for therapists, including AI note-takers (Upheal, Twofold, Heidi, Supanote) and PR-TOP for between-session continuity.',
+  },
 ];
 
 /**
@@ -128,7 +144,15 @@ export const LLMS_SECTIONS = [
   },
   { heading: 'Legal', paths: ['/privacy', '/terms'] },
   // F20 — GEO comparison / alternatives content (English-only).
-  { heading: 'Comparisons', paths: ['/compare/upheal', '/alternatives/upheal'] },
+  {
+    heading: 'Comparisons',
+    paths: [
+      '/compare/upheal',
+      '/alternatives/upheal',
+      '/compare/mentalyc',
+      '/alternatives/mentalyc',
+    ],
+  },
 ];
 
 /**
@@ -182,7 +206,7 @@ export function localePathFor(locale, routePath) {
  * PUBLIC_ROUTES, plus the English-only F20 comparison / alternatives routes
  * appended at the tail. Length is
  *   HREFLANG_LOCALES.length * PUBLIC_ROUTES.length + EN_ONLY_ROUTES.length
- * (4 * 7 + 2 = 30 with the current manifest).
+ * (4 * 7 + 4 = 32 with the current manifest).
  *
  * Entries carry an `enOnly` flag so generators (sitemap.xml, prerender.mjs,
  * generate-llms.mjs) know to skip hreflang alternates for them (there are no

@@ -27,9 +27,14 @@ const PUBLIC_ROUTES = [
   '/privacy',
   '/terms',
 ];
-// F20 — EN-only comparison / alternatives routes. Prerendered and sitemap-listed
-// but with no /ru, /uk, /es mirrors.
-const EN_ONLY_ROUTES = ['/compare/upheal', '/alternatives/upheal'];
+// F20 / F21 — EN-only comparison / alternatives routes. Prerendered and
+// sitemap-listed but with no /ru, /uk, /es mirrors.
+const EN_ONLY_ROUTES = [
+  '/compare/upheal',
+  '/alternatives/upheal',
+  '/compare/mentalyc',
+  '/alternatives/mentalyc',
+];
 
 const AI_CRAWLERS = [
   'GPTBot',

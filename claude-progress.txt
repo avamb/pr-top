@@ -14480,3 +14480,49 @@ VERIFICATION:
   link present, "Updated: July 2026" stamp present in both files.
 
 Stats after session 192: #431 status: passing (431/433).
+
+================================================================
+Session 193 (2026-07-06) - Feature #432 PASSING (GEO F21 Mentalyc)
+================================================================
+
+Assigned: #432 F21 - /compare/mentalyc + /alternatives/mentalyc
+
+IMPLEMENTATION:
+1. src/frontend/src/pages/CompareMentalyc.jsx (NEW)
+   - Mirrors CompareUpheal structure; Mentalyc angle: privacy-first AI
+     note-taker (anonymized transcripts, HIPAA, US-hosted). Honest
+     acknowledgement; PR-TOP wedge = between-session Telegram channel.
+   - Direct-answer block, "two flavours of privacy-first" contrast H2
+     linking to /security/{encryption,gdpr,data-sovereignty}, honest
+     13-row feature/price table, When-to-choose lists, 6-item FAQ,
+     Article + FAQPage JSON-LD, Updated: July 2026 stamp.
+2. src/frontend/src/pages/AlternativesMentalyc.jsx (NEW)
+   - Listicle: PR-TOP, Upheal (internal link to /compare/upheal),
+     Twofold, Heidi, Supanote. 6-item FAQ, comparison-at-a-glance table,
+     per-item detail sections, same JSON-LD + Updated stamp.
+3. src/frontend/src/App.jsx: imports + <Route> entries for
+   /compare/mentalyc and /alternatives/mentalyc.
+4. src/frontend/src/seo/routes.mjs: appended both paths to EN_ONLY_ROUTES
+   and to LLMS_SECTIONS Comparisons; updated 4*7+2=30 comment to
+   4*7+4=32.
+5. _t_geo_audit.js: EN_ONLY_ROUTES now contains 4 entries
+   (upheal + mentalyc), so per-page audits and sitemap-count check
+   include the new pages.
+
+VERIFICATION:
+- npm run build --prefix src/frontend succeeded (3.47s).
+  * prerender wrote 32 pages (28 localized + 4 EN-only) including
+    dist/compare/mentalyc/index.html and dist/alternatives/mentalyc/index.html.
+  * sitemap.xml: 32 URLs (7 x 4 + 4 EN-only, lastmod=2026-07-06).
+  * robots.txt: 1 wildcard + 7 AI-crawler blocks (unchanged).
+  * llms.txt: 6909 bytes, 32 route entries.
+  * llms-full.txt: 55753 bytes, 11 English pages extracted (7 public + 4 EN-only).
+- node _t_geo_audit.js -> 16 passed, 0 failed.
+  * llms.txt lists all 32 manifest routes.
+  * sitemap.xml contains /compare/mentalyc and /alternatives/mentalyc.
+  * All 32 pages: exactly one <h1>, description 25-160 chars, all JSON-LD parses.
+- Grep on the two new prerendered files confirmed: H1 contains "Mentalyc",
+  <table>, canonical link, "Updated:" stamp, FAQPage JSON-LD all present.
+
+Stats after session 193: #432 status: passing (432/433, 99.8%).
+
