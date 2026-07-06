@@ -1,4 +1,4 @@
-<!-- audience: user -->
+<!-- audience: public -->
 # Dashboard overview and a daily therapist workflow
 
 The PR-TOP dashboard is the therapist's home screen: the first page you

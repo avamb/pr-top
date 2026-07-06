@@ -1,4 +1,4 @@
-<!-- audience: user -->
+<!-- audience: public -->
 # Client management end-to-end
 
 This how-to covers the complete lifecycle of a client record on PR-TOP:

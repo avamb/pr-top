@@ -1,4 +1,4 @@
-<!-- audience: user -->
+<!-- audience: public -->
 # Subscription management: upgrade, downgrade, cancel, and what
 # happens to your data
 

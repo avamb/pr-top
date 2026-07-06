@@ -1,4 +1,4 @@
-<!-- audience: user -->
+<!-- audience: public -->
 # Supervision sharing
 
 Supervision share lets a Premium therapist grant a supervising

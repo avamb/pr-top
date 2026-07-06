@@ -1,4 +1,4 @@
-<!-- audience: user -->
+<!-- audience: public -->
 # Exercise library: assigning, creating custom exercises, and
 # reviewing responses
 

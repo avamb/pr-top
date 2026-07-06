@@ -386,9 +386,10 @@ async function main() {
   section('12f. S6 — >=20 authored how-to docs, each >=600 words, valid audience marker, FAQ section');
   try {
     const kbRoot = path.join(__dirname, 'docs', 'assistant-kb');
-    // Only count top-level authored how-to pages; skip reference/ (auto-generated).
+    // Only count top-level authored how-to pages; skip reference/ (auto-generated)
+    // and README.md (maintenance/process doc, not KB content).
     const kbFiles = fs.readdirSync(kbRoot, { withFileTypes: true })
-      .filter((ent) => ent.isFile() && ent.name.endsWith('.md'))
+      .filter((ent) => ent.isFile() && ent.name.endsWith('.md') && ent.name !== 'README.md')
       .map((ent) => path.join(kbRoot, ent.name));
 
     let qualifying = 0;

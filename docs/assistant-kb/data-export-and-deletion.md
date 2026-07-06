@@ -1,4 +1,4 @@
-<!-- audience: user -->
+<!-- audience: public -->
 # Data export, GDPR requests, and deleting a client or account
 
 PR-TOP is designed so a therapist — as the data controller for their

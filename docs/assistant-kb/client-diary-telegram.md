@@ -1,4 +1,4 @@
-<!-- audience: user -->
+<!-- audience: public -->
 
 # How the client diary works over Telegram
 

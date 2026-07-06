@@ -1,4 +1,4 @@
-<!-- audience: user -->
+<!-- audience: public -->
 # Client-side bot commands and experience
 
 This how-to describes what the client sees inside the PR-TOP Telegram

@@ -1,4 +1,4 @@
-<!-- audience: user -->
+<!-- audience: public -->
 # Analytics and mood trends
 
 PR-TOP's analytics view turns the raw between-session activity

@@ -1,4 +1,4 @@
-<!-- audience: user -->
+<!-- audience: public -->
 # General troubleshooting and FAQ
 
 This page is a triage guide for the most common problems a therapist

@@ -1,4 +1,4 @@
-<!-- audience: user -->
+<!-- audience: public -->
 # Bulk session upload
 
 Uploading one session at a time is fine for a couple of clients but

@@ -1,4 +1,4 @@
-<!-- audience: user -->
+<!-- audience: public -->
 # Natural-language queries over client history
 
 Natural-language queries (NL queries) let a signed-in therapist ask a

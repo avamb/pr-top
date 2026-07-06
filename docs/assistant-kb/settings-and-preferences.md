@@ -1,4 +1,4 @@
-<!-- audience: user -->
+<!-- audience: public -->
 # Settings: profile, rates, and notification preferences
 
 The Settings area is where a therapist configures their profile,

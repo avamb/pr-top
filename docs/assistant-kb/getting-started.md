@@ -1,4 +1,4 @@
-<!-- audience: user -->
+<!-- audience: public -->
 # Getting started with PR-TOP as a therapist
 
 This how-to walks a signed-in therapist through the first-hour setup of a

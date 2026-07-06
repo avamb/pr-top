@@ -1,4 +1,4 @@
-<!-- audience: user -->
+<!-- audience: public -->
 
 # How to assign an exercise between sessions
 

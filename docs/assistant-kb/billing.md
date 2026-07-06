@@ -1,4 +1,4 @@
-<!-- audience: user -->
+<!-- audience: public -->
 
 # How billing works
 

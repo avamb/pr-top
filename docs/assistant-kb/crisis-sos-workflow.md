@@ -1,4 +1,4 @@
-<!-- audience: user -->
+<!-- audience: public -->
 # Crisis / SOS therapist-side workflow
 
 The SOS system is the highest-priority signal path in PR-TOP. When a

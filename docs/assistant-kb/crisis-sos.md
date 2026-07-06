@@ -1,4 +1,4 @@
-<!-- audience: user -->
+<!-- audience: public -->
 
 # How the crisis / SOS channel works
 
