@@ -139,5 +139,11 @@ Rules: honest feature/price tables (agent-verified via B4), each page follows A3
 - Referrals: measurable sessions from chatgpt.com/perplexity.ai in Umami; ≥10 referring domains (mo. 3), ≥30 (mo. 6).
 - Pipeline: ≥12 new indexable pages published; 100% pass B5 CI checks.
 
+### Next tasks (owner-requested backlog)
+
+**N1. AMP decision + mobile CWV audit (added 2026-07-06, from GSC "AMP" report showing "no AMP pages").**
+Expert assessment recorded upfront: AMP is NOT recommended in 2026 — Google dropped the AMP requirement for Top Stories in 2021, AMP confers no ranking boost, and the prerendered static pages already load fast without it. GSC showing "no AMP pages" is informational, not an error. The real underlying goal is mobile speed.
+Task for the executing agent: (a) run a mobile Lighthouse/PageSpeed audit on `/`, `/ru/`, one comparison page and one security page; (b) record scores in `docs/seo/BASELINE.md`; (c) fix what's cheap (image formats/sizes, font-display, unused JS on landing — see SEO_PLAN.md Phase 5 budget: LCP < 2.5s, INP < 200ms, CLS < 0.1); (d) implement AMP only if the owner explicitly re-confirms after reading this assessment.
+
 ### What stays human
 G2/Capterra/PH account creation and submissions; sending outreach; API credentials for GSC/Yandex (one-time); review/approval of every content page before merge (clinical-adjacent niche — tone and claims must be human-vetted); Reddit participation.
