@@ -14300,3 +14300,32 @@ Stats after session 188:
   in_progress: 0
   #426 status: passing
   ALL SEO LOCALIZATION FEATURES COMPLETE (F1-F15).
+
+================================================================
+Session 189 (2026-07-06) - Feature #427 PASSING
+================================================================
+
+Assigned: #427 F16 - robots.txt explicit AI-crawler access (GEO A1)
+
+IMPLEMENTATION:
+1. src/frontend/scripts/generate-robots.mjs (NEW)
+   - Writes dist/robots.txt after vite build.
+   - Single DISALLOW_PATHS list (18 private routes) reused for wildcard
+     block and 7 AI-crawler blocks (no hand-maintained duplicates).
+   - AI_CRAWLERS: GPTBot, OAI-SearchBot, ClaudeBot, Claude-SearchBot,
+     PerplexityBot, Google-Extended, Bingbot. Each block is
+     `User-agent: X` + `Allow: /` + full Disallow list.
+   - Final line: `Sitemap: https://pr-top.com/sitemap.xml`.
+2. src/frontend/package.json build script: appended
+   `&& node scripts/generate-robots.mjs` after generate-sitemap.
+   public/robots.txt kept as the dev-server fallback (User-agent: *
+   only); dist file overrides it in production builds.
+
+VERIFICATION:
+- npm run build --prefix src/frontend succeeded (5.74s).
+- [robots] wrote dist/robots.txt with 1 wildcard + 7 AI-crawler blocks
+  (18 Disallow paths each).
+- Read dist/robots.txt: wildcard block intact, 7 named crawler blocks
+  each with Allow: / and the full Disallow list, Sitemap: line present.
+
+Stats after session 189: #427 status: passing.

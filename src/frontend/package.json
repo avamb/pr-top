@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "npx vite --port 3000",
-    "build": "node scripts/generate-og-image.mjs && npx vite build && node scripts/prerender.mjs && node scripts/generate-sitemap.mjs",
+    "build": "node scripts/generate-og-image.mjs && npx vite build && node scripts/prerender.mjs && node scripts/generate-sitemap.mjs && node scripts/generate-robots.mjs",
     "preview": "npx vite preview"
   },
   "dependencies": {
