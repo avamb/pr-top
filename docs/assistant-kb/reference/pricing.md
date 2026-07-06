@@ -1,0 +1,75 @@
+<!-- audience: public -->
+# PR-TOP pricing and plan tiers
+
+_This page is regenerated on every release by_ `npm run docs:assistant`.
+_Do not edit by hand — edits will be overwritten._
+
+PR-TOP is offered as a monthly subscription with a free 14-day trial.
+There are four tiers. All plans include end-to-end encryption of the
+most sensitive client data (diary entries, private notes, transcripts,
+and AI summaries).
+
+| Plan | Price | Clients | Sessions / mo |
+|------|-------|---------|---------------|
+| Trial | $0 for 14 days | 3 | 10 |
+| Basic | $19 / mo | 15 | 50 |
+| Pro | $49 / mo | 60 | 250 |
+| Premium | $99 / mo | unlimited | unlimited |
+
+## Trial — $0 for 14 days
+
+- Client seats: **3**
+- Sessions per month: **10**
+
+Included:
+
+- Client diary via Telegram bot
+- Manual session notes
+- Basic exercises library
+
+## Basic — $19 / mo
+
+- Client seats: **15**
+- Sessions per month: **50**
+
+Included:
+
+- Everything in Trial
+- Audio session upload + AI transcription
+- Automatic session summaries
+- Email support
+
+## Pro — $49 / mo
+
+- Client seats: **60**
+- Sessions per month: **250**
+
+Included:
+
+- Everything in Basic
+- Vector semantic search over client history
+- Natural-language queries
+- PDF / JSON / CSV export
+- Assign custom exercises
+
+## Premium — $99 / mo
+
+- Client seats: **unlimited**
+- Sessions per month: **unlimited**
+
+Included:
+
+- Everything in Pro
+- Supervision share (read-only colleague access)
+- SOS / crisis alert channels
+- Priority support
+
+## Payment and cancellation
+
+Payments are processed by Stripe. Therapists can upgrade, downgrade,
+or cancel at any time from the dashboard under Settings → Subscription.
+Downgrades take effect at the end of the current billing period; the
+current tier remains active until then. Cancellation preserves data
+access until the paid period ends, after which the account reverts to
+read-only until a new plan is chosen.
+

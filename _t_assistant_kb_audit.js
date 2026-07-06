@@ -263,6 +263,122 @@ async function main() {
     fail('default-audience check threw: ' + e.message);
   }
 
+  section('12b. S4 — every file under docs/assistant-kb/ has a valid audience marker');
+  try {
+    const kbRoot = path.join(__dirname, 'docs', 'assistant-kb');
+    if (!fs.existsSync(kbRoot)) {
+      fail('docs/assistant-kb/ does not exist');
+    } else {
+      const walk = (dir, out) => {
+        for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+          const p = path.join(dir, ent.name);
+          if (ent.isDirectory()) walk(p, out);
+          else if (ent.isFile() && ent.name.endsWith('.md')) out.push(p);
+        }
+        return out;
+      };
+      const kbFiles = walk(kbRoot, []);
+      if (kbFiles.length === 0) fail('docs/assistant-kb/ contains no markdown files');
+      let missing = 0;
+      let publicCount = 0;
+      let userCount = 0;
+      let densityFail = 0;
+      const density = (t) => {
+        const w = t.split(/\s+/).filter(Boolean).length || 1;
+        const req = (t.match(/require\(/g) || []).length;
+        const fn = (t.match(/function /g) || []).length;
+        return ((req + fn) * 200) / w;
+      };
+      for (const f of kbFiles) {
+        const src = fs.readFileSync(f, 'utf8');
+        const m = src.match(/<!--\s*audience:\s*(public|user)\s*-->/);
+        if (!m) { missing++; continue; }
+        if (m[1] === 'public') publicCount++; else userCount++;
+        if (density(src) >= 1) {
+          densityFail++;
+          fail('prose guardrail: code density >= 1 per 200 words in ' + path.relative(__dirname, f).replace(/\\/g, '/'));
+        }
+      }
+      if (missing === 0) pass('all ' + kbFiles.length + ' docs/assistant-kb/*.md files have a valid audience marker');
+      else fail(missing + ' file(s) missing <!-- audience: public|user --> marker');
+      if (publicCount > 0) pass('found ' + publicCount + ' public-audience file(s) under docs/assistant-kb/');
+      else fail('no public-audience files under docs/assistant-kb/');
+      if (userCount > 0) pass('found ' + userCount + ' user-audience file(s) under docs/assistant-kb/');
+      else fail('no user-audience files under docs/assistant-kb/');
+      if (densityFail === 0) pass('all files pass prose guardrail (<1 require(/function per 200 words)');
+    }
+  } catch (e) {
+    fail('S4 audience-marker check threw: ' + e.message);
+  }
+
+  section('12c. S4 — npm run docs:assistant is wired in package.json');
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+    if (pkg.scripts && pkg.scripts['docs:assistant']) {
+      pass("package.json defines scripts['docs:assistant']: " + pkg.scripts['docs:assistant']);
+    } else {
+      fail("package.json is missing scripts['docs:assistant']");
+    }
+    const genPath = path.join(__dirname, 'scripts', 'generate-assistant-docs.mjs');
+    if (fs.existsSync(genPath)) pass('scripts/generate-assistant-docs.mjs exists');
+    else fail('scripts/generate-assistant-docs.mjs missing');
+  } catch (e) {
+    fail('S4 package.json wiring check threw: ' + e.message);
+  }
+
+  section('12d. S4 — deterministic reference docs present and derived from source');
+  try {
+    const refDir = path.join(__dirname, 'docs', 'assistant-kb', 'reference');
+    const required = ['endpoints.md', 'ui-labels.md', 'pricing.md'];
+    for (const rf of required) {
+      const p = path.join(refDir, rf);
+      if (!fs.existsSync(p)) { fail('missing docs/assistant-kb/reference/' + rf); continue; }
+      const src = fs.readFileSync(p, 'utf8');
+      if (!/<!--\s*audience:\s*(public|user)\s*-->/.test(src)) {
+        fail(rf + ' missing audience marker');
+      } else {
+        pass('reference/' + rf + ' present with audience marker');
+      }
+    }
+    const endpoints = fs.readFileSync(path.join(refDir, 'endpoints.md'), 'utf8');
+    if (/\/api\/subscription/.test(endpoints) && /\/api\/clients/.test(endpoints)) {
+      pass('endpoints.md contains real routes derived from src/backend/src/routes');
+    } else {
+      fail('endpoints.md does not reference expected /api/subscription or /api/clients routes');
+    }
+    const uiLabels = fs.readFileSync(path.join(refDir, 'ui-labels.md'), 'utf8');
+    if (/^## subscription$/m.test(uiLabels)) {
+      pass('ui-labels.md contains real i18n namespaces from en.json');
+    } else {
+      fail('ui-labels.md missing expected namespace section (## subscription)');
+    }
+    const pricing = fs.readFileSync(path.join(refDir, 'pricing.md'), 'utf8');
+    const tiers = ['Trial', 'Basic', 'Pro', 'Premium'];
+    const missingTier = tiers.filter(t => !new RegExp('## ' + t).test(pricing));
+    if (missingTier.length === 0) pass('pricing.md lists all four tiers (Trial/Basic/Pro/Premium)');
+    else fail('pricing.md missing tier sections: ' + missingTier.join(', '));
+  } catch (e) {
+    fail('S4 reference-docs check threw: ' + e.message);
+  }
+
+  section('12e. S4 — reindex picks up new docs/assistant-kb/ files with correct audience');
+  try {
+    await assistantKB.reindex();
+    const db2 = dbConn.getDatabase();
+    const res = db2.exec("SELECT source_file, audiences FROM assistant_knowledge WHERE source_file LIKE 'docs/assistant-kb/%'");
+    const kbRows = (res.length && res[0].values) ? res[0].values : [];
+    const uniq = new Set(kbRows.map(r => (r[0] || '').replace(/\\/g, '/')));
+    if (uniq.size >= 4) pass('reindex picked up ' + uniq.size + ' docs/assistant-kb/ files');
+    else fail('reindex only picked up ' + uniq.size + ' docs/assistant-kb/ files (expected >=4)');
+
+    const userSearch = await assistantKB.search('uploading a session recording', 5, 'user');
+    const foundHowto = userSearch.some(r => (r.source_file || '').includes('docs/assistant-kb/uploading-a-session'));
+    if (foundHowto) pass('user search retrieves the new uploading-a-session how-to');
+    else fail('user search did NOT retrieve docs/assistant-kb/uploading-a-session.md');
+  } catch (e) {
+    fail('S4 reindex check threw: ' + e.message);
+  }
+
   section('12. S2 — publicAssistant.js and assistant.js call search with correct audience');
   try {
     const publicRoute = fs.readFileSync(path.join(__dirname, 'src/backend/src/routes/publicAssistant.js'), 'utf8');
