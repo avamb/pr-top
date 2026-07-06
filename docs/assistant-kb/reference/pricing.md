@@ -11,15 +11,15 @@ and AI summaries).
 
 | Plan | Price | Clients | Sessions / mo |
 |------|-------|---------|---------------|
-| Trial | $0 for 14 days | 3 | 10 |
-| Basic | $19 / mo | 15 | 50 |
-| Pro | $49 / mo | 60 | 250 |
+| Trial | $0 for 14 days | 3 | 5 |
+| Basic | $19 / mo | 10 | 20 |
+| Pro | $49 / mo | 30 | 60 |
 | Premium | $99 / mo | unlimited | unlimited |
 
 ## Trial — $0 for 14 days
 
 - Client seats: **3**
-- Sessions per month: **10**
+- Sessions per month: **5**
 
 Included:
 
@@ -29,8 +29,8 @@ Included:
 
 ## Basic — $19 / mo
 
-- Client seats: **15**
-- Sessions per month: **50**
+- Client seats: **10**
+- Sessions per month: **20**
 
 Included:
 
@@ -41,8 +41,8 @@ Included:
 
 ## Pro — $49 / mo
 
-- Client seats: **60**
-- Sessions per month: **250**
+- Client seats: **30**
+- Sessions per month: **60**
 
 Included:
 

@@ -300,13 +300,37 @@ function buildUiLabelsMarkdown() {
 // Stripe (basic=1900, pro=4900, premium=9900 cents) as of the current
 // release. Update this table in one place when tiers change.
 
+// Plan limits and prices are the SINGLE SOURCE OF TRUTH in the DB seed
+// (src/backend/src/db/connection.js DEFAULT_SETTINGS). Read them from there so
+// this doc never drifts from what the product actually enforces/charges.
+// NOTE: an admin can override these at runtime in platform_settings; the doc
+// reflects the shipped defaults. The FAQ seed additionally tells users to check
+// Settings → Subscription for their live price.
+function loadPlanDefaults() {
+  const connPath = join(PROJECT_ROOT, 'src', 'backend', 'src', 'db', 'connection.js');
+  const src = readFileSync(connPath, 'utf8');
+  const num = (key, fallback) => {
+    const m = src.match(new RegExp(`\\['${key}',\\s*'(\\d+)'\\]`));
+    return m ? parseInt(m[1], 10) : fallback;
+  };
+  const price = (cents) => `$${Math.round(cents / 100)} / mo`;
+  return {
+    trial: { clients: num('trial_client_limit', 3), sessions: num('trial_session_limit', 5) },
+    basic: { clients: num('basic_client_limit', 10), sessions: num('basic_session_limit', 20), price: price(num('basic_price_monthly', 1900)) },
+    pro: { clients: num('pro_client_limit', 30), sessions: num('pro_session_limit', 60), price: price(num('pro_price_monthly', 4900)) },
+    premium: { price: price(num('premium_price_monthly', 9900)) },
+  };
+}
+
+const PD = loadPlanDefaults();
+
 const PLAN_MATRIX = [
   {
     id: 'trial',
     label: 'Trial',
     priceMonthly: '$0 for 14 days',
-    clients: 3,
-    sessionsPerMonth: 10,
+    clients: PD.trial.clients,
+    sessionsPerMonth: PD.trial.sessions,
     features: [
       'Client diary via Telegram bot',
       'Manual session notes',
@@ -316,9 +340,9 @@ const PLAN_MATRIX = [
   {
     id: 'basic',
     label: 'Basic',
-    priceMonthly: '$19 / mo',
-    clients: 15,
-    sessionsPerMonth: 50,
+    priceMonthly: PD.basic.price,
+    clients: PD.basic.clients,
+    sessionsPerMonth: PD.basic.sessions,
     features: [
       'Everything in Trial',
       'Audio session upload + AI transcription',
@@ -329,9 +353,9 @@ const PLAN_MATRIX = [
   {
     id: 'pro',
     label: 'Pro',
-    priceMonthly: '$49 / mo',
-    clients: 60,
-    sessionsPerMonth: 250,
+    priceMonthly: PD.pro.price,
+    clients: PD.pro.clients,
+    sessionsPerMonth: PD.pro.sessions,
     features: [
       'Everything in Basic',
       'Vector semantic search over client history',
@@ -343,7 +367,7 @@ const PLAN_MATRIX = [
   {
     id: 'premium',
     label: 'Premium',
-    priceMonthly: '$99 / mo',
+    priceMonthly: PD.premium.price,
     clients: 'unlimited',
     sessionsPerMonth: 'unlimited',
     features: [
