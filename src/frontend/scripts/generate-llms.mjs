@@ -36,10 +36,16 @@ import { dirname, resolve } from 'node:path';
 
 import {
   PUBLIC_ROUTES,
+  EN_ONLY_ROUTES,
   LOCALES,
   LLMS_SECTIONS,
   localePathFor,
 } from '../src/seo/routes.mjs';
+
+// F20 — routes.mjs merges PUBLIC_ROUTES + EN_ONLY_ROUTES via a single
+// `allEnglishRoutes` lookup because LLMS_SECTIONS references comparison
+// paths that live in EN_ONLY_ROUTES.
+const ALL_ENGLISH_ROUTES = [...PUBLIC_ROUTES, ...EN_ONLY_ROUTES];
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -54,9 +60,9 @@ const SITE_ORIGIN = 'https://pr-top.com';
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Look up the manifest entry for a public marketing path. */
+/** Look up the manifest entry for a public marketing path (localized or EN-only). */
 function routeByPath(path) {
-  const r = PUBLIC_ROUTES.find((x) => x.path === path);
+  const r = ALL_ENGLISH_ROUTES.find((x) => x.path === path);
   if (!r) throw new Error(`[llms] LLMS_SECTIONS references unknown path: ${path}`);
   return r;
 }
@@ -194,7 +200,7 @@ function buildLlmsFull() {
   );
   parts.push('');
 
-  for (const route of PUBLIC_ROUTES) {
+  for (const route of ALL_ENGLISH_ROUTES) {
     const htmlPath = distFileForRoute(route.path);
     if (!existsSync(htmlPath)) {
       throw new Error(
@@ -241,5 +247,5 @@ console.log(
 );
 console.log(
   `[llms] wrote ${LLMS_FULL_OUT} (${llmsFullBody.length} bytes,`
-    + ` ${PUBLIC_ROUTES.length} English pages extracted)`,
+    + ` ${ALL_ENGLISH_ROUTES.length} English pages extracted)`,
 );

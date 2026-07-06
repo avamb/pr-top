@@ -14416,3 +14416,67 @@ VERIFICATION:
 - No lint/compile errors.
 
 Stats after session 191: #430 status: passing (430/433, 99.3%).
+
+================================================================
+Session 192 (2026-07-06) - Feature #431 PASSING
+================================================================
+
+Assigned: #431 F20 - CONTENT_RULES + /compare/upheal + /alternatives/upheal
+
+IMPLEMENTATION:
+1. docs/seo/CONTENT_RULES.md (NEW) - 7-rule GEO checklist per Plan A3
+   (40-60 word direct-answer, H1/H2/H3, honest comparison table,
+   FAQPage JSON-LD, visible Updated stamp, internal links to
+   /pricing + siblings, PR-TOP wedge positioning). Referenced by
+   Program B2 content-agent prompts.
+2. src/frontend/src/seo/routes.mjs
+   - New EN_ONLY_ROUTES export listing /compare/upheal +
+     /alternatives/upheal with title + summary + priority.
+   - LOCALIZED_ROUTES now concatenates PUBLIC_ROUTES x 4 locales +
+     EN_ONLY_ROUTES (28 + 2 = 30). Each entry carries an enOnly flag.
+   - LLMS_SECTIONS gained a Comparisons section for the two new paths.
+   - PUBLIC_MARKETING_PATHS Set includes EN-only paths so LocaleSync
+     forces en on them.
+3. src/frontend/scripts/generate-sitemap.mjs - skips hreflang alternates
+   for enOnly routes (no /ru mirrors exist). Logs +N EN-only routes.
+4. src/frontend/scripts/generate-llms.mjs - ALL_ENGLISH_ROUTES =
+   PUBLIC_ROUTES + EN_ONLY_ROUTES; routeByPath looks up in both;
+   llms-full.txt extracts 9 English pages (was 7).
+5. src/frontend/src/pages/CompareUpheal.jsx (NEW) - PR-TOP vs Upheal
+   page. Follows all 7 CONTENT_RULES: direct-answer 52 words below H1,
+   single H1, honest 13-row feature/price table (Upheal data verified
+   against upheal.io/pricing 2026-07, source cited in HTML comment),
+   Article + FAQPage JSON-LD, "Updated: July 2026" stamp, internal
+   links to /, /alternatives/upheal, /security/gdpr, wedge line
+   restated in first two H2 sections.
+6. src/frontend/src/pages/AlternativesUpheal.jsx (NEW) - Upheal
+   alternatives listicle (PR-TOP + Mentalyc + Twofold + Heidi +
+   Supanote). Direct-answer 48 words, at-a-glance comparison table +
+   per-item detail section, Article + FAQPage JSON-LD, Updated stamp,
+   internal links to /, /compare/upheal, /security/gdpr.
+7. src/frontend/src/App.jsx - added CompareUpheal + AlternativesUpheal
+   imports and two standalone routes (no locale mirrors, per F20 spec:
+   EN-only in this wave).
+8. _t_geo_audit.js - EN_ONLY_ROUTES constant; llms.txt check requires
+   EN-only URLs; sitemap.xml count = locales x routes + EN-only, plus
+   explicit contains-check for each EN-only route; auditPage() helper
+   reuses H1/description/JSON-LD checks for the two new pages.
+
+VERIFICATION:
+- npm run build --prefix src/frontend succeeded (3.52s).
+- Prerender wrote 30 pages including dist/compare/upheal/index.html and
+  dist/alternatives/upheal/index.html.
+- Sitemap: 30 URLs (7 x 4 + 2 EN-only), no hreflang alt tags for the
+  two EN-only routes.
+- llms.txt lists 30 route entries; llms-full.txt extracts 9 English
+  pages including both new comparison files.
+- node _t_geo_audit.js -> 14 passed, 0 failed. All F17 GEO checks pass
+  with the two new pages included:
+  * llms.txt contains EN-only routes
+  * sitemap.xml contains /compare/upheal and /alternatives/upheal
+  * Both new prerendered pages have exactly one H1, description 25-160
+    chars, JSON-LD parses (2 blocks per page: Article + FAQPage).
+- grep confirmations on prerendered HTML: <table> present, canonical
+  link present, "Updated: July 2026" stamp present in both files.
+
+Stats after session 192: #431 status: passing (431/433).

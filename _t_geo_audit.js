@@ -27,6 +27,9 @@ const PUBLIC_ROUTES = [
   '/privacy',
   '/terms',
 ];
+// F20 — EN-only comparison / alternatives routes. Prerendered and sitemap-listed
+// but with no /ru, /uk, /es mirrors.
+const EN_ONLY_ROUTES = ['/compare/upheal', '/alternatives/upheal'];
 
 const AI_CRAWLERS = [
   'GPTBot',
@@ -92,7 +95,18 @@ section('2. dist/llms.txt (conditional — F18)');
         }
       }
     }
-    if (missing === 0) pass(`llms.txt lists all ${LOCALES.length * PUBLIC_ROUTES.length} manifest routes`);
+    // F20 — EN-only routes must also appear (no locale mirrors expected).
+    for (const routePath of EN_ONLY_ROUTES) {
+      const url = 'https://pr-top.com' + routePath;
+      if (!llms.includes(url)) {
+        fail(`llms.txt missing EN-only route: ${url}`);
+        missing++;
+      }
+    }
+    if (missing === 0) {
+      const total = LOCALES.length * PUBLIC_ROUTES.length + EN_ONLY_ROUTES.length;
+      pass(`llms.txt lists all ${total} manifest routes (localized + EN-only)`);
+    }
   }
 }
 
@@ -105,11 +119,19 @@ section('3. dist/sitemap.xml URL count equals routes x locales');
   } else {
     const sm = fs.readFileSync(smFile, 'utf8');
     const locMatches = sm.match(/<loc>[^<]+<\/loc>/g) || [];
-    const expected = LOCALES.length * PUBLIC_ROUTES.length;
+    const expected = LOCALES.length * PUBLIC_ROUTES.length + EN_ONLY_ROUTES.length;
     if (locMatches.length === expected) {
-      pass(`sitemap.xml has ${locMatches.length} <loc> entries (= ${LOCALES.length} locales × ${PUBLIC_ROUTES.length} routes)`);
+      pass(`sitemap.xml has ${locMatches.length} <loc> entries (= ${LOCALES.length} locales × ${PUBLIC_ROUTES.length} routes + ${EN_ONLY_ROUTES.length} EN-only)`);
     } else {
       fail(`sitemap.xml has ${locMatches.length} <loc> entries, expected ${expected}`);
+    }
+    for (const routePath of EN_ONLY_ROUTES) {
+      const url = 'https://pr-top.com' + routePath;
+      if (sm.includes('<loc>' + url + '</loc>')) {
+        pass(`sitemap.xml contains EN-only route: ${routePath}`);
+      } else {
+        fail(`sitemap.xml missing EN-only route: ${routePath}`);
+      }
     }
   }
 }
@@ -139,45 +161,52 @@ let h1Failures = 0;
 let descFailures = 0;
 let jsonLdFailures = 0;
 
-for (const locale of LOCALES) {
-  for (const routePath of PUBLIC_ROUTES) {
-    const localizedPath = localePathFor(locale, routePath);
-    const file = distFileFor(localizedPath);
-    if (!fs.existsSync(file)) {
-      fail(`Missing prerendered file: ${localizedPath}`);
-      continue;
-    }
-    pagesChecked++;
-    const html = fs.readFileSync(file, 'utf8');
+function auditPage(localizedPath) {
+  const file = distFileFor(localizedPath);
+  if (!fs.existsSync(file)) {
+    fail(`Missing prerendered file: ${localizedPath}`);
+    return;
+  }
+  pagesChecked++;
+  const html = fs.readFileSync(file, 'utf8');
 
-    // 4a. Exactly one <h1>
-    const h1Count = countH1(html);
-    if (h1Count !== 1) {
-      fail(`${localizedPath}: expected exactly 1 <h1>, found ${h1Count}`);
-      h1Failures++;
-    }
+  // 4a. Exactly one <h1>
+  const h1Count = countH1(html);
+  if (h1Count !== 1) {
+    fail(`${localizedPath}: expected exactly 1 <h1>, found ${h1Count}`);
+    h1Failures++;
+  }
 
-    // 4b. Description length 25–160
-    const desc = extractDescription(html);
-    if (!desc) {
-      fail(`${localizedPath}: <meta name="description"> missing`);
-      descFailures++;
-    } else if (desc.length < 25 || desc.length > 160) {
-      fail(`${localizedPath}: description length ${desc.length} out of 25–160 range`);
-      descFailures++;
-    }
+  // 4b. Description length 25–160
+  const desc = extractDescription(html);
+  if (!desc) {
+    fail(`${localizedPath}: <meta name="description"> missing`);
+    descFailures++;
+  } else if (desc.length < 25 || desc.length > 160) {
+    fail(`${localizedPath}: description length ${desc.length} out of 25–160 range`);
+    descFailures++;
+  }
 
-    // 5. JSON-LD blocks parse
-    const blocks = extractJsonLdBlocks(html);
-    for (let i = 0; i < blocks.length; i++) {
-      try {
-        JSON.parse(blocks[i]);
-      } catch (e) {
-        fail(`${localizedPath}: JSON-LD block #${i + 1} does not parse: ${e.message}`);
-        jsonLdFailures++;
-      }
+  // 5. JSON-LD blocks parse
+  const blocks = extractJsonLdBlocks(html);
+  for (let i = 0; i < blocks.length; i++) {
+    try {
+      JSON.parse(blocks[i]);
+    } catch (e) {
+      fail(`${localizedPath}: JSON-LD block #${i + 1} does not parse: ${e.message}`);
+      jsonLdFailures++;
     }
   }
+}
+
+for (const locale of LOCALES) {
+  for (const routePath of PUBLIC_ROUTES) {
+    auditPage(localePathFor(locale, routePath));
+  }
+}
+// F20 — EN-only routes get the same H1/description/JSON-LD checks.
+for (const routePath of EN_ONLY_ROUTES) {
+  auditPage(routePath);
 }
 if (h1Failures === 0) pass(`All ${pagesChecked} pages have exactly one <h1>`);
 if (descFailures === 0) pass(`All ${pagesChecked} pages have description length 25–160`);

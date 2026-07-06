@@ -81,6 +81,35 @@ export const PUBLIC_ROUTES = [
 ];
 
 /**
+ * F20 — English-only comparison / alternatives content.
+ *
+ * These GEO-targeted competitor pages ship in English first and are NOT
+ * mirrored under /ru, /uk, /es (per the F20 spec: "EN-only in this wave.
+ * Human reviews copy before dev->prod merge"). They still participate in
+ * sitemap.xml, prerender, and llms.txt (Comparisons section) via
+ * LOCALIZED_ROUTES below, but with `enOnly: true` so downstream generators
+ * skip emitting hreflang alternates or locale-mirrored URLs for them.
+ */
+export const EN_ONLY_ROUTES = [
+  {
+    path: '/compare/upheal',
+    changefreq: 'monthly',
+    priority: 0.6,
+    title: 'PR-TOP vs Upheal — comparison for therapists',
+    summary:
+      'Honest 2026 comparison: Upheal is an AI-native session-notes EHR; PR-TOP owns between-session continuity via a Telegram client channel.',
+  },
+  {
+    path: '/alternatives/upheal',
+    changefreq: 'monthly',
+    priority: 0.6,
+    title: 'Upheal alternatives (2026) — Mentalyc, Twofold, Heidi, Supanote, PR-TOP',
+    summary:
+      'Ranked list of Upheal alternatives for therapists, including AI note-takers (Mentalyc, Twofold, Heidi, Supanote) and PR-TOP for between-session continuity.',
+  },
+];
+
+/**
  * llmstxt.org grouping for the F18 llms.txt generator. Each entry lists
  * PUBLIC_ROUTES paths that belong under one Markdown section (##). Ordering
  * within a group follows the group definition; the group order below is the
@@ -98,6 +127,8 @@ export const LLMS_SECTIONS = [
     ],
   },
   { heading: 'Legal', paths: ['/privacy', '/terms'] },
+  // F20 — GEO comparison / alternatives content (English-only).
+  { heading: 'Comparisons', paths: ['/compare/upheal', '/alternatives/upheal'] },
 ];
 
 /**
@@ -113,8 +144,13 @@ export const LOCALES = ['ru', 'uk', 'es'];
  * Convenience Set of the exact public marketing paths (root, no locale prefix).
  * Used by <LocaleSync> in App.jsx to distinguish "public English marketing"
  * (URL wins, force EN) from authenticated app routes (localStorage wins).
+ * F20: EN-only comparison / alternatives pages are also public marketing and
+ * must force EN (they have no locale mirrors).
  */
-export const PUBLIC_MARKETING_PATHS = new Set(PUBLIC_ROUTES.map((r) => r.path));
+export const PUBLIC_MARKETING_PATHS = new Set([
+  ...PUBLIC_ROUTES.map((r) => r.path),
+  ...EN_ONLY_ROUTES.map((r) => r.path),
+]);
 
 /**
  * All hreflang locales including the default English root. English lives at
@@ -143,17 +179,34 @@ export function localePathFor(locale, routePath) {
 
 /**
  * Full matrix of (locale, routePath) tuples spanning HREFLANG_LOCALES x
- * PUBLIC_ROUTES. Length is HREFLANG_LOCALES.length * PUBLIC_ROUTES.length
- * (4 * 7 = 28 with the current manifest).
+ * PUBLIC_ROUTES, plus the English-only F20 comparison / alternatives routes
+ * appended at the tail. Length is
+ *   HREFLANG_LOCALES.length * PUBLIC_ROUTES.length + EN_ONLY_ROUTES.length
+ * (4 * 7 + 2 = 30 with the current manifest).
+ *
+ * Entries carry an `enOnly` flag so generators (sitemap.xml, prerender.mjs,
+ * generate-llms.mjs) know to skip hreflang alternates for them (there are no
+ * /ru, /uk, /es mirrors — attempting to emit them would produce dead URLs).
  */
-export const LOCALIZED_ROUTES = HREFLANG_LOCALES.flatMap((locale) =>
-  PUBLIC_ROUTES.map(({ path, changefreq, priority }) => ({
-    locale,
+export const LOCALIZED_ROUTES = [
+  ...HREFLANG_LOCALES.flatMap((locale) =>
+    PUBLIC_ROUTES.map(({ path, changefreq, priority }) => ({
+      locale,
+      basePath: path,
+      path: localePathFor(locale, path),
+      changefreq,
+      priority,
+      enOnly: false,
+    })),
+  ),
+  ...EN_ONLY_ROUTES.map(({ path, changefreq, priority }) => ({
+    locale: 'en',
     basePath: path,
-    path: localePathFor(locale, path),
+    path,
     changefreq,
     priority,
+    enOnly: true,
   })),
-);
+];
 
 export default PUBLIC_ROUTES;

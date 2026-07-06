@@ -40,6 +40,8 @@ import SecurityAuditLog from './pages/SecurityAuditLog';
 import SecurityDataSovereignty from './pages/SecurityDataSovereignty';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
+import CompareUpheal from './pages/CompareUpheal';
+import AlternativesUpheal from './pages/AlternativesUpheal';
 import VerifyLead from './pages/VerifyLead';
 import SupervisionView from './pages/SupervisionView';
 import NotFound from './pages/NotFound';
@@ -164,6 +166,10 @@ function App() {
             />
           ))
         )}
+
+        {/* F20 — EN-only GEO comparison / alternatives pages (no locale mirrors). */}
+        <Route path="/compare/upheal" element={<CompareUpheal />} />
+        <Route path="/alternatives/upheal" element={<AlternativesUpheal />} />
 
         {/* /confirm landing page - 4 locale variants, outside AppLayout */}
         <Route path="/confirm" element={<LandingConfirm />} />

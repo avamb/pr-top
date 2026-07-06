@@ -48,7 +48,7 @@ function xmlEscape(s) {
     .replace(/'/g, '&apos;');
 }
 
-const urlEntries = LOCALIZED_ROUTES.map(({ path, basePath, changefreq, priority }) => {
+const urlEntries = LOCALIZED_ROUTES.map(({ path, basePath, changefreq, priority, enOnly }) => {
   const loc = xmlEscape(`${BASE_URL}${path}`);
   const parts = [
     `    <loc>${loc}</loc>`,
@@ -58,16 +58,20 @@ const urlEntries = LOCALIZED_ROUTES.map(({ path, basePath, changefreq, priority 
   if (priority != null) parts.push(`    <priority>${priority.toFixed(1)}</priority>`);
 
   // xhtml:link rel="alternate" — one per hreflang locale plus x-default.
-  for (const altLocale of HREFLANG_LOCALES) {
-    const altHref = xmlEscape(`${BASE_URL}${localePathFor(altLocale, basePath)}`);
+  // F20: EN-only routes (e.g. /compare/upheal) have no locale mirrors, so we
+  // skip alternate emission entirely to avoid dead-URL references.
+  if (!enOnly) {
+    for (const altLocale of HREFLANG_LOCALES) {
+      const altHref = xmlEscape(`${BASE_URL}${localePathFor(altLocale, basePath)}`);
+      parts.push(
+        `    <xhtml:link rel="alternate" hreflang="${altLocale}" href="${altHref}"/>`,
+      );
+    }
+    const xDefaultHref = xmlEscape(`${BASE_URL}${localePathFor('en', basePath)}`);
     parts.push(
-      `    <xhtml:link rel="alternate" hreflang="${altLocale}" href="${altHref}"/>`,
+      `    <xhtml:link rel="alternate" hreflang="x-default" href="${xDefaultHref}"/>`,
     );
   }
-  const xDefaultHref = xmlEscape(`${BASE_URL}${localePathFor('en', basePath)}`);
-  parts.push(
-    `    <xhtml:link rel="alternate" hreflang="x-default" href="${xDefaultHref}"/>`,
-  );
 
   return `  <url>\n${parts.join('\n')}\n  </url>`;
 }).join('\n');
@@ -84,8 +88,9 @@ if (!existsSync(DIST_DIR)) {
 }
 writeFileSync(OUT_FILE, xml, 'utf8');
 
+const enOnlyCount = LOCALIZED_ROUTES.filter((r) => r.enOnly).length;
 console.log(
   `[sitemap] wrote ${OUT_FILE} with ${LOCALIZED_ROUTES.length} URLs`
-  + ` (${PUBLIC_ROUTES.length} routes x ${HREFLANG_LOCALES.length} locales,`
-  + ` lastmod=${lastmod})`,
+  + ` (${PUBLIC_ROUTES.length} routes x ${HREFLANG_LOCALES.length} locales`
+  + ` + ${enOnlyCount} EN-only routes, lastmod=${lastmod})`,
 );
