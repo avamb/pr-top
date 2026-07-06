@@ -383,6 +383,39 @@ async function main() {
     fail('S4 reindex check threw: ' + e.message);
   }
 
+  section('12f. S6 — >=20 authored how-to docs, each >=600 words, valid audience marker, FAQ section');
+  try {
+    const kbRoot = path.join(__dirname, 'docs', 'assistant-kb');
+    // Only count top-level authored how-to pages; skip reference/ (auto-generated).
+    const kbFiles = fs.readdirSync(kbRoot, { withFileTypes: true })
+      .filter((ent) => ent.isFile() && ent.name.endsWith('.md'))
+      .map((ent) => path.join(kbRoot, ent.name));
+
+    let qualifying = 0;
+    let missingMarker = 0;
+    let tooShort = 0;
+    let missingFaq = 0;
+    for (const f of kbFiles) {
+      const src = fs.readFileSync(f, 'utf8');
+      const rel = path.relative(__dirname, f).replace(/\\/g, '/');
+      const wordCount = src.split(/\s+/).filter(Boolean).length;
+      const hasMarker = /<!--\s*audience:\s*(public|user)\s*-->/.test(src);
+      const hasFaq = /^##+\s+(FAQ|Frequently Asked)/mi.test(src);
+      if (!hasMarker) { missingMarker++; fail('S6: missing audience marker in ' + rel); continue; }
+      if (wordCount < 600) { tooShort++; fail('S6: ' + rel + ' has only ' + wordCount + ' words (<600)'); continue; }
+      if (!hasFaq) { missingFaq++; fail('S6: ' + rel + ' missing FAQ/Frequently Asked section'); continue; }
+      qualifying++;
+    }
+    if (qualifying >= 20) {
+      pass('S6: ' + qualifying + ' authored docs meet >=600 words + audience marker + FAQ');
+    } else {
+      fail('S6: only ' + qualifying + ' authored docs qualify (need >=20). shortfalls: ' +
+        'missingMarker=' + missingMarker + ', tooShort=' + tooShort + ', missingFaq=' + missingFaq);
+    }
+  } catch (e) {
+    fail('S6 authored-docs audit threw: ' + e.message);
+  }
+
   section('12. S2 — publicAssistant.js and assistant.js call search with correct audience');
   try {
     const publicRoute = fs.readFileSync(path.join(__dirname, 'src/backend/src/routes/publicAssistant.js'), 'utf8');

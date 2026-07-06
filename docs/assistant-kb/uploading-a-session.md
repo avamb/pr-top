@@ -48,3 +48,43 @@ nightly cleanup window.
   provider is healthy.
 - **Summary looks generic** — make sure the transcript is legible; the
   quality of the summary depends on the transcript.
+
+## Edge cases
+
+- **Quota nearly full.** The uploader warns when the batch would
+  push you over the session quota. Upgrade, drop overflow files, or
+  postpone them to the next billing period.
+- **Duplicate upload.** If a file's hash matches an existing session
+  on the same client, the upload is skipped and marked "already
+  uploaded" without counting against quota.
+- **Auto-detect picks the wrong language.** Force the language on the
+  upload row before submit. A wrong-language transcript reads as
+  gibberish; delete and re-upload with the language forced.
+- **Mid-transcription failure.** The session page shows a Retry
+  button. Repeated failures on the same file usually mean corrupted
+  audio.
+
+## FAQ
+
+**Q: How long does transcription take?**
+A: Roughly 0.1× real-time on the default transcription provider —
+a 60-minute recording takes about six minutes, plus queue wait.
+
+**Q: Are video files supported?**
+A: Yes. mp4 and webm up to 100 MB. Only the audio track is
+transcribed; video playback is available on Pro and Premium.
+
+**Q: Where do transcripts live?**
+A: On the session page. Both the transcript and the AI summary are
+Class-A data — AES-encrypted at rest.
+
+**Q: Can I bulk-upload multiple sessions?**
+A: Yes. See the Bulk session upload how-to for the batch flow.
+
+**Q: What if the client withdraws consent after upload?**
+A: New uploads are blocked. Existing sessions stay encrypted until
+you delete them explicitly or delete the client.
+
+**Q: Do transcripts feed the vector search?**
+A: Yes. Transcripts and AI summaries are indexed on Pro/Premium and
+retrievable via natural-language queries scoped to that client.

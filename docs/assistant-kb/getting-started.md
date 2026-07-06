@@ -42,3 +42,61 @@ The signed-in assistant (this bot) can walk you through platform tasks
 like "how do I mark a session as ended", "where do I export a
 transcript", or "how do I assign an exercise". It does **not** have
 access to any individual client's diary or notes.
+
+## Prerequisites
+
+- A registered therapist account and access to your login email.
+- A modern browser (current + previous release of Chrome, Firefox,
+  Safari, or Edge).
+- Willingness to obtain informed consent from any real client you
+  invite. PR-TOP enforces consent flags on every data-writing route.
+
+## Edge cases
+
+- **First login on Trial.** New accounts start on Trial with 3 client
+  seats and 10 sessions/mo. You can upgrade at any time from
+  Settings → Subscription.
+- **Multiple therapists in one practice.** Each therapist registers
+  their own account. Premium accounts can share specific clients
+  read-only with a supervising colleague.
+- **Client already on Telegram with a different therapist.** The
+  `/switch` command lets the client flip between therapist bindings.
+
+## Troubleshooting
+
+- **Forgotten password.** Use **Forgot password?** on the sign-in
+  page; a reset link is emailed and valid for one hour.
+- **Deep link opens the wrong Telegram account.** Confirm which
+  Telegram account the client is signed into (desktop vs. web can
+  differ) before they tap Start.
+- **Row stuck at pending invite.** Regenerate a fresh invite from
+  the client page; the old code invalidates.
+- **Language toggle missing.** Very small viewports collapse it into
+  the profile submenu — widen the browser or open the sidebar.
+
+## FAQ
+
+**Q: How long is the Trial?**
+A: 14 calendar days from account creation. It ends automatically;
+data is preserved through a 90-day grace and a 30-day final grace.
+
+**Q: Do I need a credit card to start?**
+A: No. Trial does not require a card. You are prompted for one only
+at upgrade.
+
+**Q: Can I invite myself as a test client?**
+A: Yes. Use your own Telegram account bound to a "Test client"
+record to try diary, exercises, and SOS as if you were the client.
+
+**Q: What languages are supported?**
+A: UI: English, Russian, Spanish, Ukrainian. Bot: same four. Vector
+search is cross-lingual — an English query can retrieve entries in
+any supported language.
+
+**Q: Can the assistant read my clients' diaries?**
+A: No. The assistant reads only the knowledge base you are seeing
+now — never a client's diary, notes, or transcripts.
+
+**Q: How do I contact support?**
+A: The help widget in the dashboard opens a support form. Include
+the browser, OS, and approximate timestamp of any error.
