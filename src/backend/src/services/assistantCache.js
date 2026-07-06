@@ -103,7 +103,22 @@ function findCachedAnswer(questionText, audience, locale) {
       const cachedEmbedding = deserializeEmbedding(row[1]);
       const similarity = cosineSimilarity(questionEmbedding, cachedEmbedding);
 
-      if (similarity > bestSimilarity) {
+      // Curated seeds outrank real-traffic answers: prefer a seed whenever it
+      // is within CURATION_MARGIN of the best score so far, so a stale/wrong
+      // LLM-cached answer can never beat the reviewed seed for the same
+      // question. Among same-kind entries, higher similarity wins.
+      const CURATION_MARGIN = 0.05;
+      let better;
+      if (!bestMatch) {
+        better = similarity > bestSimilarity;
+      } else if (isSeed && !bestMatch.is_seed) {
+        better = similarity >= bestSimilarity - CURATION_MARGIN;
+      } else if (!isSeed && bestMatch.is_seed) {
+        better = similarity > bestSimilarity + CURATION_MARGIN;
+      } else {
+        better = similarity > bestSimilarity;
+      }
+      if (better) {
         bestSimilarity = similarity;
         bestMatch = { id: row[0], answer: row[2], is_seed: isSeed };
       }

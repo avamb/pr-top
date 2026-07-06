@@ -563,6 +563,16 @@ async function main() {
       const pubHit = cache.findCachedAnswer(q, 'public', 'en');
       if (pubHit && pubHit.hit) pass('audience gate: public lookup returns public seed');
       else fail('audience gate: public lookup missed a public seed');
+
+      // Seed priority: a stale/wrong real-traffic answer for the SAME question
+      // must not beat the reviewed seed.
+      cache.storeCachedAnswer(q, 'STALE WRONG ANSWER — Pro 999 clients', true);
+      const contested = cache.findCachedAnswer(q, 'public', 'en');
+      if (contested && contested.hit && contested.is_seed && !/STALE WRONG/.test(contested.answer)) {
+        pass('seed priority: reviewed seed served over a competing non-seed answer');
+      } else {
+        fail('seed priority FAILED: non-seed answer won for "' + q.slice(0, 30) + '..."');
+      }
     }
   } catch (e) {
     fail('S7 seeder/cache functional check threw: ' + e.message);
