@@ -11,7 +11,7 @@ const aiProviders = require('../services/aiProviders');
 const { buildAssistantSystemPrompt } = require('../services/assistantPrompt');
 const assistantCache = require('../services/assistantCache');
 const assistantKnowledge = require('../services/assistantKnowledge');
-const { sanitizeInput, detectInjection, getInjectionRejection, detectLanguage } = require('../services/assistantSanitizer');
+const { sanitizeInput, sanitizeOutput, detectInjection, getInjectionRejection, detectLanguage } = require('../services/assistantSanitizer');
 
 // === Auto-generate conversation title from first user message ===
 function generateTitle(firstMessage) {
@@ -301,6 +301,9 @@ router.post('/chat', async (req, res) => {
 
     // If cached, return immediately (no need to stream)
     if (fromCache) {
+      // Output guardrail (feature #436): defensively re-sanitize cached replies
+      // so credentials that slipped in before this guardrail existed cannot leak.
+      assistantReply = sanitizeOutput(assistantReply);
       messages.push({ role: 'assistant', content: assistantReply, timestamp: new Date().toISOString() });
       const conversationId = req.body._conversation_id || null;
       const savedChatId = saveChatExchange(db, req.user.id, activeChatId, messages, sanitized, assistantReply, true, page_context, detectedLanguage, conversationId);
@@ -454,17 +457,23 @@ router.post('/chat', async (req, res) => {
           model: activeAssistant.model
         }, db);
 
+        // Feature #436 output guardrail: buffer the accumulated stream and run
+        // sanitizeOutput ONCE before flushing. Streaming raw chunks would risk
+        // leaking a secret split across chunk boundaries. We accept the small
+        // UX cost (no token-by-token render) to guarantee no credential ever
+        // reaches the wire or cache unredacted.
         for await (const chunk of streamGen) {
           if (chunk.text) {
             fullText += chunk.text;
-            res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk.text })}\n\n`);
           }
           if (chunk.done) {
             if (chunk.fullText) fullText = chunk.fullText;
           }
         }
 
-        assistantReply = fullText || '';
+        assistantReply = sanitizeOutput(fullText || '');
+        // Emit the sanitized reply as a single chunk before the terminal done event.
+        res.write(`data: ${JSON.stringify({ type: 'chunk', text: assistantReply })}\n\n`);
 
         // Store Q&A in cache (only if RAG context was present to prevent cache poisoning)
         assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext);
@@ -518,7 +527,8 @@ router.post('/chat', async (req, res) => {
         provider: activeAssistant.providerName,
         model: activeAssistant.model
       }, db);
-      assistantReply = result.text;
+      // Feature #436 output guardrail: sanitize BEFORE both caching and send.
+      assistantReply = sanitizeOutput(result.text);
 
       // Store Q&A in cache (only if RAG context was present to prevent cache poisoning)
       assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext);

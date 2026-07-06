@@ -125,6 +125,92 @@ async function main() {
   if (envExample.length === 0) pass('.env.example not present in index');
   else fail(`.env.example indexed with ${envExample.length} chunks`);
 
+  section('7. Feature #436 S3 — sanitizeOutput redacts secret-shaped strings');
+  let sanitizer;
+  try {
+    sanitizer = require('./src/backend/src/services/assistantSanitizer');
+    pass('Loaded assistantSanitizer service');
+  } catch (e) {
+    fail('Failed to load assistantSanitizer: ' + e.message);
+    return finish();
+  }
+  if (typeof sanitizer.sanitizeOutput !== 'function') {
+    fail('sanitizeOutput is not exported from assistantSanitizer');
+    return finish();
+  }
+  const { sanitizeOutput } = sanitizer;
+
+  // Secret-shaped inputs — every one must be redacted.
+  const secretSamples = [
+    { label: 'OpenAI-style key (sk-...)',      raw: 'sk-abcDEF0123456789ghijklMNop' },
+    { label: 'Anthropic-style key (sk-ant-)',  raw: 'sk-ant-api03-abcDEF0123456789ghi' },
+    { label: 'Bearer token',                   raw: 'Bearer xyz1234567890abcDEF' },
+    { label: 'AI_API_KEY=secret assignment',   raw: 'AI_API_KEY=supersecretvalue_12345' },
+    { label: 'PASSWORD= assignment',           raw: 'PASSWORD=hunter2hunter2extra' },
+    { label: 'JWT (eyJ...)',                   raw: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcDEFghiJKLmnop' },
+    { label: 'Long hex blob (>=32 chars)',     raw: 'a'.repeat(48) },
+    { label: 'Long base64url blob (>=32 chars)', raw: 'AbCdEf-1234567890_ghijklMNOPqrstUVwxyzZZ' },
+  ];
+  for (const s of secretSamples) {
+    const wrapped = `Prose before ${s.raw} prose after.`;
+    const out = sanitizeOutput(wrapped);
+    if (!out.includes(s.raw) && out.includes('[REDACTED]')) {
+      pass(`${s.label} redacted`);
+    } else {
+      fail(`${s.label} NOT redacted (got: ${out.slice(0, 120)})`);
+    }
+  }
+
+  // Normal prose — must pass through UNCHANGED.
+  const proseSamples = [
+    'Encryption uses AES at the application layer.',
+    'To register, go to /register and confirm your email address to activate your trial.',
+    'Class A data (diary, notes, transcripts, summaries) is encrypted at rest.',
+    'The Telegram bot connects to a client via a deep link or an invite code.',
+  ];
+  for (const p of proseSamples) {
+    const out = sanitizeOutput(p);
+    if (out === p) pass(`Normal prose unchanged: "${p.slice(0, 40)}..."`);
+    else fail(`Normal prose mutated. Expected: "${p}" Got: "${out}"`);
+  }
+
+  // Empty / non-string safety.
+  if (sanitizeOutput('') === '') pass('Empty string safe');
+  else fail('Empty string not handled');
+  if (sanitizeOutput(null) === '') pass('null input safe');
+  else fail('null not handled');
+
+  // Idempotence — sanitizing twice yields the same result.
+  const once = sanitizeOutput(`Leaked: sk-abcDEF0123456789ghijklMN end.`);
+  const twice = sanitizeOutput(once);
+  if (once === twice) pass('sanitizeOutput is idempotent');
+  else fail('sanitizeOutput is NOT idempotent');
+
+  section('8. Feature #436 S3 — route wiring: guardrail runs before send AND before cache');
+  const routeFiles = [
+    'src/backend/src/routes/publicAssistant.js',
+    'src/backend/src/routes/assistant.js',
+  ];
+  for (const rel of routeFiles) {
+    const abs = path.join(__dirname, rel);
+    let src;
+    try { src = fs.readFileSync(abs, 'utf8'); }
+    catch (e) { fail(`Cannot read ${rel}: ${e.message}`); continue; }
+
+    if (/sanitizeOutput\s*\(/.test(src)) pass(`${rel} calls sanitizeOutput`);
+    else fail(`${rel} does NOT call sanitizeOutput`);
+
+    // Ensure sanitizeOutput is called BEFORE storeCachedAnswer (so the cached
+    // reply is the redacted one — otherwise a later cache hit would leak).
+    const sanitizeIdx = src.indexOf('sanitizeOutput(');
+    const cacheIdx = src.indexOf('storeCachedAnswer(');
+    if (sanitizeIdx >= 0 && cacheIdx >= 0 && sanitizeIdx < cacheIdx) {
+      pass(`${rel}: sanitizeOutput invoked before storeCachedAnswer`);
+    } else {
+      fail(`${rel}: sanitizeOutput must be called before storeCachedAnswer`);
+    }
+  }
+
   return finish();
 }
 

@@ -14578,3 +14578,51 @@ VERIFICATION:
 
 Stats after session 193: #433 status: passing (433/433, 100%).
 GEO Comparisons wave (F20/F21/F22) COMPLETE.
+
+================================================================
+Session 194 (2026-07-06) - Feature #436 PASSING (Assistant KB Security S3)
+================================================================
+
+Assigned: #436 S3 - Output guardrail: redact secret-shaped strings from replies
+
+IMPLEMENTATION:
+1. src/backend/src/services/assistantSanitizer.js
+   - New sanitizeOutput(text) with 6 redaction patterns:
+     * OpenAI-style keys: sk-[A-Za-z0-9_-]{20,} (also matches sk-ant-)
+     * Bearer <token>
+     * Env-style assignments: FOO_API_KEY=, PASSWORD=, SECRET=, TOKEN=,
+       PRIVATE_KEY= (key name preserved, value -> [REDACTED])
+     * JWTs (eyJ<b64>.<b64>.<b64>)
+     * Long hex blobs (>=32 chars)
+     * Long base64/base64url blobs (>=32 chars)
+   - Idempotent, empty/null safe. Exports sanitizeOutput +
+     OUTPUT_REDACTION_PATTERNS.
+
+2. src/backend/src/routes/publicAssistant.js
+   - Import sanitizeOutput.
+   - Cached-answer path: re-sanitize before send (defends older cache rows).
+   - SSE streaming path: BUFFER accumulated model text, sanitize ONCE,
+     emit as single chunk before terminal done event. Avoids mid-token
+     leaks across chunk boundaries (e.g. "sk-" in one chunk, rest in next).
+   - Non-streaming JSON path: sanitize BEFORE both storeCachedAnswer and
+     res.json (so the cached copy is also redacted).
+
+3. src/backend/src/routes/assistant.js
+   - Same wiring: import + cache-hit re-sanitize + SSE buffer-then-emit +
+     JSON path sanitize-before-cache-and-send.
+
+4. _t_assistant_kb_audit.js
+   - Added sections 7 & 8 to the existing S1 audit:
+     * 7: 8 secret samples (sk-, sk-ant-, Bearer, AI_API_KEY=, PASSWORD=,
+       JWT, long hex, long b64) -> asserts all redacted. 4 prose samples
+       -> asserts unchanged. Empty/null safety + idempotence checks.
+     * 8: reads both route files, requires sanitizeOutput() call AND
+       asserts sanitizeOutput index < storeCachedAnswer index so the
+       cached reply is guaranteed to be the redacted one.
+
+VERIFICATION:
+- node --check on all 4 modified files: OK.
+- node _t_assistant_kb_audit.js -> 28 passed, 0 failed (S1 KB coverage
+  checks + S3 sanitizeOutput unit tests + route-wiring order asserts).
+
+Stats after session 194: #436 status: passing (434/438, 99.1%).

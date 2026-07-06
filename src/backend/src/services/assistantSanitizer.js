@@ -181,11 +181,83 @@ function detectLanguage(text, defaultLocale) {
   return latinCount > cyrillicCount ? 'en' : (defaultLocale || 'en');
 }
 
+// === Output Guardrail: Secret Redaction ===
+//
+// Feature #436 (S3): redact anything that resembles a credential BEFORE the
+// reply is sent to the client OR cached. Cheap, independent safety net that
+// complements input sanitization / prompt injection defenses.
+//
+// Redacted patterns:
+//   - OpenAI-style API keys:  sk-[A-Za-z0-9-_]{20,}
+//   - Anthropic-style keys:   sk-ant-[A-Za-z0-9-_]{20,} (matched by above too)
+//   - Bearer tokens:          "Bearer <token>"
+//   - Env-style assignments:  *_API_KEY=..., *_SECRET=..., *_TOKEN=..., PASSWORD=...
+//   - JWTs:                   eyJ<base64>.<base64>.<base64>
+//   - Long hex/base64 blobs:  >=32 chars of [A-Fa-f0-9] or base64url alphabet
+//
+// Every match is replaced with the literal string "[REDACTED]".
+
+const REDACTION = '[REDACTED]';
+
+// Ordered so that the most specific patterns match first (before the generic
+// long-hex/base64 catch-all).
+const OUTPUT_REDACTION_PATTERNS = [
+  // OpenAI-style API keys (also covers sk-ant-, sk-proj-, sk-or-, etc.)
+  { name: 'openai_key', re: /sk-[A-Za-z0-9_-]{20,}/g },
+  // Bearer tokens in Authorization-style strings
+  { name: 'bearer_token', re: /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/g },
+  // Env-style assignments: FOO_API_KEY=..., FOO_SECRET=..., FOO_TOKEN=..., PASSWORD=...
+  // Redact only the value portion, keep the key name so the message still reads.
+  {
+    name: 'env_assignment',
+    re: /\b((?:[A-Z][A-Z0-9_]*_)?(?:API_KEY|SECRET|TOKEN|PASSWORD|PASSWD|PRIVATE_KEY))\s*=\s*['"]?[^\s'"]+['"]?/g,
+    replacement: (_m, key) => `${key}=${REDACTION}`,
+  },
+  // JWTs: three dot-separated base64url segments, first begins with "eyJ"
+  { name: 'jwt', re: /eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}/g },
+  // Long hex blob (>=32 chars).  Word-bounded to avoid mid-word matches.
+  { name: 'long_hex', re: /\b[A-Fa-f0-9]{32,}\b/g },
+  // Long base64/base64url blob (>=32 chars).  Requires at least one non-hex char
+  // to avoid double-matching hex blobs and to skip plain English words.
+  {
+    name: 'long_base64',
+    re: /\b(?=[A-Za-z0-9+/_-]{32,}\b)[A-Za-z0-9+/_-]*[+/_-][A-Za-z0-9+/_-]{20,}\b/g,
+  },
+];
+
+/**
+ * Redact anything that looks like a secret from assistant output.
+ *
+ * Safe to call on empty / non-string values (returns them unchanged).
+ * Idempotent: calling twice yields the same result.
+ *
+ * @param {string} text - Assistant reply text (fully accumulated, not a chunk).
+ * @returns {string} Text with secret-shaped substrings replaced by "[REDACTED]".
+ */
+function sanitizeOutput(text) {
+  if (!text || typeof text !== 'string') return text || '';
+
+  let out = text;
+  for (const { re, replacement } of OUTPUT_REDACTION_PATTERNS) {
+    // Reset lastIndex — patterns use the /g flag and are module-level singletons.
+    re.lastIndex = 0;
+    if (typeof replacement === 'function') {
+      out = out.replace(re, replacement);
+    } else {
+      out = out.replace(re, REDACTION);
+    }
+  }
+
+  return out;
+}
+
 module.exports = {
   sanitizeInput,
+  sanitizeOutput,
   detectInjection,
   getInjectionRejection,
   detectLanguage,
   INJECTION_PATTERNS,
-  ROLE_MARKERS
+  ROLE_MARKERS,
+  OUTPUT_REDACTION_PATTERNS,
 };

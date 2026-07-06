@@ -9,7 +9,7 @@ const aiProviders = require('../services/aiProviders');
 const { buildAssistantSystemPrompt } = require('../services/assistantPrompt');
 const assistantCache = require('../services/assistantCache');
 const assistantKnowledge = require('../services/assistantKnowledge');
-const { sanitizeInput, detectInjection, getInjectionRejection, detectLanguage } = require('../services/assistantSanitizer');
+const { sanitizeInput, sanitizeOutput, detectInjection, getInjectionRejection, detectLanguage } = require('../services/assistantSanitizer');
 
 const MAX_MESSAGES_PER_SESSION = 5;
 
@@ -261,6 +261,11 @@ router.post('/public-chat', async (req, res) => {
 
     // If cached, return immediately
     if (fromCache) {
+      // Output guardrail (feature #436): redact secret-shaped strings from the
+      // cached reply before it leaves the server. Cached entries were sanitized
+      // at store time, but re-sanitize defensively in case older entries slipped
+      // through.
+      assistantReply = sanitizeOutput(assistantReply);
       const convId = savePublicChatExchange(db, session.id, sanitized, assistantReply, true, detectedLanguage, conversation_id || null);
 
       if (useSSE) {
@@ -348,17 +353,24 @@ router.post('/public-chat', async (req, res) => {
           model: activeAssistant.model
         }, db);
 
+        // Feature #436 output guardrail: buffer the accumulated stream and run
+        // sanitizeOutput ONCE before flushing. Streaming raw chunks would risk
+        // leaking a secret split across chunk boundaries (e.g. "sk-" in one
+        // chunk, the rest in the next). We accept a small UX cost (typing
+        // indicator instead of token-by-token render) to guarantee no
+        // credential ever reaches the wire unredacted.
         for await (const chunk of streamGen) {
           if (chunk.text) {
             fullText += chunk.text;
-            res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk.text })}\n\n`);
           }
           if (chunk.done && chunk.fullText) {
             fullText = chunk.fullText;
           }
         }
 
-        assistantReply = fullText || '';
+        assistantReply = sanitizeOutput(fullText || '');
+        // Emit the sanitized reply as a single chunk before the terminal done event.
+        res.write(`data: ${JSON.stringify({ type: 'chunk', text: assistantReply })}\n\n`);
         assistantCache.storeCachedAnswer(sanitized, assistantReply);
 
         const convId = savePublicChatExchange(db, session.id, sanitized, assistantReply, false, detectedLanguage, conversation_id || null);
@@ -393,7 +405,8 @@ router.post('/public-chat', async (req, res) => {
         provider: activeAssistant.providerName,
         model: activeAssistant.model
       }, db);
-      assistantReply = result.text;
+      // Feature #436 output guardrail: sanitize BEFORE both caching and send.
+      assistantReply = sanitizeOutput(result.text);
       assistantCache.storeCachedAnswer(sanitized, assistantReply);
     } catch (aiError) {
       logger.error('[PublicAssistant] AI provider error: ' + aiError.message);

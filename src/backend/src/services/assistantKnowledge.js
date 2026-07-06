@@ -393,6 +393,15 @@ function ensureTable() {
     // Column already exists, ignore
   }
 
+  // Add audiences column (S2 — feature #435). JSON-encoded array of audience
+  // tags (e.g. '["public"]' or '["user"]'). Persisting per-chunk so filtering
+  // at query time is O(1) — no need to re-derive from source config.
+  try {
+    db.run("ALTER TABLE assistant_knowledge ADD COLUMN audiences TEXT DEFAULT '[\"public\"]'");
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
   saveDatabaseAfterWrite();
 }
 
@@ -434,34 +443,56 @@ function getProjectRootDiagnostics() {
  * Source-code categories (api_route, service, bot, ui_component) MUST NOT be
  * indexed. .env.example is also excluded from the config bucket.
  */
+// AUDIENCE TAGGING (S2 — feature #435):
+// Each source declares the audience(s) that may see its chunks in RAG results.
+// - 'public' : marketing / feature / FAQ / security-overview material safe for
+//              anonymous landing-page visitors AND authenticated users.
+// - 'user'   : how-to material for authenticated therapists ONLY.
+//
+// search(query, k, audience) filters at query time:
+//   audience === 'public' -> only chunks tagged 'public'
+//   audience === 'user'   -> chunks tagged 'public' OR 'user' (superset)
+//
+// UI labels (i18n) and top-level docs/*.md (PRD, MARKETING, etc.) are 'public'
+// because they describe what the platform is / does. The docs/assistant-kb/
+// pipeline (S4) produces per-file how-to guides tagged 'user' by default; if
+// a per-file `<!-- audience: public -->` marker appears in the future it may
+// be respected by the generator itself (not this indexer). README is public.
 const INDEX_SOURCES = [
   {
     type: 'i18n',
     description: 'Internationalization translation files (UI labels/copy)',
     dirs: ['src/frontend/src/i18n'],
     extensions: ['.json', '.js'],
-    maxDepth: 1
+    maxDepth: 1,
+    audiences: ['public']
   },
   {
     type: 'documentation',
     description: 'Project documentation',
     dirs: ['docs'],
     extensions: ['.md'],
-    maxDepth: 1
+    maxDepth: 1,
+    audiences: ['public']
   },
   {
     type: 'documentation',
-    description: 'Curated assistant knowledge base articles',
+    description: 'Curated assistant knowledge base articles (authenticated how-to)',
     dirs: ['docs/assistant-kb'],
     extensions: ['.md'],
-    maxDepth: 3
+    maxDepth: 3,
+    audiences: ['user']
   },
   {
     type: 'documentation',
     description: 'Project README',
-    files: ['README.md']
+    files: ['README.md'],
+    audiences: ['public']
   }
 ];
+
+// Valid audience tags. Kept in sync with the search() audience filter.
+const VALID_AUDIENCES = new Set(['public', 'user']);
 
 // No source-code files are indexed after S1, so the historical exclusion list
 // (which only covered a backend service module) is intentionally empty.
@@ -695,6 +726,13 @@ function discoverFiles() {
   const files = [];
 
   for (const source of INDEX_SOURCES) {
+    // Default audience is 'public' if the source declaration omits the field.
+    // Kept safe-by-default so a missing tag never accidentally exposes a
+    // 'user' doc to the public bot.
+    const audiences = Array.isArray(source.audiences) && source.audiences.length > 0
+      ? source.audiences.slice()
+      : ['public'];
+
     if (source.files) {
       // Specific files
       for (const f of source.files) {
@@ -702,7 +740,7 @@ function discoverFiles() {
         if (fs.existsSync(fullPath)) {
           const relativePath = path.relative(PROJECT_ROOT, fullPath).replace(/\\/g, '/');
           if (!EXCLUDED_SOURCE_FILES.has(relativePath)) {
-            files.push({ path: fullPath, type: source.type });
+            files.push({ path: fullPath, type: source.type, audiences });
           }
         }
       }
@@ -714,7 +752,7 @@ function discoverFiles() {
         for (const f of found) {
           const relativePath = path.relative(PROJECT_ROOT, f).replace(/\\/g, '/');
           if (!EXCLUDED_SOURCE_FILES.has(relativePath)) {
-            files.push({ path: f, type: source.type });
+            files.push({ path: f, type: source.type, audiences });
           }
         }
       }
@@ -778,7 +816,8 @@ async function reindex() {
           chunk: chunks[i],
           relativePath,
           sourceType: file.type,
-          chunkIndex: i
+          chunkIndex: i,
+          audiences: file.audiences || ['public']
         });
       }
     } catch (e) {
@@ -809,7 +848,7 @@ async function reindex() {
       }
 
       for (let i = 0; i < batch.length; i++) {
-        const { chunk, relativePath, sourceType, chunkIndex } = batch[i];
+        const { chunk, relativePath, sourceType, chunkIndex, audiences } = batch[i];
         let embedding = embeddings[i];
         let type = 'ai';
 
@@ -822,8 +861,8 @@ async function reindex() {
 
         const serialized = serializeEmbedding(embedding, type);
         db.run(
-          "INSERT INTO assistant_knowledge (chunk_text, embedding, source_file, source_type, chunk_index, embedding_type, updated_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
-          [chunk, serialized, relativePath, sourceType, chunkIndex, type]
+          "INSERT INTO assistant_knowledge (chunk_text, embedding, source_file, source_type, chunk_index, embedding_type, audiences, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))",
+          [chunk, serialized, relativePath, sourceType, chunkIndex, type, JSON.stringify(audiences || ['public'])]
         );
         totalChunks++;
       }
@@ -834,14 +873,14 @@ async function reindex() {
     }
   } else {
     // TF-IDF embedding (synchronous, fast)
-    for (const { chunk, relativePath, sourceType, chunkIndex } of allChunkData) {
+    for (const { chunk, relativePath, sourceType, chunkIndex, audiences } of allChunkData) {
       const embedding = generateTfidfEmbedding(chunk);
       if (!embedding) continue;
 
       const serialized = serializeEmbedding(embedding, 'tfidf');
       db.run(
-        "INSERT INTO assistant_knowledge (chunk_text, embedding, source_file, source_type, chunk_index, embedding_type, updated_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
-        [chunk, serialized, relativePath, sourceType, chunkIndex, 'tfidf']
+        "INSERT INTO assistant_knowledge (chunk_text, embedding, source_file, source_type, chunk_index, embedding_type, audiences, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))",
+        [chunk, serialized, relativePath, sourceType, chunkIndex, 'tfidf', JSON.stringify(audiences || ['public'])]
       );
       totalChunks++;
     }
@@ -926,16 +965,27 @@ function getStats() {
  * Uses AI embeddings when available (cross-language semantic search),
  * falls back to TF-IDF for local/offline operation.
  *
+ * AUDIENCE FILTERING (S2 — feature #435):
+ *   - audience === 'public' (DEFAULT, safe-by-default): only chunks tagged
+ *     'public' are eligible. Used by the anonymous landing-page assistant.
+ *   - audience === 'user'  : chunks tagged either 'public' OR 'user' are
+ *     eligible. Used by the authenticated therapist assistant, which may
+ *     also see how-to material.
+ *   - Any other value falls through to the safe 'public' filter.
+ *
  * @param {string} query - Search query text
  * @param {number} limit - Max results (default 5)
- * @returns {Promise<Array<{chunk_text: string, source_file: string, source_type: string, similarity: number}>>}
+ * @param {'public'|'user'} [audience='public'] - Audience scope for filtering
+ * @returns {Promise<Array<{chunk_text: string, source_file: string, source_type: string, similarity: number, audiences: string[]}>>}
  */
-async function search(query, limit) {
+async function search(query, limit, audience) {
   limit = limit || 5;
+  // Safe default: unknown/missing audience -> 'public' (never leak 'user' docs).
+  const effectiveAudience = (audience === 'user') ? 'user' : 'public';
   ensureTable();
 
   const db = getDatabase();
-  const allChunks = db.exec("SELECT id, chunk_text, embedding, source_file, source_type, embedding_type FROM assistant_knowledge");
+  const allChunks = db.exec("SELECT id, chunk_text, embedding, source_file, source_type, embedding_type, audiences FROM assistant_knowledge");
   if (!allChunks.length || !allChunks[0].values) return [];
   const queryTokens = expandQueryTokens(tokenize(query));
 
@@ -958,6 +1008,25 @@ async function search(query, limit) {
 
   const results = [];
   for (const row of allChunks[0].values) {
+    // Audience filter — O(1) per chunk. Chunks store a JSON-encoded array of
+    // audience tags. Legacy rows written before the column existed default
+    // to '["public"]' at ALTER-TABLE time; any parse failure is treated as
+    // 'public' too, matching the safe default in ensureTable().
+    let chunkAudiences = ['public'];
+    if (row[6]) {
+      try {
+        const parsed = JSON.parse(row[6]);
+        if (Array.isArray(parsed) && parsed.length > 0) chunkAudiences = parsed;
+      } catch (_) { /* keep default */ }
+    }
+    if (effectiveAudience === 'public') {
+      // Public search: chunk must be explicitly tagged 'public'.
+      if (!chunkAudiences.includes('public')) continue;
+    } else {
+      // 'user' search: chunk must be tagged 'public' OR 'user' (superset).
+      if (!chunkAudiences.includes('public') && !chunkAudiences.includes('user')) continue;
+    }
+
     const chunkEmbType = getEmbeddingType(row[2]);
     const chunkEmbedding = deserializeEmbedding(row[2]);
     if (!chunkEmbedding) continue;
@@ -993,7 +1062,8 @@ async function search(query, limit) {
         similarity: rankScore,
         semantic_similarity: semanticSimilarity,
         lexical_score: lexicalScore,
-        source_bonus: sourceBonus
+        source_bonus: sourceBonus,
+        audiences: chunkAudiences
       });
     }
   }
@@ -1014,6 +1084,7 @@ module.exports = {
   reindex,
   getStats,
   search,
+  VALID_AUDIENCES,
   embedText,
   embedTextBatch,
   generateEmbedding,
