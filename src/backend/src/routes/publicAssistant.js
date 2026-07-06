@@ -14,40 +14,71 @@ const { sanitizeInput, sanitizeOutput, detectInjection, getInjectionRejection, d
 const MAX_MESSAGES_PER_SESSION = 5;
 
 // === Rate Limiting for public chat ===
-// IP-based: max 10 messages per minute
+// Feature #438 (S5) — Public-bot economics guard.
+//
+// Three layers, cheap and independent, all in addition to the existing
+// per-session hard message-count cap enforced downstream:
+//   1) IP-based:      max PUBLIC_RATE_LIMIT_MAX messages per 60s (spam control).
+//   2) Per-session:   max PUBLIC_SESSION_RATE_LIMIT_MAX per 60s per session_uuid
+//                     (a single browser tab cannot fan out cost via IP rotation).
+//   3) Per-lead:      max PUBLIC_LEAD_RATE_LIMIT_MAX per 60s per email
+//                     (a lead cannot burn tokens across many session UUIDs).
+// Cheap approximation of a cost guard: token budget is bounded above by
+// max_tokens (600 for the public bot), so message-rate ≈ cost-rate.
 const publicRateLimitMap = new Map();
+const publicSessionRateLimitMap = new Map();
+const publicLeadRateLimitMap = new Map();
+
 const PUBLIC_RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const PUBLIC_RATE_LIMIT_MAX = 10;
+const PUBLIC_SESSION_RATE_LIMIT_MAX = 6;
+const PUBLIC_LEAD_RATE_LIMIT_MAX = 8;
 
-function checkPublicRateLimit(ip) {
+function _checkBucket(map, key, max) {
   const now = Date.now();
-  const key = String(ip || 'unknown');
+  const k = String(key || 'unknown');
 
-  if (!publicRateLimitMap.has(key)) {
-    publicRateLimitMap.set(key, []);
+  if (!map.has(k)) {
+    map.set(k, []);
   }
-
-  const timestamps = publicRateLimitMap.get(key);
+  const timestamps = map.get(k);
   const cutoff = now - PUBLIC_RATE_LIMIT_WINDOW_MS;
   while (timestamps.length > 0 && timestamps[0] < cutoff) {
     timestamps.shift();
   }
 
-  if (timestamps.length >= PUBLIC_RATE_LIMIT_MAX) {
-    return { allowed: false, remaining: 0, resetIn: Math.ceil((timestamps[0] + PUBLIC_RATE_LIMIT_WINDOW_MS - now) / 1000) };
+  if (timestamps.length >= max) {
+    return {
+      allowed: false,
+      remaining: 0,
+      resetIn: Math.ceil((timestamps[0] + PUBLIC_RATE_LIMIT_WINDOW_MS - now) / 1000)
+    };
   }
 
   timestamps.push(now);
-  return { allowed: true, remaining: PUBLIC_RATE_LIMIT_MAX - timestamps.length };
+  return { allowed: true, remaining: max - timestamps.length };
+}
+
+function checkPublicRateLimit(ip) {
+  return _checkBucket(publicRateLimitMap, ip, PUBLIC_RATE_LIMIT_MAX);
+}
+function checkPublicSessionRateLimit(sessionUuid) {
+  return _checkBucket(publicSessionRateLimitMap, sessionUuid, PUBLIC_SESSION_RATE_LIMIT_MAX);
+}
+function checkPublicLeadRateLimit(email) {
+  if (!email) return { allowed: true, remaining: PUBLIC_LEAD_RATE_LIMIT_MAX };
+  return _checkBucket(publicLeadRateLimitMap, String(email).toLowerCase(), PUBLIC_LEAD_RATE_LIMIT_MAX);
 }
 
 // Periodic cleanup (every 5 minutes)
 setInterval(() => {
   const now = Date.now();
   const cutoff = now - PUBLIC_RATE_LIMIT_WINDOW_MS * 2;
-  for (const [key, timestamps] of publicRateLimitMap.entries()) {
-    if (timestamps.length === 0 || timestamps[timestamps.length - 1] < cutoff) {
-      publicRateLimitMap.delete(key);
+  for (const map of [publicRateLimitMap, publicSessionRateLimitMap, publicLeadRateLimitMap]) {
+    for (const [key, timestamps] of map.entries()) {
+      if (timestamps.length === 0 || timestamps[timestamps.length - 1] < cutoff) {
+        map.delete(key);
+      }
     }
   }
 }, 5 * 60 * 1000);
@@ -152,6 +183,16 @@ router.post('/public-chat', async (req, res) => {
       });
     }
 
+    // Feature #438 (S5): per-session guard — closes IP-rotation loophole.
+    const sessionRateCheck = checkPublicSessionRateLimit(session_uuid);
+    if (!sessionRateCheck.allowed) {
+      logger.warn(`[PublicAssistant] Session rate limit exceeded for session ${session_uuid}`);
+      return res.status(429).json({
+        error: 'Rate limit exceeded. Please wait before sending more messages.',
+        retry_after: sessionRateCheck.resetIn
+      });
+    }
+
     // Prompt injection detection
     const sanitized = sanitizeInput(message.trim());
     const injectionResult = detectInjection(sanitized);
@@ -201,6 +242,18 @@ router.post('/public-chat', async (req, res) => {
         }
       } catch (e) {
         logger.warn('[PublicAssistant] Lead lookup error: ' + e.message);
+      }
+    }
+
+    // Feature #438 (S5): per-lead guard — closes multi-session token-burn loophole.
+    if (session.email) {
+      const leadRateCheck = checkPublicLeadRateLimit(session.email);
+      if (!leadRateCheck.allowed) {
+        logger.warn(`[PublicAssistant] Lead rate limit exceeded for email ${session.email}`);
+        return res.status(429).json({
+          error: 'Rate limit exceeded. Please wait before sending more messages.',
+          retry_after: leadRateCheck.resetIn
+        });
       }
     }
 
@@ -349,7 +402,11 @@ router.post('/public-chat', async (req, res) => {
         let fullText = '';
         const streamGen = aiProviders.chatStream(aiMessages, {
           temperature: 0.7,
-          max_tokens: 1500,
+          // Feature #438 (S5): FAQ-length answers only for the anonymous
+          // public bot. 600 is enough for a 2–3 paragraph reply; capping here
+          // bounds per-question cost. Authenticated therapist assistant keeps
+          // 1500 (see src/backend/src/routes/assistant.js).
+          max_tokens: 600,
           purpose: 'assistant',
           provider: activeAssistant.providerName,
           model: activeAssistant.model
@@ -373,7 +430,11 @@ router.post('/public-chat', async (req, res) => {
         assistantReply = sanitizeOutput(fullText || '');
         // Emit the sanitized reply as a single chunk before the terminal done event.
         res.write(`data: ${JSON.stringify({ type: 'chunk', text: assistantReply })}\n\n`);
-        assistantCache.storeCachedAnswer(sanitized, assistantReply);
+        // Feature #438 (S5): pass hasRagContext as the 3rd arg — without it,
+        // storeCachedAnswer's poisoning guard skips the write and the cache
+        // never populates. Sanitized reply is stored so a later cache hit
+        // cannot leak stale credentials.
+        assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext);
 
         const convId = savePublicChatExchange(db, session.id, sanitized, assistantReply, false, detectedLanguage, conversation_id || null);
         const remaining = effectiveLimit - session.messageCount - 1;
@@ -402,14 +463,17 @@ router.post('/public-chat', async (req, res) => {
     try {
       const result = await aiProviders.chat(aiMessages, {
         temperature: 0.7,
-        max_tokens: 1500,
+        // Feature #438 (S5): FAQ-length cap for the anonymous public bot.
+        max_tokens: 600,
         purpose: 'assistant',
         provider: activeAssistant.providerName,
         model: activeAssistant.model
       }, db);
       // Feature #436 output guardrail: sanitize BEFORE both caching and send.
       assistantReply = sanitizeOutput(result.text);
-      assistantCache.storeCachedAnswer(sanitized, assistantReply);
+      // Feature #438 (S5): pass hasRagContext as the 3rd arg (previously
+      // dropped, which silently disabled cache population entirely).
+      assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext);
     } catch (aiError) {
       logger.error('[PublicAssistant] AI provider error: ' + aiError.message);
       const fallbacks = {

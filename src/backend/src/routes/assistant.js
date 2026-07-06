@@ -453,7 +453,7 @@ router.post('/chat', async (req, res) => {
         let fullText = '';
         const streamGen = aiProviders.chatStream(aiMessages, {
           temperature: 0.7,
-          max_tokens: 1024,
+          max_tokens: 1500,
           purpose: 'assistant',
           provider: activeAssistant.providerName,
           model: activeAssistant.model
@@ -524,7 +524,7 @@ router.post('/chat', async (req, res) => {
     try {
       const result = await aiProviders.chat(aiMessages, {
         temperature: 0.7,
-        max_tokens: 1024,
+        max_tokens: 1500,
         purpose: 'assistant',
         provider: activeAssistant.providerName,
         model: activeAssistant.model

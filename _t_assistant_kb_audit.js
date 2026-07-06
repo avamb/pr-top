@@ -281,6 +281,89 @@ async function main() {
     fail("route audience-wiring check threw: " + e.message);
   }
 
+  // === Feature #438 S5 — public-bot economics + cache fix ===
+  section('13. S5 — public max_tokens<=600, authenticated max_tokens===1500');
+  try {
+    const publicRoute = fs.readFileSync(path.join(__dirname, 'src/backend/src/routes/publicAssistant.js'), 'utf8');
+    const userRoute = fs.readFileSync(path.join(__dirname, 'src/backend/src/routes/assistant.js'), 'utf8');
+    const publicMaxTokens = Array.from(publicRoute.matchAll(/max_tokens:\s*(\d+)/g)).map(m => parseInt(m[1], 10));
+    const userMaxTokens = Array.from(userRoute.matchAll(/max_tokens:\s*(\d+)/g)).map(m => parseInt(m[1], 10));
+
+    if (publicMaxTokens.length > 0 && publicMaxTokens.every(v => v <= 600)) {
+      pass(`publicAssistant.js max_tokens values all <=600: [${publicMaxTokens.join(', ')}]`);
+    } else {
+      fail(`publicAssistant.js has max_tokens > 600: [${publicMaxTokens.join(', ')}]`);
+    }
+    if (userMaxTokens.length > 0 && userMaxTokens.every(v => v === 1500)) {
+      pass(`assistant.js max_tokens values all === 1500: [${userMaxTokens.join(', ')}]`);
+    } else {
+      fail(`assistant.js max_tokens must all be 1500: got [${userMaxTokens.join(', ')}]`);
+    }
+  } catch (e) {
+    fail('S5 max_tokens grep check threw: ' + e.message);
+  }
+
+  section('14. S5 — storeCachedAnswer receives hasRagContext in both routes');
+  try {
+    const publicRoute = fs.readFileSync(path.join(__dirname, 'src/backend/src/routes/publicAssistant.js'), 'utf8');
+    const userRoute = fs.readFileSync(path.join(__dirname, 'src/backend/src/routes/assistant.js'), 'utf8');
+    // Expect storeCachedAnswer(sanitized, assistantReply, hasRagContext) — 3 args.
+    const publicCalls = Array.from(publicRoute.matchAll(/storeCachedAnswer\(([^)]*)\)/g));
+    const userCalls = Array.from(userRoute.matchAll(/storeCachedAnswer\(([^)]*)\)/g));
+
+    if (publicCalls.length > 0 && publicCalls.every(m => m[1].split(',').length >= 3 && /hasRagContext/.test(m[1]))) {
+      pass(`publicAssistant.js: ${publicCalls.length} storeCachedAnswer call(s) pass hasRagContext`);
+    } else {
+      fail(`publicAssistant.js storeCachedAnswer call sites missing hasRagContext arg (found ${publicCalls.length} calls)`);
+    }
+    if (userCalls.length > 0 && userCalls.every(m => m[1].split(',').length >= 3 && /hasRagContext/.test(m[1]))) {
+      pass(`assistant.js: ${userCalls.length} storeCachedAnswer call(s) pass hasRagContext`);
+    } else {
+      fail(`assistant.js storeCachedAnswer call sites missing hasRagContext arg (found ${userCalls.length} calls)`);
+    }
+  } catch (e) {
+    fail('S5 storeCachedAnswer arity check threw: ' + e.message);
+  }
+
+  section('15. S5 — per-session and per-lead rate-limit guards exist alongside IP guard');
+  try {
+    const publicRoute = fs.readFileSync(path.join(__dirname, 'src/backend/src/routes/publicAssistant.js'), 'utf8');
+    if (/checkPublicRateLimit\s*\(/.test(publicRoute)) pass('checkPublicRateLimit (IP guard) present');
+    else fail('checkPublicRateLimit missing');
+    if (/checkPublicSessionRateLimit\s*\(/.test(publicRoute)) pass('checkPublicSessionRateLimit (per-session guard) present');
+    else fail('checkPublicSessionRateLimit missing');
+    if (/checkPublicLeadRateLimit\s*\(/.test(publicRoute)) pass('checkPublicLeadRateLimit (per-lead guard) present');
+    else fail('checkPublicLeadRateLimit missing');
+  } catch (e) {
+    fail('S5 rate-limit guard check threw: ' + e.message);
+  }
+
+  section('16. S5 — cached answers pass secret-redaction check');
+  // Simulate what the routes now do: sanitize before storing, sanitize before serving.
+  const secretyReply =
+    'Here is the info you asked for.\n' +
+    'API key: sk-abcDEF0123456789ghijklMNop\n' +
+    'Bearer TokenXYZ1234567890abcDEF\n' +
+    'Config: AI_API_KEY=supersecretvalue_12345\n' +
+    'JWT: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcDEFghiJKLmnop';
+  const stored = sanitizeOutput(secretyReply); // what the cache would persist
+  const served = sanitizeOutput(stored);       // what the cache-hit path emits
+  // Note: env_assignment redaction keeps the KEY name and replaces only the
+  // VALUE (so the reply still reads sensibly), so "AI_API_KEY=[REDACTED]" is
+  // fine. Only flag a leak when a value that isn't [REDACTED] follows.
+  const leakPatterns = [
+    /sk-[A-Za-z0-9]/,
+    /Bearer\s+\S/,
+    /_API_KEY=(?!\[REDACTED\])\S/,
+    /eyJ[A-Za-z0-9_-]+\./,
+  ];
+  const leaks = leakPatterns.filter(p => p.test(stored) || p.test(served));
+  if (leaks.length === 0) {
+    pass('cached answer contains no sk-*, Bearer, JWT, or *_API_KEY= patterns');
+  } else {
+    fail(`cached answer leaks ${leaks.length} secret-shaped pattern(s)`);
+  }
+
   return finish();
 }
 
