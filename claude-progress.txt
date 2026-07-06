@@ -14755,3 +14755,49 @@ VERIFICATION:
 
 Stats after session 196: #437 status: passing.
 
+================================================================
+Session 197 (2026-07-07) - Feature #439 PASSING (S6 KB expansion)
+================================================================
+Assigned: #439 S6 -- Expand how-to corpus to full product coverage
+(14 detailed docs)
+
+IMPLEMENTATION:
+1. 14 new authored docs under docs/assistant-kb/ (800-1500 words each,
+   structure: intro -> prerequisites -> step-by-step -> edge cases
+   -> troubleshooting -> FAQ 5+ Q&As):
+   dashboard-overview, client-management, analytics-and-mood-trends,
+   natural-language-queries, bulk-session-upload, exercise-library,
+   crisis-sos-workflow, settings-and-preferences,
+   subscription-management, supervision-sharing,
+   registration-and-onboarding (public audience),
+   client-bot-experience, data-export-and-deletion,
+   troubleshooting-faq. Facts grounded in reference/pricing.md,
+   reference/endpoints.md, and en.json i18n namespaces
+   (dashboard/clientList/sessions/exercise/subscription/etc).
+2. Extended the 8 pre-existing seed docs (billing,
+   client-diary-telegram, crisis-sos, exercises, feature-overview,
+   getting-started, security-overview, uploading-a-session) with
+   Edge cases + Troubleshooting + FAQ sections so every doc under
+   docs/assistant-kb/ hits >=600 words with an FAQ heading.
+3. _t_assistant_kb_audit.js: added section 12f. Asserts >=20
+   authored top-level docs meeting >=600 words + valid
+   <!-- audience --> marker + FAQ (heading matches
+   /FAQ|Frequently Asked/mi).
+4. Generator preservation: scripts/generate-assistant-docs.mjs uses
+   writeIfMissing and its HOWTO_SEEDS list does not include any of
+   the 14 new docs, so the kept-list mechanism naturally preserves
+   them. On rerun all 8 seeded docs log "kept (already authored)".
+
+VERIFICATION:
+- node _t_assistant_kb_audit.js -> 57 passed, 0 failed.
+  * S1/S2/S3/S4/S5 sections all still green.
+  * 12b: all 25 docs/assistant-kb/*.md have valid audience markers.
+  * 12e: reindex picked up 25 docs/assistant-kb/ files.
+  * 12f (S6): 22 authored docs meet >=600 words + audience + FAQ.
+- node scripts/generate-assistant-docs.mjs on rerun: 8 seed docs
+  "kept", 3 reference docs "unchanged".
+- reindex stats: 45 files, 529 chunks (up from 31/515). All 14
+  new + 8 expanded seed docs ingested.
+
+Stats after session 197: #439 status: passing.
+
