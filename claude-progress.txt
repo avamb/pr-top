@@ -14329,3 +14329,51 @@ VERIFICATION:
   each with Allow: / and the full Disallow list, Sitemap: line present.
 
 Stats after session 189: #427 status: passing.
+
+================================================================
+Session 190 (2026-07-06) - Feature #429 PASSING
+================================================================
+
+Assigned: #429 F18 - llms.txt + llms-full.txt build-time generation (GEO A2)
+
+IMPLEMENTATION:
+1. src/frontend/src/seo/routes.mjs
+   - Added English title + summary metadata to each of the 7 PUBLIC_ROUTES
+     entries. English is canonical for llms.txt (llmstxt.org convention is
+     a single English index).
+   - Added LLMS_SECTIONS export grouping paths into ##Product, ##Security,
+     ##Legal for the Markdown TOC.
+
+2. src/frontend/scripts/generate-llms.mjs (NEW)
+   - Writes dist/llms.txt (llmstxt.org-style Markdown): `# PR-TOP` H1,
+     product summary paragraph, then ##Product / ##Security / ##Legal /
+     ##Languages sections. Each section lists
+     `- [Title](https://pr-top.com/path): summary` derived from routes.mjs.
+     ##Languages enumerates every RU/UK/ES localized URL so the file
+     matches sitemap.xml URL set.
+   - Writes dist/llms-full.txt (plain-text corpus): strips <head>, script,
+     style, noscript, template, svg blocks; converts block-close tags to
+     newlines; strips remaining tags; decodes common entities; collapses
+     whitespace. Concatenates all 7 English prerendered pages with
+     URL/Title/Summary headers.
+
+3. src/frontend/package.json build script: appended
+   `&& node scripts/generate-llms.mjs` after generate-robots.mjs.
+
+VERIFICATION:
+- npm run build --prefix src/frontend succeeded (3.86s).
+- [llms] wrote dist/llms.txt (5872 bytes, 28 route entries).
+- [llms] wrote dist/llms-full.txt (29194 bytes, 7 English pages extracted).
+- head dist/llms.txt: starts with `# PR-TOP`, product summary, then
+  ##Product / ##Security / ##Legal sections with correct entries.
+- head dist/llms-full.txt: contains landing H1 text
+  ("Keep Your Practice on Top") - confirms prerendered EN copy extracted.
+- HTML tag grep on both files: 0 tags (plain text confirmed).
+- File sizes: llms.txt=5.87KB, llms-full.txt=29.19KB (both >5KB).
+- node _t_geo_audit.js -> 12 passed, 0 failed.
+  * F17 conditional llms check now activates and passes:
+    "llms.txt lists all 28 manifest routes"
+  * All prior GEO checks (robots AI blocks, sitemap count, H1/desc,
+    JSON-LD) still pass.
+
+Stats after session 190: #429 status: passing.

@@ -14,14 +14,90 @@
  *
  * changefreq / priority follow standard sitemap conventions (advisory only).
  */
+/**
+ * `title` / `summary` are English-language, one-line labels used by the GEO
+ * generators (F18 llms.txt and its companions). They deliberately do NOT
+ * localize — the llmstxt.org format is a single English index that points AI
+ * crawlers at the canonical marketing pages; per-locale routes are still
+ * enumerated, but with their base title/summary so the index stays compact.
+ */
 export const PUBLIC_ROUTES = [
-  { path: '/',                            changefreq: 'weekly',  priority: 1.0 },
-  { path: '/security/encryption',         changefreq: 'monthly', priority: 0.7 },
-  { path: '/security/gdpr',               changefreq: 'monthly', priority: 0.7 },
-  { path: '/security/audit-log',          changefreq: 'monthly', priority: 0.7 },
-  { path: '/security/data-sovereignty',   changefreq: 'monthly', priority: 0.7 },
-  { path: '/privacy',                     changefreq: 'yearly',  priority: 0.5 },
-  { path: '/terms',                       changefreq: 'yearly',  priority: 0.5 },
+  {
+    path: '/',
+    changefreq: 'weekly',
+    priority: 1.0,
+    title: 'PR-TOP — Therapist-controlled between-session assistant',
+    summary:
+      'Product landing: client diary, AI session notes, crisis alerts, Telegram bot — with therapist control and GDPR-grade encryption.',
+  },
+  {
+    path: '/security/encryption',
+    changefreq: 'monthly',
+    priority: 0.7,
+    title: 'Encryption architecture',
+    summary:
+      'How PR-TOP encrypts diary entries, session transcripts and private notes at the application layer (Class A / Class B model).',
+  },
+  {
+    path: '/security/gdpr',
+    changefreq: 'monthly',
+    priority: 0.7,
+    title: 'GDPR compliance',
+    summary:
+      'Data-controller / processor split, consent enforcement, subject-access and deletion workflows for EU therapists.',
+  },
+  {
+    path: '/security/audit-log',
+    changefreq: 'monthly',
+    priority: 0.7,
+    title: 'Immutable audit log',
+    summary:
+      'Append-only audit trail for every access to Class A client data — visible to therapists and superadmins.',
+  },
+  {
+    path: '/security/data-sovereignty',
+    changefreq: 'monthly',
+    priority: 0.7,
+    title: 'Data sovereignty',
+    summary:
+      'EU-only hosting (Hetzner), self-hosted analytics, no third-party trackers, and portable encrypted backups.',
+  },
+  {
+    path: '/privacy',
+    changefreq: 'yearly',
+    priority: 0.5,
+    title: 'Privacy policy',
+    summary:
+      'What data PR-TOP collects, why, how long it is retained, and how therapists and clients can exercise their rights.',
+  },
+  {
+    path: '/terms',
+    changefreq: 'yearly',
+    priority: 0.5,
+    title: 'Terms of service',
+    summary:
+      'Subscription tiers, acceptable use, therapist responsibilities and platform liability limits.',
+  },
+];
+
+/**
+ * llmstxt.org grouping for the F18 llms.txt generator. Each entry lists
+ * PUBLIC_ROUTES paths that belong under one Markdown section (##). Ordering
+ * within a group follows the group definition; the group order below is the
+ * top-to-bottom order emitted in dist/llms.txt.
+ */
+export const LLMS_SECTIONS = [
+  { heading: 'Product', paths: ['/'] },
+  {
+    heading: 'Security',
+    paths: [
+      '/security/encryption',
+      '/security/gdpr',
+      '/security/audit-log',
+      '/security/data-sovereignty',
+    ],
+  },
+  { heading: 'Legal', paths: ['/privacy', '/terms'] },
 ];
 
 /**
