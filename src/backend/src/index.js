@@ -18,6 +18,7 @@ const { requireActiveSubscription, authenticate } = require('./middleware/auth')
 const { i18nMiddleware } = require('./middleware/i18n');
 const { t: translate, SUPPORTED_LANGUAGES } = require('./i18n');
 const assistantKnowledge = require('./services/assistantKnowledge');
+const assistantCache = require('./services/assistantCache');
 const authRoutes = require('./routes/auth');
 const botRoutes = require('./routes/bot');
 const subscriptionRoutes = require('./routes/subscription');
@@ -445,6 +446,17 @@ async function start() {
       logger.info(`Assistant knowledge base reindexed on startup: ${kbStats.indexed} files, ${kbStats.chunks} chunks, ${kbStats.removed} stale removed, embedding=${kbStats.embedding_type} (${kbStats.elapsed_ms}ms)`);
     } catch (kbError) {
       logger.warn('Assistant knowledge base reindex failed on startup: ' + kbError.message);
+    }
+
+    // Feature #440 (S7): (re)seed canned FAQ answers on startup so the top
+    // standard questions ("how much does it cost", "is there a free trial")
+    // are served from the cache without ever calling the LLM. Idempotent —
+    // upsert-by-hash means restarts do not duplicate rows.
+    try {
+      const seedStats = assistantCache.seedCannedFaq();
+      logger.info(`Assistant FAQ seed loaded on startup: loaded=${seedStats.loaded} inserted=${seedStats.inserted} updated=${seedStats.updated} skipped=${seedStats.skipped}`);
+    } catch (seedError) {
+      logger.warn('Assistant FAQ seed failed on startup: ' + seedError.message);
     }
 
     const server = app.listen(PORT, () => {

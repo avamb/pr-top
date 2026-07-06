@@ -1,0 +1,258 @@
+[
+  {
+    "id": "pricing-overview",
+    "audience": "public",
+    "locale": "en",
+    "question": "How much does PR-TOP cost?",
+    "answer": "PR-TOP has four tiers: Trial (free, limited clients and sessions), Basic, Pro, and Premium. Each paid tier adds more clients, session storage, transcription minutes, and advanced features like natural-language search and PDF export. Sign in and open Settings → Subscription to see the current price for each plan in your currency, or start the free trial to try the platform without a card.",
+    "tags": ["pricing", "plans", "billing"]
+  },
+  {
+    "id": "free-trial",
+    "audience": "public",
+    "locale": "en",
+    "question": "Is there a free trial?",
+    "answer": "Yes. The Trial plan is free and requires no credit card. You can register on the landing page, connect your Telegram bot, add a few test clients, and try the diary, exercises, session upload, and dashboard. When you are ready you can upgrade to Basic, Pro, or Premium from Settings → Subscription.",
+    "tags": ["trial", "free", "pricing"]
+  },
+  {
+    "id": "what-is-pr-top",
+    "audience": "public",
+    "locale": "en",
+    "question": "What is PR-TOP?",
+    "answer": "PR-TOP is a therapist-controlled between-session assistant for psychologists. It combines a web dashboard for the therapist, a Telegram bot for clients (diary, voice/video entries, exercises, SOS button), and AI helpers that transcribe and summarize sessions and surface relevant context — all while keeping sensitive data encrypted and under the therapist's control.",
+    "tags": ["overview", "product"]
+  },
+  {
+    "id": "gdpr-secure",
+    "audience": "public",
+    "locale": "en",
+    "question": "Is PR-TOP GDPR compliant and secure?",
+    "answer": "Yes. Sensitive client content (diary entries, notes, transcripts, summaries) is encrypted at the application layer with AES. Access is enforced by role and consent. The stack uses JWT auth over HttpOnly cookies, CSRF protection, bcrypt-hashed passwords, rate limiting, and an audit log for admin actions. Analytics use self-hosted, GDPR-compliant Umami — no third-party tracking.",
+    "tags": ["security", "gdpr", "privacy"]
+  },
+  {
+    "id": "telegram-required",
+    "audience": "public",
+    "locale": "en",
+    "question": "Does PR-TOP work with Telegram?",
+    "answer": "Yes. Clients interact with PR-TOP through a Telegram bot — they don't need to install a separate app. The therapist manages everything from the web dashboard, and the bot handles diary text/voice/video messages, exercise delivery, SOS alerts, and consent management on the client side.",
+    "tags": ["telegram", "bot", "clients"]
+  },
+  {
+    "id": "how-clients-join",
+    "audience": "public",
+    "locale": "en",
+    "question": "How do clients join?",
+    "answer": "The therapist creates a client in the dashboard and sends them either a short invite code or a Telegram deep link. The client opens Telegram, taps the link (or pastes the code), agrees to the consent screen, and is connected. No app store install and no account setup is required on the client side.",
+    "tags": ["onboarding", "clients", "invite"]
+  },
+  {
+    "id": "try-without-card",
+    "audience": "public",
+    "locale": "en",
+    "question": "Can I try PR-TOP without a credit card?",
+    "answer": "Yes. Registration for the Trial plan does not require a credit card. You can build a small test setup — one or two clients, a session upload, some exercises — and evaluate the workflow before you decide to subscribe.",
+    "tags": ["trial", "billing"]
+  },
+  {
+    "id": "upload-session",
+    "audience": "public",
+    "locale": "en",
+    "question": "How do I upload a session recording?",
+    "answer": "From the dashboard, open a client's detail page and use the Upload Session action. Audio and video files up to 100 MB are accepted. PR-TOP transcribes the recording with Whisper, summarizes it with AI, and stores both the transcript and summary encrypted, so you can search and re-read them later.",
+    "tags": ["sessions", "upload", "transcription"]
+  },
+  {
+    "id": "cancel-subscription",
+    "audience": "public",
+    "locale": "en",
+    "question": "How do I cancel my subscription?",
+    "answer": "Open Settings → Subscription and choose Cancel. Cancellation stops future billing but keeps the plan active until the end of the current period. Your client data stays intact; you can export it or come back and re-subscribe later.",
+    "tags": ["billing", "subscription", "cancel"]
+  },
+  {
+    "id": "data-ownership",
+    "audience": "public",
+    "locale": "en",
+    "question": "Who owns the data in PR-TOP?",
+    "answer": "The therapist owns the professional record and the client owns their personal content. Client consent is required for storage of diary and session material. Both parties can export their data as PDF/JSON/CSV, and deletion requests are honored end-to-end.",
+    "tags": ["privacy", "data", "gdpr"]
+  },
+  {
+    "id": "export-data",
+    "audience": "public",
+    "locale": "en",
+    "question": "Can I export my data?",
+    "answer": "Yes. From Settings → Data you can export client lists, notes, session transcripts, and dashboard analytics as PDF, JSON, or CSV. Export scope depends on the plan — Pro and Premium include full transcript and summary export.",
+    "tags": ["export", "data"]
+  },
+  {
+    "id": "supervisor-access",
+    "audience": "public",
+    "locale": "en",
+    "question": "Can a supervisor read my client cases?",
+    "answer": "Yes, with your explicit share. PR-TOP supports supervision sharing: you pick a case, choose which materials to share (summary only, or transcripts too), and grant a time-boxed link to the supervisor. Access is revocable and logged.",
+    "tags": ["supervision", "sharing"]
+  },
+  {
+    "id": "languages",
+    "audience": "public",
+    "locale": "en",
+    "question": "What languages does PR-TOP support?",
+    "answer": "The dashboard, bot, and emails ship in four languages: English, Russian, Spanish, and Ukrainian. Language is auto-detected from the browser or Telegram client and can be overridden per user in Settings.",
+    "tags": ["i18n", "languages"]
+  },
+  {
+    "id": "voice-diary",
+    "audience": "public",
+    "locale": "en",
+    "question": "Can clients send voice or video diary entries?",
+    "answer": "Yes. Clients can record voice notes and short video messages directly in Telegram. PR-TOP transcribes voice with Whisper and stores the media encrypted, so the therapist can play it back and read the transcript in the dashboard between sessions.",
+    "tags": ["diary", "voice", "video"]
+  },
+  {
+    "id": "exercises",
+    "audience": "public",
+    "locale": "en",
+    "question": "Can I assign exercises between sessions?",
+    "answer": "Yes. PR-TOP ships with a multilingual library of pre-seeded exercises (grounding, thought records, breathing, journaling, etc.) and lets you add your own. You assign an exercise from the client's page and it is delivered through the Telegram bot with reminders.",
+    "tags": ["exercises", "bot"]
+  },
+  {
+    "id": "sos",
+    "audience": "public",
+    "locale": "en",
+    "question": "How does the SOS crisis button work?",
+    "answer": "Clients have a one-tap SOS action in the Telegram bot. When it is triggered PR-TOP notifies the therapist immediately by dashboard push, WebSocket, and email, opens a tracked crisis event with a lifecycle (acknowledged, contacted, resolved), and stores the audit trail for later review.",
+    "tags": ["sos", "crisis", "safety"]
+  },
+  {
+    "id": "ai-providers",
+    "audience": "public",
+    "locale": "en",
+    "question": "Which AI providers does PR-TOP use?",
+    "answer": "PR-TOP is multi-provider by design: OpenAI, Anthropic, Google Gemini, and OpenRouter are supported. Superadmins choose the active provider and model per purpose (summarization, assistant chat, transcription). Client data is only sent to the provider configured by the platform owner.",
+    "tags": ["ai", "providers"]
+  },
+  {
+    "id": "search",
+    "audience": "public",
+    "locale": "en",
+    "question": "Can I search across sessions and diaries?",
+    "answer": "Yes. PR-TOP builds vector embeddings across notes, transcripts, and diary entries so you can search by meaning, not just keywords. Pro and Premium plans add natural-language queries — for example, \"show me anxiety-related entries from the last month for client X\".",
+    "tags": ["search", "nlq"]
+  },
+  {
+    "id": "notifications",
+    "audience": "public",
+    "locale": "en",
+    "question": "Do I get real-time notifications?",
+    "answer": "Yes. PR-TOP delivers real-time push notifications over WebSocket for new diary entries, exercise completions, and SOS events. The dashboard is a PWA, so you can install it on your phone and receive alerts even when the browser tab is closed.",
+    "tags": ["notifications", "pwa"]
+  },
+  {
+    "id": "analytics",
+    "audience": "public",
+    "locale": "en",
+    "question": "What analytics does PR-TOP provide?",
+    "answer": "The dashboard shows client-engagement stats, session activity, mood-trend charts, and exercise completion rates. You can filter by date range and client, and export the underlying data as PDF, JSON, or CSV. Advanced charts and per-client comparisons are gated to Pro and Premium.",
+    "tags": ["analytics", "dashboard"]
+  },
+  {
+    "id": "notes-privacy",
+    "audience": "public",
+    "locale": "en",
+    "question": "Are my private notes visible to clients?",
+    "answer": "No. Therapist notes are encrypted and never shown to the client. The client only sees what they send (their own diary, exercise responses) and the messages the bot delivers on your behalf. Your case notes stay in the dashboard.",
+    "tags": ["notes", "privacy"]
+  },
+  {
+    "id": "client-limits",
+    "audience": "public",
+    "locale": "en",
+    "question": "How many clients can I have?",
+    "answer": "Client limits depend on the plan: the Trial and Basic tiers cover small case loads, Pro adds room for a full-time practice, and Premium is unlimited. See Settings → Subscription for the current numbers on your account.",
+    "tags": ["plans", "limits"]
+  },
+  {
+    "id": "bot-hosting",
+    "audience": "public",
+    "locale": "en",
+    "question": "Do I need to host my own Telegram bot?",
+    "answer": "No. PR-TOP runs the Telegram bot for you. Each therapist gets a shared bot with an isolated client space; there is no bot token setup and no server administration on your side.",
+    "tags": ["telegram", "hosting"]
+  },
+  {
+    "id": "session-storage",
+    "audience": "public",
+    "locale": "en",
+    "question": "Where are my session recordings stored?",
+    "answer": "Session media is stored on the PR-TOP server with encrypted file storage and opaque file IDs. Playback uses signed short-lived URLs, so a recording can only be streamed by an authenticated therapist who owns that client.",
+    "tags": ["security", "sessions", "storage"]
+  },
+  {
+    "id": "email-notifications",
+    "audience": "public",
+    "locale": "en",
+    "question": "Do I get email notifications?",
+    "answer": "Yes. PR-TOP sends emails for account events (welcome, password reset), SOS alerts, subscription receipts, and plan-expiry warnings. Email frequency is rate-limited and every message is localized to your account language.",
+    "tags": ["email", "notifications"]
+  },
+  {
+    "id": "consent-management",
+    "audience": "public",
+    "locale": "en",
+    "question": "How does client consent work?",
+    "answer": "When a client connects through the bot they walk through a consent screen for diary storage, session recording, and exercise delivery. Consent is enforced on every server route that touches client data; a withdrawn consent immediately blocks that data class until it is re-granted.",
+    "tags": ["consent", "privacy"]
+  },
+  {
+    "id": "session-summaries",
+    "audience": "public",
+    "locale": "en",
+    "question": "Do I have to write session summaries manually?",
+    "answer": "No. When you upload a recording PR-TOP transcribes it and generates an AI summary with themes, action items, and homework suggestions. You review, edit, and save — the double documentation goes away.",
+    "tags": ["sessions", "ai", "summaries"]
+  },
+  {
+    "id": "custom-exercises",
+    "audience": "public",
+    "locale": "en",
+    "question": "Can I create custom exercises?",
+    "answer": "Yes. In the Exercise Library you can add your own exercises with translated titles, instructions, and follow-up prompts. Custom exercises live alongside the pre-seeded library and can be assigned to any client via the Telegram bot.",
+    "tags": ["exercises", "library"]
+  },
+  {
+    "id": "team-therapists",
+    "audience": "public",
+    "locale": "en",
+    "question": "Can multiple therapists share a practice?",
+    "answer": "Each therapist has their own account and their own client roster; PR-TOP does not currently merge case loads across therapists. What you can do today is supervision sharing (per case, time-boxed link) and, on the Premium plan, hand off a client to another therapist inside the platform.",
+    "tags": ["team", "practice"]
+  },
+  {
+    "id": "delete-account",
+    "audience": "public",
+    "locale": "en",
+    "question": "How do I delete my account?",
+    "answer": "Open Settings → Data and use Delete Account. Deletion is a two-step confirmation, cancels the subscription, and purges encrypted client data, session media, and dashboard analytics. An audit record of the deletion itself is retained per GDPR.",
+    "tags": ["account", "delete", "gdpr"]
+  },
+  {
+    "id": "payment-methods",
+    "audience": "public",
+    "locale": "en",
+    "question": "Which payment methods are supported?",
+    "answer": "Billing runs through Stripe, so PR-TOP accepts every card and local method Stripe supports in your country, plus Apple Pay and Google Pay on supported devices. Invoices are emailed automatically after every charge.",
+    "tags": ["billing", "payments"]
+  },
+  {
+    "id": "reset-password",
+    "audience": "public",
+    "locale": "en",
+    "question": "How do I reset my password?",
+    "answer": "On the sign-in page click \"Forgot password\", enter your email, and PR-TOP sends a reset link. The link is single-use and expires; you can then set a new password and sign back in. If the email does not arrive, check your spam folder or contact support.",
+    "tags": ["account", "password"]
+  }
+]

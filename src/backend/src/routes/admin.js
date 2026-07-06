@@ -1446,6 +1446,27 @@ router.delete('/assistant/cached-answers/:id', (req, res) => {
   }
 });
 
+// POST /api/admin/assistant/seed-faq - Idempotently (re)load the canned FAQ
+// seed (docs/assistant-kb/faq-seed.json) into assistant_cached_answers.
+// Feature #440 (S7): lets the owner refresh seeded answers without a full
+// redeploy after editing the seed file. Startup runs the same seeder too.
+router.post('/assistant/seed-faq', (req, res) => {
+  try {
+    const stats = assistantCache.seedCannedFaq();
+    // Audit log
+    const db = getDatabase();
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'seed_faq', 'assistant_cached_answers', ?, ?, datetime('now'))",
+      [req.user.id, 'seed', JSON.stringify(stats)]
+    );
+    saveDatabaseAfterWrite();
+    res.json({ message: 'Seeded canned FAQ', ...stats });
+  } catch (error) {
+    logger.error('Admin seed-faq error: ' + error.message);
+    res.status(500).json({ error: 'Failed to seed canned FAQ' });
+  }
+});
+
 // =====================================================
 // ASSISTANT CHAT ANALYTICS
 // =====================================================

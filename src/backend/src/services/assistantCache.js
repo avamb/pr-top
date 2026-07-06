@@ -2,9 +2,21 @@
 // Implements self-learning cache for the assistant chatbot.
 // When a question is semantically similar to a previously answered one,
 // returns the cached answer to save AI tokens.
+//
+// Feature #440 (S7) — canned FAQ seeder + audience/locale scoping.
+//   - findCachedAnswer(question, audience, locale) filters by audience so a
+//     'user'-only seed cannot leak to the anonymous public bot (mirrors S2).
+//   - Seeded entries live in the same table with is_seed=1 so the admin
+//     cached-answers view can render/edit/delete them without a redeploy.
+//   - Locale gates on detected language so an English seed is not served
+//     for a Russian question (fall through to LLM instead).
 
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
+const { sanitizeOutput } = require('./assistantSanitizer');
 
 // Import embedding utilities from assistantKnowledge
 const {
@@ -16,6 +28,9 @@ const {
 
 // Default similarity threshold for cache hits
 const DEFAULT_THRESHOLD = 0.92;
+
+// Path to the pre-seeded canned FAQ (docs/assistant-kb/faq-seed.json).
+const FAQ_SEED_PATH = path.join(__dirname, '..', '..', '..', '..', 'docs', 'assistant-kb', 'faq-seed.json');
 
 /**
  * Get the configured similarity threshold from platform settings.
@@ -36,33 +51,61 @@ function getThreshold() {
 }
 
 /**
- * Search for a cached answer that matches the question.
+ * Search for a cached answer that matches the question, scoped by audience.
+ *
+ * Audience filter (mirrors S2 RAG audience gating):
+ *   - 'public' request → only entries with audience='public' are searched.
+ *   - 'user'   request → entries with audience IN ('public','user') are searched.
+ *
+ * Locale filter: when the caller passes a detected language, seeded entries
+ * whose locale mismatches are skipped; non-seed (self-learned) entries are
+ * not locale-gated (they were populated from real traffic).
  *
  * @param {string} questionText - The user's question
- * @returns {{ hit: boolean, answer?: string, cached_id?: number, similarity?: number }}
+ * @param {'public'|'user'} [audience='public'] - Audience scope
+ * @param {string} [locale] - Detected question language; when provided,
+ *                            seed entries with a different locale are skipped.
+ * @returns {{ hit: boolean, answer?: string, cached_id?: number, similarity?: number, is_seed?: boolean }}
  */
-function findCachedAnswer(questionText) {
+function findCachedAnswer(questionText, audience, locale) {
   try {
+    const aud = audience === 'user' ? 'user' : 'public';
     const questionEmbedding = generateEmbedding(questionText);
     if (!questionEmbedding) return { hit: false };
 
     const db = getDatabase();
     const threshold = getThreshold();
 
-    // Only return cache hits where RAG context was present (has_rag_context = 1)
-    const allCached = db.exec("SELECT id, question_embedding, answer_text FROM assistant_cached_answers WHERE has_rag_context = 1");
+    // 'public' request → only public entries; 'user' request → both.
+    const audienceFilter = aud === 'user'
+      ? "(audience IN ('public','user') OR audience IS NULL)"
+      : "(audience = 'public' OR audience IS NULL)";
+
+    // has_rag_context=1 ensures we never serve a cache entry whose original
+    // answer had no grounding (poisoning guard). Seeds always store 1.
+    const allCached = db.exec(
+      `SELECT id, question_embedding, answer_text, is_seed, locale
+         FROM assistant_cached_answers
+        WHERE has_rag_context = 1 AND ${audienceFilter}`
+    );
     if (!allCached.length || !allCached[0].values) return { hit: false };
 
     let bestMatch = null;
     let bestSimilarity = 0;
 
     for (const row of allCached[0].values) {
+      const isSeed = !!row[3];
+      const entryLocale = row[4];
+      // Seed locale gate: skip when caller provided a locale and it does not
+      // match. Non-seed entries fall through (populated from real traffic).
+      if (isSeed && locale && entryLocale && entryLocale !== locale) continue;
+
       const cachedEmbedding = deserializeEmbedding(row[1]);
       const similarity = cosineSimilarity(questionEmbedding, cachedEmbedding);
 
       if (similarity > bestSimilarity) {
         bestSimilarity = similarity;
-        bestMatch = { id: row[0], answer: row[2] };
+        bestMatch = { id: row[0], answer: row[2], is_seed: isSeed };
       }
     }
 
@@ -74,13 +117,14 @@ function findCachedAnswer(questionText) {
       );
       saveDatabaseAfterWrite();
 
-      logger.info(`[AssistantCache] Cache hit for question (similarity: ${bestSimilarity.toFixed(3)}, id: ${bestMatch.id})`);
+      logger.info(`[AssistantCache] Cache hit (similarity: ${bestSimilarity.toFixed(3)}, id: ${bestMatch.id}, seed=${bestMatch.is_seed}, audience=${aud})`);
 
       return {
         hit: true,
         answer: bestMatch.answer,
         cached_id: bestMatch.id,
-        similarity: bestSimilarity
+        similarity: bestSimilarity,
+        is_seed: bestMatch.is_seed
       };
     }
 
@@ -98,14 +142,18 @@ function findCachedAnswer(questionText) {
  * @param {string} questionText - The user's question
  * @param {string} answerText - The AI's answer
  * @param {boolean} hasRagContext - Whether RAG context was available for this answer
+ * @param {{audience?: 'public'|'user', locale?: string}} [opts]
  * @returns {number|null} The ID of the cached entry, or null on error/skipped
  */
-function storeCachedAnswer(questionText, answerText, hasRagContext) {
+function storeCachedAnswer(questionText, answerText, hasRagContext, opts) {
   // Prevent cache poisoning: only cache answers that had RAG context
   if (!hasRagContext) {
     logger.info('[AssistantCache] Skipping cache storage — no RAG context for this answer');
     return null;
   }
+
+  const audience = (opts && opts.audience === 'user') ? 'user' : 'public';
+  const locale = (opts && opts.locale) || 'en';
 
   try {
     const questionEmbedding = generateEmbedding(questionText);
@@ -115,8 +163,8 @@ function storeCachedAnswer(questionText, answerText, hasRagContext) {
     const db = getDatabase();
 
     db.run(
-      "INSERT INTO assistant_cached_answers (question_embedding, question_text, answer_text, usage_count, has_rag_context, created_at, updated_at) VALUES (?, ?, ?, 1, ?, datetime('now'), datetime('now'))",
-      [serialized, questionText, answerText, hasRagContext ? 1 : 0]
+      "INSERT INTO assistant_cached_answers (question_embedding, question_text, answer_text, usage_count, has_rag_context, audience, locale, is_seed, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?, ?, 0, datetime('now'), datetime('now'))",
+      [serialized, questionText, answerText, hasRagContext ? 1 : 0, audience, locale]
     );
 
     const idResult = db.exec('SELECT last_insert_rowid()');
@@ -124,7 +172,7 @@ function storeCachedAnswer(questionText, answerText, hasRagContext) {
 
     saveDatabaseAfterWrite();
 
-    logger.info(`[AssistantCache] Stored new cached answer (id: ${id})`);
+    logger.info(`[AssistantCache] Stored new cached answer (id: ${id}, audience: ${audience})`);
     return id;
   } catch (e) {
     logger.warn('[AssistantCache] Error storing cache: ' + e.message);
@@ -150,7 +198,7 @@ function getCachedAnswers(page, limit) {
   const total = (countResult.length > 0 && countResult[0].values.length > 0) ? countResult[0].values[0][0] : 0;
 
   const result = db.exec(
-    "SELECT id, question_text, answer_text, usage_count, created_at, updated_at, has_rag_context FROM assistant_cached_answers ORDER BY usage_count DESC, updated_at DESC LIMIT ? OFFSET ?",
+    "SELECT id, question_text, answer_text, usage_count, created_at, updated_at, has_rag_context, is_seed, audience, locale FROM assistant_cached_answers ORDER BY is_seed DESC, usage_count DESC, updated_at DESC LIMIT ? OFFSET ?",
     [limit, offset]
   );
 
@@ -164,7 +212,10 @@ function getCachedAnswers(page, limit) {
         usage_count: row[3],
         created_at: row[4],
         updated_at: row[5],
-        has_rag_context: !!row[6]
+        has_rag_context: !!row[6],
+        is_seed: !!row[7],
+        audience: row[8] || 'public',
+        locale: row[9] || 'en'
       });
     }
   }
@@ -217,6 +268,125 @@ function deleteCachedAnswer(id) {
   }
 }
 
+/**
+ * Compute a stable hash for a seed entry. Used as an idempotent upsert key so
+ * a re-run of the seeder updates existing entries in place instead of
+ * creating duplicates. Key derives from id + audience + locale + question so a
+ * hand-edited answer_text does not create a phantom copy.
+ */
+function _seedHash(entry) {
+  const key = `${entry.id}|${entry.audience}|${entry.locale}|${entry.question}`;
+  return 'seed:' + crypto.createHash('sha256').update(key).digest('hex').slice(0, 24);
+}
+
+/**
+ * Load the FAQ seed file and (idempotently) upsert each entry into
+ * assistant_cached_answers.
+ *
+ *   - has_rag_context = 1 (so findCachedAnswer's poisoning guard permits it).
+ *   - is_seed         = 1 (so the admin UI can flag it and the audit knows).
+ *   - Embedding is computed AT SEED TIME so findCachedAnswer's cosine
+ *     similarity path can match without an on-demand embed round-trip.
+ *   - Answer is passed through sanitizeOutput before it hits the DB so no
+ *     secret-shaped strings can be smuggled in via the JSON file.
+ *   - Upsert-by-hash: repeated calls of seedCannedFaq() do NOT create duplicates.
+ *
+ * @param {string} [seedPath] - Override for the seed JSON path (used by tests).
+ * @returns {{ loaded: number, inserted: number, updated: number, skipped: number, path: string }}
+ */
+function seedCannedFaq(seedPath) {
+  const p = seedPath || FAQ_SEED_PATH;
+  const stats = { loaded: 0, inserted: 0, updated: 0, skipped: 0, path: p };
+
+  let raw;
+  try {
+    raw = fs.readFileSync(p, 'utf8');
+  } catch (e) {
+    logger.warn('[AssistantCache] FAQ seed file not found at ' + p + ' — skipping seed');
+    return stats;
+  }
+
+  let entries;
+  try {
+    entries = JSON.parse(raw);
+  } catch (e) {
+    logger.error('[AssistantCache] FAQ seed file is not valid JSON: ' + e.message);
+    return stats;
+  }
+  if (!Array.isArray(entries)) {
+    logger.error('[AssistantCache] FAQ seed file must be a JSON array');
+    return stats;
+  }
+
+  const db = getDatabase();
+  for (const entry of entries) {
+    stats.loaded++;
+    if (!entry || !entry.id || !entry.question || !entry.answer) {
+      logger.warn('[AssistantCache] Skipping malformed seed entry: ' + JSON.stringify(entry).slice(0, 100));
+      stats.skipped++;
+      continue;
+    }
+    const audience = entry.audience === 'user' ? 'user' : 'public';
+    const locale = entry.locale || 'en';
+    const hash = _seedHash({ id: entry.id, audience, locale, question: entry.question });
+
+    // Defensive: run answer text through sanitizeOutput at seed time so a
+    // hand-authored JSON entry cannot inject a credential-shaped string.
+    // (Audit assertion 16 stays green.)
+    const safeAnswer = sanitizeOutput(String(entry.answer));
+
+    let embedding = null;
+    try {
+      embedding = generateEmbedding(entry.question);
+    } catch (e) {
+      logger.warn(`[AssistantCache] Failed to embed seed "${entry.id}": ${e.message}`);
+    }
+    if (!embedding) {
+      stats.skipped++;
+      continue;
+    }
+    const serialized = serializeEmbedding(embedding);
+
+    // Idempotent upsert-by-hash.
+    const existing = db.exec(
+      'SELECT id FROM assistant_cached_answers WHERE question_hash = ?',
+      [hash]
+    );
+
+    if (existing.length > 0 && existing[0].values && existing[0].values.length > 0) {
+      const existingId = existing[0].values[0][0];
+      db.run(
+        `UPDATE assistant_cached_answers
+            SET question_embedding = ?,
+                question_text      = ?,
+                answer_text        = ?,
+                has_rag_context    = 1,
+                audience           = ?,
+                locale             = ?,
+                is_seed            = 1,
+                updated_at         = datetime('now')
+          WHERE id = ?`,
+        [serialized, entry.question, safeAnswer, audience, locale, existingId]
+      );
+      stats.updated++;
+    } else {
+      db.run(
+        `INSERT INTO assistant_cached_answers
+           (question_embedding, question_text, answer_text, usage_count,
+            has_rag_context, audience, locale, is_seed, question_hash,
+            created_at, updated_at)
+         VALUES (?, ?, ?, 0, 1, ?, ?, 1, ?, datetime('now'), datetime('now'))`,
+        [serialized, entry.question, safeAnswer, audience, locale, hash]
+      );
+      stats.inserted++;
+    }
+  }
+
+  saveDatabaseAfterWrite();
+  logger.info(`[AssistantCache] Seeded canned FAQ: loaded=${stats.loaded} inserted=${stats.inserted} updated=${stats.updated} skipped=${stats.skipped}`);
+  return stats;
+}
+
 module.exports = {
   findCachedAnswer,
   storeCachedAnswer,
@@ -224,5 +394,7 @@ module.exports = {
   updateCachedAnswer,
   deleteCachedAnswer,
   getThreshold,
+  seedCannedFaq,
+  FAQ_SEED_PATH,
   DEFAULT_THRESHOLD
 };

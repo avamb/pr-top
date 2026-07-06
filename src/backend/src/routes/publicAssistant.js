@@ -302,13 +302,18 @@ router.post('/public-chat', async (req, res) => {
     let assistantReply;
     let fromCache = false;
 
-    // Check cache for similar questions (only for first message)
-    if (session.messageCount === 0) {
-      const cacheResult = assistantCache.findCachedAnswer(sanitized);
+    // Feature #440 (S7): check the cache on EVERY message (not just the first).
+    // The previous `session.messageCount === 0` guard meant a rephrased or
+    // repeated question later in the same session still called the LLM. Public
+    // bot always searches the 'public' audience so 'user'-scoped seeds (kept
+    // for the signed-in bot) can never leak. Locale is passed so an English
+    // seed is not served for a Russian question — fall through to the LLM.
+    {
+      const cacheResult = assistantCache.findCachedAnswer(sanitized, 'public', detectedLanguage);
       if (cacheResult.hit) {
         assistantReply = cacheResult.answer;
         fromCache = true;
-        logger.info(`[PublicAssistant] Serving cached answer (id: ${cacheResult.cached_id})`);
+        logger.info(`[PublicAssistant] Serving cached answer (id: ${cacheResult.cached_id}, seed=${!!cacheResult.is_seed})`);
       }
     }
 
@@ -434,7 +439,7 @@ router.post('/public-chat', async (req, res) => {
         // storeCachedAnswer's poisoning guard skips the write and the cache
         // never populates. Sanitized reply is stored so a later cache hit
         // cannot leak stale credentials.
-        assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext);
+        assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext, { audience: 'public', locale: detectedLanguage });
 
         const convId = savePublicChatExchange(db, session.id, sanitized, assistantReply, false, detectedLanguage, conversation_id || null);
         const remaining = effectiveLimit - session.messageCount - 1;
@@ -473,7 +478,7 @@ router.post('/public-chat', async (req, res) => {
       assistantReply = sanitizeOutput(result.text);
       // Feature #438 (S5): pass hasRagContext as the 3rd arg (previously
       // dropped, which silently disabled cache population entirely).
-      assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext);
+      assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext, { audience: 'public', locale: detectedLanguage });
     } catch (aiError) {
       logger.error('[PublicAssistant] AI provider error: ' + aiError.message);
       const fallbacks = {

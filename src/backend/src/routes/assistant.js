@@ -289,13 +289,18 @@ router.post('/chat', async (req, res) => {
     let assistantReply;
     let fromCache = false;
 
-    // Check cache for similar questions (only for standalone questions, not mid-conversation)
-    if (messages.filter(m => m.role === 'user').length <= 1) {
-      const cacheResult = assistantCache.findCachedAnswer(sanitized);
+    // Feature #440 (S7): check the cache on EVERY message. The previous
+    // "only first message" guard let a rephrased question later in the same
+    // session bypass the cache. Authenticated bot searches the 'user'
+    // audience (which is a superset of 'public' — see S2 audience filter),
+    // so seeded canned answers meant for the landing bot are also reused
+    // here when a therapist asks the same standard question.
+    {
+      const cacheResult = assistantCache.findCachedAnswer(sanitized, 'user', detectedLanguage);
       if (cacheResult.hit) {
         assistantReply = cacheResult.answer;
         fromCache = true;
-        logger.info(`[Assistant] Serving cached answer (id: ${cacheResult.cached_id}, similarity: ${cacheResult.similarity?.toFixed(3)})`);
+        logger.info(`[Assistant] Serving cached answer (id: ${cacheResult.cached_id}, similarity: ${cacheResult.similarity?.toFixed(3)}, seed=${!!cacheResult.is_seed})`);
       }
     }
 
@@ -478,7 +483,7 @@ router.post('/chat', async (req, res) => {
         res.write(`data: ${JSON.stringify({ type: 'chunk', text: assistantReply })}\n\n`);
 
         // Store Q&A in cache (only if RAG context was present to prevent cache poisoning)
-        assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext);
+        assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext, { audience: 'user', locale: detectedLanguage });
 
         // Save to database
         messages.push({ role: 'assistant', content: assistantReply, timestamp: new Date().toISOString() });
@@ -533,7 +538,7 @@ router.post('/chat', async (req, res) => {
       assistantReply = sanitizeOutput(result.text);
 
       // Store Q&A in cache (only if RAG context was present to prevent cache poisoning)
-      assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext);
+      assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext, { audience: 'user', locale: detectedLanguage });
     } catch (aiError) {
       logger.error('[Assistant] AI provider error: ' + aiError.message);
       const fallbacks = {

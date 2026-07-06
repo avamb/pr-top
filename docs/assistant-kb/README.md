@@ -39,3 +39,34 @@ paperwork.
 - `<!-- audience: user -->` — signed-in bot only. Reserved for internal
   surfaces (API endpoint map, UI-label dump) and anything that would
   help an attacker more than a customer.
+
+## Canned FAQ seed (`faq-seed.json`) — Feature #440 (S7)
+
+`faq-seed.json` is a companion to the how-to pages. It preloads the top
+standard questions (pricing, free trial, is-it-GDPR, how-do-clients-join,
+etc.) into `assistant_cached_answers` at backend startup and via the admin
+endpoint `POST /api/admin/assistant/seed-faq`, so those questions never
+have to hit the LLM.
+
+- **Schema**: an array of `{ id, audience, locale, question, answer, tags[] }`.
+  `audience` is `"public"` or `"user"`. `locale` is a language tag (currently
+  English-only).
+- **Idempotency**: the seeder upserts by a stable hash of
+  `id|audience|locale|question`, so re-running the seeder never creates
+  duplicates. Edit the JSON and restart (or POST `/api/admin/assistant/seed-faq`)
+  to pick up changes.
+- **Audience filter**: when a public bot request arrives, `findCachedAnswer`
+  searches only `audience='public'` entries — `user`-scoped seeds cannot
+  leak. Signed-in bot requests search both.
+- **Locale rule**: a seed is served ONLY when its `locale` matches the
+  language detected on the incoming question. If the detected language does
+  not match any seed with the same question, the request falls through to
+  the LLM. This keeps English seeds from being returned for Russian /
+  Spanish / Ukrainian questions.
+- **Admin curation**: seeded entries appear in `/admin/cached-answers`
+  flagged `is_seed: true`. They can be edited (answer text) or deleted
+  without a redeploy; a deleted seed will be re-created on the next
+  startup unless the entry is also removed from `faq-seed.json`.
+- **Secret redaction**: answers pass through `sanitizeOutput` at seed time
+  so a hand-authored JSON entry cannot smuggle a credential-shaped string
+  into the cache.

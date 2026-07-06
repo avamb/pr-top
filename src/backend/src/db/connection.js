@@ -792,6 +792,20 @@ function applySchema(db) {
     // Column already exists
   }
 
+  // Feature #440 (S7) — canned FAQ seeder support.
+  // audience scopes cache lookups so a 'user'-only seed cannot be served to
+  // the anonymous landing bot (mirrors the S2 audience filter on RAG chunks).
+  // locale gates on detected language so an English seed is not served for a
+  // Russian question.
+  // is_seed marks pre-seeded canned answers so the admin UI can flag them.
+  // question_hash gives the seeder an idempotent upsert key.
+  try { db.run("ALTER TABLE assistant_cached_answers ADD COLUMN audience TEXT DEFAULT 'public'"); } catch (e) { /* exists */ }
+  try { db.run("ALTER TABLE assistant_cached_answers ADD COLUMN locale TEXT DEFAULT 'en'"); } catch (e) { /* exists */ }
+  try { db.run('ALTER TABLE assistant_cached_answers ADD COLUMN is_seed INTEGER DEFAULT 0'); } catch (e) { /* exists */ }
+  try { db.run('ALTER TABLE assistant_cached_answers ADD COLUMN question_hash TEXT'); } catch (e) { /* exists */ }
+  db.run('CREATE INDEX IF NOT EXISTS idx_assistant_cached_answers_hash ON assistant_cached_answers(question_hash)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_assistant_cached_answers_audience ON assistant_cached_answers(audience, is_seed)');
+
   // Create assistant_knowledge table for knowledge base indexing
   db.run(`CREATE TABLE IF NOT EXISTS assistant_knowledge (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
