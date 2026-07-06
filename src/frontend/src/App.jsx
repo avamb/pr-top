@@ -44,6 +44,7 @@ import CompareUpheal from './pages/CompareUpheal';
 import AlternativesUpheal from './pages/AlternativesUpheal';
 import CompareMentalyc from './pages/CompareMentalyc';
 import AlternativesMentalyc from './pages/AlternativesMentalyc';
+import BestAiAssistantForTherapists from './pages/BestAiAssistantForTherapists';
 import VerifyLead from './pages/VerifyLead';
 import SupervisionView from './pages/SupervisionView';
 import NotFound from './pages/NotFound';
@@ -174,6 +175,7 @@ function App() {
         <Route path="/alternatives/upheal" element={<AlternativesUpheal />} />
         <Route path="/compare/mentalyc" element={<CompareMentalyc />} />
         <Route path="/alternatives/mentalyc" element={<AlternativesMentalyc />} />
+        <Route path="/best-ai-assistant-for-therapists" element={<BestAiAssistantForTherapists />} />
 
         {/* /confirm landing page - 4 locale variants, outside AppLayout */}
         <Route path="/confirm" element={<LandingConfirm />} />

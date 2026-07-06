@@ -34,6 +34,7 @@ const EN_ONLY_ROUTES = [
   '/alternatives/upheal',
   '/compare/mentalyc',
   '/alternatives/mentalyc',
+  '/best-ai-assistant-for-therapists',
 ];
 
 const AI_CRAWLERS = [

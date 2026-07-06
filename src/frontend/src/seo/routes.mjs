@@ -123,6 +123,14 @@ export const EN_ONLY_ROUTES = [
     summary:
       'Ranked list of Mentalyc alternatives for therapists, including AI note-takers (Upheal, Twofold, Heidi, Supanote) and PR-TOP for between-session continuity.',
   },
+  {
+    path: '/best-ai-assistant-for-therapists',
+    changefreq: 'monthly',
+    priority: 0.7,
+    title: 'Best AI assistants for therapists (2026) — honest listicle',
+    summary:
+      'Best AI assistants for therapists (2026): honest picks across Upheal, Mentalyc, Twofold, Heidi, Supanote, Freed, Eleos, and PR-TOP — with a "best for" label on each entry.',
+  },
 ];
 
 /**
@@ -151,6 +159,7 @@ export const LLMS_SECTIONS = [
       '/alternatives/upheal',
       '/compare/mentalyc',
       '/alternatives/mentalyc',
+      '/best-ai-assistant-for-therapists',
     ],
   },
 ];

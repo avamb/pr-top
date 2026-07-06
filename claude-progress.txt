@@ -14526,3 +14526,55 @@ VERIFICATION:
 
 Stats after session 193: #432 status: passing (432/433, 99.8%).
 
+
+================================================================
+Session 193 (2026-07-06) - Feature #433 PASSING (GEO F22 best-of listicle)
+================================================================
+
+Assigned: #433 F22 - /best-ai-assistant-for-therapists (LLM-citation magnet)
+
+IMPLEMENTATION:
+1. src/frontend/src/seo/routes.mjs
+   - EN_ONLY_ROUTES: appended /best-ai-assistant-for-therapists
+     (priority 0.7 - higher than compare/alt pages, this is the hub).
+   - LLMS_SECTIONS Comparisons: added the new path so llms.txt lists it.
+   - LOCALIZED_ROUTES length now 4x7 + 5 = 33 (was 32).
+2. src/frontend/src/pages/BestAiAssistantForTherapists.jsx (NEW)
+   - Direct-answer intro (~55 words) below single H1.
+   - Summary comparison table: 8 competitors (PR-TOP, Upheal, Mentalyc,
+     Twofold, Heidi, Supanote, Freed, Eleos) with rank/product/category/
+     price/"best for" columns.
+   - Per-item verdict section for each of the 8 entries with the "best
+     for" label rendered next to the H2. PR-TOP first, tagged
+     "best for between-session client support & Telegram-first practices"
+     per F22 spec.
+   - THREE JSON-LD blocks: Article, ItemList (position + name + description
+     + url per ItemListElement, 8 items), FAQPage (6 Q&A).
+   - Visible "Updated: July 2026" stamp under H1.
+   - Internal links to /compare/upheal, /compare/mentalyc, /security/gdpr,
+     / (Trial CTA). rel=nofollow noopener on external competitor links.
+3. src/frontend/src/App.jsx
+   - Import BestAiAssistantForTherapists; add standalone route (no locale
+     mirrors, EN-only per F22 spec).
+4. _t_geo_audit.js EN_ONLY_ROUTES: appended the new path so it is checked
+   for H1 count, description length, JSON-LD parse, sitemap presence,
+   llms.txt presence.
+
+VERIFICATION:
+- npm run build --prefix src/frontend succeeded (3.61s).
+- Prerender wrote 33 pages including
+  dist/best-ai-assistant-for-therapists/index.html.
+- sitemap.xml: 33 URLs (7x4 + 5 EN-only). All 5 EN-only URLs of this
+  wave (upheal x2, mentalyc x2, best-of x1) enumerated.
+- llms.txt: 33 route entries; llms-full.txt: 12 English pages extracted.
+- node _t_geo_audit.js -> 17 passed, 0 failed:
+  * llms.txt lists all 33 manifest routes
+  * sitemap.xml contains /best-ai-assistant-for-therapists
+  * 33/33 pages: exactly 1 H1, description length 25-160,
+    all JSON-LD blocks parse (Article + ItemList + FAQPage on this page)
+- Grep on prerendered HTML confirms: 1 <table>, Updated stamp, 2 JSON-LD
+  type strings for ItemList+FAQPage, all 7 external competitor names
+  (Upheal, Mentalyc, Twofold, Heidi, Supanote, Freed, Eleos) present.
+
+Stats after session 193: #433 status: passing (433/433, 100%).
+GEO Comparisons wave (F20/F21/F22) COMPLETE.
