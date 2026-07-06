@@ -459,22 +459,9 @@ function getProjectRootDiagnostics() {
 // a per-file `<!-- audience: public -->` marker appears in the future it may
 // be respected by the generator itself (not this indexer). README is public.
 const INDEX_SOURCES = [
-  {
-    type: 'i18n',
-    description: 'Internationalization translation files (UI labels/copy)',
-    dirs: ['src/frontend/src/i18n'],
-    extensions: ['.json', '.js'],
-    maxDepth: 1,
-    audiences: ['public']
-  },
-  {
-    type: 'documentation',
-    description: 'Project documentation',
-    dirs: ['docs'],
-    extensions: ['.md'],
-    maxDepth: 1,
-    audiences: ['public']
-  },
+  // Curated how-to knowledge base for authenticated therapists. Declared
+  // FIRST so its 'user' tag wins over the broader docs/ scanner if a file
+  // path is discovered by both (see discoverFiles() dedup).
   {
     type: 'documentation',
     description: 'Curated assistant knowledge base articles (authenticated how-to)',
@@ -482,6 +469,28 @@ const INDEX_SOURCES = [
     extensions: ['.md'],
     maxDepth: 3,
     audiences: ['user']
+  },
+  // UI translation strings — indexed as 'user' material because they
+  // describe app screens meaningful only after login, and the spec (S2
+  // acceptance test) requires that public search never returns chunks
+  // sourced under src/.
+  {
+    type: 'i18n',
+    description: 'Internationalization translation files (UI labels/copy)',
+    dirs: ['src/frontend/src/i18n'],
+    extensions: ['.json', '.js'],
+    maxDepth: 1,
+    audiences: ['user']
+  },
+  // Top-level docs: marketing / feature / security-overview material safe
+  // for the public landing-page assistant.
+  {
+    type: 'documentation',
+    description: 'Project documentation',
+    dirs: ['docs'],
+    extensions: ['.md'],
+    maxDepth: 1,
+    audiences: ['public']
   },
   {
     type: 'documentation',
@@ -724,6 +733,12 @@ function extractComponentInfo(content, relativePath) {
  */
 function discoverFiles() {
   const files = [];
+  // Dedup by relativePath: the FIRST source in INDEX_SOURCES to claim a
+  // path wins its audience tag. This prevents a single file from being
+  // indexed twice with conflicting audiences (e.g. docs/assistant-kb/*.md
+  // would otherwise be picked up by both the 'user' assistant-kb source
+  // and the broader 'public' docs source when depth-limited scans overlap).
+  const seenPaths = new Set();
 
   for (const source of INDEX_SOURCES) {
     // Default audience is 'public' if the source declaration omits the field.
@@ -739,7 +754,8 @@ function discoverFiles() {
         const fullPath = path.join(PROJECT_ROOT, f);
         if (fs.existsSync(fullPath)) {
           const relativePath = path.relative(PROJECT_ROOT, fullPath).replace(/\\/g, '/');
-          if (!EXCLUDED_SOURCE_FILES.has(relativePath)) {
+          if (!EXCLUDED_SOURCE_FILES.has(relativePath) && !seenPaths.has(relativePath)) {
+            seenPaths.add(relativePath);
             files.push({ path: fullPath, type: source.type, audiences });
           }
         }
@@ -751,7 +767,8 @@ function discoverFiles() {
         const found = findFiles(fullDir, source.extensions, source.maxDepth);
         for (const f of found) {
           const relativePath = path.relative(PROJECT_ROOT, f).replace(/\\/g, '/');
-          if (!EXCLUDED_SOURCE_FILES.has(relativePath)) {
+          if (!EXCLUDED_SOURCE_FILES.has(relativePath) && !seenPaths.has(relativePath)) {
+            seenPaths.add(relativePath);
             files.push({ path: f, type: source.type, audiences });
           }
         }

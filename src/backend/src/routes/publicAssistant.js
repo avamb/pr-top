@@ -290,7 +290,9 @@ router.post('/public-chat', async (req, res) => {
     let ragContext = '';
     let hasRagContext = false;
     try {
-      const kbResults = await assistantKnowledge.search(sanitized, 3);
+      // S2 (feature #435): scope RAG to 'public'-tagged chunks ONLY. The
+      // anonymous landing-page bot must never see 'user'-audience how-to docs.
+      const kbResults = await assistantKnowledge.search(sanitized, 3, 'public');
       if (kbResults.length > 0) {
         const contextParts = kbResults
           .filter(r => r.similarity > 0.1)

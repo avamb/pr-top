@@ -330,7 +330,9 @@ router.post('/chat', async (req, res) => {
     let ragContext = '';
     let hasRagContext = false;
     try {
-      const kbResults = await assistantKnowledge.search(sanitized, 3);
+      // S2 (feature #435): authenticated therapist assistant may retrieve
+      // BOTH 'public' marketing/security docs AND 'user' how-to material.
+      const kbResults = await assistantKnowledge.search(sanitized, 3, 'user');
       if (kbResults.length > 0) {
         const contextParts = kbResults
           .filter(r => r.similarity > 0.1)

@@ -211,6 +211,76 @@ async function main() {
     }
   }
 
+  // === Feature #435 S2 — audience-scoped search ===
+  section('9. S2 — public search excludes chunks sourced from src/');
+  try {
+    const publicHits = await assistantKB.search('how is data encrypted', 3, 'public');
+    const publicLeaks = publicHits.filter(r => (r.source_file || '').replace(/\\/g, '/').startsWith('src/'));
+    if (publicLeaks.length === 0) {
+      pass("search('how is data encrypted', 3, 'public') returned zero chunks under src/");
+    } else {
+      const sample = publicLeaks.slice(0, 3).map(r => r.source_file).join(' | ');
+      fail(`public search leaked ${publicLeaks.length} src/-sourced chunk(s): ${sample}`);
+    }
+  } catch (e) {
+    fail("public-audience search threw: " + e.message);
+  }
+
+  section('10. S2 — user-audience how-to doc retrievable by user but NOT by public');
+  try {
+    const userQuery = 'getting started as a therapist first client';
+    const userHits = await assistantKB.search(userQuery, 5, 'user');
+    const publicHits = await assistantKB.search(userQuery, 5, 'public');
+
+    const userKbHits = userHits.filter(r => (r.source_file || '').replace(/\\/g, '/').startsWith('docs/assistant-kb/'));
+    const publicKbHits = publicHits.filter(r => (r.source_file || '').replace(/\\/g, '/').startsWith('docs/assistant-kb/'));
+
+    if (userKbHits.length > 0) {
+      pass(`user search retrieved ${userKbHits.length} how-to chunk(s) from docs/assistant-kb/`);
+    } else {
+      fail("user search returned zero docs/assistant-kb/ chunks — how-to doc not retrievable");
+    }
+    if (publicKbHits.length === 0) {
+      pass('public search returned zero docs/assistant-kb/ chunks (user-audience content is scoped out)');
+    } else {
+      const sample = publicKbHits.slice(0, 3).map(r => r.source_file).join(' | ');
+      fail(`public search leaked ${publicKbHits.length} user-audience chunk(s): ${sample}`);
+    }
+  } catch (e) {
+    fail("audience-scoped how-to check threw: " + e.message);
+  }
+
+  section('11. S2 — default audience is safe (public) when omitted');
+  try {
+    const defaultHits = await assistantKB.search('getting started as a therapist', 5);
+    const leaked = defaultHits.filter(r => (r.source_file || '').replace(/\\/g, '/').startsWith('docs/assistant-kb/'));
+    if (leaked.length === 0) {
+      pass('search(q, k) with no audience arg defaults to public (no user-audience leaks)');
+    } else {
+      fail(`search default audience leaked ${leaked.length} user-audience chunk(s)`);
+    }
+  } catch (e) {
+    fail('default-audience check threw: ' + e.message);
+  }
+
+  section('12. S2 — publicAssistant.js and assistant.js call search with correct audience');
+  try {
+    const publicRoute = fs.readFileSync(path.join(__dirname, 'src/backend/src/routes/publicAssistant.js'), 'utf8');
+    const userRoute = fs.readFileSync(path.join(__dirname, 'src/backend/src/routes/assistant.js'), 'utf8');
+    if (/assistantKnowledge\.search\([^)]*,\s*['"]public['"]\s*\)/.test(publicRoute)) {
+      pass("publicAssistant.js calls assistantKnowledge.search(..., 'public')");
+    } else {
+      fail("publicAssistant.js does NOT call search with 'public' audience arg");
+    }
+    if (/assistantKnowledge\.search\([^)]*,\s*['"]user['"]\s*\)/.test(userRoute)) {
+      pass("assistant.js calls assistantKnowledge.search(..., 'user')");
+    } else {
+      fail("assistant.js does NOT call search with 'user' audience arg");
+    }
+  } catch (e) {
+    fail("route audience-wiring check threw: " + e.message);
+  }
+
   return finish();
 }
 

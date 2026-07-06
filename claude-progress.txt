@@ -14626,3 +14626,69 @@ VERIFICATION:
   checks + S3 sanitizeOutput unit tests + route-wiring order asserts).
 
 Stats after session 194: #436 status: passing (434/438, 99.1%).
+
+================================================================
+Session 195 (2026-07-06) - Feature #435 PASSING (S2 audience-scoped RAG)
+================================================================
+
+Assigned: #435 S2 -- Audience-scoped search (public vs authenticated)
+
+IMPLEMENTATION:
+1. src/backend/src/services/assistantKnowledge.js
+   - INDEX_SOURCES entries gained an `audiences: string[]` field.
+     Reordered so docs/assistant-kb (user) precedes docs/ (public) --
+     the discoverFiles dedup makes the first match win.
+   - Audience tagging:
+       * docs/assistant-kb/**/*.md   -> ['user'] (how-to)
+       * src/frontend/src/i18n/**    -> ['user'] (spec: no src/ in public)
+       * docs/*.md (maxDepth 1)      -> ['public'] (marketing/security)
+       * README.md                   -> ['public']
+   - ensureTable(): ALTER TABLE ADD COLUMN audiences TEXT
+     DEFAULT '["public"]' (idempotent). Legacy rows default to public
+     -- safe-by-default.
+   - discoverFiles(): dedupes by relativePath (Set) so a file discovered
+     by multiple sources uses only the first source's audience.
+   - reindex(): allChunkData items carry audiences; each INSERT path
+     (AI batch + TF-IDF sync) writes JSON.stringify(audiences) into
+     the new column.
+   - search(query, k, audience='public'): audience-scoped filter.
+       * 'public' -> chunk must include 'public' tag
+       * 'user'   -> chunk must include 'public' OR 'user' (superset)
+       * missing/unknown -> defaults to 'public' (safe).
+     Filter runs before embedding deserialization for O(1) rejection.
+   - VALID_AUDIENCES set added and exported.
+
+2. src/backend/src/routes/publicAssistant.js
+   - Landing-page anonymous chat calls
+     assistantKnowledge.search(sanitized, 3, 'public').
+
+3. src/backend/src/routes/assistant.js
+   - Authenticated therapist chat calls
+     assistantKnowledge.search(sanitized, 3, 'user').
+
+4. docs/assistant-kb/getting-started.md (NEW)
+   - Seed 'user'-audience how-to doc with `<!-- audience: user -->`
+     header marker for the future S4 generator. Gives the authenticated
+     bot an initial how-to and gives the audit test a known
+     user-audience file to assert scoping on.
+
+5. _t_assistant_kb_audit.js
+   - Added sections 9-12 (S2 tests):
+     9  search('how is data encrypted', 3, 'public') returns zero
+        src/-sourced chunks.
+     10 user search retrieves docs/assistant-kb/*, public search does not.
+     11 search(q, k) without audience arg defaults to 'public' (no
+        user-audience leaks).
+     12 grep confirms publicAssistant.js calls search(..., 'public') and
+        assistant.js calls search(..., 'user').
+
+VERIFICATION:
+- node _t_assistant_kb_audit.js -> 34 passed, 0 failed.
+  * S1 asserts (sections 1-6) still pass.
+  * S3 asserts (sections 7-8) still pass.
+  * S2 asserts (sections 9-12) all green.
+- node -c syntax check on assistantKnowledge.js, publicAssistant.js,
+  assistant.js -- no errors.
+- reindex stats: 21 files, 505 chunks (i18n 489, docs 15, how-to 1).
+
+Stats after session 195: #435 status: passing.
