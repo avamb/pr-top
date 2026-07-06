@@ -194,7 +194,9 @@ function parseRoutesFromFile(fileName) {
 function buildEndpointsMarkdown() {
   const files = readdirSync(ROUTES_DIR).filter(f => f.endsWith('.js')).sort();
   const lines = [];
-  lines.push(AUDIENCE_PUBLIC);
+  // Internal API surface (incl. admin route groups) — never expose it to the
+  // anonymous public bot; signed-in therapists may still ask about it.
+  lines.push(AUDIENCE_USER);
   lines.push('# PR-TOP REST API — endpoint reference');
   lines.push('');
   lines.push('_This page is regenerated on every release by_ `npm run docs:assistant`.');

@@ -14692,3 +14692,66 @@ VERIFICATION:
 - reindex stats: 21 files, 505 chunks (i18n 489, docs 15, how-to 1).
 
 Stats after session 195: #435 status: passing.
+
+================================================================
+Session 196 (2026-07-06) - Feature #437 PASSING (S4 auto-gen docs)
+================================================================
+Assigned: #437 S4 -- Auto-generated assistant docs pipeline
+
+IMPLEMENTATION:
+1. scripts/generate-assistant-docs.mjs (NEW) - project-root ESM script
+   with two layers:
+   (a) DETERMINISTIC: writes docs/assistant-kb/reference/*.md every run
+       - endpoints.md (public): walks src/backend/src/routes/*.js and
+         extracts method+path+preceding-comment via same regex the RAG
+         indexer uses. Mount prefixes and human-readable module labels
+         held in ROUTE_MOUNT_PREFIX / ROUTE_FILE_DESC tables.
+       - ui-labels.md (user): parses src/frontend/src/i18n/en.json into
+         one ## section per top-level namespace with up to 20 sample
+         leaf keys per namespace (bounded to keep chunks small).
+       - pricing.md (public): PLAN_MATRIX table (Trial/Basic/Pro/Premium)
+         with monthly USD, client seats, sessions/mo, feature bullets.
+   (b) PROSE how-to seeds: only written when the file does NOT exist
+       (writeIfMissing) - never overwrites human-authored edits.
+       - user audience: uploading-a-session, client-diary-telegram,
+         exercises, crisis-sos, billing
+       - public audience: feature-overview, security-overview
+   Self-check: refuses to write any file whose code-token density
+   (require(/function per 200 words) is >=1.
+
+2. package.json (root) - added scripts.docs:assistant and
+   docs:assistant:check (dry-run). Documented pre-release step in
+   docsAssistant metadata block.
+
+3. _t_assistant_kb_audit.js - added sections 12b/12c/12d/12e:
+   - 12b: walks docs/assistant-kb/**/*.md, asserts every file has a
+     <!-- audience: public|user --> marker; enumerates public + user
+     files and runs the prose density guardrail on every file.
+   - 12c: asserts scripts['docs:assistant'] in package.json AND
+     scripts/generate-assistant-docs.mjs exists.
+   - 12d: asserts docs/assistant-kb/reference/{endpoints,ui-labels,
+     pricing}.md exist, each carries an audience marker, endpoints.md
+     references real /api/subscription + /api/clients routes,
+     ui-labels.md contains ## subscription namespace, pricing.md lists
+     all four tiers.
+   - 12e: reindex + assert >=4 docs/assistant-kb/ files ingested;
+     user-audience search retrieves the new uploading-a-session.md
+     how-to.
+
+VERIFICATION:
+- node scripts/generate-assistant-docs.mjs -> wrote 3 reference docs +
+  seeded 7 how-to/overview docs (11 total under docs/assistant-kb/).
+- Rerun: all files "unchanged" or "kept (already authored)" - confirms
+  idempotence and non-destructive seeding.
+- endpoints.md 349 lines, pricing.md 75 lines, ui-labels.md 885 lines.
+- node _t_assistant_kb_audit.js -> 56 passed, 0 failed
+  * S1 restrictions (sections 1-6) still green
+  * S3 sanitizeOutput (sections 7-8) still green
+  * S2 audience-scoped search (sections 9-12) still green
+  * S4 new sections (12b-12e) all green
+  * S5 sections (13-16) still green
+- reindex stats: 31 files, 515 chunks. All 11 docs/assistant-kb/*.md
+  files picked up in a single reindex pass.
+
+Stats after session 196: #437 status: passing.
+

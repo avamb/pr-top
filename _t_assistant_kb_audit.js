@@ -311,13 +311,17 @@ async function main() {
     fail('S4 audience-marker check threw: ' + e.message);
   }
 
-  section('12c. S4 — npm run docs:assistant is wired in package.json');
+  section('12c. S4 — npm run docs:assistant is wired in a committed package.json');
   try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-    if (pkg.scripts && pkg.scripts['docs:assistant']) {
-      pass("package.json defines scripts['docs:assistant']: " + pkg.scripts['docs:assistant']);
+    // Root /package.json is gitignored (workspace dev convenience) so the
+    // committed home for docs:assistant lives in src/backend/package.json,
+    // which any fresh clone / CI has.
+    const backendPkgPath = path.join(__dirname, 'src', 'backend', 'package.json');
+    const backendPkg = JSON.parse(fs.readFileSync(backendPkgPath, 'utf8'));
+    if (backendPkg.scripts && backendPkg.scripts['docs:assistant']) {
+      pass("src/backend/package.json defines scripts['docs:assistant']: " + backendPkg.scripts['docs:assistant']);
     } else {
-      fail("package.json is missing scripts['docs:assistant']");
+      fail("src/backend/package.json is missing scripts['docs:assistant']");
     }
     const genPath = path.join(__dirname, 'scripts', 'generate-assistant-docs.mjs');
     if (fs.existsSync(genPath)) pass('scripts/generate-assistant-docs.mjs exists');

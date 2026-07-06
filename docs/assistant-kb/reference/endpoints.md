@@ -1,4 +1,4 @@
-<!-- audience: public -->
+<!-- audience: user -->
 # PR-TOP REST API — endpoint reference
 
 _This page is regenerated on every release by_ `npm run docs:assistant`.

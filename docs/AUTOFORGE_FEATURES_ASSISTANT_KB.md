@@ -56,6 +56,30 @@ Implement in order S1→S5. Acceptance checks are local: run against a local rei
 
 ---
 
+## S6 — Expand the how-to corpus to full product coverage (added 2026-07-07 after S1–S5 review)
+**Why:** S4 shipped 8 how-to docs of only 210–352 words each (~2,200 words of prose total). Quality of the existing pages is good (verified factually accurate against code: 100 MB upload limit, consent gating), but coverage is far below the owner's requirement — "the docs must be very detailed because we don't know what users will ask". Whole product surfaces have no docs at all.
+**Description:** Author detailed how-to docs (800–1,500 words each: intro → prerequisites → step-by-step → edge cases → troubleshooting → 5+ FAQ Q&As) for every missing surface, `audience: user` unless noted:
+1. Dashboard overview & daily workflow
+2. Client management end-to-end (invite, statuses, archive, timeline, consent flags)
+3. Analytics & mood trends (+ how to read them)
+4. Natural-language queries (what you can ask, examples, plan gating)
+5. Bulk session upload
+6. Exercise library: assigning, creating custom exercises, reviewing client responses
+7. Crisis/SOS therapist-side workflow (alert → respond → resolve)
+8. Settings: profile, rates, notification preferences
+9. Subscription management: upgrade/downgrade/cancel, what happens to data
+10. Supervision sharing (share links, what supervisors see)
+11. Registration & onboarding (audience: public — pre-sales questions)
+12. Client-side bot commands & experience (what the client sees, streaks, reminders)
+13. Data export, GDPR requests, deleting a client/account
+14. General troubleshooting & FAQ (login issues, Telegram not connecting, transcription errors)
+**Rules:** every factual claim (limits, plan gating, button names) must be verified against code/i18n before writing — cite the exact i18n keys for UI labels via reference/ui-labels.md; no invented features. English only (RAG embeddings are cross-lingual; the bot answers in the user's language).
+**Steps:**
+1. Write the 14 docs into `docs/assistant-kb/` (generator `kept`-list must preserve them — they are authored pages, same mechanism as getting-started.md).
+2. Extend `_t_assistant_kb_audit.js`: assert ≥20 authored docs exist, each ≥600 words, each with a valid audience marker and an FAQ section.
+3. Reindex; assert chunk count for `documentation` sources grows accordingly and audience filtering still passes.
+4. Flag for human review (owner reads at least the public-audience and plan/pricing-related pages).
+
 ## Not for AutoForge (human)
 - Review the auto-generated/seeded public-audience docs for marketing/security-claim accuracy before they go live (same gate as the comparison pages).
 - Decide the pre-release trigger for `npm run docs:assistant` (CI step vs manual vs agent) once S4 lands.
