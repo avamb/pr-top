@@ -284,6 +284,29 @@ function deleteCachedAnswer(id) {
 }
 
 /**
+ * Purge real-traffic (non-seed) cached answers, keeping curated seeds.
+ * Called after a knowledge-base re-index: answers generated against the OLD
+ * index are stale by definition (e.g. wrong pricing before a pricing fix), so
+ * dropping them forces fresh answers from the current KB. Seeds are reviewed
+ * content and are preserved.
+ * @returns {number} rows removed
+ */
+function purgeNonSeedCache() {
+  try {
+    const db = getDatabase();
+    const before = db.exec("SELECT COUNT(*) FROM assistant_cached_answers WHERE is_seed = 0 OR is_seed IS NULL");
+    const count = (before.length && before[0].values.length) ? before[0].values[0][0] : 0;
+    db.run("DELETE FROM assistant_cached_answers WHERE is_seed = 0 OR is_seed IS NULL");
+    saveDatabaseAfterWrite();
+    logger.info(`[AssistantCache] Purged ${count} non-seed cached answer(s) after re-index (seeds kept)`);
+    return count;
+  } catch (e) {
+    logger.warn('[AssistantCache] Error purging non-seed cache: ' + e.message);
+    return 0;
+  }
+}
+
+/**
  * Compute a stable hash for a seed entry. Used as an idempotent upsert key so
  * a re-run of the seeder updates existing entries in place instead of
  * creating duplicates. Key derives from id + audience + locale + question so a
@@ -408,6 +431,7 @@ module.exports = {
   getCachedAnswers,
   updateCachedAnswer,
   deleteCachedAnswer,
+  purgeNonSeedCache,
   getThreshold,
   seedCannedFaq,
   FAQ_SEED_PATH,

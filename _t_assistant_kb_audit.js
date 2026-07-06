@@ -573,6 +573,18 @@ async function main() {
       } else {
         fail('seed priority FAILED: non-seed answer won for "' + q.slice(0, 30) + '..."');
       }
+
+      // Purge-on-reindex: purgeNonSeedCache removes the stale answer but keeps seeds.
+      const db3 = dbConn.getDatabase();
+      const seedsBefore = db3.exec("SELECT COUNT(*) FROM assistant_cached_answers WHERE is_seed=1")[0].values[0][0];
+      const purged = cache.purgeNonSeedCache();
+      const seedsAfter = db3.exec("SELECT COUNT(*) FROM assistant_cached_answers WHERE is_seed=1")[0].values[0][0];
+      const nonSeedAfter = db3.exec("SELECT COUNT(*) FROM assistant_cached_answers WHERE is_seed=0 OR is_seed IS NULL")[0].values[0][0];
+      if (purged >= 1 && seedsAfter === seedsBefore && nonSeedAfter === 0) {
+        pass(`purgeNonSeedCache removed ${purged} stale answer(s), kept all ${seedsAfter} seeds`);
+      } else {
+        fail(`purgeNonSeedCache wrong: purged=${purged}, seeds ${seedsBefore}->${seedsAfter}, nonSeedLeft=${nonSeedAfter}`);
+      }
     }
   } catch (e) {
     fail('S7 seeder/cache functional check threw: ' + e.message);

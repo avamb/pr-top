@@ -919,17 +919,28 @@ async function reindex() {
 
   saveDatabaseAfterWrite();
 
+  // Non-seed cached answers were generated against the index we just replaced,
+  // so they are stale — drop them (seeds are kept). Required lazily to avoid a
+  // load-time cycle between the KB and cache services.
+  let cachePurged = 0;
+  try {
+    cachePurged = require('./assistantCache').purgeNonSeedCache();
+  } catch (e) {
+    logger.warn('[AssistantKB] Non-seed cache purge after re-index failed: ' + e.message);
+  }
+
   const elapsed = Date.now() - startTime;
   const stats = {
     indexed: processedFiles.size,
     chunks: totalChunks,
     removed: removed,
     errors: errors,
+    cache_purged: cachePurged,
     elapsed_ms: elapsed,
     embedding_type: embeddingType
   };
 
-  logger.info(`[AssistantKB] Re-index complete: ${stats.indexed} files, ${stats.chunks} chunks, ${stats.removed} removed, ${stats.errors} errors, embedding=${embeddingType} (${elapsed}ms)`);
+  logger.info(`[AssistantKB] Re-index complete: ${stats.indexed} files, ${stats.chunks} chunks, ${stats.removed} removed, ${stats.errors} errors, cache_purged=${cachePurged}, embedding=${embeddingType} (${elapsed}ms)`);
 
   return stats;
 }
