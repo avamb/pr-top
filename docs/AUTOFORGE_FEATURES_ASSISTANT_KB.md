@@ -80,6 +80,22 @@ Implement in order S1→S5. Acceptance checks are local: run against a local rei
 3. Reindex; assert chunk count for `documentation` sources grows accordingly and audience filtering still passes.
 4. Flag for human review (owner reads at least the public-audience and plan/pricing-related pages).
 
+## S7 — Seeded canned FAQ answers + cache repeated questions (added 2026-07-07)
+**Why:** Two gaps found reviewing the answer cache. (a) There are NO pre-seeded answers — every question, even "how much does it cost", hits the LLM on its first ask (cost + latency). (b) The cache is only consulted on the **first message of a session** (`publicAssistant.js:306` `if (session.messageCount === 0)`), so a repeated/rephrased question later in the same conversation still calls the LLM. Owner requirement: standard questions should be answered from prepared canned answers without dragging the LLM, and repeated questions should already be in memory.
+**Description:**
+1. **Seed file:** author `docs/assistant-kb/faq-seed.json` — an array of `{ id, audience: 'public'|'user', locale: 'en', question, answer, tags[] }` covering the top standard questions (pricing/plans, free trial, what PR-TOP is, is it GDPR/secure, does it work with Telegram, how clients join, can I try without a card, how do I upload a session, how do I cancel, data ownership/export, supervisor access, languages supported — aim for 30–50 entries). Answers are concise (2–5 sentences), factual, marketing-aware for public ones. English only (embeddings are cross-lingual; the reply is served as-is — see step 4 note).
+2. **Seeder:** on backend startup (and via a new `POST /api/admin/assistant/seed-faq`), load `faq-seed.json` into `assistant_cached_answers` with `has_rag_context = 1` and a `is_seed = 1` flag (add column). Idempotent: upsert by a stable hash of the question so re-seeding doesn't duplicate. Compute the question embedding at seed time so `findCachedAnswer` similarity matching works.
+3. **Cache on every message, not just the first:** in `publicAssistant.js` (and `assistant.js`), move the `findCachedAnswer` check out of the `messageCount === 0` guard so any message can hit cache. Keep the existing similarity threshold (`assistant_cache_threshold` setting) to avoid false hits.
+4. **Audience-scope cache lookups:** `findCachedAnswer(q, audience)` must not serve a `user`-audience seed to the public bot. Add the audience filter (mirror S2).
+5. **Admin visibility:** seeded answers appear in the existing `/admin/cached-answers` view, visually flagged `seed`, editable/deletable (owner curates wording without a redeploy).
+6. **Language note:** seeds are English; if a non-English visitor's question matches an English seed by embedding similarity, still prefer an LLM answer in their language OR add per-locale seed rows. Simplest correct behavior: only serve a seed when its `locale` matches the detected language; otherwise fall through to LLM. Document this choice.
+**Acceptance (local):**
+1. `faq-seed.json` parses; ≥30 entries; each has id/audience/locale/question/answer.
+2. After seeding into a test DB, `findCachedAnswer('how much does PR-TOP cost', 'public')` returns a hit **without** calling any AI provider (assert no network / provider mock not invoked).
+3. A repeated question as the 2nd message in a session returns a cache hit (not messageCount===0 gated) — verify via a route-level test or by asserting the guard was removed.
+4. `findCachedAnswer(userSeedQuestion, 'public')` returns no hit; same question with `'user'` does.
+5. `node _t_assistant_kb_audit.js` still green; add an assertion that seeded public answers pass `sanitizeOutput` (no secret-shaped strings).
+
 ## Not for AutoForge (human)
 - Review the auto-generated/seeded public-audience docs for marketing/security-claim accuracy before they go live (same gate as the comparison pages).
 - Decide the pre-release trigger for `npm run docs:assistant` (CI step vs manual vs agent) once S4 lands.
