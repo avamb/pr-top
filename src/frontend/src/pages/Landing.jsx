@@ -87,6 +87,15 @@ function FaqSection({ t }) {
             </AccordionItem>
           ))}
         </div>
+        <p className="mt-10 text-center text-sm text-text/70">
+          {t('landing.faqCompareLead')}{' '}
+          <Link
+            to="/best-ai-assistant-for-therapists"
+            className="text-primary font-medium hover:underline"
+          >
+            {t('landing.faqCompareLink')}
+          </Link>
+        </p>
       </div>
     </section>
   );
@@ -470,7 +479,7 @@ export default function Landing() {
       {/* ─── Footer ─── */}
       <footer className="bg-text text-white/70">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-8">
             {/* Brand */}
             <div>
               <span className="text-xl font-bold text-white">{t('brand')}</span>
@@ -498,6 +507,18 @@ export default function Landing() {
                 <li><Link to="/security/gdpr" className="hover:text-white transition-colors">{t('landing.gdpr')}</Link></li>
                 <li><Link to="/security/audit-log" className="hover:text-white transition-colors">{t('landing.auditLogging')}</Link></li>
                 <li><Link to="/security/data-sovereignty" className="hover:text-white transition-colors">{t('landing.dataSovereignty')}</Link></li>
+              </ul>
+            </div>
+
+            {/* Compare */}
+            <div>
+              <h4 className="text-white font-semibold text-sm mb-3">{t('landing.footerCompare')}</h4>
+              <ul className="space-y-2 text-sm">
+                <li><Link to="/best-ai-assistant-for-therapists" className="hover:text-white transition-colors">{t('landing.bestAiAssistants')}</Link></li>
+                <li><Link to="/compare/upheal" className="hover:text-white transition-colors">{t('landing.compareUpheal')}</Link></li>
+                <li><Link to="/compare/mentalyc" className="hover:text-white transition-colors">{t('landing.compareMentalyc')}</Link></li>
+                <li><Link to="/alternatives/upheal" className="hover:text-white transition-colors">{t('landing.altUpheal')}</Link></li>
+                <li><Link to="/alternatives/mentalyc" className="hover:text-white transition-colors">{t('landing.altMentalyc')}</Link></li>
               </ul>
             </div>
 
