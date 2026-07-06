@@ -8,6 +8,8 @@ import { trackUmamiEvent } from '../utils/umami';
 import PublicAssistantChatButton from '../components/PublicAssistantChatButton';
 import PublicAssistantChatPanel from '../components/PublicAssistantChatPanel';
 import Seo from '../components/Seo';
+import useLocalePath from '../hooks/useLocalePath';
+import { LOCALES } from '../seo/routes.mjs';
 
 /* ───────── Feature Highlights (icons only, text from i18n) ───────── */
 const highlightIcons = [
@@ -45,6 +47,10 @@ const faqKeys = [
 
 function FaqSection({ t }) {
   const [openIndex, setOpenIndex] = useState(null);
+  const { i18n } = useTranslation();
+  // Comparison pages exist in English only for now — don't send localized
+  // visitors across languages (see docs/seo/AGENTIC_SEO_PLAN.md §C2).
+  const isEn = !LOCALES.includes(i18n.language);
 
   // Build FAQPage JSON-LD from the i18n values so the structured data
   // stays in sync with the visible copy and the active locale (F5).
@@ -87,15 +93,17 @@ function FaqSection({ t }) {
             </AccordionItem>
           ))}
         </div>
-        <p className="mt-10 text-center text-sm text-text/70">
-          {t('landing.faqCompareLead')}{' '}
-          <Link
-            to="/best-ai-assistant-for-therapists"
-            className="text-primary font-medium hover:underline"
-          >
-            {t('landing.faqCompareLink')}
-          </Link>
-        </p>
+        {isEn && (
+          <p className="mt-10 text-center text-sm text-text/70">
+            {t('landing.faqCompareLead')}{' '}
+            <Link
+              to="/best-ai-assistant-for-therapists"
+              className="text-primary font-medium hover:underline"
+            >
+              {t('landing.faqCompareLink')}
+            </Link>
+          </p>
+        )}
       </div>
     </section>
   );
@@ -105,7 +113,9 @@ function FaqSection({ t }) {
 /*                Landing Page                 */
 /* ═══════════════════════════════════════════ */
 export default function Landing() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lp = useLocalePath();
+  const isEn = !LOCALES.includes(i18n.language);
   const pricingRef = useRef(null);
   const pricingTrackedRef = useRef(false);
   const burnoutRef = useRef(null);
@@ -479,7 +489,7 @@ export default function Landing() {
       {/* ─── Footer ─── */}
       <footer className="bg-text text-white/70">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-8">
+          <div className={`grid sm:grid-cols-2 gap-8 ${isEn ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
             {/* Brand */}
             <div>
               <span className="text-xl font-bold text-white">{t('brand')}</span>
@@ -503,32 +513,35 @@ export default function Landing() {
             <div>
               <h4 className="text-white font-semibold text-sm mb-3">{t('landing.footerSecurity')}</h4>
               <ul className="space-y-2 text-sm">
-                <li><Link to="/security/encryption" className="hover:text-white transition-colors">{t('landing.encryption')}</Link></li>
-                <li><Link to="/security/gdpr" className="hover:text-white transition-colors">{t('landing.gdpr')}</Link></li>
-                <li><Link to="/security/audit-log" className="hover:text-white transition-colors">{t('landing.auditLogging')}</Link></li>
-                <li><Link to="/security/data-sovereignty" className="hover:text-white transition-colors">{t('landing.dataSovereignty')}</Link></li>
+                <li><Link to={lp('/security/encryption')} className="hover:text-white transition-colors">{t('landing.encryption')}</Link></li>
+                <li><Link to={lp('/security/gdpr')} className="hover:text-white transition-colors">{t('landing.gdpr')}</Link></li>
+                <li><Link to={lp('/security/audit-log')} className="hover:text-white transition-colors">{t('landing.auditLogging')}</Link></li>
+                <li><Link to={lp('/security/data-sovereignty')} className="hover:text-white transition-colors">{t('landing.dataSovereignty')}</Link></li>
               </ul>
             </div>
 
-            {/* Compare */}
-            <div>
-              <h4 className="text-white font-semibold text-sm mb-3">{t('landing.footerCompare')}</h4>
-              <ul className="space-y-2 text-sm">
-                <li><Link to="/best-ai-assistant-for-therapists" className="hover:text-white transition-colors">{t('landing.bestAiAssistants')}</Link></li>
-                <li><Link to="/compare/upheal" className="hover:text-white transition-colors">{t('landing.compareUpheal')}</Link></li>
-                <li><Link to="/compare/mentalyc" className="hover:text-white transition-colors">{t('landing.compareMentalyc')}</Link></li>
-                <li><Link to="/alternatives/upheal" className="hover:text-white transition-colors">{t('landing.altUpheal')}</Link></li>
-                <li><Link to="/alternatives/mentalyc" className="hover:text-white transition-colors">{t('landing.altMentalyc')}</Link></li>
-              </ul>
-            </div>
+            {/* Compare — EN-only pages, hidden on localized trees to keep
+                navigation within one language (AGENTIC_SEO_PLAN.md §C2) */}
+            {isEn && (
+              <div>
+                <h4 className="text-white font-semibold text-sm mb-3">{t('landing.footerCompare')}</h4>
+                <ul className="space-y-2 text-sm">
+                  <li><Link to="/best-ai-assistant-for-therapists" className="hover:text-white transition-colors">{t('landing.bestAiAssistants')}</Link></li>
+                  <li><Link to="/compare/upheal" className="hover:text-white transition-colors">{t('landing.compareUpheal')}</Link></li>
+                  <li><Link to="/compare/mentalyc" className="hover:text-white transition-colors">{t('landing.compareMentalyc')}</Link></li>
+                  <li><Link to="/alternatives/upheal" className="hover:text-white transition-colors">{t('landing.altUpheal')}</Link></li>
+                  <li><Link to="/alternatives/mentalyc" className="hover:text-white transition-colors">{t('landing.altMentalyc')}</Link></li>
+                </ul>
+              </div>
+            )}
 
             {/* Contact */}
             <div>
               <h4 className="text-white font-semibold text-sm mb-3">{t('landing.footerContact')}</h4>
               <ul className="space-y-2 text-sm">
                 <li><a href="mailto:support@pr-top.com" className="hover:text-white transition-colors">support@pr-top.com</a></li>
-                <li><Link to="/privacy" className="hover:text-white transition-colors">{t('landing.privacyPolicy')}</Link></li>
-                <li><Link to="/terms" className="hover:text-white transition-colors">{t('landing.termsOfService')}</Link></li>
+                <li><Link to={lp('/privacy')} className="hover:text-white transition-colors">{t('landing.privacyPolicy')}</Link></li>
+                <li><Link to={lp('/terms')} className="hover:text-white transition-colors">{t('landing.termsOfService')}</Link></li>
               </ul>
             </div>
           </div>

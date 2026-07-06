@@ -77,6 +77,7 @@ export default function CompareMentalyc() {
   return (
     <div className="min-h-screen bg-white">
       <Seo
+        localized={false}
         path="/compare/mentalyc"
         title="PR-TOP vs Mentalyc (2026) — honest comparison for therapists"
         description="Mentalyc is a privacy-first AI note-taker for therapists. PR-TOP adds the between-session layer: Telegram diary, exercises, SOS. EU-hosted."
@@ -263,15 +264,8 @@ export default function CompareMentalyc() {
             </table>
           </div>
           <p className="text-xs text-gray-500 mt-3">
-            Mentalyc figures verified against{' '}
-            <a
-              href="https://www.mentalyc.com/pricing"
-              rel="nofollow noopener"
-              className="underline hover:text-primary"
-            >
-              mentalyc.com/pricing
-            </a>{' '}
-            in July 2026. Numbers refresh quarterly.
+            Mentalyc figures verified against mentalyc.com/pricing in July 2026.
+            Numbers refresh quarterly.
           </p>
         </section>
 

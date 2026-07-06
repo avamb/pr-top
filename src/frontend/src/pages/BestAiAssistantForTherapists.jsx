@@ -206,6 +206,7 @@ export default function BestAiAssistantForTherapists() {
   return (
     <div className="min-h-screen bg-white">
       <Seo
+        localized={false}
         path="/best-ai-assistant-for-therapists"
         title="Best AI assistants for therapists (2026): honest listicle"
         description="Honest 2026 ranking of AI assistants for therapists: Upheal, Mentalyc, Twofold, Heidi, Supanote, Freed, Eleos, PR-TOP — with a 'best for' label per entry."
@@ -330,14 +331,11 @@ export default function BestAiAssistantForTherapists() {
               <li><strong>Pricing (from):</strong> {it.priceFrom}</li>
             </ul>
             <div className="flex flex-wrap gap-4">
-              {it.internal ? (
+              {/* External competitor links intentionally omitted — names only */}
+              {it.internal && (
                 <Link to="/" className="text-sm text-primary underline hover:no-underline">
                   Try PR-TOP (free trial) &rarr;
                 </Link>
-              ) : (
-                <a href={it.href} rel="nofollow noopener" className="text-sm text-primary underline hover:no-underline">
-                  {it.name} website &rarr;
-                </a>
               )}
               {it.internalHref && (
                 <Link to={it.internalHref} className="text-sm text-primary underline hover:no-underline">

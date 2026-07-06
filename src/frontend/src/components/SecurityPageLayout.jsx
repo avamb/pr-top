@@ -2,20 +2,24 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from './LanguageSwitcher';
+import useLocalePath from '../hooks/useLocalePath';
 
 /**
  * Shared layout for /security/* pages.
  * Hero with shield icon + title, content sections, back-to-home link.
+ * All internal links carry the active locale prefix so navigation stays
+ * within the visitor's language tree.
  */
 export default function SecurityPageLayout({ titleKey, children }) {
   const { t } = useTranslation();
+  const lp = useLocalePath();
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Navbar */}
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 text-primary font-bold text-lg">
+          <Link to={lp('/')} className="flex items-center gap-2 text-primary font-bold text-lg">
             <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
             </svg>
@@ -23,7 +27,7 @@ export default function SecurityPageLayout({ titleKey, children }) {
           </Link>
           <div className="flex items-center gap-4">
             <LanguageSwitcher />
-            <Link to="/" className="text-sm text-gray-600 hover:text-primary transition-colors">
+            <Link to={lp('/')} className="text-sm text-gray-600 hover:text-primary transition-colors">
               ← {t('security.backToHome')}
             </Link>
           </div>
@@ -62,16 +66,16 @@ export default function SecurityPageLayout({ titleKey, children }) {
             {t('security.relatedPages')}
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <Link to="/security/encryption" className="p-3 rounded-lg border border-gray-200 hover:border-primary/40 hover:bg-primary/5 transition-all text-sm font-medium text-gray-700 hover:text-primary text-center">
+            <Link to={lp('/security/encryption')} className="p-3 rounded-lg border border-gray-200 hover:border-primary/40 hover:bg-primary/5 transition-all text-sm font-medium text-gray-700 hover:text-primary text-center">
               {t('security.encryptionTitle')}
             </Link>
-            <Link to="/security/gdpr" className="p-3 rounded-lg border border-gray-200 hover:border-primary/40 hover:bg-primary/5 transition-all text-sm font-medium text-gray-700 hover:text-primary text-center">
+            <Link to={lp('/security/gdpr')} className="p-3 rounded-lg border border-gray-200 hover:border-primary/40 hover:bg-primary/5 transition-all text-sm font-medium text-gray-700 hover:text-primary text-center">
               {t('security.gdprTitle')}
             </Link>
-            <Link to="/security/audit-log" className="p-3 rounded-lg border border-gray-200 hover:border-primary/40 hover:bg-primary/5 transition-all text-sm font-medium text-gray-700 hover:text-primary text-center">
+            <Link to={lp('/security/audit-log')} className="p-3 rounded-lg border border-gray-200 hover:border-primary/40 hover:bg-primary/5 transition-all text-sm font-medium text-gray-700 hover:text-primary text-center">
               {t('security.auditLogTitle')}
             </Link>
-            <Link to="/security/data-sovereignty" className="p-3 rounded-lg border border-gray-200 hover:border-primary/40 hover:bg-primary/5 transition-all text-sm font-medium text-gray-700 hover:text-primary text-center">
+            <Link to={lp('/security/data-sovereignty')} className="p-3 rounded-lg border border-gray-200 hover:border-primary/40 hover:bg-primary/5 transition-all text-sm font-medium text-gray-700 hover:text-primary text-center">
               {t('security.dataSovereigntyTitle')}
             </Link>
           </div>

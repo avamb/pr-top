@@ -72,6 +72,7 @@ export default function CompareUpheal() {
   return (
     <div className="min-h-screen bg-white">
       <Seo
+        localized={false}
         path="/compare/upheal"
         title="PR-TOP vs Upheal (2026) — honest comparison for therapists"
         description="Upheal is an AI-native session-notes EHR from ~$29/mo. PR-TOP is a between-session assistant with Telegram client bot, diary, crisis alerts."
@@ -228,15 +229,8 @@ export default function CompareUpheal() {
             </table>
           </div>
           <p className="text-xs text-gray-500 mt-3">
-            Upheal figures verified against{' '}
-            <a
-              href="https://www.upheal.io/pricing"
-              rel="nofollow noopener"
-              className="underline hover:text-primary"
-            >
-              upheal.io/pricing
-            </a>{' '}
-            in July 2026. Numbers refresh quarterly.
+            Upheal figures verified against upheal.io/pricing in July 2026.
+            Numbers refresh quarterly.
           </p>
         </section>
 

@@ -129,6 +129,7 @@ export default function AlternativesMentalyc() {
   return (
     <div className="min-h-screen bg-white">
       <Seo
+        localized={false}
         path="/alternatives/mentalyc"
         title="Mentalyc alternatives (2026): Upheal, Twofold, Heidi, Supanote, PR-TOP"
         description="Ranked Mentalyc alternatives for therapists in 2026. Honest comparison of Upheal, Twofold, Heidi, Supanote, and PR-TOP for between-session engagement."
@@ -253,21 +254,14 @@ export default function AlternativesMentalyc() {
               <li><strong>Best for:</strong> {it.bestFor}</li>
             </ul>
             <div className="mt-3">
-              {it.internal ? (
+              {/* External competitor links intentionally omitted — names only */}
+              {it.internal && (
                 <Link
                   to={it.internalHref}
                   className="text-sm text-primary underline hover:no-underline"
                 >
                   See the full PR-TOP vs {it.name} comparison &rarr;
                 </Link>
-              ) : (
-                <a
-                  href={it.href}
-                  rel="nofollow noopener"
-                  className="text-sm text-primary underline hover:no-underline"
-                >
-                  {it.name} website &rarr;
-                </a>
               )}
             </div>
           </section>

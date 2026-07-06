@@ -127,6 +127,7 @@ export default function AlternativesUpheal() {
   return (
     <div className="min-h-screen bg-white">
       <Seo
+        localized={false}
         path="/alternatives/upheal"
         title="Upheal alternatives (2026): Mentalyc, Twofold, Heidi, Supanote, PR-TOP"
         description="Ranked Upheal alternatives for therapists in 2026. Honest comparison of Mentalyc, Twofold, Heidi, Supanote, and PR-TOP for between-session client engagement."
@@ -241,21 +242,14 @@ export default function AlternativesUpheal() {
               <li><strong>Best for:</strong> {it.bestFor}</li>
             </ul>
             <div className="mt-3">
-              {it.internal ? (
+              {/* External competitor links intentionally omitted — names only */}
+              {it.internal && (
                 <Link
                   to="/compare/upheal"
                   className="text-sm text-primary underline hover:no-underline"
                 >
                   See the full PR-TOP vs Upheal comparison &rarr;
                 </Link>
-              ) : (
-                <a
-                  href={it.href}
-                  rel="nofollow noopener"
-                  className="text-sm text-primary underline hover:no-underline"
-                >
-                  {it.name} website &rarr;
-                </a>
               )}
             </div>
           </section>

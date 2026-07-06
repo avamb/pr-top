@@ -64,13 +64,18 @@ export default function Seo({
   ogImageHeight = 630,
   twitterCard = 'summary_large_image',
   canonicalHost = 'https://pr-top.com',
+  // Set localized={false} on pages that exist ONLY in English (e.g. the
+  // /compare/* tree): forces an EN canonical + lang and skips hreflang, so
+  // we never advertise locale URLs that don't exist.
+  localized = true,
 }) {
   const { t, i18n } = useTranslation();
   const location = useLocation();
   const rawPath = typeof path === 'string' ? path : location.pathname;
   const basePath = stripLocalePrefix(rawPath);
 
-  const activeLocale = HREFLANG_LOCALES.includes(i18n.language) ? i18n.language : 'en';
+  const activeLocale =
+    localized && HREFLANG_LOCALES.includes(i18n.language) ? i18n.language : 'en';
   const canonicalPath = localizePath(activeLocale, basePath);
   const canonicalUrl = `${canonicalHost}${canonicalPath}`;
 
@@ -83,9 +88,9 @@ export default function Seo({
 
   const robotsContent = noindex ? 'noindex,nofollow' : 'index,follow';
 
-  // Only emit hreflang alternates on indexable pages. Noindex/private routes
-  // (login, dashboard, ...) intentionally skip them.
-  const alternateLinks = noindex
+  // Only emit hreflang alternates on indexable pages that actually have
+  // locale variants. Noindex/private routes and EN-only pages skip them.
+  const alternateLinks = noindex || !localized
     ? null
     : [
         ...HREFLANG_LOCALES.map((loc) => (
