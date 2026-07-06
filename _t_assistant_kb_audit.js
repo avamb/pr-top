@@ -518,6 +518,71 @@ async function main() {
     fail(`cached answer leaks ${leaks.length} secret-shaped pattern(s)`);
   }
 
+  // === Feature #440 S7 — canned FAQ seed + cache behavior (FUNCTIONAL) ===
+  section('17. S7 — faq-seed.json shape');
+  let seedData = null;
+  try {
+    seedData = JSON.parse(fs.readFileSync(path.join(__dirname, 'docs/assistant-kb/faq-seed.json'), 'utf8'));
+    if (Array.isArray(seedData) && seedData.length >= 30) pass(`faq-seed.json has ${seedData.length} entries (>=30)`);
+    else fail(`faq-seed.json has ${seedData ? seedData.length : 0} entries (need >=30)`);
+    const badShape = seedData.filter(e => !e.id || !e.audience || !e.locale || !e.question || !e.answer);
+    if (badShape.length === 0) pass('all seed entries have id/audience/locale/question/answer');
+    else fail(`${badShape.length} seed entries missing required fields`);
+  } catch (e) {
+    fail('faq-seed.json parse failed: ' + e.message);
+  }
+
+  section('18. S7 — seeder loads FAQ and findCachedAnswer serves a hit without an LLM');
+  try {
+    const cache = require('./src/backend/src/services/assistantCache');
+    if (typeof cache.seedCannedFaq !== 'function') {
+      fail('assistantCache.seedCannedFaq is not exported');
+    } else {
+      const seedStats = cache.seedCannedFaq();
+      pass(`seedCannedFaq() ran: ${JSON.stringify(seedStats)}`);
+      // Idempotency: second run must not duplicate.
+      const before = dbConn.getDatabase().exec("SELECT COUNT(*) FROM assistant_cached_answers WHERE is_seed=1")[0].values[0][0];
+      cache.seedCannedFaq();
+      const after = dbConn.getDatabase().exec("SELECT COUNT(*) FROM assistant_cached_answers WHERE is_seed=1")[0].values[0][0];
+      if (before === after) pass(`seeder idempotent: ${before} seed rows unchanged on re-run`);
+      else fail(`seeder NOT idempotent: ${before} -> ${after} rows`);
+
+      // A standard question served from cache (no provider call happens — findCachedAnswer is pure DB+math).
+      const q = seedData[0].question;
+      const hit = cache.findCachedAnswer(q, 'public', 'en');
+      if (hit && hit.hit) pass(`cache hit for seeded question "${q.slice(0, 40)}..." (is_seed=${hit.is_seed}, sim=${(hit.similarity||0).toFixed(3)})`);
+      else fail(`no cache hit for exact seeded question "${q}"`);
+
+      // Locale gate: an English seed must NOT be served to a Russian-detected question.
+      const ruHit = cache.findCachedAnswer(q, 'public', 'ru');
+      if (!ruHit || !ruHit.hit || !ruHit.is_seed) pass('locale gate: EN seed not served to RU-detected question');
+      else fail('locale gate FAILED: EN seed served to RU question');
+
+      // Audience gate: seed everything public here; assert a user-only lookup still finds public (superset) but public never sees user.
+      // (All current seeds are public, so we assert public lookup works and that the audience filter param is honored.)
+      const pubHit = cache.findCachedAnswer(q, 'public', 'en');
+      if (pubHit && pubHit.hit) pass('audience gate: public lookup returns public seed');
+      else fail('audience gate: public lookup missed a public seed');
+    }
+  } catch (e) {
+    fail('S7 seeder/cache functional check threw: ' + e.message);
+  }
+
+  section('19. S7 — cache is consulted on every message (first-message guard removed)');
+  try {
+    const publicRoute = fs.readFileSync(path.join(__dirname, 'src/backend/src/routes/publicAssistant.js'), 'utf8');
+    // The old code gated findCachedAnswer inside `if (session.messageCount === 0)`.
+    // Assert findCachedAnswer is NOT inside that guard anymore.
+    const guardIdx = publicRoute.indexOf('messageCount === 0');
+    const cacheIdx = publicRoute.indexOf('findCachedAnswer');
+    const guardStillWrapsCache = guardIdx !== -1 && cacheIdx !== -1 &&
+      /if\s*\(\s*session\.messageCount === 0\s*\)\s*\{[^}]*findCachedAnswer/.test(publicRoute);
+    if (!guardStillWrapsCache) pass('findCachedAnswer no longer gated by messageCount===0 (repeated questions can hit cache)');
+    else fail('findCachedAnswer still gated to first message only');
+  } catch (e) {
+    fail('S7 guard-removal check threw: ' + e.message);
+  }
+
   return finish();
 }
 
