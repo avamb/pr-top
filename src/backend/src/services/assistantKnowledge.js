@@ -421,36 +421,26 @@ function getProjectRootDiagnostics() {
 /**
  * File categories to index with glob-like patterns.
  * All operations are READ-ONLY.
+ *
+ * SECURITY (S1 — feature #434): The assistant knowledge base is used to answer
+ * public "Ask about PR-TOP" chat questions. To prevent information disclosure
+ * of internal backend implementation, the RAG index is restricted to
+ * user-facing, non-sensitive material ONLY:
+ *   - docs/ project documentation (Markdown)
+ *   - docs/assistant-kb/ curated assistant knowledge (created in S4)
+ *   - src/frontend/src/i18n UI labels and copy
+ *   - README.md
+ *
+ * Source-code categories (api_route, service, bot, ui_component) MUST NOT be
+ * indexed. .env.example is also excluded from the config bucket.
  */
 const INDEX_SOURCES = [
   {
-    type: 'api_route',
-    description: 'Backend API route definitions',
-    files: ['src/backend/src/index.js'],
-    dirs: ['src/backend/src/routes'],
-    extensions: ['.js'],
-    maxDepth: 1
-  },
-  {
-    type: 'ui_component',
-    description: 'Frontend React components',
-    dirs: ['src/frontend/src/pages', 'src/frontend/src/components'],
-    extensions: ['.jsx', '.js'],
-    maxDepth: 2
-  },
-  {
     type: 'i18n',
-    description: 'Internationalization translation files',
+    description: 'Internationalization translation files (UI labels/copy)',
     dirs: ['src/frontend/src/i18n'],
     extensions: ['.json', '.js'],
     maxDepth: 1
-  },
-  {
-    type: 'service',
-    description: 'Backend service modules',
-    dirs: ['src/backend/src/services'],
-    extensions: ['.js'],
-    maxDepth: 2
   },
   {
     type: 'documentation',
@@ -460,22 +450,22 @@ const INDEX_SOURCES = [
     maxDepth: 1
   },
   {
-    type: 'bot',
-    description: 'Telegram bot handlers',
-    dirs: ['src/bot/src'],
-    extensions: ['.js'],
-    maxDepth: 2
+    type: 'documentation',
+    description: 'Curated assistant knowledge base articles',
+    dirs: ['docs/assistant-kb'],
+    extensions: ['.md'],
+    maxDepth: 3
   },
   {
-    type: 'config',
-    description: 'Configuration files',
-    files: ['docker-compose.yml', 'README.md', '.env.example']
+    type: 'documentation',
+    description: 'Project README',
+    files: ['README.md']
   }
 ];
 
-const EXCLUDED_SOURCE_FILES = new Set([
-  'src/backend/src/services/assistantPrompt.js'
-]);
+// No source-code files are indexed after S1, so the historical exclusion list
+// (which only covered a backend service module) is intentionally empty.
+const EXCLUDED_SOURCE_FILES = new Set();
 
 /**
  * Recursively find files in a directory (READ-ONLY).
