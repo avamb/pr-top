@@ -96,6 +96,30 @@ Implement in order S1→S5. Acceptance checks are local: run against a local rei
 4. `findCachedAnswer(userSeedQuestion, 'public')` returns no hit; same question with `'user'` does.
 5. `node _t_assistant_kb_audit.js` still green; add an assertion that seeded public answers pass `sanitizeOutput` (no secret-shaped strings).
 
+## S8 — Semantic cache matching on AI embeddings (added 2026-07-07)
+**Why:** The answer cache matches questions with `generateEmbedding` = **TF-IDF** (assistantKnowledge.js:283-284), i.e. keyword overlap, at a high 0.92 threshold. So "how much does it cost?" and "what are your prices?" (same intent, few shared words) do NOT match and both hit the LLM. Meanwhile the RAG index already uses real AI embeddings. Aligning the cache to AI embeddings makes matching truly semantic → far higher cache-hit rate → fewer LLM calls, which is the whole point of the cache. Helpers already exist: `assistantKnowledge.generateEmbeddingAsync(text)` → `{embedding, type:'ai'|'tfidf'}`, `embedTextBatch(texts)`, `isAIEmbeddingAvailable()`.
+
+**Critical design constraints (get these wrong and matching silently breaks):**
+- **Dimension mismatch:** AI vectors (text-embedding-3-small, 1536-d) and TF-IDF vectors are different lengths — cosineSimilarity across types is meaningless. Store an `embedding_type` column per cached row and ONLY compare the query against rows of the SAME type.
+- **Async:** `findCachedAnswer` becomes async (AI embed is a network call). Update BOTH call sites — `publicAssistant.js` and `assistant.js` — to `await` it. `storeCachedAnswer` and `seedCannedFaq` also become async (embed at write time).
+- **Separate thresholds:** AI cosine similarity is distributed differently from TF-IDF. 0.92 is right for TF-IDF but too strict for AI (paraphrases land ~0.85–0.92). Add `assistant_cache_threshold_ai` (default ~0.86) alongside the existing `assistant_cache_threshold` (TF-IDF, 0.92); pick by the active embedding type.
+- **Graceful fallback:** when `isAIEmbeddingAvailable()` is false (provider down / no key), embed and match with TF-IDF exactly as today — never hard-fail a chat request on an embedding outage.
+
+**Description / Steps:**
+1. **Schema:** add `embedding_type TEXT DEFAULT 'tfidf'` to `assistant_cached_answers` (idempotent ALTER, mirror the S2 `audiences` migration). Existing rows stay 'tfidf'.
+2. **Write path:** `storeCachedAnswer` and `seedCannedFaq` embed via `generateEmbeddingAsync`, persist both the vector and its `embedding_type`.
+3. **Read path:** `findCachedAnswer(question, audience, locale)` → embed the query with `generateEmbeddingAsync`; compare ONLY against rows whose `embedding_type` equals the query's type; apply the type-matched threshold. Keep the seed-priority margin (S-earlier) and the locale gate.
+4. **Re-embed seeds when the type flips:** the idempotent seeder must re-embed a seed when the stored `embedding_type` differs from the currently available one (e.g. seeded under TF-IDF while the AI key was missing, now AI is back). Tie this into `seedCannedFaq` and expose it on the existing reindex path so a reindex upgrades seed embeddings.
+5. **Call sites:** add `await` in publicAssistant.js and assistant.js; confirm the cached-return branch still streams/JSON-responds correctly.
+6. **Threshold setting:** register `assistant_cache_threshold_ai` in admin settings validation (like `assistant_cache_threshold`).
+
+**Acceptance (local — must not require a live AI key):**
+1. Migration adds `embedding_type`; existing rows readable as 'tfidf'.
+2. With AI embeddings mocked/stubbed to a deterministic vector: two different-wording same-intent questions ("how much does it cost" vs "what are your prices") both match the same seeded pricing answer at the AI threshold, and a cross-type comparison (AI query vs a tfidf row) is skipped, not falsely matched.
+3. With `isAIEmbeddingAvailable()` false: behavior is byte-identical to today (TF-IDF, 0.92) — regression-safe.
+4. `findCachedAnswer`/`storeCachedAnswer`/`seedCannedFaq` are async and awaited at all call sites (grep: no un-awaited call remains).
+5. `node _t_assistant_kb_audit.js` green; extend section 18 to assert the type-matched comparison and the fallback path.
+
 ## Not for AutoForge (human)
 - Review the auto-generated/seeded public-audience docs for marketing/security-claim accuracy before they go live (same gate as the comparison pages).
 - Decide the pre-release trigger for `npm run docs:assistant` (CI step vs manual vs agent) once S4 lands.
