@@ -31,13 +31,17 @@ const {
 
 // Default similarity thresholds for cache hits.
 // - TF-IDF (0.92): sparse hashed vectors, requires strong token overlap.
-// - AI     (0.86): dense 1536-d embeddings distribute differently — same-intent
-//                  paraphrases typically land ~0.86–0.95. 0.92 is too strict.
+// - AI (0.62): calibrated for text-embedding-3-small on prod. A live run showed
+//   0.86 caught only paraphrases that kept shared nouns ("What does PR-TOP
+//   cost?") and missed vocab-divergent ones ("how much does it cost?", ~0.6-0.7);
+//   unrelated questions sit ~0.25-0.45, so 0.62 recovers loose paraphrases with
+//   margin against false matches. Tune via assistant_cache_threshold_ai and
+//   verify precision (distinct questions must not collide) after changing.
 // The active threshold is picked at query time from the type of the QUERY's
 // embedding (see findCachedAnswer). Rows of a different type are skipped
 // entirely because their vector geometry is not comparable.
 const DEFAULT_THRESHOLD = 0.92;
-const DEFAULT_THRESHOLD_AI = 0.86;
+const DEFAULT_THRESHOLD_AI = 0.62;
 
 // Path to the pre-seeded canned FAQ (docs/assistant-kb/faq-seed.json).
 // Must resolve the project root the SAME way assistantKnowledge does: in the
