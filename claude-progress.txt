@@ -14801,3 +14801,58 @@ VERIFICATION:
 
 Stats after session 197: #439 status: passing.
 
+================================================================
+Session 198 (2026-07-07) - Feature #441 PASSING (S8 semantic AI cache)
+================================================================
+Assigned: #441 S8 -- Semantic cache matching on AI embeddings
+
+IMPLEMENTATION:
+1. src/backend/src/db/connection.js: added embedding_type TEXT DEFAULT
+   'tfidf' column via idempotent ALTER; new index idx_..._emb_type.
+2. src/backend/src/services/assistantCache.js:
+   - findCachedAnswer, storeCachedAnswer, seedCannedFaq -> async.
+   - Uses generateEmbeddingAsync (AI when key present, TF-IDF fallback).
+   - Per-row type gate: skips rows whose embedding_type differs from the
+     current query type. AI 1536-d vs TF-IDF hashed vectors are not
+     comparable -- cosine between them is meaningless (dimension +
+     geometry mismatch).
+   - New DEFAULT_THRESHOLD_AI=0.86; getThreshold(type) picks by embedding
+     type from platform_settings (assistant_cache_threshold_ai /
+     assistant_cache_threshold).
+   - seedCannedFaq: type-flip re-embed. If a seed row was stored under
+     TF-IDF but AI is now available (or vice versa), the next seed run
+     re-embeds only those rows. Stats include a new `reembedded`
+     counter. Unchanged-type rows skip the embed API call.
+3. Call sites awaited:
+   - publicAssistant.js (findCachedAnswer + 2x storeCachedAnswer)
+   - assistant.js       (findCachedAnswer + 2x storeCachedAnswer)
+   - admin.js           (seed-faq POST route -> async;
+                         comments/correction path -> async + fixed the
+                         previously-dropped hasRagContext arg;
+                         reindex route also calls seedCannedFaq() to
+                         opportunistically upgrade seed embeddings on
+                         the natural refresh path.)
+   - index.js           (startup seedCannedFaq await).
+4. admin.js platform_settings validator learned `float` type; both cache
+   thresholds registered (min 0.5, max 1.0).
+5. _t_assistant_kb_audit.js: added sections 20-26 covering
+   * 20 schema migration adds embedding_type;
+   * 21 all three cache entrypoints are AsyncFunction;
+   * 22 every call site awaits (comment-stripping regex handles //,
+     /* */, and CRLF line endings on Windows checkouts);
+   * 23 type-matched comparison (AI query never matches a tfidf row);
+   * 24 TF-IDF fallback path stays strict at 0.92 when AI unavailable
+     and DEFAULT_THRESHOLD_AI < DEFAULT_THRESHOLD;
+   * 25 assistant_cache_threshold_ai registered as float in admin
+     allowedKeys;
+   * 26 seedCannedFaq re-embeds on type flip and increments the
+     reembedded counter.
+
+VERIFICATION:
+- node -c on all 6 modified files: OK.
+- node _t_assistant_kb_audit.js -> 79 passed, 0 failed.
+  * All S1/S2/S3/S4/S5/S6/S7 sections still green.
+  * S8 sections 20-26 all green.
+
+Stats after session 198: #441 status: passing.
+

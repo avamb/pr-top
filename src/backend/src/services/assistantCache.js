@@ -21,13 +21,23 @@ const { sanitizeOutput } = require('./assistantSanitizer');
 // Import embedding utilities from assistantKnowledge
 const {
   generateEmbedding,
+  generateEmbeddingAsync,
   serializeEmbedding,
   deserializeEmbedding,
-  cosineSimilarity
+  cosineSimilarity,
+  getEmbeddingType,
+  isAIEmbeddingAvailable
 } = require('./assistantKnowledge');
 
-// Default similarity threshold for cache hits
+// Default similarity thresholds for cache hits.
+// - TF-IDF (0.92): sparse hashed vectors, requires strong token overlap.
+// - AI     (0.86): dense 1536-d embeddings distribute differently — same-intent
+//                  paraphrases typically land ~0.86–0.95. 0.92 is too strict.
+// The active threshold is picked at query time from the type of the QUERY's
+// embedding (see findCachedAnswer). Rows of a different type are skipped
+// entirely because their vector geometry is not comparable.
 const DEFAULT_THRESHOLD = 0.92;
+const DEFAULT_THRESHOLD_AI = 0.86;
 
 // Path to the pre-seeded canned FAQ (docs/assistant-kb/faq-seed.json).
 // Must resolve the project root the SAME way assistantKnowledge does: in the
@@ -42,12 +52,21 @@ const FAQ_SEED_PATH = path.join(_PROJECT_ROOT, 'docs', 'assistant-kb', 'faq-seed
 
 /**
  * Get the configured similarity threshold from platform settings.
+ *
+ * @param {'tfidf'|'ai'} [type='tfidf'] - Which threshold to fetch. AI cosine
+ *   sim distributes differently from TF-IDF hashed-token overlap, so we keep
+ *   two independent settings and pick by the active embedding type of the
+ *   query. Falling back to the type-appropriate default protects the cache
+ *   from a stale platform_settings row of the wrong type.
  * @returns {number} Threshold between 0 and 1
  */
-function getThreshold() {
+function getThreshold(type) {
+  const t = (type === 'ai') ? 'ai' : 'tfidf';
+  const key = t === 'ai' ? 'assistant_cache_threshold_ai' : 'assistant_cache_threshold';
+  const fallback = t === 'ai' ? DEFAULT_THRESHOLD_AI : DEFAULT_THRESHOLD;
   try {
     const db = getDatabase();
-    const result = db.exec("SELECT value FROM platform_settings WHERE key = 'assistant_cache_threshold'");
+    const result = db.exec("SELECT value FROM platform_settings WHERE key = ?", [key]);
     if (result.length > 0 && result[0].values.length > 0) {
       const val = parseFloat(result[0].values[0][0]);
       if (val > 0 && val <= 1) return val;
@@ -55,7 +74,7 @@ function getThreshold() {
   } catch (e) {
     // Use default
   }
-  return DEFAULT_THRESHOLD;
+  return fallback;
 }
 
 /**
@@ -75,14 +94,22 @@ function getThreshold() {
  *                            seed entries with a different locale are skipped.
  * @returns {{ hit: boolean, answer?: string, cached_id?: number, similarity?: number, is_seed?: boolean }}
  */
-function findCachedAnswer(questionText, audience, locale) {
+async function findCachedAnswer(questionText, audience, locale) {
   try {
     const aud = audience === 'user' ? 'user' : 'public';
-    const questionEmbedding = generateEmbedding(questionText);
-    if (!questionEmbedding) return { hit: false };
+
+    // Feature #441 (S8): embed the query with AI when available, TF-IDF
+    // otherwise. The RETURNED type drives BOTH the threshold pick AND the
+    // per-row skip: rows of a different embedding_type are silently skipped
+    // because their vectors live in a different space and cosine similarity
+    // between them is meaningless (dimension mismatch or geometric mismatch).
+    const emb = await generateEmbeddingAsync(questionText);
+    if (!emb || !emb.embedding) return { hit: false };
+    const questionEmbedding = emb.embedding;
+    const queryType = emb.type === 'ai' ? 'ai' : 'tfidf';
 
     const db = getDatabase();
-    const threshold = getThreshold();
+    const threshold = getThreshold(queryType);
 
     // 'public' request → only public entries; 'user' request → both.
     const audienceFilter = aud === 'user'
@@ -91,8 +118,10 @@ function findCachedAnswer(questionText, audience, locale) {
 
     // has_rag_context=1 ensures we never serve a cache entry whose original
     // answer had no grounding (poisoning guard). Seeds always store 1.
+    // embedding_type filter is applied post-fetch to be robust to NULL rows
+    // written before the S8 migration (they default to 'tfidf').
     const allCached = db.exec(
-      `SELECT id, question_embedding, answer_text, is_seed, locale
+      `SELECT id, question_embedding, answer_text, is_seed, locale, embedding_type
          FROM assistant_cached_answers
         WHERE has_rag_context = 1 AND ${audienceFilter}`
     );
@@ -104,11 +133,20 @@ function findCachedAnswer(questionText, audience, locale) {
     for (const row of allCached[0].values) {
       const isSeed = !!row[3];
       const entryLocale = row[4];
+      const rowType = (row[5] === 'ai') ? 'ai' : 'tfidf';
+      // S8 type gate: never compare AI vs TF-IDF (different dimensions and
+      // geometries — cosine is undefined between them). Skip cross-type rows.
+      if (rowType !== queryType) continue;
       // Seed locale gate: skip when caller provided a locale and it does not
       // match. Non-seed entries fall through (populated from real traffic).
       if (isSeed && locale && entryLocale && entryLocale !== locale) continue;
 
       const cachedEmbedding = deserializeEmbedding(row[1]);
+      if (!cachedEmbedding) continue;
+      // Defense-in-depth: cosineSimilarity returns 0 on length mismatch, but
+      // skip explicitly so we never treat a mismatched vector as a near-zero
+      // false negative that displaces a real hit.
+      if (cachedEmbedding.length !== questionEmbedding.length) continue;
       const similarity = cosineSimilarity(questionEmbedding, cachedEmbedding);
 
       // Curated seeds outrank real-traffic answers: prefer a seed whenever it
@@ -140,7 +178,7 @@ function findCachedAnswer(questionText, audience, locale) {
       );
       saveDatabaseAfterWrite();
 
-      logger.info(`[AssistantCache] Cache hit (similarity: ${bestSimilarity.toFixed(3)}, id: ${bestMatch.id}, seed=${bestMatch.is_seed}, audience=${aud})`);
+      logger.info(`[AssistantCache] Cache hit (similarity: ${bestSimilarity.toFixed(3)}, id: ${bestMatch.id}, seed=${bestMatch.is_seed}, audience=${aud}, emb=${queryType})`);
 
       return {
         hit: true,
@@ -168,7 +206,7 @@ function findCachedAnswer(questionText, audience, locale) {
  * @param {{audience?: 'public'|'user', locale?: string}} [opts]
  * @returns {number|null} The ID of the cached entry, or null on error/skipped
  */
-function storeCachedAnswer(questionText, answerText, hasRagContext, opts) {
+async function storeCachedAnswer(questionText, answerText, hasRagContext, opts) {
   // Prevent cache poisoning: only cache answers that had RAG context
   if (!hasRagContext) {
     logger.info('[AssistantCache] Skipping cache storage — no RAG context for this answer');
@@ -179,15 +217,20 @@ function storeCachedAnswer(questionText, answerText, hasRagContext, opts) {
   const locale = (opts && opts.locale) || 'en';
 
   try {
-    const questionEmbedding = generateEmbedding(questionText);
-    if (!questionEmbedding) return null;
+    // S8: embed with AI when available so future queries hit at the AI
+    // threshold; TF-IDF fallback keeps behavior byte-identical to pre-S8 when
+    // the API key is missing.
+    const emb = await generateEmbeddingAsync(questionText);
+    if (!emb || !emb.embedding) return null;
+    const questionEmbedding = emb.embedding;
+    const embType = emb.type === 'ai' ? 'ai' : 'tfidf';
 
-    const serialized = serializeEmbedding(questionEmbedding);
+    const serialized = serializeEmbedding(questionEmbedding, embType);
     const db = getDatabase();
 
     db.run(
-      "INSERT INTO assistant_cached_answers (question_embedding, question_text, answer_text, usage_count, has_rag_context, audience, locale, is_seed, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?, ?, 0, datetime('now'), datetime('now'))",
-      [serialized, questionText, answerText, hasRagContext ? 1 : 0, audience, locale]
+      "INSERT INTO assistant_cached_answers (question_embedding, question_text, answer_text, usage_count, has_rag_context, audience, locale, is_seed, embedding_type, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?, ?, 0, ?, datetime('now'), datetime('now'))",
+      [serialized, questionText, answerText, hasRagContext ? 1 : 0, audience, locale, embType]
     );
 
     const idResult = db.exec('SELECT last_insert_rowid()');
@@ -195,7 +238,7 @@ function storeCachedAnswer(questionText, answerText, hasRagContext, opts) {
 
     saveDatabaseAfterWrite();
 
-    logger.info(`[AssistantCache] Stored new cached answer (id: ${id}, audience: ${audience})`);
+    logger.info(`[AssistantCache] Stored new cached answer (id: ${id}, audience: ${audience}, emb: ${embType})`);
     return id;
   } catch (e) {
     logger.warn('[AssistantCache] Error storing cache: ' + e.message);
@@ -340,9 +383,12 @@ function _seedHash(entry) {
  * @param {string} [seedPath] - Override for the seed JSON path (used by tests).
  * @returns {{ loaded: number, inserted: number, updated: number, skipped: number, path: string }}
  */
-function seedCannedFaq(seedPath) {
+async function seedCannedFaq(seedPath) {
   const p = seedPath || FAQ_SEED_PATH;
-  const stats = { loaded: 0, inserted: 0, updated: 0, skipped: 0, path: p };
+  // S8: reembedded counts re-embeds triggered by a type flip (e.g. seeded
+  // under TF-IDF before an AI key was configured, then AI became available).
+  const stats = { loaded: 0, inserted: 0, updated: 0, skipped: 0, reembedded: 0, path: p };
+  const activeType = isAIEmbeddingAvailable() ? 'ai' : 'tfidf';
 
   let raw;
   try {
@@ -381,55 +427,88 @@ function seedCannedFaq(seedPath) {
     // (Audit assertion 16 stays green.)
     const safeAnswer = sanitizeOutput(String(entry.answer));
 
-    let embedding = null;
-    try {
-      embedding = generateEmbedding(entry.question);
-    } catch (e) {
-      logger.warn(`[AssistantCache] Failed to embed seed "${entry.id}": ${e.message}`);
-    }
-    if (!embedding) {
-      stats.skipped++;
-      continue;
-    }
-    const serialized = serializeEmbedding(embedding);
-
-    // Idempotent upsert-by-hash.
+    // Idempotent upsert-by-hash: check first so we can skip the embed call
+    // when a matching row already exists at the currently-active type. That
+    // makes repeated seedCannedFaq() calls cheap (no API round-trips per seed).
     const existing = db.exec(
-      'SELECT id FROM assistant_cached_answers WHERE question_hash = ?',
+      'SELECT id, embedding_type FROM assistant_cached_answers WHERE question_hash = ?',
       [hash]
     );
+    const hasExisting = existing.length > 0 && existing[0].values && existing[0].values.length > 0;
+    const existingId = hasExisting ? existing[0].values[0][0] : null;
+    const existingType = hasExisting ? (existing[0].values[0][1] === 'ai' ? 'ai' : 'tfidf') : null;
 
-    if (existing.length > 0 && existing[0].values && existing[0].values.length > 0) {
-      const existingId = existing[0].values[0][0];
-      db.run(
-        `UPDATE assistant_cached_answers
-            SET question_embedding = ?,
-                question_text      = ?,
-                answer_text        = ?,
-                has_rag_context    = 1,
-                audience           = ?,
-                locale             = ?,
-                is_seed            = 1,
-                updated_at         = datetime('now')
-          WHERE id = ?`,
-        [serialized, entry.question, safeAnswer, audience, locale, existingId]
-      );
+    // Re-embed only when there is no row yet OR when the stored type does
+    // not match the active type (S8 "type flip" upgrade path). Otherwise
+    // preserve the existing embedding to avoid an unnecessary API call.
+    const needsReembed = !hasExisting || existingType !== activeType;
+
+    let serialized = null;
+    let embType = existingType;
+
+    if (needsReembed) {
+      let embedResult = null;
+      try {
+        embedResult = await generateEmbeddingAsync(entry.question);
+      } catch (e) {
+        logger.warn(`[AssistantCache] Failed to embed seed "${entry.id}": ${e.message}`);
+      }
+      if (!embedResult || !embedResult.embedding) {
+        stats.skipped++;
+        continue;
+      }
+      embType = embedResult.type === 'ai' ? 'ai' : 'tfidf';
+      serialized = serializeEmbedding(embedResult.embedding, embType);
+      if (hasExisting) stats.reembedded++;
+    }
+
+    if (hasExisting) {
+      if (needsReembed) {
+        db.run(
+          `UPDATE assistant_cached_answers
+              SET question_embedding = ?,
+                  question_text      = ?,
+                  answer_text        = ?,
+                  has_rag_context    = 1,
+                  audience           = ?,
+                  locale             = ?,
+                  is_seed            = 1,
+                  embedding_type     = ?,
+                  updated_at         = datetime('now')
+            WHERE id = ?`,
+          [serialized, entry.question, safeAnswer, audience, locale, embType, existingId]
+        );
+      } else {
+        // Preserve existing embedding; just refresh text fields.
+        db.run(
+          `UPDATE assistant_cached_answers
+              SET question_text = ?,
+                  answer_text   = ?,
+                  has_rag_context = 1,
+                  audience      = ?,
+                  locale        = ?,
+                  is_seed       = 1,
+                  updated_at    = datetime('now')
+            WHERE id = ?`,
+          [entry.question, safeAnswer, audience, locale, existingId]
+        );
+      }
       stats.updated++;
     } else {
       db.run(
         `INSERT INTO assistant_cached_answers
            (question_embedding, question_text, answer_text, usage_count,
             has_rag_context, audience, locale, is_seed, question_hash,
-            created_at, updated_at)
-         VALUES (?, ?, ?, 0, 1, ?, ?, 1, ?, datetime('now'), datetime('now'))`,
-        [serialized, entry.question, safeAnswer, audience, locale, hash]
+            embedding_type, created_at, updated_at)
+         VALUES (?, ?, ?, 0, 1, ?, ?, 1, ?, ?, datetime('now'), datetime('now'))`,
+        [serialized, entry.question, safeAnswer, audience, locale, hash, embType]
       );
       stats.inserted++;
     }
   }
 
   saveDatabaseAfterWrite();
-  logger.info(`[AssistantCache] Seeded canned FAQ: loaded=${stats.loaded} inserted=${stats.inserted} updated=${stats.updated} skipped=${stats.skipped}`);
+  logger.info(`[AssistantCache] Seeded canned FAQ: loaded=${stats.loaded} inserted=${stats.inserted} updated=${stats.updated} skipped=${stats.skipped} reembedded=${stats.reembedded} activeType=${activeType}`);
   return stats;
 }
 
@@ -443,5 +522,6 @@ module.exports = {
   getThreshold,
   seedCannedFaq,
   FAQ_SEED_PATH,
-  DEFAULT_THRESHOLD
+  DEFAULT_THRESHOLD,
+  DEFAULT_THRESHOLD_AI
 };

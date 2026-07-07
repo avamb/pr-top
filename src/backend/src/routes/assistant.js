@@ -296,7 +296,7 @@ router.post('/chat', async (req, res) => {
     // so seeded canned answers meant for the landing bot are also reused
     // here when a therapist asks the same standard question.
     {
-      const cacheResult = assistantCache.findCachedAnswer(sanitized, 'user', detectedLanguage);
+      const cacheResult = await assistantCache.findCachedAnswer(sanitized, 'user', detectedLanguage);
       if (cacheResult.hit) {
         assistantReply = cacheResult.answer;
         fromCache = true;
@@ -483,7 +483,7 @@ router.post('/chat', async (req, res) => {
         res.write(`data: ${JSON.stringify({ type: 'chunk', text: assistantReply })}\n\n`);
 
         // Store Q&A in cache (only if RAG context was present to prevent cache poisoning)
-        assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext, { audience: 'user', locale: detectedLanguage });
+        await assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext, { audience: 'user', locale: detectedLanguage });
 
         // Save to database
         messages.push({ role: 'assistant', content: assistantReply, timestamp: new Date().toISOString() });
@@ -538,7 +538,7 @@ router.post('/chat', async (req, res) => {
       assistantReply = sanitizeOutput(result.text);
 
       // Store Q&A in cache (only if RAG context was present to prevent cache poisoning)
-      assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext, { audience: 'user', locale: detectedLanguage });
+      await assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext, { audience: 'user', locale: detectedLanguage });
     } catch (aiError) {
       logger.error('[Assistant] AI provider error: ' + aiError.message);
       const fallbacks = {

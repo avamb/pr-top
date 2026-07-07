@@ -309,7 +309,7 @@ router.post('/public-chat', async (req, res) => {
     // for the signed-in bot) can never leak. Locale is passed so an English
     // seed is not served for a Russian question — fall through to the LLM.
     {
-      const cacheResult = assistantCache.findCachedAnswer(sanitized, 'public', detectedLanguage);
+      const cacheResult = await assistantCache.findCachedAnswer(sanitized, 'public', detectedLanguage);
       if (cacheResult.hit) {
         assistantReply = cacheResult.answer;
         fromCache = true;
@@ -439,7 +439,7 @@ router.post('/public-chat', async (req, res) => {
         // storeCachedAnswer's poisoning guard skips the write and the cache
         // never populates. Sanitized reply is stored so a later cache hit
         // cannot leak stale credentials.
-        assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext, { audience: 'public', locale: detectedLanguage });
+        await assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext, { audience: 'public', locale: detectedLanguage });
 
         const convId = savePublicChatExchange(db, session.id, sanitized, assistantReply, false, detectedLanguage, conversation_id || null);
         const remaining = effectiveLimit - session.messageCount - 1;
@@ -478,7 +478,7 @@ router.post('/public-chat', async (req, res) => {
       assistantReply = sanitizeOutput(result.text);
       // Feature #438 (S5): pass hasRagContext as the 3rd arg (previously
       // dropped, which silently disabled cache population entirely).
-      assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext, { audience: 'public', locale: detectedLanguage });
+      await assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext, { audience: 'public', locale: detectedLanguage });
     } catch (aiError) {
       logger.error('[PublicAssistant] AI provider error: ' + aiError.message);
       const fallbacks = {

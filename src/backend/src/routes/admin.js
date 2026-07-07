@@ -466,7 +466,13 @@ router.put('/settings', (req, res) => {
       pro_price_monthly: { min: 100, max: 100000, type: 'integer' },
       premium_price_monthly: { min: 100, max: 100000, type: 'integer' },
       assistant_prompt_viewer_anonymous: { type: 'text', maxLength: 10000 },
-      assistant_prompt_viewer_registered: { type: 'text', maxLength: 10000 }
+      assistant_prompt_viewer_registered: { type: 'text', maxLength: 10000 },
+      // Feature #441 (S8): parallel thresholds for TF-IDF vs AI embeddings.
+      // Cosine similarity distributes differently across the two vector
+      // spaces — a single threshold cannot serve both. findCachedAnswer picks
+      // by the type of the current query's embedding.
+      assistant_cache_threshold: { min: 0.5, max: 1.0, type: 'float' },
+      assistant_cache_threshold_ai: { min: 0.5, max: 1.0, type: 'float' }
     };
 
     const updated = [];
@@ -494,6 +500,24 @@ router.put('/settings', (req, res) => {
           [key, strVal, req.user.id, strVal, req.user.id]
         );
         updated.push({ key, value: strVal });
+      } else if (rule.type === 'float') {
+        // Float validation (used by S8 cache thresholds).
+        const numVal = parseFloat(value);
+        if (isNaN(numVal)) {
+          errors.push(`${key} must be a number`);
+          continue;
+        }
+        if (numVal < rule.min || numVal > rule.max) {
+          errors.push(`${key} must be between ${rule.min} and ${rule.max}`);
+          continue;
+        }
+        db.run(
+          `INSERT INTO platform_settings (key, value, updated_by, updated_at)
+           VALUES (?, ?, ?, datetime('now'))
+           ON CONFLICT(key) DO UPDATE SET value = ?, updated_by = ?, updated_at = datetime('now')`,
+          [key, String(numVal), req.user.id, String(numVal), req.user.id]
+        );
+        updated.push({ key, value: numVal });
       } else {
         // Integer validation (default)
         const numVal = parseInt(value, 10);
@@ -1346,19 +1370,31 @@ router.post('/assistant/reindex', async (req, res) => {
   try {
     const stats = await assistantKnowledge.reindex();
 
+    // Feature #441 (S8): a re-index is the natural moment to upgrade seed
+    // embeddings when the active embedding type has flipped (e.g. AI key was
+    // added after seeds were first stored under TF-IDF). seedCannedFaq()
+    // detects the type mismatch per-row and re-embeds only what needs it.
+    let seedRefresh = null;
+    try {
+      seedRefresh = await assistantCache.seedCannedFaq();
+    } catch (seedErr) {
+      logger.warn('[Admin] Post-reindex seed refresh failed: ' + seedErr.message);
+    }
+
     // Audit log
     const db = getDatabase();
     db.run(
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'reindex_knowledge_base', 'assistant_knowledge', NULL, ?, datetime('now'))",
-      [req.user.id, JSON.stringify(stats)]
+      [req.user.id, JSON.stringify({ ...stats, seedRefresh })]
     );
     saveDatabaseAfterWrite();
 
-    logger.info(`Superadmin ${req.user.id} triggered knowledge base re-index: ${stats.indexed} files, ${stats.chunks} chunks`);
+    logger.info(`Superadmin ${req.user.id} triggered knowledge base re-index: ${stats.indexed} files, ${stats.chunks} chunks (seed reembedded=${seedRefresh ? seedRefresh.reembedded : 'n/a'})`);
 
     res.json({
       message: 'Knowledge base re-indexed successfully',
-      ...stats
+      ...stats,
+      seed_refresh: seedRefresh
     });
   } catch (error) {
     logger.error('Admin reindex knowledge base error: ' + error.message);
@@ -1450,9 +1486,9 @@ router.delete('/assistant/cached-answers/:id', (req, res) => {
 // seed (docs/assistant-kb/faq-seed.json) into assistant_cached_answers.
 // Feature #440 (S7): lets the owner refresh seeded answers without a full
 // redeploy after editing the seed file. Startup runs the same seeder too.
-router.post('/assistant/seed-faq', (req, res) => {
+router.post('/assistant/seed-faq', async (req, res) => {
   try {
-    const stats = assistantCache.seedCannedFaq();
+    const stats = await assistantCache.seedCannedFaq();
     // Audit log
     const db = getDatabase();
     db.run(
@@ -1833,7 +1869,7 @@ router.get('/assistant/export', (req, res) => {
 // ==========================================
 
 // POST /api/admin/assistant/messages/:messageId/comments - Create a comment on an assistant message
-router.post('/assistant/messages/:messageId/comments', (req, res) => {
+router.post('/assistant/messages/:messageId/comments', async (req, res) => {
   try {
     const db = getDatabase();
     const messageId = parseInt(req.params.messageId);
@@ -1876,8 +1912,11 @@ router.post('/assistant/messages/:messageId/comments', (req, res) => {
           );
           if (userMsg.length && userMsg[0].values.length) {
             const questionText = userMsg[0].values[0][0];
-            // Store or update cached answer with the correction
-            assistantCache.storeCachedAnswer(questionText, correction_text);
+            // Store or update cached answer with the correction.
+            // Admin corrections are curated, so we pass hasRagContext=true to
+            // bypass the poisoning guard. S8: awaited because embedding is
+            // now an async round-trip when AI embeddings are available.
+            await assistantCache.storeCachedAnswer(questionText, correction_text, true, { audience: 'user', locale: 'en' });
             logger.info(`[AdminComments] Stored correction as cached answer for message #${messageId}`);
           }
         }

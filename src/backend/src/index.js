@@ -453,7 +453,7 @@ async function start() {
     // are served from the cache without ever calling the LLM. Idempotent —
     // upsert-by-hash means restarts do not duplicate rows.
     try {
-      const seedStats = assistantCache.seedCannedFaq();
+      const seedStats = await assistantCache.seedCannedFaq();
       logger.info(`Assistant FAQ seed loaded on startup: loaded=${seedStats.loaded} inserted=${seedStats.inserted} updated=${seedStats.updated} skipped=${seedStats.skipped}`);
     } catch (seedError) {
       logger.warn('Assistant FAQ seed failed on startup: ' + seedError.message);

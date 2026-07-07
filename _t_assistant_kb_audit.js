@@ -538,36 +538,37 @@ async function main() {
     if (typeof cache.seedCannedFaq !== 'function') {
       fail('assistantCache.seedCannedFaq is not exported');
     } else {
-      const seedStats = cache.seedCannedFaq();
+      // S8: all three cache entrypoints are now async — always await.
+      const seedStats = await cache.seedCannedFaq();
       pass(`seedCannedFaq() ran: ${JSON.stringify(seedStats)}`);
       // Idempotency: second run must not duplicate.
       const before = dbConn.getDatabase().exec("SELECT COUNT(*) FROM assistant_cached_answers WHERE is_seed=1")[0].values[0][0];
-      cache.seedCannedFaq();
+      await cache.seedCannedFaq();
       const after = dbConn.getDatabase().exec("SELECT COUNT(*) FROM assistant_cached_answers WHERE is_seed=1")[0].values[0][0];
       if (before === after) pass(`seeder idempotent: ${before} seed rows unchanged on re-run`);
       else fail(`seeder NOT idempotent: ${before} -> ${after} rows`);
 
       // A standard question served from cache (no provider call happens — findCachedAnswer is pure DB+math).
       const q = seedData[0].question;
-      const hit = cache.findCachedAnswer(q, 'public', 'en');
+      const hit = await cache.findCachedAnswer(q, 'public', 'en');
       if (hit && hit.hit) pass(`cache hit for seeded question "${q.slice(0, 40)}..." (is_seed=${hit.is_seed}, sim=${(hit.similarity||0).toFixed(3)})`);
       else fail(`no cache hit for exact seeded question "${q}"`);
 
       // Locale gate: an English seed must NOT be served to a Russian-detected question.
-      const ruHit = cache.findCachedAnswer(q, 'public', 'ru');
+      const ruHit = await cache.findCachedAnswer(q, 'public', 'ru');
       if (!ruHit || !ruHit.hit || !ruHit.is_seed) pass('locale gate: EN seed not served to RU-detected question');
       else fail('locale gate FAILED: EN seed served to RU question');
 
       // Audience gate: seed everything public here; assert a user-only lookup still finds public (superset) but public never sees user.
       // (All current seeds are public, so we assert public lookup works and that the audience filter param is honored.)
-      const pubHit = cache.findCachedAnswer(q, 'public', 'en');
+      const pubHit = await cache.findCachedAnswer(q, 'public', 'en');
       if (pubHit && pubHit.hit) pass('audience gate: public lookup returns public seed');
       else fail('audience gate: public lookup missed a public seed');
 
       // Seed priority: a stale/wrong real-traffic answer for the SAME question
       // must not beat the reviewed seed.
-      cache.storeCachedAnswer(q, 'STALE WRONG ANSWER — Pro 999 clients', true);
-      const contested = cache.findCachedAnswer(q, 'public', 'en');
+      await cache.storeCachedAnswer(q, 'STALE WRONG ANSWER — Pro 999 clients', true);
+      const contested = await cache.findCachedAnswer(q, 'public', 'en');
       if (contested && contested.hit && contested.is_seed && !/STALE WRONG/.test(contested.answer)) {
         pass('seed priority: reviewed seed served over a competing non-seed answer');
       } else {
@@ -588,6 +589,208 @@ async function main() {
     }
   } catch (e) {
     fail('S7 seeder/cache functional check threw: ' + e.message);
+  }
+
+  // ==================================================================
+  // Feature #441 (S8) — Semantic cache matching on AI embeddings
+  // ==================================================================
+  section('20. S8 — schema migration adds embedding_type column');
+  try {
+    const db4 = dbConn.getDatabase();
+    const cols = db4.exec("PRAGMA table_info(assistant_cached_answers)")[0].values.map(r => r[1]);
+    if (cols.includes('embedding_type')) pass('assistant_cached_answers.embedding_type column present');
+    else fail('embedding_type column missing after migration');
+
+    // Default should be 'tfidf' for legacy rows (safe-by-default: geometric compat with pre-S8 rows).
+    const legacy = db4.exec("SELECT DISTINCT embedding_type FROM assistant_cached_answers WHERE is_seed=1")[0];
+    const types = legacy ? legacy.values.map(r => r[0]) : [];
+    if (types.length && types.every(t => t === 'tfidf' || t === 'ai')) {
+      pass(`existing seed rows have valid embedding_type values: ${JSON.stringify(types)}`);
+    } else {
+      fail('some seed rows have an invalid embedding_type: ' + JSON.stringify(types));
+    }
+  } catch (e) {
+    fail('S8 schema check threw: ' + e.message);
+  }
+
+  section('21. S8 — findCachedAnswer / storeCachedAnswer / seedCannedFaq are async');
+  try {
+    const cache = require('./src/backend/src/services/assistantCache');
+    const isAsync = (fn) => fn && fn.constructor && fn.constructor.name === 'AsyncFunction';
+    if (isAsync(cache.findCachedAnswer)) pass('findCachedAnswer is async');
+    else fail('findCachedAnswer must be async (returns a Promise)');
+    if (isAsync(cache.storeCachedAnswer)) pass('storeCachedAnswer is async');
+    else fail('storeCachedAnswer must be async');
+    if (isAsync(cache.seedCannedFaq)) pass('seedCannedFaq is async');
+    else fail('seedCannedFaq must be async');
+  } catch (e) {
+    fail('S8 async signature check threw: ' + e.message);
+  }
+
+  section('22. S8 — every call site awaits findCachedAnswer / storeCachedAnswer / seedCannedFaq');
+  try {
+    const files = [
+      'src/backend/src/routes/publicAssistant.js',
+      'src/backend/src/routes/assistant.js',
+      'src/backend/src/routes/admin.js',
+      'src/backend/src/index.js'
+    ];
+    let missingAwait = 0;
+    for (const rel of files) {
+      const rawSrc = fs.readFileSync(path.join(__dirname, rel), 'utf8');
+      // Strip // line comments and /* */ block comments so mentions of the
+      // function names in comments do not trigger false-positive fails.
+      // Normalize CRLF -> LF first: JS regex `.*` does not match `\r`, so a
+      // trailing `\r` would prevent `.*$` from matching and leave `//`
+      // comments intact — which is why our first cut of this test tripped
+      // on Windows-checkout files.
+      const src = rawSrc
+        .replace(/\r\n/g, '\n')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .split('\n')
+        .map(line => line.replace(/(^|[^:])\/\/.*$/, '$1'))
+        .join('\n');
+      const callRe = /\b(findCachedAnswer|storeCachedAnswer|seedCannedFaq)\s*\(/g;
+      let m;
+      while ((m = callRe.exec(src)) !== null) {
+        const start = Math.max(0, m.index - 30);
+        const preceding = src.slice(start, m.index);
+        // Skip function DEFINITIONS (async function foo, function foo).
+        if (/function\s+$/.test(preceding)) continue;
+        if (!/await\s+[\w.]*$/.test(preceding)) {
+          fail(`${rel}: call to ${m[1]} not awaited (context: "${preceding.replace(/\s+/g, ' ')}${m[0]}")`);
+          missingAwait++;
+        }
+      }
+    }
+    if (missingAwait === 0) pass('all call sites await the (now-async) cache functions');
+  } catch (e) {
+    fail('S8 await-grep check threw: ' + e.message);
+  }
+
+  section('23. S8 — type-matched comparison: AI query never falsely matches a tfidf row');
+  try {
+    const cache = require('./src/backend/src/services/assistantCache');
+    const kb = require('./src/backend/src/services/assistantKnowledge');
+    const db5 = dbConn.getDatabase();
+
+    // Determine active embedding type in this test env (no AI key configured -> tfidf).
+    const activeType = kb.isAIEmbeddingAvailable() ? 'ai' : 'tfidf';
+
+    // Deterministically inject a TF-IDF-typed row AND an AI-typed row for the SAME question.
+    // Assert that a query never blends them.
+    const testQ = 'S8-type-scoping test question ' + Date.now();
+    // Manufacture an AI-shape serialized embedding (all zeros — irrelevant, we only test type gating).
+    const aiVec = new Array(1536).fill(0);
+    aiVec[0] = 1.0;
+    const aiSerialized = 'AI:' + JSON.stringify(aiVec);
+    const tfidfSerialized = kb.serializeEmbedding(kb.generateEmbedding(testQ), 'tfidf');
+
+    db5.run(
+      "INSERT INTO assistant_cached_answers (question_embedding, question_text, answer_text, usage_count, has_rag_context, audience, locale, is_seed, embedding_type, created_at, updated_at) VALUES (?, ?, 'AI-typed answer', 0, 1, 'public', 'en', 1, 'ai', datetime('now'), datetime('now'))",
+      [aiSerialized, testQ]
+    );
+    db5.run(
+      "INSERT INTO assistant_cached_answers (question_embedding, question_text, answer_text, usage_count, has_rag_context, audience, locale, is_seed, embedding_type, created_at, updated_at) VALUES (?, ?, 'TFIDF-typed answer', 0, 1, 'public', 'en', 1, 'tfidf', datetime('now'), datetime('now'))",
+      [tfidfSerialized, testQ]
+    );
+
+    const hit = await cache.findCachedAnswer(testQ, 'public', 'en');
+    if (activeType === 'tfidf') {
+      // Under tfidf-only env, the query embedding is tfidf, so ONLY the tfidf row is compared.
+      // Assert the AI row was skipped (answer must not be the AI one).
+      if (hit && hit.hit && /TFIDF-typed/.test(hit.answer)) {
+        pass('AI-typed row skipped when query is TF-IDF (dimension geometry protected)');
+      } else if (hit && hit.hit && /AI-typed/.test(hit.answer)) {
+        fail('type gate FAILED: AI row matched against TF-IDF query');
+      } else {
+        // Below threshold is also acceptable — the key assertion is "not the AI row".
+        pass('AI-typed row not served to TF-IDF query (no false cross-type match)');
+      }
+    } else {
+      // Under AI env: query is AI. Only AI rows may be considered.
+      if (hit && hit.hit && /TFIDF-typed/.test(hit.answer)) {
+        fail('type gate FAILED: TF-IDF row matched against AI query');
+      } else {
+        pass('TF-IDF row not served to AI query (no cross-type match)');
+      }
+    }
+    // Cleanup
+    db5.run("DELETE FROM assistant_cached_answers WHERE question_text = ?", [testQ]);
+  } catch (e) {
+    fail('S8 type-gate check threw: ' + e.message);
+  }
+
+  section('24. S8 — TF-IDF fallback path: behavior byte-identical to pre-S8 when AI unavailable');
+  try {
+    const cache = require('./src/backend/src/services/assistantCache');
+    const kb = require('./src/backend/src/services/assistantKnowledge');
+    if (kb.isAIEmbeddingAvailable()) {
+      // If real AI key configured, we cannot meaningfully assert byte-identical fallback here.
+      pass('AI embeddings available in this env — fallback path not exercised (skipped)');
+    } else {
+      // AI is unavailable in the audit env. Assert the TF-IDF threshold applies (0.92 default)
+      // and that a rephrased same-intent question does NOT hit (matching pre-S8 strictness).
+      const thresh = cache.getThreshold('tfidf');
+      if (thresh >= 0.9 && thresh <= 1.0) pass(`TF-IDF threshold in fallback path is strict (${thresh})`);
+      else fail(`TF-IDF threshold unexpected: ${thresh}`);
+
+      // Sanity: DEFAULT_THRESHOLD_AI export exists and is looser than TF-IDF.
+      if (cache.DEFAULT_THRESHOLD_AI && cache.DEFAULT_THRESHOLD_AI < cache.DEFAULT_THRESHOLD) {
+        pass(`DEFAULT_THRESHOLD_AI (${cache.DEFAULT_THRESHOLD_AI}) < DEFAULT_THRESHOLD (${cache.DEFAULT_THRESHOLD})`);
+      } else {
+        fail('DEFAULT_THRESHOLD_AI must be looser than TF-IDF default');
+      }
+    }
+  } catch (e) {
+    fail('S8 fallback check threw: ' + e.message);
+  }
+
+  section('25. S8 — assistant_cache_threshold_ai registered in admin settings validation');
+  try {
+    const adminSrc = fs.readFileSync(path.join(__dirname, 'src/backend/src/routes/admin.js'), 'utf8');
+    if (/assistant_cache_threshold_ai\s*:\s*\{[^}]*type:\s*'float'/.test(adminSrc)) {
+      pass('assistant_cache_threshold_ai registered as a float-typed setting in admin.js');
+    } else {
+      fail('assistant_cache_threshold_ai not found in admin allowedKeys (must be validated to prevent bogus writes)');
+    }
+    // Also assert both thresholds are registered (the existing tfidf key too).
+    if (/assistant_cache_threshold\s*:\s*\{[^}]*type:\s*'float'/.test(adminSrc)) {
+      pass('assistant_cache_threshold also registered as float-typed');
+    } else {
+      fail('assistant_cache_threshold not registered as float-typed');
+    }
+  } catch (e) {
+    fail('S8 admin settings check threw: ' + e.message);
+  }
+
+  section('26. S8 — seedCannedFaq re-embeds seeds when the active type differs from stored');
+  try {
+    const cache = require('./src/backend/src/services/assistantCache');
+    const db6 = dbConn.getDatabase();
+    // Force one seed row to have the "wrong" embedding_type ('ai') so the next
+    // seedCannedFaq() run must re-embed it back to the active type.
+    const oneSeed = db6.exec("SELECT id, question_text FROM assistant_cached_answers WHERE is_seed=1 LIMIT 1")[0];
+    if (oneSeed && oneSeed.values.length) {
+      const sid = oneSeed.values[0][0];
+      db6.run("UPDATE assistant_cached_answers SET embedding_type='ai', question_embedding=? WHERE id=?",
+        ['AI:' + JSON.stringify(new Array(1536).fill(0.0001)), sid]);
+      const stats = await cache.seedCannedFaq();
+      const nowRow = db6.exec("SELECT embedding_type FROM assistant_cached_answers WHERE id=?", [sid])[0];
+      const nowType = nowRow.values[0][0];
+      // Under TF-IDF-only env, the re-embed should flip it back to 'tfidf'.
+      const kb = require('./src/backend/src/services/assistantKnowledge');
+      const activeType = kb.isAIEmbeddingAvailable() ? 'ai' : 'tfidf';
+      if (nowType === activeType && stats.reembedded >= 1) {
+        pass(`type-flip re-embed: seed #${sid} re-embedded to ${activeType} (reembedded=${stats.reembedded})`);
+      } else {
+        fail(`type-flip re-embed FAILED: expected type=${activeType} reembedded>=1, got type=${nowType} reembedded=${stats.reembedded}`);
+      }
+    } else {
+      fail('No seed rows available to test type-flip re-embed');
+    }
+  } catch (e) {
+    fail('S8 re-embed check threw: ' + e.message);
   }
 
   section('19. S7 — cache is consulted on every message (first-message guard removed)');

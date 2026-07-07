@@ -803,7 +803,12 @@ function applySchema(db) {
   try { db.run("ALTER TABLE assistant_cached_answers ADD COLUMN locale TEXT DEFAULT 'en'"); } catch (e) { /* exists */ }
   try { db.run('ALTER TABLE assistant_cached_answers ADD COLUMN is_seed INTEGER DEFAULT 0'); } catch (e) { /* exists */ }
   try { db.run('ALTER TABLE assistant_cached_answers ADD COLUMN question_hash TEXT'); } catch (e) { /* exists */ }
+  // Feature #441 (S8) — embedding_type discriminates AI (1536-d) vs TF-IDF vectors.
+  // Only rows of the SAME type may be compared (different dimensions/geometry).
+  // Existing rows default to 'tfidf' — that matches how they were embedded.
+  try { db.run("ALTER TABLE assistant_cached_answers ADD COLUMN embedding_type TEXT DEFAULT 'tfidf'"); } catch (e) { /* exists */ }
   db.run('CREATE INDEX IF NOT EXISTS idx_assistant_cached_answers_hash ON assistant_cached_answers(question_hash)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_assistant_cached_answers_emb_type ON assistant_cached_answers(embedding_type)');
   db.run('CREATE INDEX IF NOT EXISTS idx_assistant_cached_answers_audience ON assistant_cached_answers(audience, is_seed)');
 
   // Create assistant_knowledge table for knowledge base indexing
