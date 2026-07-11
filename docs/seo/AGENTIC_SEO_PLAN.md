@@ -119,6 +119,7 @@ Positioning line for all comparison content: *"AI note-takers document your sess
 4. `/compare/simplepractice` (angle: "lightweight European alternative").
 5. RU: `/ru/ai-dlya-psihologa` (guide), `/ru/telegram-bot-dlya-psihologa` (category-defining page) — no competition, high intent.
 6. Refresh quarterly via B4 findings (LLMs favor fresh comparison data; stamp "Updated: <month year>" visibly).
+7. **Wave 2 (2026-07-11, from the 35-query ranking study):** two P0 prerender bugs (duplicate meta description; SPA-fallback head on auth routes) + 9 keyword landings incl. /for-coaches — see [AUTOFORGE_FEATURES_SEO_WAVE2.md](AUTOFORGE_FEATURES_SEO_WAVE2.md).
 Rules: honest feature/price tables (agent-verified via B4), each page follows A3 standard, FAQPage schema, hreflang for localized versions.
 
 ### C3. Sequencing & effort
