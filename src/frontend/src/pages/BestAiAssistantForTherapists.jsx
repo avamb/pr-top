@@ -609,7 +609,7 @@ const CONTENT = {
     seoTitle:
       'Los mejores asistentes de IA para terapeutas y psicólogos (2026): ranking honesto',
     seoDescription:
-      'Ranking honesto 2026 de asistentes de IA para terapeutas: Upheal, Mentalyc, Twofold, Heidi, Supanote, Freed, Eleos y PR-TOP, con etiqueta «ideal para» en cada uno.',
+      'Ranking 2026 de asistentes de IA para terapeutas: Upheal, Mentalyc, Twofold, Heidi, Supanote, Freed, Eleos y PR-TOP, con etiqueta «ideal para» en cada uno.',
     articleHeadline:
       'Los mejores asistentes de IA para terapeutas y psicólogos (2026): lista honesta',
     articleDescription:

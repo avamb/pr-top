@@ -150,6 +150,13 @@ function countH1(html) {
   const m = html.match(/<h1\b[^>]*>[\s\S]*?<\/h1>/gi);
   return m ? m.length : 0;
 }
+function countDescriptions(html) {
+  // Count ALL <meta name="description"> occurrences — both static and helmet-injected.
+  // W1: should be exactly 1 after removing the static copy from index.html.
+  const re = /<meta[^>]+name=["']description["'][^>]*/gi;
+  const m = html.match(re);
+  return m ? m.length : 0;
+}
 function extractDescription(html) {
   const m = html.match(/<meta[^>]+name=["']description["'][^>]*content=["']([^"']*)["']/i);
   return m ? m[1] : null;
@@ -165,9 +172,15 @@ function extractJsonLdBlocks(html) {
 let pagesChecked = 0;
 let h1Failures = 0;
 let descFailures = 0;
+let descCountFailures = 0;
 let jsonLdFailures = 0;
 
-function auditPage(localizedPath) {
+// Per-locale description registry for W1 uniqueness check (section 6b).
+// Map<locale, Map<description, localizedPath>>
+const descByLocale = {};
+for (const locale of LOCALES) descByLocale[locale] = new Map();
+
+function auditPage(localizedPath, locale) {
   const file = distFileFor(localizedPath);
   if (!fs.existsSync(file)) {
     fail(`Missing prerendered file: ${localizedPath}`);
@@ -193,6 +206,18 @@ function auditPage(localizedPath) {
     descFailures++;
   }
 
+  // W1(a). Exactly ONE <meta name="description"> per page (helmet owns it).
+  const dCount = countDescriptions(html);
+  if (dCount !== 1) {
+    fail(`${localizedPath}: expected exactly 1 <meta name="description">, found ${dCount} (static+helmet duplicate?)`);
+    descCountFailures++;
+  }
+
+  // Collect for W1(b) per-locale uniqueness check.
+  if (desc && locale && descByLocale[locale] !== undefined) {
+    descByLocale[locale].set(desc, localizedPath);
+  }
+
   // 5. JSON-LD blocks parse
   const blocks = extractJsonLdBlocks(html);
   for (let i = 0; i < blocks.length; i++) {
@@ -207,16 +232,85 @@ function auditPage(localizedPath) {
 
 for (const locale of LOCALES) {
   for (const routePath of PUBLIC_ROUTES) {
-    auditPage(localePathFor(locale, routePath));
+    auditPage(localePathFor(locale, routePath), locale);
   }
 }
 // F20 — EN-only routes get the same H1/description/JSON-LD checks.
 for (const routePath of EN_ONLY_ROUTES) {
-  auditPage(routePath);
+  auditPage(routePath, 'en');
 }
 if (h1Failures === 0) pass(`All ${pagesChecked} pages have exactly one <h1>`);
 if (descFailures === 0) pass(`All ${pagesChecked} pages have description length 25–160`);
 if (jsonLdFailures === 0) pass(`All JSON-LD blocks parse across ${pagesChecked} pages`);
+
+// ---- 6. W1 assertions: single description + per-locale uniqueness ----
+section('6. W1: single meta description per page + per-locale uniqueness');
+{
+  // 6a. Exactly one description per page (already counted above per page;
+  // emit a single pass/fail summary here).
+  if (descCountFailures === 0) {
+    pass(`W1(a): all ${pagesChecked} pages have exactly ONE <meta name="description">`);
+  } else {
+    fail(`W1(a): ${descCountFailures} page(s) have duplicate <meta name="description"> (static + helmet)`);
+  }
+
+  // 6b. Descriptions are UNIQUE within each locale.
+  // Build full per-locale arrays (including EN-only routes) so we can detect
+  // two pages that share the same description text.
+  // Re-collect: iterate all files and gather descriptions per locale.
+  let uniquenessOk = true;
+  for (const locale of LOCALES) {
+    const seen = new Map(); // description -> first localizedPath
+    const routes = PUBLIC_ROUTES.map((r) => localePathFor(locale, r));
+    for (const lp of routes) {
+      const file = distFileFor(lp);
+      if (!fs.existsSync(file)) continue;
+      const html = fs.readFileSync(file, 'utf8');
+      const d = extractDescription(html);
+      if (!d) continue;
+      if (seen.has(d)) {
+        fail(`W1(b): locale=${locale} duplicate description on "${lp}" and "${seen.get(d)}": "${d.substring(0, 60)}..."`);
+        uniquenessOk = false;
+      } else {
+        seen.set(d, lp);
+      }
+    }
+  }
+  if (uniquenessOk) {
+    pass(`W1(b): descriptions are unique within each locale (${LOCALES.join(', ')})`);
+  }
+
+  // 6c. Spot-assert: dist/compare/mentalyc/index.html description mentions "Mentalyc".
+  {
+    const f = distFileFor('/compare/mentalyc');
+    if (fs.existsSync(f)) {
+      const d = extractDescription(fs.readFileSync(f, 'utf8'));
+      if (d && d.toLowerCase().includes('mentalyc')) {
+        pass('W1(c): /compare/mentalyc description mentions "Mentalyc"');
+      } else {
+        fail(`W1(c): /compare/mentalyc description does not mention "Mentalyc": "${d}"`);
+      }
+    } else {
+      fail('W1(c): dist/compare/mentalyc/index.html missing');
+    }
+  }
+
+  // 6d. Spot-assert: dist/ru/index.html description is in Russian (Cyrillic).
+  {
+    const f = distFileFor('/ru');
+    if (fs.existsSync(f)) {
+      const d = extractDescription(fs.readFileSync(f, 'utf8'));
+      const hasCyrillic = d && /[Ѐ-ӿ]/.test(d);
+      if (hasCyrillic) {
+        pass('W1(d): /ru homepage description contains Cyrillic (Russian)');
+      } else {
+        fail(`W1(d): /ru homepage description does not appear to be Russian: "${d}"`);
+      }
+    } else {
+      fail('W1(d): dist/ru/index.html missing');
+    }
+  }
+}
 
 // ---- Summary ----
 console.log('\n' + '='.repeat(60));
