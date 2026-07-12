@@ -49,6 +49,11 @@ import AiSessionNotesForTherapists from './pages/AiSessionNotesForTherapists';
 import AiPracticeManagement from './pages/AiPracticeManagement';
 import ForCoaches from './pages/ForCoaches';
 import SecurePracticeManagement from './pages/SecurePracticeManagement';
+import TherapyDocumentationAi from './pages/TherapyDocumentationAi';
+import TherapistAiAssistant from './pages/TherapistAiAssistant';
+import HipaaAndGdprForTherapySoftware from './pages/HipaaAndGdprForTherapySoftware';
+import CoachingSessionManagement from './pages/CoachingSessionManagement';
+import ClientDiaryForTherapists from './pages/ClientDiaryForTherapists';
 import VerifyLead from './pages/VerifyLead';
 import SupervisionView from './pages/SupervisionView';
 import NotFound from './pages/NotFound';
@@ -120,6 +125,12 @@ const PUBLIC_MARKETING_ROUTES = [
   { path: '/ai-practice-management',            element: <AiPracticeManagement /> },
   { path: '/for-coaches',                       element: <ForCoaches /> },
   { path: '/secure-practice-management',        element: <SecurePracticeManagement /> },
+  // W5 quick-win landings (batch 2) — 2026-07-12
+  { path: '/therapy-documentation-ai',          element: <TherapyDocumentationAi /> },
+  { path: '/therapist-ai-assistant',            element: <TherapistAiAssistant /> },
+  { path: '/hipaa-and-gdpr-for-therapy-software', element: <HipaaAndGdprForTherapySoftware /> },
+  { path: '/coaching-session-management',       element: <CoachingSessionManagement /> },
+  { path: '/client-diary-for-therapists',       element: <ClientDiaryForTherapists /> },
 ];
 
 function localePrefixedPath(locale, routePath) {

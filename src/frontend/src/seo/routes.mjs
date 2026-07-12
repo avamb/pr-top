@@ -174,6 +174,52 @@ export const PUBLIC_ROUTES = [
       'How PR-TOP protects client data: application-layer AES encryption, EU-only hosting, GDPR consent enforcement, immutable audit log, and data sovereignty — all in one practice-management workspace.',
     primaryKeyword: { en: 'secure practice management for therapists', ru: 'безопасное управление практикой', uk: 'безпечне управління практикою', es: 'gestión segura de consulta para terapeutas' },
   },
+  // W5 quick-win landings (batch 2) — 2026-07-12
+  {
+    path: '/therapy-documentation-ai',
+    changefreq: 'monthly',
+    priority: 0.7,
+    title: 'Therapy documentation AI — PR-TOP guide for therapists (2026)',
+    summary:
+      'How PR-TOP reduces therapy documentation time: Whisper transcription, configurable AI summaries, encrypted session notes, and a between-session client diary — all in one workspace.',
+    primaryKeyword: { en: 'therapy documentation AI', ru: 'AI-документация для психологов', uk: 'AI-документація для психологів', es: 'documentación de terapia con IA' },
+  },
+  {
+    path: '/therapist-ai-assistant',
+    changefreq: 'monthly',
+    priority: 0.7,
+    title: 'Therapist AI assistant — what it does and how PR-TOP delivers it (2026)',
+    summary:
+      'What a therapist AI assistant should do: session transcription, note generation, client diary, exercise assignment and crisis alerts — all from one tool. PR-TOP hub page linking the 2026 best-of listicle and feature comparisons.',
+    primaryKeyword: { en: 'therapist AI assistant', ru: 'AI-ассистент для психолога', uk: 'AI-асистент для психолога', es: 'asistente de IA para terapeutas' },
+  },
+  {
+    path: '/hipaa-and-gdpr-for-therapy-software',
+    changefreq: 'monthly',
+    priority: 0.7,
+    title: 'HIPAA and GDPR for therapy software — what PR-TOP offers (2026)',
+    summary:
+      'Honest guide: what HIPAA requires vs what PR-TOP actually provides. PR-TOP is GDPR-native and EU-hosted — maps real controls (AES encryption, audit log, consent) to HIPAA safeguards without claiming certification or offering a BAA.',
+    primaryKeyword: { en: 'HIPAA and GDPR', ru: 'HIPAA и GDPR', uk: 'HIPAA і GDPR', es: 'HIPAA y GDPR' },
+  },
+  {
+    path: '/coaching-session-management',
+    changefreq: 'monthly',
+    priority: 0.7,
+    title: 'Coaching session management software — PR-TOP for coaches',
+    summary:
+      'PR-TOP for coaching session management: Telegram client bot for homework tracking, between-session check-ins, accountability streaks and session prep — without EHR complexity. Sibling of /for-coaches.',
+    primaryKeyword: { en: 'coaching session management', ru: 'управление сессиями коучинга', uk: 'управління сесіями коучингу', es: 'gestión de sesiones de coaching' },
+  },
+  {
+    path: '/client-diary-for-therapists',
+    changefreq: 'monthly',
+    priority: 0.8,
+    title: 'Client diary for therapists — PR-TOP between-session channel',
+    summary:
+      'How PR-TOP\'s client diary works: clients send voice, text and video entries via Telegram; therapists see all entries in an encrypted dashboard before every session. Currently ranked #3 for "client diary for therapists online".',
+    primaryKeyword: { en: 'client diary for therapists', ru: 'дневник клиента для психологов', uk: 'щоденник клієнта для психологів', es: 'diario del cliente para terapeutas' },
+  },
 ];
 
 /**
@@ -207,6 +253,12 @@ export const LLMS_SECTIONS = [
       '/ai-practice-management',
       '/for-coaches',
       '/secure-practice-management',
+      // W5 batch 2
+      '/therapy-documentation-ai',
+      '/therapist-ai-assistant',
+      '/hipaa-and-gdpr-for-therapy-software',
+      '/coaching-session-management',
+      '/client-diary-for-therapists',
     ],
   },
 ];

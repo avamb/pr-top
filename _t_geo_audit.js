@@ -37,6 +37,12 @@ const PUBLIC_ROUTES = [
   '/ai-practice-management',
   '/for-coaches',
   '/secure-practice-management',
+  // W5 quick-win landings (batch 2) — 2026-07-12
+  '/therapy-documentation-ai',
+  '/therapist-ai-assistant',
+  '/hipaa-and-gdpr-for-therapy-software',
+  '/coaching-session-management',
+  '/client-diary-for-therapists',
 ];
 // Legacy: kept for the loops below; empty since the comparison pages gained
 // /ru, /uk, /es mirrors.

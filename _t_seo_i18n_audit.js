@@ -29,6 +29,17 @@ const PUBLIC_ROUTES = [
   '/compare/mentalyc',
   '/alternatives/mentalyc',
   '/best-ai-assistant-for-therapists',
+  // W4 quick-win landings batch 1 — 2026-07-12
+  '/ai-session-notes-for-therapists',
+  '/ai-practice-management',
+  '/for-coaches',
+  '/secure-practice-management',
+  // W5 quick-win landings (batch 2) — 2026-07-12
+  '/therapy-documentation-ai',
+  '/therapist-ai-assistant',
+  '/hipaa-and-gdpr-for-therapy-software',
+  '/coaching-session-management',
+  '/client-diary-for-therapists',
 ];
 
 let passed = 0;
@@ -94,7 +105,7 @@ function findRawKeys(html) {
   return hits;
 }
 
-section('1. All 48 prerendered pages exist and have title / description / h1');
+section('1. All 84 prerendered pages exist and have title / description / h1');
 
 const pageMeta = []; // { locale, routePath, title, description, h1, htmlLang, path }
 for (const locale of LOCALES) {
@@ -214,6 +225,17 @@ const PRIMARY_KEYWORDS = {
   '/compare/mentalyc': { en: 'PR-TOP vs Mentalyc', ru: 'Mentalyc', uk: 'Mentalyc', es: 'Mentalyc' },
   '/alternatives/mentalyc': { en: 'Mentalyc alternatives', ru: 'Mentalyc', uk: 'Mentalyc', es: 'alternativas a Mentalyc' },
   '/best-ai-assistant-for-therapists': { en: 'best AI assistant', ru: 'ИИ-ассистент', uk: 'ШІ-асистент', es: 'asistentes de IA' },
+  // W4 quick-win landings batch 1
+  '/ai-session-notes-for-therapists': { en: 'AI session notes for therapists', ru: 'AI-заметки', uk: 'AI-нотатки', es: 'notas de sesión' },
+  '/ai-practice-management': { en: 'AI practice management', ru: 'управление практикой', uk: 'управління практикою', es: 'gestión de consulta' },
+  '/for-coaches': { en: 'for coaches', ru: 'для коучей', uk: 'для коучів', es: 'para coaches' },
+  '/secure-practice-management': { en: 'secure practice management', ru: 'безопасн', uk: 'безпечн', es: 'consulta segura' },
+  // W5 quick-win landings batch 2
+  '/therapy-documentation-ai': { en: 'therapy documentation AI', ru: 'AI-документация', uk: 'AI-документація', es: 'documentación de terapia' },
+  '/therapist-ai-assistant': { en: 'therapist AI assistant', ru: 'AI-ассистент для психолога', uk: 'AI-асистент для психолога', es: 'asistente de IA para terapeutas' },
+  '/hipaa-and-gdpr-for-therapy-software': { en: 'HIPAA and GDPR', ru: 'HIPAA и GDPR', uk: 'HIPAA і GDPR', es: 'HIPAA y GDPR' },
+  '/coaching-session-management': { en: 'coaching session management', ru: 'управления сессиями', uk: 'управління сесіями', es: 'gestión de sesiones de coaching' },
+  '/client-diary-for-therapists': { en: 'client diary for therapists', ru: 'дневник клиента', uk: 'щоденник клієнта', es: 'diario del cliente' },
 };
 let w3KeywordChecks = 0;
 for (const p of pageMeta) {
