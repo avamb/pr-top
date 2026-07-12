@@ -14856,3 +14856,76 @@ VERIFICATION:
 
 Stats after session 198: #441 status: passing.
 
+================================================================
+Session 199 (2026-07-12) - Feature #443 PASSING (W2 noindex auth shells)
+================================================================
+
+Assigned: #443 W2 - P0: prerender noindex shells for auth routes
+
+The implementation was already in place from a prior session:
+- NOINDEX_PRERENDER_ROUTES exported from src/frontend/src/seo/routes.mjs
+  with /register, /login, /forgot-password, /reset-password entries
+- prerender.mjs already imports NOINDEX_PRERENDER_ROUTES and renders
+  all 4 routes after the root (English-only, no locale mirrors)
+- All 4 page components already call <Seo ... noindex /> (F3)
+- sitemap generator and llms.txt use LOCALIZED_ROUTES only
+
+VERIFICATION:
+- npm run build --prefix src/frontend: 52 pages total (48 public + 4
+  noindex auth shells); build completed in 4.67s
+- dist/register/index.html: title="Register - PR-TOP", noindex,nofollow
+- dist/login/index.html: title="Sign in - PR-TOP", noindex,nofollow
+- dist/forgot-password/index.html: title="Forgot password - PR-TOP"
+- dist/reset-password/index.html: title="Reset password - PR-TOP"
+- grep for register/login/forgot-password/reset-password in sitemap.xml: 0
+- grep for register/login/forgot-password/reset-password in llms.txt: 0
+- git commit: 045c633
+
+Stats after session 199: #443 status: passing.
+
+================================================================
+Session 200 (2026-07-12) - Feature #442 PASSING (W1 single meta description)
+================================================================
+Assigned: #442 W1 — P0: exactly ONE meta description per page (helmet owns it)
+
+IMPLEMENTATION:
+1. src/frontend/index.html (template) — already clean: no static
+   <meta name="description">, og:title, og:description, or twitter:*
+   tags. Helmet/Seo.jsx is already the sole source of these on every
+   prerendered page. No edits needed to the template.
+
+2. Fixed 3 over-length descriptions (all were 1-3 chars over the
+   25-160 range required by section 4b of the audit):
+   - src/frontend/src/pages/CompareMentalyc.jsx (uk locale):
+     removed trailing " за замовчуванням" → 161→144 chars
+   - src/frontend/src/pages/CompareUpheal.jsx (es locale):
+     removed trailing " y alojamiento en la UE" → 161→138 chars
+   - src/frontend/src/pages/BestAiAssistantForTherapists.jsx (es locale):
+     removed " honesto" from "Ranking honesto" → 163→155 chars
+   Also patched the corresponding prerendered dist HTML files in-place
+   (dist/ is gitignored, so only source changes are committed).
+
+3. _t_geo_audit.js — added section 6 (W1 assertions):
+   - countDescriptions(html): counts ALL name="description" meta tags.
+   - auditPage now accepts locale arg; records (desc, path) in
+     descByLocale map for uniqueness check.
+   - 6a: exactly one <meta name="description"> per page across all 48
+     prerendered pages (W1 main assertion).
+   - 6b: descriptions are UNIQUE within each locale (en/ru/uk/es) —
+     the assertion whose absence let the duplicate-description bug ship.
+   - 6c: spot-assert /compare/mentalyc description mentions "Mentalyc".
+   - 6d: spot-assert /ru homepage description contains Cyrillic.
+
+VERIFICATION:
+- node _t_geo_audit.js → 16 passed, 0 failed.
+  * S1: 7 AI-crawler blocks present.
+  * S2: llms.txt lists all 48 routes.
+  * S3: sitemap.xml has 48 <loc> entries.
+  * S4/S5: all 48 pages have 1 <h1>, description 25-160, JSON-LD valid.
+  * S6 (W1): count==1 on all 48 pages; descriptions unique per locale;
+    both spot-asserts pass.
+- template grep: no static description/og/twitter tags in index.html.
+- git commit: 285037f
+
+Stats after session 200: #442 status: passing.
+
