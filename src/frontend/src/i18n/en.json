@@ -3,31 +3,31 @@
   "seo": {
     "home": {
       "title": "PR-TOP — AI Assistant for Therapists & Psychologists | Client Diary, Session Notes, Telegram Bot",
-      "description": "PR-TOP: therapist-controlled AI assistant for between-session client work — secure client diary, AI session notes, crisis alerts, Telegram bot. GDPR-compliant."
+      "description": "PR-TOP — AI assistant for therapists: encrypted client diary, AI session notes, crisis alerts and Telegram bot. Start your free trial today."
     },
     "privacy": {
       "title": "Privacy Policy — PR-TOP",
-      "description": "PR-TOP privacy policy: how we handle therapist and client data, encryption, retention, and your rights under GDPR."
+      "description": "PR-TOP privacy policy: how we collect, encrypt, and delete therapist and client data — your rights under GDPR, retention periods, and contact details."
     },
     "terms": {
       "title": "Terms of Service — PR-TOP",
-      "description": "Terms of service for using PR-TOP: therapist obligations, acceptable use, subscription terms, and liability."
+      "description": "PR-TOP terms of service: therapist obligations, acceptable use, subscription tiers, cancellation policy and platform liability. Please read before signing up."
     },
     "securityEncryption": {
       "title": "Encryption at Rest & In Transit — PR-TOP Security",
-      "description": "How PR-TOP protects sensitive client data with AES application-layer encryption, TLS transport, and strict key management."
+      "description": "PR-TOP uses AES application-layer encryption for all client diary entries and session transcripts. See how encryption protects your clients' sensitive data."
     },
     "securityGdpr": {
       "title": "GDPR Compliance — PR-TOP Security",
-      "description": "How PR-TOP implements GDPR data-minimization, subject rights, and lawful processing for therapist and client data."
+      "description": "PR-TOP is built GDPR-first: EU-hosted, no third-party trackers, consent enforcement for every client. Read our full GDPR compliance architecture here."
     },
     "securityAuditLog": {
       "title": "Audit Log & Access Trails — PR-TOP Security",
-      "description": "How PR-TOP records every access to client data with tamper-evident audit logs available to therapists and administrators."
+      "description": "PR-TOP keeps an immutable audit log of every access to encrypted client data. Therapists and administrators can review the full access trail at any time."
     },
     "securityDataSovereignty": {
       "title": "Data Sovereignty & Residency — PR-TOP Security",
-      "description": "Where PR-TOP hosts client data, region choices, and how therapists remain in control of data residency and export."
+      "description": "PR-TOP stores all client data on EU-only servers (Hetzner). No cross-border transfers, no hidden third parties. Full data sovereignty for therapists."
     }
   },
   "ai": {

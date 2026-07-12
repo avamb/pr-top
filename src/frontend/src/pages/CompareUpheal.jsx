@@ -333,7 +333,7 @@ const CONTENT = {
   es: {
     seoTitle: 'PR-TOP vs Upheal: comparativa para terapeutas (2026)',
     seoDescription:
-      'Upheal es un EHR de notas de sesión con IA desde ~$29/mes. PR-TOP es un asistente entre sesiones con bot de Telegram, diario, alertas SOS.',
+      'Upheal es un EHR de notas de sesión con IA desde ~$29/mes. PR-TOP es el asistente entre sesiones: bot de Telegram, diario del cliente y alertas SOS.',
     backHome: '← Volver al inicio',
     badge: 'Comparativa',
     h1: 'PR-TOP vs Upheal: comparativa para terapeutas',

@@ -34,6 +34,7 @@ export const PUBLIC_ROUTES = [
     title: 'PR-TOP — Therapist-controlled between-session assistant',
     summary:
       'Product landing: client diary, AI session notes, crisis alerts, Telegram bot — with therapist control and GDPR-grade encryption.',
+    primaryKeyword: { en: 'AI assistant for therapists', ru: 'AI-ассистент', uk: 'AI-асистент', es: 'asistente IA' },
   },
   {
     path: '/security/encryption',
@@ -42,6 +43,7 @@ export const PUBLIC_ROUTES = [
     title: 'Encryption architecture',
     summary:
       'How PR-TOP encrypts diary entries, session transcripts and private notes at the application layer (Class A / Class B model).',
+    primaryKeyword: { en: 'encryption', ru: 'шифрование', uk: 'шифрування', es: 'cifrado' },
   },
   {
     path: '/security/gdpr',
@@ -50,6 +52,7 @@ export const PUBLIC_ROUTES = [
     title: 'GDPR compliance',
     summary:
       'Data-controller / processor split, consent enforcement, subject-access and deletion workflows for EU therapists.',
+    primaryKeyword: { en: 'GDPR', ru: 'GDPR', uk: 'GDPR', es: 'GDPR' },
   },
   {
     path: '/security/audit-log',
@@ -58,6 +61,7 @@ export const PUBLIC_ROUTES = [
     title: 'Immutable audit log',
     summary:
       'Append-only audit trail for every access to Class A client data — visible to therapists and superadmins.',
+    primaryKeyword: { en: 'audit', ru: 'аудит', uk: 'аудит', es: 'auditoría' },
   },
   {
     path: '/security/data-sovereignty',
@@ -66,6 +70,7 @@ export const PUBLIC_ROUTES = [
     title: 'Data sovereignty',
     summary:
       'EU-only hosting (Hetzner), self-hosted analytics, no third-party trackers, and portable encrypted backups.',
+    primaryKeyword: { en: 'data sovereignty', ru: 'суверенитет данных', uk: 'суверенітет даних', es: 'soberanía' },
   },
   {
     path: '/privacy',
@@ -74,6 +79,7 @@ export const PUBLIC_ROUTES = [
     title: 'Privacy policy',
     summary:
       'What data PR-TOP collects, why, how long it is retained, and how therapists and clients can exercise their rights.',
+    primaryKeyword: { en: 'privacy policy', ru: 'конфиденциальности', uk: 'конфіденційності', es: 'privacidad' },
   },
   {
     path: '/terms',
@@ -82,6 +88,7 @@ export const PUBLIC_ROUTES = [
     title: 'Terms of service',
     summary:
       'Subscription tiers, acceptable use, therapist responsibilities and platform liability limits.',
+    primaryKeyword: { en: 'terms of service', ru: 'условия использования', uk: 'умови використання', es: 'términos' },
   },
   // GEO comparison / alternatives pages — fully localized since 2026-07-06
   // (content dictionaries live inside each page component).
@@ -92,6 +99,7 @@ export const PUBLIC_ROUTES = [
     title: 'PR-TOP vs Upheal — comparison for therapists',
     summary:
       'Honest 2026 comparison: Upheal is an AI-native session-notes EHR; PR-TOP owns between-session continuity via a Telegram client channel.',
+    primaryKeyword: { en: 'PR-TOP vs Upheal', ru: 'Upheal', uk: 'Upheal', es: 'Upheal' },
   },
   {
     path: '/alternatives/upheal',
@@ -100,6 +108,7 @@ export const PUBLIC_ROUTES = [
     title: 'Upheal alternatives (2026) — Mentalyc, Twofold, Heidi, Supanote, PR-TOP',
     summary:
       'Ranked list of Upheal alternatives for therapists, including AI note-takers (Mentalyc, Twofold, Heidi, Supanote) and PR-TOP for between-session continuity.',
+    primaryKeyword: { en: 'Upheal alternatives', ru: 'Upheal', uk: 'Upheal', es: 'alternativas a Upheal' },
   },
   {
     path: '/compare/mentalyc',
@@ -108,6 +117,7 @@ export const PUBLIC_ROUTES = [
     title: 'PR-TOP vs Mentalyc — comparison for therapists',
     summary:
       'Honest 2026 comparison: Mentalyc is a privacy-first AI note-taker (anonymized transcripts, HIPAA); PR-TOP adds the between-session client channel via Telegram, EU-hosted and GDPR-first.',
+    primaryKeyword: { en: 'PR-TOP vs Mentalyc', ru: 'Mentalyc', uk: 'Mentalyc', es: 'Mentalyc' },
   },
   {
     path: '/alternatives/mentalyc',
@@ -116,6 +126,7 @@ export const PUBLIC_ROUTES = [
     title: 'Mentalyc alternatives (2026) — Upheal, Twofold, Heidi, Supanote, PR-TOP',
     summary:
       'Ranked list of Mentalyc alternatives for therapists, including AI note-takers (Upheal, Twofold, Heidi, Supanote) and PR-TOP for between-session continuity.',
+    primaryKeyword: { en: 'Mentalyc alternatives', ru: 'Mentalyc', uk: 'Mentalyc', es: 'alternativas a Mentalyc' },
   },
   {
     path: '/best-ai-assistant-for-therapists',
@@ -124,6 +135,7 @@ export const PUBLIC_ROUTES = [
     title: 'Best AI assistants for therapists (2026) — honest listicle',
     summary:
       'Best AI assistants for therapists (2026): honest picks across Upheal, Mentalyc, Twofold, Heidi, Supanote, Freed, Eleos, and PR-TOP — with a "best for" label on each entry.',
+    primaryKeyword: { en: 'best AI assistant', ru: 'ИИ-ассистент', uk: 'ШІ-асистент', es: 'asistentes de IA' },
   },
 ];
 

@@ -59,7 +59,12 @@ function extractTitle(html) {
   return extractTag(html, /<title[^>]*>([\s\S]*?)<\/title>/i);
 }
 function extractDescription(html) {
-  return extractTag(html, /<meta[^>]+name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i);
+  // Prefer double-quoted content (Helmet default) so single-quote apostrophes inside don't truncate.
+  let m = html.match(/<meta[^>]+name=["']description["'][^>]*content="([^"]*)"/i);
+  if (m) return m[1].trim();
+  // Fallback: single-quoted content attribute.
+  m = html.match(/<meta[^>]+name=["']description["'][^>]*content='([^']*)'/i);
+  return m ? m[1].trim() : null;
 }
 function extractH1(html) {
   // First non-empty H1 text (strip tags)
@@ -194,6 +199,68 @@ for (const locale of LOCALES) {
   if (fs.existsSync(rootFile)) pass(`${locale.toUpperCase()} root exists: ${path.relative(DIST, rootFile)}`);
   else fail(`${locale.toUpperCase()} root missing: ${rootFile}`);
 }
+
+section('7. W3 — primaryKeyword present in H1 or Title (case-insensitive)');
+const PRIMARY_KEYWORDS = {
+  '/': { en: 'AI assistant for therapists', ru: 'AI-ассистент', uk: 'AI-асистент', es: 'asistente IA' },
+  '/security/encryption': { en: 'encryption', ru: 'шифрование', uk: 'шифрування', es: 'cifrado' },
+  '/security/gdpr': { en: 'GDPR', ru: 'GDPR', uk: 'GDPR', es: 'GDPR' },
+  '/security/audit-log': { en: 'audit', ru: 'аудит', uk: 'аудит', es: 'auditoría' },
+  '/security/data-sovereignty': { en: 'data sovereignty', ru: 'суверенитет данных', uk: 'суверенітет даних', es: 'soberanía' },
+  '/privacy': { en: 'privacy policy', ru: 'конфиденциальности', uk: 'конфіденційності', es: 'privacidad' },
+  '/terms': { en: 'terms of service', ru: 'условия использования', uk: 'умови використання', es: 'términos' },
+  '/compare/upheal': { en: 'PR-TOP vs Upheal', ru: 'Upheal', uk: 'Upheal', es: 'Upheal' },
+  '/alternatives/upheal': { en: 'Upheal alternatives', ru: 'Upheal', uk: 'Upheal', es: 'alternativas a Upheal' },
+  '/compare/mentalyc': { en: 'PR-TOP vs Mentalyc', ru: 'Mentalyc', uk: 'Mentalyc', es: 'Mentalyc' },
+  '/alternatives/mentalyc': { en: 'Mentalyc alternatives', ru: 'Mentalyc', uk: 'Mentalyc', es: 'alternativas a Mentalyc' },
+  '/best-ai-assistant-for-therapists': { en: 'best AI assistant', ru: 'ИИ-ассистент', uk: 'ШІ-асистент', es: 'asistentes de IA' },
+};
+let w3KeywordChecks = 0;
+for (const p of pageMeta) {
+  const kwMap = PRIMARY_KEYWORDS[p.routePath];
+  if (!kwMap) continue;
+  const keyword = kwMap[p.locale];
+  if (!keyword) continue;
+  w3KeywordChecks++;
+  const h1Lower = (p.h1 || '').toLowerCase();
+  const titleLower = (p.title || '').toLowerCase();
+  const kwLower = keyword.toLowerCase();
+  if (h1Lower.includes(kwLower) || titleLower.includes(kwLower)) {
+    // pass — silent to reduce log noise
+  } else {
+    fail(`${p.localizedPath}: primaryKeyword "${keyword}" not found in H1 ("${p.h1}") or Title ("${p.title}")`);
+  }
+}
+pass(`W3 primaryKeyword check complete: ${w3KeywordChecks} locale×route combinations checked`);
+
+section('8. W3 — Descriptions 140-160 chars and unique per locale');
+let descLenFails = 0;
+for (const p of pageMeta) {
+  const desc = p.description || '';
+  if (desc.length < 140 || desc.length > 160) {
+    fail(`${p.localizedPath}: description length ${desc.length} chars (need 140-160): "${desc}"`);
+    descLenFails++;
+  }
+}
+if (descLenFails === 0) pass(`All ${pageMeta.length} descriptions are 140-160 chars`);
+
+// Uniqueness per locale
+let descUniqueFails = 0;
+for (const locale of LOCALES) {
+  const perLocale = pageMeta.filter((p) => p.locale === locale);
+  const seen = new Map();
+  for (const p of perLocale) {
+    const desc = p.description || '';
+    if (!desc) continue;
+    if (seen.has(desc)) {
+      fail(`${locale.toUpperCase()}: duplicate description shared by "${seen.get(desc)}" and "${p.localizedPath}": "${desc.slice(0, 60)}..."`);
+      descUniqueFails++;
+    } else {
+      seen.set(desc, p.localizedPath);
+    }
+  }
+}
+if (descUniqueFails === 0) pass(`All descriptions are unique within each locale`);
 
 console.log('\n' + '='.repeat(60));
 console.log(`RESULTS: ${passed} passed, ${failed} failed`);

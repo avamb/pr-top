@@ -3,31 +3,31 @@
   "seo": {
     "home": {
       "title": "PR-TOP — Asistente IA para psicólogos: diario del cliente, notas de sesión, bot de Telegram",
-      "description": "PR-TOP: asistente IA para psicólogos entre sesiones — diario seguro del cliente, notas de sesión con IA, alertas SOS y bot de Telegram. Cumple GDPR."
+      "description": "PR-TOP — asistente IA para terapeutas: diario cifrado del cliente, notas con IA, alertas SOS y bot de Telegram. Empieza tu prueba gratuita hoy mismo."
     },
     "privacy": {
       "title": "Política de privacidad — PR-TOP",
-      "description": "Política de privacidad de PR-TOP: cómo tratamos los datos del terapeuta y del cliente, cifrado, retención y tus derechos bajo el RGPD."
+      "description": "Política de privacidad de PR-TOP: cómo recopilamos, ciframos y eliminamos datos del terapeuta y del cliente — tus derechos GDPR, retención y contacto."
     },
     "terms": {
       "title": "Términos del servicio — PR-TOP",
-      "description": "Términos de uso de PR-TOP: obligaciones del terapeuta, uso aceptable, condiciones de suscripción y responsabilidad."
+      "description": "Términos de servicio PR-TOP: obligaciones del terapeuta, uso aceptable, planes de suscripción, cancelación y responsabilidad. Léelo antes de registrarte."
     },
     "securityEncryption": {
       "title": "Cifrado de datos del cliente — Seguridad PR-TOP",
-      "description": "Cómo PR-TOP protege los datos sensibles del cliente con cifrado AES en la aplicación, transporte TLS y gestión estricta de claves."
+      "description": "PR-TOP usa cifrado AES en la capa de aplicación para el diario del cliente y transcripciones. El cifrado protege los datos sensibles de tus clientes."
     },
     "securityGdpr": {
       "title": "Cumplimiento GDPR — Seguridad PR-TOP",
-      "description": "Cómo PR-TOP implementa la minimización de datos GDPR, los derechos del interesado y el tratamiento legítimo de los datos del terapeuta y del cliente."
+      "description": "PR-TOP cumple el GDPR desde su diseño: alojado en la UE, sin rastreadores, consentimiento forzado por cliente. Lee nuestra arquitectura de cumplimiento GDPR."
     },
     "securityAuditLog": {
       "title": "Registro de auditoría y accesos — Seguridad PR-TOP",
-      "description": "Cómo PR-TOP registra cada acceso a los datos del cliente con registros de auditoría inalterables, disponibles para terapeutas y administradores."
+      "description": "PR-TOP lleva un registro de auditoría inmutable de cada acceso a datos del cliente. Terapeutas y administradores pueden revisar el historial de acceso completo."
     },
     "securityDataSovereignty": {
       "title": "Soberanía y residencia de datos — Seguridad PR-TOP",
-      "description": "Dónde aloja PR-TOP los datos del cliente, opciones de región y cómo los terapeutas mantienen el control sobre la residencia y exportación de datos."
+      "description": "PR-TOP almacena los datos del cliente en servidores de la UE (Hetzner). Sin transferencias ni terceros ocultos. Soberanía total de datos para terapeutas."
     }
   },
   "ai": {

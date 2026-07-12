@@ -29,7 +29,7 @@ const CONTENT = {
   en: {
     seoTitle: 'PR-TOP vs Mentalyc (2026) — honest comparison for therapists',
     seoDescription:
-      'Mentalyc is a privacy-first AI note-taker for therapists. PR-TOP adds the between-session layer: Telegram diary, exercises, SOS. EU-hosted.',
+      'Mentalyc is a privacy-first AI note-taker for therapists. PR-TOP adds the between-session layer: Telegram diary, exercises, SOS. EU-hosted, GDPR-first.',
     articleHeadline: 'PR-TOP vs Mentalyc — comparison for therapists (2026)',
     articleDescription:
       'Honest 2026 comparison of Mentalyc (privacy-first AI note-taker) and PR-TOP (therapist-controlled between-session assistant with Telegram client bot).',
