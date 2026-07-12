@@ -384,6 +384,20 @@ export default function Landing() {
               </div>
             ))}
           </div>
+
+          {/* Contextual solution links — boost internal link graph for batch-1/2 landings */}
+          <div className="mt-12 pt-8 border-t border-surface">
+            <p className="text-secondary text-sm mb-4 font-medium">{t('landing.relatedLinks')}:</p>
+            <div className="flex flex-wrap gap-3">
+              <Link to={lp('/ai-session-notes-for-therapists')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.solAiSessionNotes')}</Link>
+              <Link to={lp('/for-coaches')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.solForCoaches')}</Link>
+              <Link to={lp('/therapy-documentation-ai')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.solTherapyDocumentation')}</Link>
+              <Link to={lp('/therapist-ai-assistant')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.solTherapistAssistant')}</Link>
+              <Link to={lp('/client-diary-for-therapists')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.solClientDiary')}</Link>
+              <Link to={lp('/secure-practice-management')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.solSecurePractice')}</Link>
+              <Link to={lp('/best-ai-assistant-for-therapists')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.bestAiAssistants')}</Link>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -482,7 +496,7 @@ export default function Landing() {
       {/* ─── Footer ─── */}
       <footer className="bg-text text-white/70">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-8">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-6 gap-8">
             {/* Brand */}
             <div>
               <span className="text-xl font-bold text-white">{t('brand')}</span>
@@ -522,6 +536,22 @@ export default function Landing() {
                 <li><Link to={lp('/compare/mentalyc')} className="hover:text-white transition-colors">{t('landing.compareMentalyc')}</Link></li>
                 <li><Link to={lp('/alternatives/upheal')} className="hover:text-white transition-colors">{t('landing.altUpheal')}</Link></li>
                 <li><Link to={lp('/alternatives/mentalyc')} className="hover:text-white transition-colors">{t('landing.altMentalyc')}</Link></li>
+              </ul>
+            </div>
+
+            {/* Solutions — batch-1/2 landing pages */}
+            <div>
+              <h4 className="text-white font-semibold text-sm mb-3">{t('landing.footerSolutions')}</h4>
+              <ul className="space-y-2 text-sm">
+                <li><Link to={lp('/ai-session-notes-for-therapists')} className="hover:text-white transition-colors">{t('landing.solAiSessionNotes')}</Link></li>
+                <li><Link to={lp('/ai-practice-management')} className="hover:text-white transition-colors">{t('landing.solAiPracticeManagement')}</Link></li>
+                <li><Link to={lp('/for-coaches')} className="hover:text-white transition-colors">{t('landing.solForCoaches')}</Link></li>
+                <li><Link to={lp('/therapy-documentation-ai')} className="hover:text-white transition-colors">{t('landing.solTherapyDocumentation')}</Link></li>
+                <li><Link to={lp('/therapist-ai-assistant')} className="hover:text-white transition-colors">{t('landing.solTherapistAssistant')}</Link></li>
+                <li><Link to={lp('/hipaa-and-gdpr-for-therapy-software')} className="hover:text-white transition-colors">{t('landing.solHipaaGdpr')}</Link></li>
+                <li><Link to={lp('/coaching-session-management')} className="hover:text-white transition-colors">{t('landing.solCoachingSessions')}</Link></li>
+                <li><Link to={lp('/client-diary-for-therapists')} className="hover:text-white transition-colors">{t('landing.solClientDiary')}</Link></li>
+                <li><Link to={lp('/secure-practice-management')} className="hover:text-white transition-colors">{t('landing.solSecurePractice')}</Link></li>
               </ul>
             </div>
 

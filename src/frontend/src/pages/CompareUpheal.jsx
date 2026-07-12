@@ -594,6 +594,57 @@ export default function CompareUpheal() {
           </div>
         </section>
 
+        {/* Related solutions — internal link hub W6 */}
+        {(() => {
+          const RELATED = {
+            en: { title: 'Related', links: [
+              { path: '/ai-session-notes-for-therapists', label: 'AI session notes for therapists' },
+              { path: '/best-ai-assistant-for-therapists', label: 'Best AI assistants for therapists' },
+              { path: '/for-coaches', label: 'For coaches' },
+              { path: '/therapy-documentation-ai', label: 'Therapy documentation AI' },
+              { path: '/client-diary-for-therapists', label: 'Client diary for therapists' },
+              { path: '/secure-practice-management', label: 'Secure practice management' },
+            ]},
+            ru: { title: 'Смотрите также', links: [
+              { path: '/ai-session-notes-for-therapists', label: 'ИИ-заметки к сессиям' },
+              { path: '/best-ai-assistant-for-therapists', label: 'Лучшие ИИ-ассистенты для терапевтов' },
+              { path: '/for-coaches', label: 'Для коучей' },
+              { path: '/therapy-documentation-ai', label: 'ИИ для документации терапии' },
+              { path: '/client-diary-for-therapists', label: 'Дневник клиента для терапевтов' },
+              { path: '/secure-practice-management', label: 'Безопасная практика' },
+            ]},
+            uk: { title: 'Дивіться також', links: [
+              { path: '/ai-session-notes-for-therapists', label: 'ШІ-нотатки до сесій' },
+              { path: '/best-ai-assistant-for-therapists', label: 'Найкращі ШІ-асистенти для терапевтів' },
+              { path: '/for-coaches', label: 'Для коучів' },
+              { path: '/therapy-documentation-ai', label: 'ШІ для документації терапії' },
+              { path: '/client-diary-for-therapists', label: 'Щоденник клієнта для терапевтів' },
+              { path: '/secure-practice-management', label: 'Безпечна практика' },
+            ]},
+            es: { title: 'Relacionado', links: [
+              { path: '/ai-session-notes-for-therapists', label: 'Notas de sesión con IA' },
+              { path: '/best-ai-assistant-for-therapists', label: 'Mejores asistentes de IA para terapeutas' },
+              { path: '/for-coaches', label: 'Para coaches' },
+              { path: '/therapy-documentation-ai', label: 'Documentación terapéutica con IA' },
+              { path: '/client-diary-for-therapists', label: 'Diario del cliente para terapeutas' },
+              { path: '/secure-practice-management', label: 'Práctica segura' },
+            ]},
+          };
+          const r = RELATED[locale] || RELATED.en;
+          return (
+            <section className="mb-6 p-5 bg-blue-50 border border-blue-100 rounded-lg">
+              <p className="text-xs font-semibold uppercase tracking-wider text-blue-600 mb-3">{r.title}</p>
+              <div className="flex flex-wrap gap-2">
+                {r.links.map((l) => (
+                  <Link key={l.path} to={lp(l.path)} className="text-sm px-3 py-1 bg-white border border-blue-200 rounded-full text-blue-700 hover:border-blue-500 hover:text-blue-900 transition-colors">
+                    {l.label}
+                  </Link>
+                ))}
+              </div>
+            </section>
+          );
+        })()}
+
         <section className="mb-4 p-6 bg-gray-50 border border-gray-200 rounded-lg">
           <h2 className="text-xl font-semibold text-gray-900 mb-2">
             {c.cta.h2}
