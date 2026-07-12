@@ -137,6 +137,43 @@ export const PUBLIC_ROUTES = [
       'Best AI assistants for therapists (2026): honest picks across Upheal, Mentalyc, Twofold, Heidi, Supanote, Freed, Eleos, and PR-TOP — with a "best for" label on each entry.',
     primaryKeyword: { en: 'best AI assistant', ru: 'ИИ-ассистент', uk: 'ШІ-асистент', es: 'asistentes de IA' },
   },
+  {
+    path: '/ai-session-notes-for-therapists',
+    changefreq: 'monthly',
+    priority: 0.7,
+    title: 'AI session notes for therapists (2026) — full guide',
+    summary:
+      'How AI session notes work for therapists: Quill, Supanote and AutoNotes compared to PR-TOP, which adds a between-session Telegram channel, exercises, and crisis alerts on top of Whisper transcription.',
+    primaryKeyword: { en: 'AI session notes for therapists', ru: 'AI-заметки к сессии для психологов', uk: 'AI-нотатки до сесії для психологів', es: 'notas de sesión con IA para terapeutas' },
+  },
+  // W4 quick-win landings (batch 1) — 2026-07-12
+  {
+    path: '/ai-practice-management',
+    changefreq: 'monthly',
+    priority: 0.7,
+    title: 'AI practice management for therapists — PR-TOP guide (2026)',
+    summary:
+      'PR-TOP for therapy practice management: client list, sessions, AI notes, analytics and a Telegram client channel. Honest scope — not a US-insurance EHR. Compared to SimplePractice and Jane App.',
+    primaryKeyword: { en: 'AI practice management for therapists', ru: 'управление практикой психолога', uk: 'управління практикою психолога', es: 'gestión de consulta IA para terapeutas' },
+  },
+  {
+    path: '/for-coaches',
+    changefreq: 'monthly',
+    priority: 0.7,
+    title: 'PR-TOP for coaches — between-session engagement software',
+    summary:
+      'PR-TOP for coaches: Telegram client bot for accountability check-ins, between-session homework, streaks, and session prep — without EHR complexity. Pricing as ROI.',
+    primaryKeyword: { en: 'coaching practice software', ru: 'ПО для коучей', uk: 'ПЗ для коучів', es: 'software para coaches' },
+  },
+  {
+    path: '/secure-practice-management',
+    changefreq: 'monthly',
+    priority: 0.7,
+    title: 'Secure practice management for therapists — PR-TOP',
+    summary:
+      'How PR-TOP protects client data: application-layer AES encryption, EU-only hosting, GDPR consent enforcement, immutable audit log, and data sovereignty — all in one practice-management workspace.',
+    primaryKeyword: { en: 'secure practice management for therapists', ru: 'безопасное управление практикой', uk: 'безпечне управління практикою', es: 'gestión segura de consulta para terapeutas' },
+  },
 ];
 
 /**
@@ -166,6 +203,10 @@ export const LLMS_SECTIONS = [
       '/compare/mentalyc',
       '/alternatives/mentalyc',
       '/best-ai-assistant-for-therapists',
+      '/ai-session-notes-for-therapists',
+      '/ai-practice-management',
+      '/for-coaches',
+      '/secure-practice-management',
     ],
   },
 ];

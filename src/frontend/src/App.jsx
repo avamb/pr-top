@@ -45,6 +45,10 @@ import AlternativesUpheal from './pages/AlternativesUpheal';
 import CompareMentalyc from './pages/CompareMentalyc';
 import AlternativesMentalyc from './pages/AlternativesMentalyc';
 import BestAiAssistantForTherapists from './pages/BestAiAssistantForTherapists';
+import AiSessionNotesForTherapists from './pages/AiSessionNotesForTherapists';
+import AiPracticeManagement from './pages/AiPracticeManagement';
+import ForCoaches from './pages/ForCoaches';
+import SecurePracticeManagement from './pages/SecurePracticeManagement';
 import VerifyLead from './pages/VerifyLead';
 import SupervisionView from './pages/SupervisionView';
 import NotFound from './pages/NotFound';
@@ -111,6 +115,11 @@ const PUBLIC_MARKETING_ROUTES = [
   { path: '/compare/mentalyc',          element: <CompareMentalyc /> },
   { path: '/alternatives/mentalyc',     element: <AlternativesMentalyc /> },
   { path: '/best-ai-assistant-for-therapists', element: <BestAiAssistantForTherapists /> },
+  { path: '/ai-session-notes-for-therapists',  element: <AiSessionNotesForTherapists /> },
+  // W4 quick-win landings (batch 1) — 2026-07-12
+  { path: '/ai-practice-management',            element: <AiPracticeManagement /> },
+  { path: '/for-coaches',                       element: <ForCoaches /> },
+  { path: '/secure-practice-management',        element: <SecurePracticeManagement /> },
 ];
 
 function localePrefixedPath(locale, routePath) {
