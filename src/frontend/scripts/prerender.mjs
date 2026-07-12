@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright';
 
-import { LOCALIZED_ROUTES } from '../src/seo/routes.mjs';
+import { LOCALIZED_ROUTES, NOINDEX_PRERENDER_ROUTES } from '../src/seo/routes.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -184,14 +184,20 @@ async function main() {
     //   1. All deep localized paths (e.g. /ru/privacy, /es/security/gdpr).
     //   2. All locale-root paths (/ru, /uk, /es) — writes dist/<loc>/index.html.
     //   3. The English root ("/") — writes dist/index.html, the shell itself.
+    //   4. W2: auth noindex shells (/register, /login, /forgot-password, /reset-password)
+    //      — rendered AFTER the root so the pristine shell is already the correct
+    //      homepage prerender when these pages get their own dist/<route>/index.html.
+    //      These routes are NOT in LOCALIZED_ROUTES (no sitemap / llms.txt / hreflang).
     // With this ordering, when Playwright visits any locale root, the static
     // server hasn't written dist/<loc>/index.html yet, so the SPA fallback
     // serves the pristine shell (dist/index.html), and the React client boots
     // fresh into the correct route.
-    const deep     = LOCALIZED_ROUTES.filter((r) => r.basePath !== '/');
+    const deep        = LOCALIZED_ROUTES.filter((r) => r.basePath !== '/');
     const localeRoots = LOCALIZED_ROUTES.filter((r) => r.basePath === '/' && r.locale !== 'en');
     const englishRoot = LOCALIZED_ROUTES.filter((r) => r.basePath === '/' && r.locale === 'en');
-    const ordered = [...deep, ...localeRoots, ...englishRoot];
+    // W2 — auth noindex shells: map to same shape as LOCALIZED_ROUTES for the loop.
+    const noindexShells = NOINDEX_PRERENDER_ROUTES.map(({ path }) => ({ path, basePath: path }));
+    const ordered = [...deep, ...localeRoots, ...englishRoot, ...noindexShells];
 
     for (const route of ordered) {
       try {
@@ -220,7 +226,8 @@ async function main() {
     console.error('[prerender] one or more routes failed — aborting build');
     process.exit(1);
   }
-  console.log(`[prerender] wrote ${LOCALIZED_ROUTES.length} prerendered pages under ${DIST_DIR}`);
+  const totalRendered = LOCALIZED_ROUTES.length + NOINDEX_PRERENDER_ROUTES.length;
+  console.log(`[prerender] wrote ${totalRendered} prerendered pages under ${DIST_DIR} (${LOCALIZED_ROUTES.length} public + ${NOINDEX_PRERENDER_ROUTES.length} noindex auth shells)`);
 }
 
 main().catch((err) => {

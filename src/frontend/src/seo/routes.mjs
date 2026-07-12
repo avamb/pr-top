@@ -6,11 +6,16 @@
  *   - App.jsx locale-prefix routing (F11)
  *
  * Only PUBLIC MARKETING routes belong here.
- * Explicitly EXCLUDED (per SEO Foundation spec F2):
+ * Explicitly EXCLUDED from PUBLIC_ROUTES (per SEO Foundation spec F2):
  *   /login, /register, /confirm (and its locale variants /ru/confirm etc.),
  *   /dashboard/*, /clients/*, /sessions/*, /exercises, /analytics, /settings,
  *   /subscription/*, /admin/*, /verify-lead, /share/*, /forgot-password,
  *   /reset-password.
+ *
+ * Auth routes ARE prerendered (NOINDEX_PRERENDER_ROUTES below) for W2 SEO
+ * correctness — each gets its own static shell with its real title and
+ * robots noindex,nofollow — but they are NOT included in sitemap.xml,
+ * llms.txt, or hreflang alternate links.
  *
  * changefreq / priority follow standard sitemap conventions (advisory only).
  */
@@ -222,6 +227,22 @@ export const LOCALIZED_ROUTES = [
       enOnly: false,
     })),
   ),
+];
+
+/**
+ * W2 — Auth routes that need their own prerendered static shell so crawlers
+ * never see the homepage head on these pages. These routes are:
+ *   - INCLUDED in prerender (scripts/prerender.mjs) — English only, no locale mirrors.
+ *   - EXCLUDED from sitemap.xml, llms.txt, and hreflang alternate links.
+ *   - Each page component already calls <Seo ... noindex /> (F3), so the
+ *     prerendered HTML naturally carries robots noindex,nofollow and the
+ *     page's own title / self-canonical.
+ */
+export const NOINDEX_PRERENDER_ROUTES = [
+  { path: '/register',       title: 'Register — PR-TOP' },
+  { path: '/login',          title: 'Sign in — PR-TOP' },
+  { path: '/forgot-password', title: 'Forgot password — PR-TOP' },
+  { path: '/reset-password', title: 'Reset password — PR-TOP' },
 ];
 
 export default PUBLIC_ROUTES;
