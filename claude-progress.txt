@@ -14929,3 +14929,54 @@ VERIFICATION:
 
 Stats after session 200: #442 status: passing.
 
+================================================================
+Session 201 (2026-07-12) - Feature #444 PASSING (W3 keyword-locked SEO)
+================================================================
+
+Assigned: #444 W3 — Unique CTA-bearing descriptions and keyword-locked H1/Title pairs
+
+IMPLEMENTATION:
+1. src/frontend/src/seo/routes.mjs
+   - Added primaryKeyword: { en, ru, uk, es } to all 12 PUBLIC_ROUTES entries.
+   - Keywords appear case-insensitively in the H1 or Title of each prerendered
+     page in every locale.
+   - For alternatives pages (ru/uk): used simple competitor name ("Upheal" /
+     "Mentalyc") since Slavic nominative plural differs from genitive form.
+   - For best-of ES: used "asistentes de IA" (plural) to match the actual H1.
+
+2. src/frontend/src/i18n/{en,ru,uk,es}.json
+   - Rewrote seo.*.description for all 7 localized pages (home, privacy, terms,
+     securityEncryption, securityGdpr, securityAuditLog, securityDataSovereignty).
+   - All new descriptions are 140-160 chars, unique per locale, include the
+     page's primaryKeyword, and end with a CTA.
+   - ES descriptions went through two revision rounds to land in 140-160 range.
+
+3. src/frontend/src/pages/CompareMentalyc.jsx
+   - EN seoDescription: was 139 chars (1 under minimum). Added ", GDPR-first"
+     suffix to reach 151 chars.
+
+4. src/frontend/src/pages/CompareUpheal.jsx
+   - ES seoDescription: was 138 chars (2 under minimum). Rephrased last clause
+     to reach 148 chars.
+
+5. _t_seo_i18n_audit.js
+   - Fixed extractDescription regex: now uses double-quote-only stop for content
+     attribute so apostrophes inside double-quoted attributes do not truncate the
+     extracted description (was causing "clients'" to stop extraction early).
+   - Added Section 7 (W3a): PRIMARY_KEYWORDS map inlined from manifest;
+     for each of 48 locale x route combinations, asserts H1 or Title contains
+     the keyword (case-insensitive).
+   - Added Section 8 (W3b): asserts every description is 140-160 chars;
+     asserts no two pages in the same locale share the same description.
+
+VERIFICATION:
+- npm run build --prefix src/frontend: 52 pages (48 public + 4 auth shells).
+- node _t_seo_i18n_audit.js: 15 passed, 0 failed
+  * Section 7: 48 keyword checks all green
+  * Section 8: all 48 descriptions 140-160 chars, all descriptions unique
+- node _t_geo_audit.js: 16 passed, 0 failed (no regressions)
+- node _t_assistant_kb_audit.js: 79 passed, 0 failed (no regressions)
+- git commit: 0db1ca1
+
+Stats after session 201: #444 status: passing.
+
