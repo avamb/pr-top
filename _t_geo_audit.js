@@ -323,6 +323,76 @@ section('6. W1: single meta description per page + per-locale uniqueness');
   }
 }
 
+// ---- 7. W7: robots meta tag present and correct on every page ----
+// (a) Every indexable (PUBLIC_ROUTES) page must have a <meta name="robots"> tag
+//     and must NOT carry "noindex".
+// (b) Every NOINDEX_PRERENDER_ROUTES page must NOT appear in sitemap.xml or llms.txt.
+section('7. W7: robots meta present on indexable pages; noindex pages absent from sitemap/llms');
+{
+  const NOINDEX_ROUTES = ['/register', '/login', '/forgot-password', '/reset-password'];
+
+  // 7a. Indexable pages: <meta name="robots"> must be present and must not say noindex.
+  function extractRobotsContent(html) {
+    const m = html.match(/<meta[^>]+name=["']robots["'][^>]*content=["']([^"']*)["']/i);
+    return m ? m[1] : null;
+  }
+
+  let robotsMissing = 0;
+  let noindexOnIndexable = 0;
+  for (const locale of LOCALES) {
+    for (const routePath of PUBLIC_ROUTES) {
+      const localizedPath = localePathFor(locale, routePath);
+      const file = distFileFor(localizedPath);
+      if (!fs.existsSync(file)) continue; // already failed above
+      const html = fs.readFileSync(file, 'utf8');
+      const robotsContent = extractRobotsContent(html);
+      if (!robotsContent) {
+        fail(`W7(a): ${localizedPath}: <meta name="robots"> missing from raw HTML`);
+        robotsMissing++;
+      } else if (/noindex/i.test(robotsContent)) {
+        fail(`W7(a): ${localizedPath}: indexable page has "noindex" in robots (content="${robotsContent}")`);
+        noindexOnIndexable++;
+      }
+    }
+  }
+  if (robotsMissing === 0 && noindexOnIndexable === 0) {
+    pass(`W7(a): all ${LOCALES.length * PUBLIC_ROUTES.length} indexable pages have a valid <meta name="robots"> without noindex`);
+  }
+
+  // 7b. Noindex pages must not appear in sitemap.xml or llms.txt.
+  const smFile = path.join(DIST, 'sitemap.xml');
+  const llmsFile = path.join(DIST, 'llms.txt');
+  const smContent = fs.existsSync(smFile) ? fs.readFileSync(smFile, 'utf8') : null;
+  const llmsContent = fs.existsSync(llmsFile) ? fs.readFileSync(llmsFile, 'utf8') : null;
+
+  let noindexLeaks = 0;
+  for (const routePath of NOINDEX_ROUTES) {
+    // Check sitemap
+    if (smContent) {
+      const urlFragment = 'pr-top.com' + routePath;
+      if (smContent.includes(urlFragment)) {
+        fail(`W7(b): noindex route "${routePath}" found in sitemap.xml — must be excluded`);
+        noindexLeaks++;
+      }
+    }
+    // Check llms.txt
+    if (llmsContent) {
+      if (llmsContent.includes(routePath)) {
+        fail(`W7(b): noindex route "${routePath}" found in llms.txt — must be excluded`);
+        noindexLeaks++;
+      }
+    }
+  }
+  if (noindexLeaks === 0) {
+    const checkedIn = [smContent ? 'sitemap.xml' : null, llmsContent ? 'llms.txt' : null].filter(Boolean).join(' and ');
+    if (checkedIn) {
+      pass(`W7(b): no noindex route leaks into ${checkedIn}`);
+    } else {
+      console.log('  SKIP  W7(b): sitemap.xml and llms.txt not present — skipping noindex-leak check');
+    }
+  }
+}
+
 // ---- Summary ----
 console.log('\n' + '='.repeat(60));
 console.log(`GEO AUDIT: ${passed} passed, ${failed} failed`);
@@ -332,6 +402,6 @@ if (failed > 0) {
   for (const f of failures.slice(0, 30)) console.log('  - ' + f);
   process.exit(1);
 } else {
-  console.log('\nF17 GEO extended audit PASSED');
+  console.log('\nF17 GEO extended audit PASSED (W7 checks included)');
   process.exit(0);
 }
