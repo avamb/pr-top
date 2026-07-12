@@ -1,4 +1,45 @@
 ================================================================
+Session 203 (2026-07-12) - Feature #448 PASSING
+================================================================
+
+Assigned: #448 "W7 — Audit + reporting extensions (query panel lock-in)"
+
+IMPLEMENTATION:
+
+(a) W1/W3 audit permanence — already in place from prior sessions:
+  - _t_geo_audit.js section 6: W1 (single description, per-locale uniqueness)
+  - _t_seo_i18n_audit.js section 7: W3 keyword-in-H1/Title
+  - _t_seo_i18n_audit.js section 8: W3 description 140-160 chars + uniqueness
+
+(b) Extended _t_geo_audit.js with new section 7 (W7 robots/noindex):
+  - W7(a): every indexable PUBLIC_ROUTES page must have <meta name="robots">
+    present in raw HTML and must NOT contain "noindex"
+  - W7(b): every NOINDEX_PRERENDER_ROUTES path (/register /login /forgot-password
+    /reset-password) must NOT appear in sitemap.xml or llms.txt
+
+(c) IndexNow post-deploy step documented in:
+  - docs/seo/reports/query-panel-2026-07.md (dedicated section)
+
+(d) Created docs/seo/reports/query-panel-2026-07.md:
+  - 35-query baseline from July 2026 Hermes ranking study
+  - July baseline: PR-TOP top-5 for 1/35 queries only (#3 for "client diary...")
+  - Table with all 35 queries (EN/RU/UK/ES), PR-TOP rank, competitors in top-5
+  - Wave-2 targeted pages mapped to query numbers
+  - Monthly re-run instructions
+  - KPI targets (3 / 8 / 15 queries by months 1 / 3 / 6)
+
+(e) Audits green:
+  GEO audit: 18/18 PASSED (incl. new W7 section)
+  i18n audit: 15/15 PASSED
+
+Commit: f6d8829
+
+Stats at end of session 203:
+  passing: 448, total: 448, percentage: 100.0 (ALL FEATURES DONE!)
+  in_progress: 0
+  #448 status: passing
+
+================================================================
 Session 202 (2026-07-12) - Feature #446 PASSING
 ================================================================
 
@@ -15077,3 +15118,47 @@ VERIFICATION:
 
 Stats after session 202: #445 status: passing (445/448, 99.3%).
 
+
+================================================================
+Session 203 (2026-07-12) - Feature #447 PASSING (W6 internal linking)
+================================================================
+
+Assigned: #447 W6 — Internal linking: 'Solutions' footer column + hub links
+
+IMPLEMENTATION:
+
+1. src/frontend/src/pages/Landing.jsx
+   - Footer: changed grid from lg:grid-cols-5 to lg:grid-cols-6.
+   - Added 'Solutions' column (6th column) listing all 9 batch-1/2 pages,
+     using t('landing.sol*') i18n keys + lp() locale-prefix function.
+   - Added contextual chip-pill link row after the features grid (7 key
+     solution landings) with relatedLinks label.
+
+2. src/frontend/src/pages/BestAiAssistantForTherapists.jsx
+   - Added a locale-aware 'Related' block (RELATED per-locale const, IIFE)
+     just before the bottom CTA section, linking 7 batch-1/2 pages.
+
+3. src/frontend/src/pages/CompareMentalyc.jsx
+   - Same 'Related' block pattern: 6 related solution links before CTA.
+
+4. src/frontend/src/pages/CompareUpheal.jsx
+   - Same 'Related' block pattern: 6 related solution links before CTA.
+
+5. src/frontend/src/i18n/{en,ru,uk,es}.json
+   - Added footerSolutions, 9 solXxx labels, relatedLinks keys.
+   - EN: "Solutions" / RU: "Решения" / UK: "Рішення" / ES: "Soluciones"
+
+6. _t_link_graph_w6.js (new audit script)
+   - Checks all 13 unique W6 link targets across 4 locales (52 dist files)
+   - Spot-checks homepage, compare pages, and best-of for inserted links
+
+VERIFICATION:
+- npm run build --prefix src/frontend: 88 prerendered pages (84 public +
+  4 noindex auth shells), sitemap 84 URLs (21 routes x 4 locales).
+- node _t_geo_audit.js: 16 passed, 0 failed.
+- node _t_seo_i18n_audit.js: 15 passed, 0 failed.
+- node _t_assistant_kb_audit.js: 79 passed, 0 failed.
+- node _t_link_graph_w6.js: 52 checks, 0 dead targets — PASSED.
+- git commit: c4702df
+
+Stats after session 203: #447 status: passing (447/448, 99.8%).
