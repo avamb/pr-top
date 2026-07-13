@@ -15237,3 +15237,61 @@ VERIFICATION:
 - git commit: c4702df
 
 Stats after session 203: #447 status: passing (447/448, 99.8%).
+
+================================================================
+Session 204 (2026-07-14) - Feature #449 PASSING (R1 practice-first hero + dual-intent meta)
+================================================================
+
+Assigned: #449 R1 — Hero + dual-intent meta on landing
+
+IMPLEMENTATION:
+1. src/frontend/src/i18n/{en,ru,uk,es}.json
+   - heroTitle1: replaced "AI Assistant for Therapists..." with practice-first H1
+     EN: "A unified workspace" / RU: "Единое рабочее пространство" /
+     UK: "Єдиний робочий простір" / ES: "Un espacio de trabajo unificado"
+   - heroTitle2: practice continuation (no AI/bot)
+     EN: "for therapists and their practice." / RU: "для психолога и его практики." /
+     UK: "для психолога та його практики." / ES: "para terapeutas y su práctica."
+   - heroSlogan: practice-first subheadline (context, control, boundaries) — no AI/bot
+   - heroDesc: includes mandatory safety sentence per §4.4 (POSITIONING_ADDENDUM)
+     "Automation technologies help structure the routine, but they do not replace
+      the specialist and do not act on their behalf."
+   - seo.home.title: dual-intent (practice-first visible, AI keywords in meta)
+     EN: "PR-TOP — Practice Workspace for Therapists & Psychologists | Client Diary,
+          Session Notes, AI Support Between Sessions"
+   - seo.home.description: dual-intent, 140-160 chars, AI keywords preserved in meta
+   - landing.footerDesc: updated to workspace voice
+
+2. src/frontend/src/pages/Landing.jsx
+   - Seo fallback title/description props updated to new EN dual-intent values
+
+3. src/frontend/src/seo/routes.mjs
+   - Home route primaryKeyword updated from "AI assistant for therapists" to
+     "Practice Workspace for Therapists" (and locale equivalents) to match
+     new dual-intent title
+
+4. _t_seo_i18n_audit.js
+   - PRIMARY_KEYWORDS['/'] updated to new practice-first keywords
+
+5. src/frontend/scripts/prerender.mjs (also fixes Windows FS race condition bug)
+   - startStaticServer(): reads dist/index.html into memory at startup,
+     serves SPA fallback from in-memory string (avoids ENOENT from Windows
+     antivirus/indexer locking the file after Vite writes it).
+   - Added error handler on ReadStream for files served from disk.
+
+NOTE: R1 changes were committed as part of the R2 (#450) commit (which also
+modified en.json/es.json) and the R3 (#451) commit (which modified prerender.mjs
+and _t_seo_i18n_audit.js). All R1 content is in HEAD.
+
+VERIFICATION:
+- node check-r1.js: 12 passed, 0 failed
+  * All 4 locales: H1 has no AI/bot ✓
+  * All 4 locales: seo.home.title has AI keywords ✓
+  * All 4 locales: heroDesc has safety sentence ✓
+- npm run build (via run-build.js): 88 prerendered pages, exit 0 ✓
+- node _t_geo_audit.js: 18 passed, 0 failed ✓
+- node _t_seo_i18n_audit.js: 15 passed, 0 failed ✓
+- node _t_assistant_kb_audit.js: 79 passed, 0 failed ✓
+- node _t_link_graph_w6.js: 52 passed, 0 failed ✓
+
+Stats after session 204: #449 status: passing (449/457, 98.2%).
