@@ -279,7 +279,14 @@
     "newsletterUnsubscribeTitle": "Unsubscribed",
     "newsletterUnsubscribeDesc": "You have been unsubscribed from the newsletter.",
     "newsletterUnsubscribeError": "Could not process unsubscribe request.",
-    "newsletterPrivacy": "We respect your privacy. Unsubscribe anytime."
+    "newsletterPrivacy": "We respect your privacy. Unsubscribe anytime.",
+    "controlHeading": "Automation helps. Decisions stay with you.",
+    "controlLead": "PR-TOP can transcribe recordings, structure draft notes, and help you surface context across sessions. Here is what the service does not do:",
+    "controlNot1": "Does not conduct therapy or provide clinical guidance.",
+    "controlNot2": "Does not make diagnoses or reach clinical conclusions.",
+    "controlNot3": "Does not make clinical decisions — that role belongs to you.",
+    "controlNot4": "Does not communicate with your clients on your behalf outside the rules you set.",
+    "controlClose": "Every meaningful action requires your review and confirmation."
   },
   "auth": {
     "loginTitle": "Log In",

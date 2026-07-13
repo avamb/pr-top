@@ -3,7 +3,7 @@
   "seo": {
     "home": {
       "title": "PR-TOP — Espacio de trabajo para terapeutas | Diario del cliente, notas de sesión, IA entre sesiones",
-      "description": "PR-TOP — espacio de trabajo para terapeutas: diario cifrado del cliente, notas de sesión con IA y comunicación segura entre sesiones. Cumple con GDPR. Prueba gratis."
+      "description": "PR-TOP — espacio de trabajo para terapeutas: diario cifrado del cliente, notas de sesión con IA, comunicación segura entre sesiones. GDPR. Prueba gratis."
     },
     "privacy": {
       "title": "Política de privacidad — PR-TOP",
@@ -279,7 +279,14 @@
     "newsletterUnsubscribeTitle": "Dado de baja",
     "newsletterUnsubscribeDesc": "Te has dado de baja del boletín.",
     "newsletterUnsubscribeError": "No se pudo procesar la solicitud de baja.",
-    "newsletterPrivacy": "Respetamos tu privacidad. Cancela la suscripción en cualquier momento."
+    "newsletterPrivacy": "Respetamos tu privacidad. Cancela la suscripción en cualquier momento.",
+    "controlHeading": "La automatización ayuda. Las decisiones son suyas.",
+    "controlLead": "PR-TOP puede transcribir grabaciones, estructurar borradores de notas y ayudarle a recuperar el contexto entre sesiones. Esto es lo que el servicio no hace:",
+    "controlNot1": "No realiza terapia ni proporciona orientación clínica.",
+    "controlNot2": "No establece diagnósticos ni extrae conclusiones clínicas.",
+    "controlNot3": "No toma decisiones clínicas — ese rol le corresponde a usted.",
+    "controlNot4": "No se comunica con sus clientes en su nombre fuera de las reglas que usted establece.",
+    "controlClose": "Toda acción relevante requiere su revisión y confirmación."
   },
   "auth": {
     "loginTitle": "Iniciar sesión",

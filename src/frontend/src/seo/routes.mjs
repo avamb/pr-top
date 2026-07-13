@@ -34,7 +34,7 @@ export const PUBLIC_ROUTES = [
     title: 'PR-TOP — Therapist-controlled between-session assistant',
     summary:
       'Product landing: client diary, AI session notes, crisis alerts, Telegram bot — with therapist control and GDPR-grade encryption.',
-    primaryKeyword: { en: 'AI assistant for therapists', ru: 'AI-ассистент', uk: 'AI-асистент', es: 'asistente IA' },
+    primaryKeyword: { en: 'Practice Workspace for Therapists', ru: 'рабочее пространство психолога', uk: 'робочий простір для психолога', es: 'espacio de trabajo para terapeutas' },
   },
   {
     path: '/security/encryption',

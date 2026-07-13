@@ -9,6 +9,7 @@ import PublicAssistantChatButton from '../components/PublicAssistantChatButton';
 import PublicAssistantChatPanel from '../components/PublicAssistantChatPanel';
 import Seo from '../components/Seo';
 import useLocalePath from '../hooks/useLocalePath';
+import ControlSection from '../components/landing/ControlSection';
 
 /* ───────── Feature Highlights (icons only, text from i18n) ───────── */
 const highlightIcons = [
@@ -220,8 +221,8 @@ export default function Landing() {
         path="/"
         titleKey="seo.home.title"
         descriptionKey="seo.home.description"
-        title="PR-TOP — AI Assistant for Therapists & Psychologists | Client Diary, Session Notes, Telegram Bot"
-        description="PR-TOP helps psychologists and coaches stay connected with clients between sessions: secure client diary, AI session notes, crisis alerts and a Telegram bot. GDPR-compliant."
+        title="PR-TOP — Practice Workspace for Therapists & Psychologists | Client Diary, Session Notes, AI Support Between Sessions"
+        description="PR-TOP — practice workspace for therapists: encrypted client diary, AI session notes, safe communication between sessions. GDPR-compliant. 7-day free trial."
       />
       {/* ─── Skip to content ─── */}
       <a href="#main-content" className="skip-to-content">
@@ -400,6 +401,9 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      {/* ─── Control Section (R3) ─── */}
+      <ControlSection />
 
       {/* ─── Anti-Burnout ─── */}
       <section aria-label="Anti-Burnout" className="py-20 bg-gradient-to-b from-teal-50 to-white">

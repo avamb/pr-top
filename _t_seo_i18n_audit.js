@@ -213,7 +213,7 @@ for (const locale of LOCALES) {
 
 section('7. W3 — primaryKeyword present in H1 or Title (case-insensitive)');
 const PRIMARY_KEYWORDS = {
-  '/': { en: 'AI assistant for therapists', ru: 'AI-ассистент', uk: 'AI-асистент', es: 'asistente IA' },
+  '/': { en: 'Practice Workspace for Therapists', ru: 'рабочее пространство психолога', uk: 'робочий простір для психолога', es: 'espacio de trabajo para terapeutas' },
   '/security/encryption': { en: 'encryption', ru: 'шифрование', uk: 'шифрування', es: 'cifrado' },
   '/security/gdpr': { en: 'GDPR', ru: 'GDPR', uk: 'GDPR', es: 'GDPR' },
   '/security/audit-log': { en: 'audit', ru: 'аудит', uk: 'аудит', es: 'auditoría' },

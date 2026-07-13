@@ -66,6 +66,11 @@ function contentTypeFor(filePath) {
 // Serve dist/ statically. If the requested path does not map to a real file
 // under dist/, fall back to dist/index.html (SPA-style) so client routing works.
 function startStaticServer() {
+  // Read the SPA shell into memory once at startup so the static server can
+  // always serve it — even if dist/index.html is temporarily locked by the OS
+  // (Windows antivirus / indexer) after being written by the previous step.
+  const shellHtml = readFileSync(INDEX_HTML, 'utf8');
+
   return new Promise((resolvePromise, rejectPromise) => {
     const server = createServer((req, res) => {
       try {
@@ -88,13 +93,26 @@ function startStaticServer() {
         }
 
         if (!existsSync(filePath) || !statSync(filePath).isFile()) {
-          // SPA fallback.
-          filePath = INDEX_HTML;
+          // SPA fallback: serve the shell from memory to avoid Windows FS locks.
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          res.end(shellHtml);
+          return;
         }
 
         res.statusCode = 200;
         res.setHeader('Content-Type', contentTypeFor(filePath));
-        createReadStream(filePath).pipe(res);
+        const stream = createReadStream(filePath);
+        stream.on('error', (streamErr) => {
+          // Guard: if the file became inaccessible after existsSync passed
+          // (Windows FS race), fall back to the in-memory shell.
+          if (!res.headersSent) {
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            res.end(shellHtml);
+          }
+        });
+        stream.pipe(res);
       } catch (err) {
         res.statusCode = 500;
         res.end(String(err && err.message ? err.message : err));
