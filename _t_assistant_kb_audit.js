@@ -491,7 +491,10 @@ async function main() {
   //     • "session access is blocked on Basic"         — 'blocked' was absent
   const TIER_RE_KB = /\b(Premium|Pro|Basic|Trial)\b/;
   // "only" uses a negative lookbehind to avoid matching "read-only" compound adjective.
-  const GATE_WORD_RE_KB = /(?<!-)only\b|available\s+on\b|\blocked\b|\bunlock\b|limited\s+to\b|\bgated\b|\bblocked\b/i;
+  // R23c fix: narrowed from (?<!-)only (excluded ALL hyphenated "...-only") to
+  // (?<!read-)only so that "Premium-only", "Pro-only", "Basic-only" ARE caught
+  // as ungated tier claims, while "read-only" (not a plan gate) stays excluded.
+  const GATE_WORD_RE_KB = /(?<!read-)only\b|available\s+on\b|\blocked\b|\bunlock\b|limited\s+to\b|\bgated\b|\bblocked\b/i;
   const ANNOTATION_RE_KB = /<!--\s*gate:\s*([\w-]+)\s*-->/;
   const HEADING_RE_KB = /^#{1,6}\s/;
 
@@ -678,6 +681,45 @@ async function main() {
     }
   } catch (e) {
     fail('R23b fixture tests threw: ' + e.message);
+  }
+
+  section('12k. R23c — lookbehind fix: Premium-only/Pro-only/Basic-only now caught; read-only still excluded');
+  try {
+    const FIXTURES_DIR_23C = path.join(__dirname, 'tests', 'fixtures');
+    const REG23C = path.join(FIXTURES_DIR_23C, 'kb-gate-r23c-regression.md');
+    const POS23C = path.join(FIXTURES_DIR_23C, 'kb-gate-r23c-positive.md');
+
+    // Regression fixture: 3 ungated "*-only" tier claims (Premium-only, Pro-only, Basic-only).
+    // OLD (?<!-)only lookbehind: all 3 silently pass (BUG).
+    // NEW (?<!read-)only lookbehind: all 3 flagged as failures (FIXED).
+    if (!fs.existsSync(REG23C)) {
+      fail('R23c: regression fixture missing — tests/fixtures/kb-gate-r23c-regression.md');
+    } else {
+      const reg23cFails = detectUngatedKBClaims(REG23C, gateIds, 'tests/fixtures/kb-gate-r23c-regression.md');
+      if (reg23cFails.length === 3) {
+        pass('R23c regression fixture: exactly 3 ungated *-only tier claims detected (Premium-only, Pro-only, Basic-only)');
+      } else {
+        fail('R23c regression fixture: expected 3 failures, got ' + reg23cFails.length +
+          (reg23cFails.length ? ': ' + reg23cFails.slice(0, 3).join(' | ').slice(0, 300) : ''));
+      }
+    }
+
+    // Positive fixture: same 3 claims WITH gate annotations → 0 failures.
+    // Also includes "read-only view on Premium" WITHOUT annotation → 0 failures
+    // (read-only is excluded by lookbehind; "on Premium" is not a gate word).
+    if (!fs.existsSync(POS23C)) {
+      fail('R23c: positive fixture missing — tests/fixtures/kb-gate-r23c-positive.md');
+    } else {
+      const pos23cFails = detectUngatedKBClaims(POS23C, gateIds, 'tests/fixtures/kb-gate-r23c-positive.md');
+      if (pos23cFails.length === 0) {
+        pass('R23c positive fixture: annotated *-only claims pass; read-only correctly excluded (0 failures)');
+      } else {
+        fail('R23c positive fixture: expected 0 failures, got ' + pos23cFails.length +
+          ': ' + pos23cFails.slice(0, 3).join(' | ').slice(0, 300));
+      }
+    }
+  } catch (e) {
+    fail('R23c fixture tests threw: ' + e.message);
   }
 
   section('12. S2 — publicAssistant.js and assistant.js call search with correct audience');

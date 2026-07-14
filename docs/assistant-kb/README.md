@@ -96,17 +96,33 @@ Descriptive pricing sentences that merely list plan names without
 restricting a specific feature (e.g., "The four tiers are Trial, Basic,
 Pro, and Premium") do not trigger the rule.
 
-#### Full gate-word list (R23b)
+#### Full gate-word list (R23c)
 
-| Word / phrase | Example trigger |
-|---|---|
-| `only` | "Pro only", "available on Premium only" |
-| `available on` | "available on Pro and Premium" |
-| `locked` | "locked card", "locked for Trial users" |
-| `unlock` | "upgrade to Pro to unlock", "Pro and Premium unlock" |
-| `limited to` | "limited to Premium subscribers" |
-| `gated` | "gated by plan", "gated on Basic" _(added R23b)_ |
-| `blocked` | "blocked on Trial", "blocked for Basic" _(added R23b)_ |
+| Word / phrase | Example trigger | Exclusion |
+|---|---|---|
+| `only` | "Pro only", "available on Premium only", "Premium-only", "Pro-only" | `read-only` excluded via lookbehind _(updated R23c — see below)_ |
+| `available on` | "available on Pro and Premium" | — |
+| `locked` | "locked card", "locked for Trial users" | — |
+| `unlock` | "upgrade to Pro to unlock", "Pro and Premium unlock" | — |
+| `limited to` | "limited to Premium subscribers" | — |
+| `gated` | "gated by plan", "gated on Basic" _(added R23b)_ | — |
+| `blocked` | "blocked on Trial", "blocked for Basic" _(added R23b)_ | — |
+
+**`only` lookbehind — R23c precision fix:**
+
+The `only` gate word uses a negative lookbehind to avoid false-positives on the
+compound adjective **`read-only`** (e.g. "a read-only view on Premium"), which is
+not a plan-gating claim. The lookbehind is `(?<!read-)only`, meaning:
+
+- `read-only` → lookbehind matches → **excluded** (correctly not flagged)
+- `Premium-only` → lookbehind does NOT match → **caught** (correctly flagged)
+- `Pro-only` → lookbehind does NOT match → **caught** (correctly flagged)
+- `Basic-only` → lookbehind does NOT match → **caught** (correctly flagged)
+
+> **R23b regression (now fixed):** The original lookbehind `(?<!-)only` excluded
+> ALL hyphenated `...-only` forms, including `Premium-only`, `Pro-only`, and
+> `Basic-only` — the exact compound forms most often used in myth claims. R23c
+> narrows the exclusion to `read-only` only.
 
 The words `upgrade`, `requires`, and `missing` are intentionally **not** in
 the registry — they produce too many false positives in pricing/payment copy.
