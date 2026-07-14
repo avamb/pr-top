@@ -1,4 +1,68 @@
 ================================================================
+Session 229 (2026-07-14) - Feature #482 PASSING (R27 AI transparency page)
+================================================================
+
+Assigned: #482 R27 - Page 'How AI processing works' - 7 blocks with anchors to code/DPA
+
+IMPLEMENTATION:
+
+1. src/frontend/src/pages/AiTransparency.jsx (NEW)
+   - Public page at /security/ai-processing (EN/RU/ES/UK)
+   - Uses SecurityPageLayout; 7 disclosure Sections:
+     1. Which AI models are used (code refs: aiProviders/openai.js:10, anthropic.js:11, google.js:10, openrouter.js:11)
+     2. What data leaves PR-TOP (per-task: transcription, summarization, exercise, search, chatbot)
+     3. For what tasks AI is used (6 tasks, all therapist-initiated)
+     4. Where providers store data (US infra, not EU; amber warning box)
+     5. DPAs - ExternalLink to OpenAI/Anthropic/Google/OpenRouter DPA pages
+     6. Retention at providers (30 days max, not used for training)
+     7. Disabling AI (no global toggle; task-level opt-in; operator config path)
+   - CodeRef components show source file:line anchors inline
+
+2. src/frontend/src/seo/routes.mjs
+   - Added /security/ai-processing to PUBLIC_ROUTES
+   - Added to LLMS_SECTIONS Security group
+
+3. src/frontend/src/App.jsx
+   - Import AiTransparency; added route to PUBLIC_MARKETING_ROUTES
+
+4. src/frontend/src/i18n/{en,ru,es,uk}.json
+   - seo.securityAiProcessing.{title,description} (140-160 chars, verified)
+   - landing.aiProcessingPage key (footer link label)
+   - security.aiTransparencyTitle key (related-pages grid)
+   - security.aiTrans.* (40+ keys covering all 7 blocks in 4 locales)
+
+5. src/frontend/src/pages/Landing.jsx
+   - Added /security/ai-processing link to footer Security section
+
+6. src/frontend/src/components/SecurityPageLayout.jsx
+   - Grid changed from sm:grid-cols-4 to sm:grid-cols-5
+   - Added AI transparency as 5th related page link
+
+7. src/frontend/src/pages/PrivacyPolicy.jsx
+   - Added "See also" link to /security/ai-processing from AI Providers section
+
+8. docs/assistant-kb/ai-transparency.md (NEW)
+   - 800+ words, audience:public
+   - Full 7-block disclosure + edge cases (OpenRouter intermediary, no training opt-out UI, Whisper)
+   - 6 FAQ Q&As (diary data, model training, active provider, disable AI, notes to clients, code refs)
+   - Provider DPA table with URLs
+
+9. _t_geo_audit.js
+   - Added /security/ai-processing to PUBLIC_ROUTES list
+   - Updated comment: 23 routes x 4 = 92 sitemap entries
+
+VERIFICATION:
+- run-build.js: 96 prerendered pages (was 92; +4 locale variants), exit 0
+- sitemap.xml: 92 entries (23 routes x 4 locales)
+- node _t_assistant_kb_audit.js: 92 passed, 0 failed (25 authored docs, up from 24)
+- node _t_geo_audit.js: 18 passed, 0 failed
+- node _t_seo_i18n_audit.js: 15 passed, 0 failed
+- scripts/generate-assistant-docs.mjs: no changes (no drift)
+- Feature #482 marked PASSING
+
+Git commit: 0a74bf9
+
+================================================================
 Session 211 (2026-07-14) - Feature #458 PASSING (R10 final repositioning polish)
 ================================================================
 
