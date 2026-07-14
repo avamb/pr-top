@@ -31,7 +31,7 @@
     },
     "securityAiProcessing": {
       "title": "Cómo funciona el procesamiento de IA — Transparencia PR-TOP",
-      "description": "Transparencia total: qué modelos de IA usa PR-TOP, qué datos salen de la plataforma, para qué tareas, DPA de proveedores, períodos de retención y cómo desactivar la IA."
+      "description": "Transparencia total: qué modelos de IA usa PR-TOP, qué datos salen de la plataforma, para qué tareas, DPA de proveedores, retención y cómo desactivar la IA."
     }
   },
   "ai": {

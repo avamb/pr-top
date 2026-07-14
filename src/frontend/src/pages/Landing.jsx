@@ -529,6 +529,7 @@ export default function Landing() {
                 <li><Link to={lp('/security/gdpr')} className="hover:text-white transition-colors">{t('landing.gdpr')}</Link></li>
                 <li><Link to={lp('/security/audit-log')} className="hover:text-white transition-colors">{t('landing.auditLogging')}</Link></li>
                 <li><Link to={lp('/security/data-sovereignty')} className="hover:text-white transition-colors">{t('landing.dataSovereignty')}</Link></li>
+                <li><Link to={lp('/security/ai-processing')} className="hover:text-white transition-colors">{t('landing.aiProcessingPage')}</Link></li>
               </ul>
             </div>
 

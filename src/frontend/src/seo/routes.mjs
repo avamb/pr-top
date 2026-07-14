@@ -73,6 +73,15 @@ export const PUBLIC_ROUTES = [
     primaryKeyword: { en: 'data sovereignty', ru: 'суверенитет данных', uk: 'суверенітет даних', es: 'soberanía' },
   },
   {
+    path: '/security/ai-processing',
+    changefreq: 'monthly',
+    priority: 0.7,
+    title: 'How AI processing works — PR-TOP transparency',
+    summary:
+      'Full AI transparency disclosure: which models (OpenAI, Anthropic, Google, OpenRouter), what data leaves the platform per task, provider DPAs, retention periods, and how to disable AI features.',
+    primaryKeyword: { en: 'AI transparency', ru: 'прозрачность ИИ', uk: 'прозорість ШІ', es: 'transparencia de IA' },
+  },
+  {
     path: '/privacy',
     changefreq: 'yearly',
     priority: 0.5,
@@ -227,7 +236,7 @@ export const PUBLIC_ROUTES = [
     priority: 0.8,
     title: 'Practice management for therapists — PR-TOP workspace (2026)',
     summary:
-      'How PR-TOP organises a therapy practice: client roster, session records, encrypted notes, analytics, and a between-session client channel — without billing or scheduling overhead. Targets routine-management intent.',
+      'How PR-TOP organizes a therapy practice: client roster, session records, encrypted notes, analytics, and a between-session client channel — without billing or scheduling overhead. Targets routine-management intent.',
     primaryKeyword: { en: 'practice management for therapists', ru: 'управление практикой психолога', uk: 'управління практикою психолога', es: 'gestión de consulta para terapeutas' },
   },
 ];
@@ -247,6 +256,7 @@ export const LLMS_SECTIONS = [
       '/security/gdpr',
       '/security/audit-log',
       '/security/data-sovereignty',
+      '/security/ai-processing',
     ],
   },
   { heading: 'Legal', paths: ['/privacy', '/terms'] },

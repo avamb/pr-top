@@ -5,7 +5,7 @@
 //   1. robots.txt contains 7 explicit AI-crawler blocks.
 //   2. dist/llms.txt (if it exists — conditional until F18 lands) lists every
 //      manifest route.
-//   3. sitemap.xml URL count equals manifest routes × locales (22 × 4 = 88).
+//   3. sitemap.xml URL count equals manifest routes × locales (23 × 4 = 92).
 //   4. Every prerendered page has exactly one <h1> and a meta description of
 //      length 25–160 chars.
 //   5. All JSON-LD blocks on every prerendered page parse as valid JSON.
@@ -24,6 +24,7 @@ const PUBLIC_ROUTES = [
   '/security/gdpr',
   '/security/audit-log',
   '/security/data-sovereignty',
+  '/security/ai-processing',
   '/privacy',
   '/terms',
   // GEO comparison / alternatives routes — fully localized since 2026-07-06

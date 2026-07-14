@@ -172,6 +172,12 @@ export default function PrivacyPolicy() {
                 <li><strong>{t('privacy.thirdParties.aiLabel')}</strong> — {t('privacy.thirdParties.aiDesc')}</li>
                 <li><strong>Telegram</strong> — {t('privacy.thirdParties.telegram')}</li>
               </ul>
+              <p className="text-sm text-gray-500 mt-2">
+                {t('security.aiTrans.seeAlso')}:{' '}
+                <Link to={lp('/security/ai-processing')} className="text-primary hover:underline">
+                  {t('security.aiTransparencyTitle')}
+                </Link>
+              </p>
               <p className="font-medium text-gray-800">{t('privacy.thirdParties.noSale')}</p>
             </Section>
 

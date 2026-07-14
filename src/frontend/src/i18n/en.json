@@ -31,7 +31,7 @@
     },
     "securityAiProcessing": {
       "title": "How AI Processing Works — PR-TOP Transparency",
-      "description": "Full transparency: which AI models PR-TOP uses, what data leaves the platform, for which tasks, provider DPAs, retention periods, and how to disable AI features."
+      "description": "Full transparency: which AI models PR-TOP uses, what data leaves the platform, for which tasks, provider DPAs, retention periods, and how to disable AI."
     }
   },
   "ai": {
@@ -200,7 +200,7 @@
     "heroTitle2": "for therapists and their practice.",
     "heroSlogan": "Keep the full client context between sessions. Review every note. Maintain clear professional boundaries.",
     "heroImageAlt": "PR-TOP therapist dashboard — client list, upcoming sessions, and recent activity (demo data only)",
-    "heroDesc": "PR-TOP brings together client diaries, session notes, assignments, and secure communication in one place. It helps you organise routine work, while clinical judgement and client decisions remain with you.",
+    "heroDesc": "PR-TOP brings together client diaries, session notes, assignments, and secure communication in one place. It helps you organize routine work, while clinical judgment and client decisions remain with you.",
     "startTrial": "Start Free Trial",
     "learnMore": "See How It Works",
     "featuresTitle": "Your Practice, Simplified",
@@ -748,7 +748,7 @@
       "inquiryNone": "— No inquiry —",
       "singleTrack": {
         "label": "Keep only my voice (single-track)",
-        "hint": "Use when the client did not consent to recording. After upload you'll pick which detected speaker is your voice; only that voice is transcribed and summarised. The other speaker's audio is discarded.",
+        "hint": "Use when the client did not consent to recording. After upload you'll pick which detected speaker is your voice; only that voice is transcribed and summarized. The other speaker's audio is discarded.",
         "badge": "Single-track",
         "diarizing": "Detecting speakers in the recording…",
         "diarizationFailed": "Speaker detection failed. You can re-upload or contact support.",
@@ -1437,7 +1437,7 @@
     "sectionConsentTitle": "Consent to Record: What You Need to Know",
     "sectionConsentBody": "Before uploading an audio or video recording of a therapy session, you must obtain the client's explicit prior consent. Recording therapy sessions without consent may violate professional ethics codes, data-protection law (GDPR in the EU/EEA), and national regulations.",
     "sectionConsentLegalHead": "Legal basis (EU/GDPR)",
-    "sectionConsentGdpr": "Under GDPR Article 9, session recordings are special-category (health) data. Lawful processing requires either the client's explicit consent (Article 9(2)(a)) or a recognised professional secrecy exception in national law (Article 9(2)(h)). In most EU member states, explicit written consent is the safest basis. Store the signed consent document outside PR-TOP (e.g., in your paper file or a dedicated consent management system) and set the 'Recording consent' flag on the client profile in PR-TOP to reflect that consent has been obtained.",
+    "sectionConsentGdpr": "Under GDPR Article 9, session recordings are special-category (health) data. Lawful processing requires either the client's explicit consent (Article 9(2)(a)) or a recognized professional secrecy exception in national law (Article 9(2)(h)). In most EU member states, explicit written consent is the safest basis. Store the signed consent document outside PR-TOP (e.g., in your paper file or a dedicated consent management system) and set the 'Recording consent' flag on the client profile in PR-TOP to reflect that consent has been obtained.",
     "sectionConsentTemplateHead": "Consent wording templates",
     "sectionConsentTemplateIntro": "Adapt these templates to your jurisdiction and practice. Have the client sign before the first recorded session. Keep the signed copy in your records.",
     "sectionConsentTemplateEnLabel": "English (EN):",
@@ -1568,7 +1568,7 @@
       "keyMgmtP1": "Encryption keys are derived from a master key that is stored separately from the database. The master key is never committed to source code and is injected at runtime through secure environment variables.",
       "keyMgmtP2": "Key rotation procedures are supported to periodically refresh encryption without disrupting service availability.",
       "zeroKnowledgeTitle": "Access Model & Transparency",
-      "zeroKnowledgeP1": "What is encrypted: all Class A data (diary entries, session notes, transcripts, AI summaries). Who can decrypt: only the application layer using the master key stored in a protected environment variable — database-level access alone is not sufficient. What support sees: under normal operation, no PR-TOP team member accesses your clinical content; technical support works with anonymised metadata and logs only.",
+      "zeroKnowledgeP1": "What is encrypted: all Class A data (diary entries, session notes, transcripts, AI summaries). Who can decrypt: only the application layer using the master key stored in a protected environment variable — database-level access alone is not sufficient. What support sees: under normal operation, no PR-TOP team member accesses your clinical content; technical support works with anonymized metadata and logs only.",
       "zeroKnowledgeP2": "The master key is held by the service operator and stored in a protected environment, separate from the database. In the event of a server breach, an attacker would encounter only encrypted ciphertext without the key."
     },
     "gdpr": {
@@ -1610,7 +1610,7 @@
     },
     "ds": {
       "residencyTitle": "Data Residency",
-      "residencyP1": "PR-TOP is deployed exclusively within the European Union. All client data — diary entries, session notes, transcripts, and AI summaries — is stored and processed in EU data centres, ensuring full GDPR data residency compliance.",
+      "residencyP1": "PR-TOP is deployed exclusively within the European Union. All client data — diary entries, session notes, transcripts, and AI summaries — is stored and processed in EU data centers, ensuring full GDPR data residency compliance.",
       "residencyP2": "No client data is transferred to servers outside the European Union.",
       "selfHostedTitle": "You Control Access",
       "selfHostedP1": "Therapists have full control over who can access their clients' data. Access requires therapist authentication and explicit client consent — both checks run on every request.",

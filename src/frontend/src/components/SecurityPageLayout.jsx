@@ -65,7 +65,7 @@ export default function SecurityPageLayout({ titleKey, children }) {
           <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">
             {t('security.relatedPages')}
           </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <Link to={lp('/security/encryption')} className="p-3 rounded-lg border border-gray-200 hover:border-primary/40 hover:bg-primary/5 transition-all text-sm font-medium text-gray-700 hover:text-primary text-center">
               {t('security.encryptionTitle')}
             </Link>
@@ -77,6 +77,9 @@ export default function SecurityPageLayout({ titleKey, children }) {
             </Link>
             <Link to={lp('/security/data-sovereignty')} className="p-3 rounded-lg border border-gray-200 hover:border-primary/40 hover:bg-primary/5 transition-all text-sm font-medium text-gray-700 hover:text-primary text-center">
               {t('security.dataSovereigntyTitle')}
+            </Link>
+            <Link to={lp('/security/ai-processing')} className="p-3 rounded-lg border border-gray-200 hover:border-primary/40 hover:bg-primary/5 transition-all text-sm font-medium text-gray-700 hover:text-primary text-center">
+              {t('security.aiTransparencyTitle')}
             </Link>
           </div>
         </div>

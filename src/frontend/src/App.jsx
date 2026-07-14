@@ -38,6 +38,7 @@ import SecurityEncryption from './pages/SecurityEncryption';
 import SecurityGDPR from './pages/SecurityGDPR';
 import SecurityAuditLog from './pages/SecurityAuditLog';
 import SecurityDataSovereignty from './pages/SecurityDataSovereignty';
+import AiTransparency from './pages/AiTransparency';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 import CompareUpheal from './pages/CompareUpheal';
@@ -113,6 +114,7 @@ const PUBLIC_MARKETING_ROUTES = [
   { path: '/security/gdpr',             element: <SecurityGDPR /> },
   { path: '/security/audit-log',        element: <SecurityAuditLog /> },
   { path: '/security/data-sovereignty', element: <SecurityDataSovereignty /> },
+  { path: '/security/ai-processing',   element: <AiTransparency /> },
   { path: '/privacy',                   element: <PrivacyPolicy /> },
   { path: '/terms',                     element: <TermsOfService /> },
   // GEO comparison / alternatives pages — localized, mirrored under /ru|/uk|/es
