@@ -16243,4 +16243,52 @@ VERIFICATION:
 - node _t_seo_i18n_audit.js: 15 passed, 0 failed
 - git commit: 9202cde
 
+================================================================
+Session 221 (2026-07-14) - Feature #472 PASSING (R21d screenshot freshness as DoD)
+================================================================
+
+Assigned: #472 R21d — Screenshot freshness as definition-of-done
+
+PROBLEM:
+Screenshots in docs/seo/reports/repositioning-screens/ were taken at ~10:42 UTC
+but i18n files were last modified at ~11:06-11:07 UTC (from sessions 215-218).
+Any reviewer could see stale screenshots after landing copy changes.
+
+IMPLEMENTATION:
+1. _t_r9_qa.js
+   - Added new "R21d QA: Screenshot freshness" section (before summary)
+   - Reads mtime of all PNGs in docs/seo/reports/repositioning-screens/
+   - Reads mtime of all src/frontend/src/i18n/*.json + Landing.jsx
+   - Finds newest src file; assertion passes only if PNG mtime >= src mtime
+   - Error message includes exact timestamps + "run: node _t_screenshots.js"
+   - Supports --skip-screenshot-freshness flag for CI pipeline bypass
+   - Test count: 76 -> 80 (4 new R21d assertions, one per PNG)
+
+2. docs/seo/CONTENT_RULES.md
+   - Added "Screenshot freshness" item to pre-merge checklist
+   - Placed between _t_geo_audit.js and Human review steps
+
+3. docs/seo/reports/repositioning-screens/*.png (all 4 UPDATED)
+   - Retook all 4 locale screenshots via node _t_screenshots.js
+   - Puppeteer connected to already-running vite preview (port 4173)
+   - New mtimes: 11:13-14 UTC (all newer than i18n files at 11:07 UTC)
+
+DEMO-FAIL VERIFIED:
+- Before screenshot retake: all 4 R21d assertions reported mtime mismatch
+  "png mtime: 2026-07-14T10:42:54, newest src: es.json at 2026-07-14T11:07:21"
+
+AFTER RETAKE:
+- node _t_r9_qa.js: 80 passed, 0 failed
+- node _t_geo_audit.js: 18 passed, 0 failed
+- node _t_seo_i18n_audit.js: 15 passed, 0 failed
+- node _t_assistant_kb_audit.js: 79 passed, 0 failed
+- npm run build: 92 prerendered pages, exit 0
+
+No KB doc update needed (internal tooling/process change, not a public capability).
+
+Git commit: 382f05c
+Feature #472 marked PASSING.
+
+Stats after session 221: 472/472 (100%). BACKLOG COMPLETE.
+
 Stats after session 220: #471 status: passing (470/472, 99.6%).
