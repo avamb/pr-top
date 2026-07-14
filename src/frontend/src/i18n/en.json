@@ -3,7 +3,7 @@
   "seo": {
     "home": {
       "title": "PR-TOP — Practice Workspace for Therapists & Psychologists | Client Diary, Session Notes, AI Support Between Sessions",
-      "description": "PR-TOP — practice workspace for therapists: encrypted client diary, AI session notes, safe communication between sessions. GDPR-compliant. 7-day free trial."
+      "description": "PR-TOP — practice workspace for therapists: encrypted client diary, AI session notes, secure communication between sessions. GDPR-compliant. 7-day free trial."
     },
     "privacy": {
       "title": "Privacy Policy — PR-TOP",
@@ -194,8 +194,8 @@
   "landing": {
     "heroTitle1": "A unified workspace",
     "heroTitle2": "for therapists and their practice.",
-    "heroSlogan": "Client context between sessions. Notes you review and control. Professional boundaries that hold.",
-    "heroDesc": "PR-TOP brings together the client diary, session notes, assignments and safe communication. Automation technologies help structure the routine, but they do not replace the specialist and do not act on their behalf. GDPR-compliant.",
+    "heroSlogan": "Keep the full client context between sessions. Review every note. Maintain clear professional boundaries.",
+    "heroDesc": "PR-TOP brings together client diaries, session notes, assignments, and secure communication in one place. It helps you organise routine work, while clinical judgement and client decisions remain with you.",
     "startTrial": "Start Free Trial",
     "learnMore": "See How It Works",
     "featuresTitle": "Your Practice, Simplified",
@@ -250,7 +250,7 @@
     "relatedLinks": "Related",
     "faqCompareLead": "Wondering how PR-TOP stacks up against other tools?",
     "faqCompareLink": "See our comparison of AI assistants for therapists",
-    "footerDesc": "PR-TOP — a workspace for therapists and psychologists. Client context, session notes and safe communication in one protected place.",
+    "footerDesc": "PR-TOP — a workspace for therapists and psychologists. Client context, session notes and secure communication in one protected place.",
     "features": "Features",
     "pricing": "Pricing",
     "signUp": "Sign Up",
@@ -358,8 +358,8 @@
   "auth": {
     "loginTitle": "Log In",
     "loginSubtitle": "Sign in to your account",
-    "registerTitle": "Register",
-    "registerSubtitle": "Create your therapist account",
+    "registerTitle": "Create your therapist workspace",
+    "registerSubtitle": "14-day free trial. No credit card required.",
     "email": "Email",
     "password": "Password",
     "confirmPassword": "Confirm Password",
@@ -417,7 +417,10 @@
     "cardError": "Card validation failed",
     "cardDeclined": "Your card was declined. Please try a different card.",
     "cardExpired": "Your card has expired. Please use a valid card.",
-    "cardIncomplete": "Please complete your card details."
+    "cardIncomplete": "Please complete your card details.",
+    "registerSecurityNote": "Application-level encryption. Data stored in the EU.",
+    "registerTermsLine1": "By creating an account, you agree to our",
+    "registerTermsLine2": "and"
   },
   "dashboard": {
     "title": "PR-TOP Dashboard",

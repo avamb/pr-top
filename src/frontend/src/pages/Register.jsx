@@ -144,7 +144,7 @@ export default function Register() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4 relative">
-      <Seo path="/register" title="Register — PR-TOP" description="Create a PR-TOP therapist account." noindex />
+      <Seo path="/register" title="Create your therapist workspace — PR-TOP" description="Start your 14-day free trial. No credit card required. Application-level encryption, data stored in the EU." noindex />
       <div className="absolute top-4 right-4">
         <LanguageSwitcher compact />
       </div>
@@ -159,6 +159,9 @@ export default function Register() {
 
         <div className="bg-white rounded-lg shadow-md p-8">
           <h2 className="text-xl font-semibold text-text mb-6">{t('auth.registerTitle')}</h2>
+          <p className="text-xs text-secondary mb-4">
+            🔒 {t('auth.registerSecurityNote')}
+          </p>
 
           {error && (
             <div role="alert" className="bg-red-50 border border-error text-error rounded-md p-3 mb-4 text-sm">
@@ -246,7 +249,18 @@ export default function Register() {
             </button>
           </form>
 
-          <p className="mt-4 text-center text-sm text-secondary">
+          <p className="mt-4 text-center text-xs text-secondary leading-relaxed">
+            {t('auth.registerTermsLine1')}{' '}
+            <Link to="/terms" className="text-primary hover:text-primary-600 underline">
+              {t('landing.termsOfService')}
+            </Link>
+            {' '}{t('auth.registerTermsLine2')}{' '}
+            <Link to="/privacy" className="text-primary hover:text-primary-600 underline">
+              {t('landing.privacyPolicy')}
+            </Link>.
+          </p>
+
+          <p className="mt-3 text-center text-sm text-secondary">
             {t('auth.hasAccount')}{' '}
             <Link to="/login" className="text-primary hover:text-primary-600 font-medium">
               {t('auth.loginTitle')}

@@ -280,6 +280,14 @@
     "tags": ["voice", "memo", "draft", "notes"]
   },
   {
+    "id": "register-form-trial",
+    "audience": "public",
+    "locale": "en",
+    "question": "What does the PR-TOP sign-up form look like? Is there a credit card field?",
+    "answer": "The registration page is headed 'Create your therapist workspace' with the subtitle '14-day free trial. No credit card required.' Below the heading a security note confirms: 'Application-level encryption. Data stored in the EU.' You enter your email and a password — no card field is shown at registration. Links to the Terms of Service and Privacy Policy appear below the form. A credit card is only collected if you actively upgrade to a paid plan from Settings → Subscription.",
+    "tags": ["registration", "trial", "billing", "security", "onboarding"]
+  },
+  {
     "id": "pwa-install",
     "audience": "public",
     "locale": "en",

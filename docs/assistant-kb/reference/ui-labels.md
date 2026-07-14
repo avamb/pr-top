@@ -179,8 +179,8 @@ of truth — see `src/frontend/src/i18n/en.json`._
 
 - `auth.loginTitle` — Log In
 - `auth.loginSubtitle` — Sign in to your account
-- `auth.registerTitle` — Register
-- `auth.registerSubtitle` — Create your therapist account
+- `auth.registerTitle` — Create your therapist workspace
+- `auth.registerSubtitle` — 14-day free trial. No credit card required.
 - `auth.email` — Email
 - `auth.password` — Password
 - `auth.confirmPassword` — Confirm Password
@@ -197,7 +197,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `auth.networkError` — Network error. Please try again.
 - `auth.emailPasswordRequired` — Email and password are required
 - `auth.passwordMinLength` — Password must be at least 6 characters
-- _+ 42 more keys_
+- _+ 45 more keys_
 
 ## brand
 
@@ -481,33 +481,43 @@ of truth — see `src/frontend/src/i18n/en.json`._
 
 ## landing
 
-- `landing.heroTitle1` — AI Assistant for Therapists and Psychologists —
-- `landing.heroTitle2` — Client Diary, Session Notes and a Telegram Bot Between Sessions
-- `landing.heroSlogan` — Keep Your Practice on Top
-- `landing.heroDesc` — PR-TOP helps psychologists, therapists and coaches stay connected with clients between ...
+- `landing.heroTitle1` — A unified workspace
+- `landing.heroTitle2` — for therapists and their practice.
+- `landing.heroSlogan` — Client context between sessions. Notes you review and control. Professional boundaries ...
+- `landing.heroDesc` — PR-TOP brings together the client diary, session notes, assignments and safe communicat...
 - `landing.startTrial` — Start Free Trial
 - `landing.learnMore` — See How It Works
-- `landing.featuresTitle` — Features That Work for You
-- `landing.featuresDesc` — Every feature is built around the real workflow of mental health professionals and coac...
+- `landing.featuresTitle` — Your Practice, Simplified
+- `landing.featuresDesc` — Six concrete changes to how your week runs — less administrative overhead, deeper conti...
 - `landing.pricingTitle` — Simple, Transparent Pricing
 - `landing.pricingDesc` — Start with a free trial. Upgrade as your practice grows.
 - `landing.mostPopular` — Most Popular
 - `landing.perMonth` — /month
 - `landing.free` — Free
 - `landing.days14` — 14 days
-- `landing.footerProduct` — Product
-- `landing.footerSecurity` — Security
-- `landing.footerContact` — Contact
-- `landing.footerCompare` — Compare
-- `landing.bestAiAssistants` — Best AI assistants for therapists
-- `landing.compareUpheal` — PR-TOP vs Upheal
-- _+ 57 more keys_
+- `landing.tierFeat.clients3` — Up to 3 clients
+- `landing.tierFeat.clients10` — Up to 10 clients
+- `landing.tierFeat.clients30` — Up to 30 clients
+- `landing.tierFeat.clientsUnlimited` — Unlimited clients
+- `landing.tierFeat.sessions5` — 5 sessions / month
+- `landing.tierFeat.sessions20` — 20 sessions / month
+- _+ 128 more keys_
 
 ## landingConfirm
 
 - `landingConfirm.hero.headline` — Zero No-Shows. Happy Clients.
 - `landingConfirm.hero.subheadline` — Automated session reminders via Telegram — your clients confirm, reschedule, or release...
 - `landingConfirm.hero.ctaBtn` — Start Free Trial
+- `landingConfirm.hero.badge` — Telegram Session Reminders
+- `landingConfirm.hero.trialNote` — 7-day free trial · No credit card required · Cancel anytime
+- `landingConfirm.hero.mockBotName` — PR-TOP Reminder
+- `landingConfirm.hero.mockBotType` — bot
+- `landingConfirm.hero.mockMsgTitle` — Session reminder
+- `landingConfirm.hero.mockMsgTime` — Tomorrow at 3:00 PM
+- `landingConfirm.hero.mockMsgTherapist` — with Dr. Maria Ivanova
+- `landingConfirm.hero.mockBtnConfirm` — ✅ Confirm session
+- `landingConfirm.hero.mockBtnReschedule` — 🔄 Request reschedule
+- `landingConfirm.hero.mockBtnRelease` — 🆓 Release slot
 - `landingConfirm.pain.title` — Sound familiar?
 - `landingConfirm.pain.card1Title` — Empty slot on Friday
 - `landingConfirm.pain.card1Body` — Client forgot, you lose €80, and the time can't be filled last minute.
@@ -515,17 +525,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `landingConfirm.pain.card2Body` — Late cancellations waste your day and break your focus before the next session.
 - `landingConfirm.pain.card3Title` — Another reminder written by hand
 - `landingConfirm.pain.card3Body` — Every week you copy-paste the same Telegram message. It's minutes that grind you down.
-- `landingConfirm.howItWorks.title` — How It Works
-- `landingConfirm.howItWorks.step1Title` — You add a session
-- `landingConfirm.howItWorks.step1Body` — Log the date and time in your PR-TOP dashboard. That's it.
-- `landingConfirm.howItWorks.step2Title` — Reminders send automatically
-- `landingConfirm.howItWorks.step2Body` — Your client gets a Telegram message the day before and 2 hours before the session.
-- `landingConfirm.howItWorks.step3Title` — One tap to confirm
-- `landingConfirm.howItWorks.step3Body` — Client taps ✅ to confirm, 🔄 to request a reschedule, or 🆓 to release the slot. You se...
-- `landingConfirm.demo.title` — What Your Client Sees
-- `landingConfirm.demo.caption` — A simple, clear Telegram message — no new apps, no logins required.
-- `landingConfirm.price.title` — One Plan. No Surprises.
-- _+ 55 more keys_
+- _+ 83 more keys_
 
 ## nav
 
@@ -670,7 +670,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `security.backToHome` — Back to Home
 - `security.heroSubtitle` — Learn how PR-TOP protects your clients' most sensitive data with industry-leading secur...
 - `security.relatedPages` — Related Security Topics
-- `security.encryptionTitle` — End-to-End Encryption
+- `security.encryptionTitle` — Encryption & Data Protection
 - `security.gdprTitle` — GDPR Compliance
 - `security.auditLogTitle` — Audit Logging
 - `security.dataSovereigntyTitle` — Data Sovereignty
@@ -691,20 +691,20 @@ of truth — see `src/frontend/src/i18n/en.json`._
 
 ## seo
 
-- `seo.home.title` — PR-TOP — AI Assistant for Therapists & Psychologists | Client Diary, Session Notes, Tel...
-- `seo.home.description` — PR-TOP: therapist-controlled AI assistant for between-session client work — secure clie...
+- `seo.home.title` — PR-TOP — Practice Workspace for Therapists & Psychologists | Client Diary, Session Note...
+- `seo.home.description` — PR-TOP — practice workspace for therapists: encrypted client diary, AI session notes, s...
 - `seo.privacy.title` — Privacy Policy — PR-TOP
-- `seo.privacy.description` — PR-TOP privacy policy: how we handle therapist and client data, encryption, retention, ...
+- `seo.privacy.description` — PR-TOP privacy policy: how we collect, encrypt, and delete therapist and client data — ...
 - `seo.terms.title` — Terms of Service — PR-TOP
-- `seo.terms.description` — Terms of service for using PR-TOP: therapist obligations, acceptable use, subscription ...
+- `seo.terms.description` — PR-TOP terms of service: therapist obligations, acceptable use, subscription tiers, can...
 - `seo.securityEncryption.title` — Encryption at Rest & In Transit — PR-TOP Security
-- `seo.securityEncryption.description` — How PR-TOP protects sensitive client data with AES application-layer encryption, TLS tr...
+- `seo.securityEncryption.description` — PR-TOP uses AES application-layer encryption for all client diary entries and session t...
 - `seo.securityGdpr.title` — GDPR Compliance — PR-TOP Security
-- `seo.securityGdpr.description` — How PR-TOP implements GDPR data-minimization, subject rights, and lawful processing for...
+- `seo.securityGdpr.description` — PR-TOP is built GDPR-first: EU-hosted, no third-party trackers, consent enforcement for...
 - `seo.securityAuditLog.title` — Audit Log & Access Trails — PR-TOP Security
-- `seo.securityAuditLog.description` — How PR-TOP records every access to client data with tamper-evident audit logs available...
+- `seo.securityAuditLog.description` — PR-TOP keeps an immutable audit log of every access to encrypted client data. Therapist...
 - `seo.securityDataSovereignty.title` — Data Sovereignty & Residency — PR-TOP Security
-- `seo.securityDataSovereignty.description` — Where PR-TOP hosts client data, region choices, and how therapists remain in control of...
+- `seo.securityDataSovereignty.description` — PR-TOP stores all client data on EU-only servers (Hetzner). No cross-border transfers, ...
 
 ## session
 

@@ -358,8 +358,8 @@
   "auth": {
     "loginTitle": "Iniciar sesión",
     "loginSubtitle": "Accede a tu cuenta",
-    "registerTitle": "Registro",
-    "registerSubtitle": "Crea tu cuenta de terapeuta",
+    "registerTitle": "Crea tu espacio de trabajo de terapeuta",
+    "registerSubtitle": "14 días gratis. Sin tarjeta de crédito.",
     "email": "Correo electrónico",
     "password": "Contraseña",
     "confirmPassword": "Confirmar contraseña",
@@ -417,7 +417,10 @@
     "cardError": "Error de validación de tarjeta",
     "cardDeclined": "Tu tarjeta fue rechazada. Intenta con otra tarjeta.",
     "cardExpired": "Tu tarjeta ha expirado. Usa una tarjeta válida.",
-    "cardIncomplete": "Por favor, completa los datos de tu tarjeta."
+    "cardIncomplete": "Por favor, completa los datos de tu tarjeta.",
+    "registerSecurityNote": "Cifrado a nivel de aplicación. Datos almacenados en la UE.",
+    "registerTermsLine1": "Al crear una cuenta, aceptas nuestros",
+    "registerTermsLine2": "y nuestra"
   },
   "dashboard": {
     "title": "Panel de PR-TOP",

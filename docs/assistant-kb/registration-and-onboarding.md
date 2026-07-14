@@ -18,19 +18,38 @@ is exposed to the anonymous, landing-page assistant.
   invite. PR-TOP enforces consent flags on the client record; you
   must have real consent before turning them on.
 
+## The registration form
+
+When you visit `/register` you are greeted with the heading
+**"Create your therapist workspace"** and the subtitle
+**"14-day free trial. No credit card required."**
+
+Below the heading a short security line reads:
+*Application-level encryption. Data stored in the EU.*
+This is factual: client data is encrypted with AES at the
+application layer and the server runs on EU infrastructure
+(Hetzner). No card is collected at this step; stripe_customer_id
+is NULL until you upgrade.
+
+At the bottom of the form two links point to `/terms` (Terms of
+Service) and `/privacy` (Privacy Policy) before the submit button
+so you know what you are agreeing to. The form is available in all
+four interface languages (EN, RU, ES, UK) and the language can be
+toggled from the top-right switcher before signing up.
+
 ## Step-by-step: register
 
-1. Go to `https://app.pr-top.com/` and click **Sign up**.
-2. Enter your email and choose a password (minimum 8 characters).
-3. Pick your preferred UI language — EN, RU, ES, or UK. You can
-   change this later.
-4. Read and accept the Terms of Service and Privacy Policy. Both are
-   linked from the sign-up form and available at `/terms` and
-   `/privacy`.
+1. Go to `https://app.pr-top.com/register` or click **Get Started**
+   on the landing page.
+2. Review the security note and terms/privacy links on the form.
+3. Enter your email and choose a password (minimum 8 characters,
+   one uppercase, one lowercase, one number).
+4. Choose your preferred UI language from the top-right switcher —
+   EN, RU, ES, or UK. You can change this later.
 5. Submit. A confirmation email lands in your inbox with a magic
    link.
 6. Click the link. You are dropped into the dashboard on a fresh
-   Trial subscription.
+   14-day Trial subscription.
 
 ## The 14-day Trial
 
