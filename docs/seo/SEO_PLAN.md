@@ -3,6 +3,7 @@
 **Target site:** https://pr-top.com/
 **Target repository:** https://github.com/avamb/pr-top — local working copy `C:\Projects\dev-psy-bot`, **work on branch `dev`** (GitHub default branch `master` is ~169 commits behind `dev`; do not base work on `master`).
 **Prepared:** 2026-07-04. Based on the verified audit in [SEO_AUDIT_ASSESSMENT.md](SEO_AUDIT_ASSESSMENT.md).
+**Positioning addendum (2026-07-13):** [POSITIONING_ADDENDUM.md](POSITIONING_ADDENDUM.md) — practice-first visible copy + dual-intent SEO (capture both AI-intent and routine-intent queries). It supersedes §1.5 for on-page H1/hero copy (meta keyword targets remain valid); implementation backlog in [AUTOFORGE_FEATURES_REPOSITIONING.md](AUTOFORGE_FEATURES_REPOSITIONING.md).
 **How to use:** phases are ordered by priority. Each step has exact file paths (relative to repo root), content templates, and acceptance criteria. Any coding agent can execute a phase top-to-bottom and verify it with the listed checks. Steps marked `[HUMAN]` need account access and must be done by the owner.
 
 **Key repo facts an executing agent needs (verified on `dev`, 2026-07-04):**
