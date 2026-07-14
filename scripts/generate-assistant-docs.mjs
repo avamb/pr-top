@@ -388,9 +388,10 @@ function buildPricingMarkdown() {
   lines.push('_Do not edit by hand — edits will be overwritten._');
   lines.push('');
   lines.push('PR-TOP is offered as a monthly subscription with a free 14-day trial.');
-  lines.push('There are four tiers. All plans include end-to-end encryption of the');
-  lines.push('most sensitive client data (diary entries, private notes, transcripts,');
-  lines.push('and AI summaries).');
+  lines.push('There are four tiers. All plans include application-layer AES encryption');
+  lines.push('of sensitive client data (diary entries, private notes, transcripts, and');
+  lines.push('AI summaries) at rest; keys are held by the operator, not the therapist');
+  lines.push('or client. PR-TOP is not end-to-end encrypted and is not zero-knowledge');
   lines.push('');
   lines.push('| Plan | Price | Clients | Sessions / mo |');
   lines.push('|------|-------|---------|---------------|');

@@ -5,9 +5,10 @@ _This page is regenerated on every release by_ `npm run docs:assistant`.
 _Do not edit by hand — edits will be overwritten._
 
 PR-TOP is offered as a monthly subscription with a free 14-day trial.
-There are four tiers. All plans include end-to-end encryption of the
-most sensitive client data (diary entries, private notes, transcripts,
-and AI summaries).
+There are four tiers. All plans include application-layer AES encryption
+of sensitive client data (diary entries, private notes, transcripts, and
+AI summaries) at rest; keys are held by the operator, not the therapist
+or client. PR-TOP is not end-to-end encrypted and is not zero-knowledge
 
 | Plan | Price | Clients | Sessions / mo |
 |------|-------|---------|---------------|
