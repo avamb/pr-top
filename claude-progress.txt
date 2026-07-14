@@ -16553,4 +16553,48 @@ VERIFICATION:
 - Section 12g: docs:assistant:check exits 0, no drift
 - git commit: 16c6872
 
+================================================================
+Session 226 (2026-07-14) - Feature #478 PASSING (R23c lookbehind fix)
+================================================================
+
+Assigned: #478 R23c - Narrow plan-gate lookbehind so Premium-only/Pro-only/Basic-only are caught
+
+PROBLEM:
+The R23b lookbehind (?&lt;!-)only excluded ALL hyphenated "...-only" forms, including
+"Premium-only", "Pro-only", "Basic-only" which are the exact compound forms most often
+used in myth claims. A live test confirmed these passed the audit silently (0 failures).
+
+IMPLEMENTATION:
+
+1. _t_assistant_kb_audit.js:
+   - Changed (?&lt;!-)only to (?&lt;!read-)only in GATE_WORD_RE_KB
+   - Updated comment block explaining the R23c precision fix
+   - Added section 12k with R23c regression + positive fixture tests
+
+2. tests/fixtures/kb-gate-r23c-regression.md (NEW):
+   - 3 ungated tier claims: "Premium-only", "Pro-only", "Basic-only"
+   - Section 12k asserts exactly 3 failures
+
+3. tests/fixtures/kb-gate-r23c-positive.md (NEW):
+   - Same 3 claims WITH gate annotations, 0 failures
+   - "Supervisors get a read-only view on Premium clients" WITHOUT annotation
+     also produces 0 failures (read-only excluded; not a gating phrase)
+
+4. docs/assistant-kb/README.md:
+   - Updated gate-word table to R23c, added Exclusion column
+   - Added detailed lookbehind precision fix section
+
+VERIFICATION:
+- node _t_assistant_kb_audit.js: 92 passed, 0 failed (was 90)
+- 12k R23c regression: exactly 3 ungated *-only tier claims caught
+- 12k R23c positive: annotated claims pass; read-only correctly excluded
+- 12j R23b fixtures: still 3+0 (no regressions)
+- 12i KB scan: no new false positives in existing KB
+- generator drift check: exits 0, no drift
+- No Premium-only/Pro-only/Basic-only in existing KB docs (nothing to remediate)
+- git commit: f1b16e8
+- Feature #478 marked PASSING
+
+Stats after session 226: 478/478 (100%). BACKLOG COMPLETE.
+
 Stats after session 225: 477/477 (100%). ALL FEATURES COMPLETE.
