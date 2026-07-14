@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Breadcrumb from '../components/Breadcrumb';
 import useNavigationBlocker from '../hooks/useNavigationBlocker';
@@ -2506,6 +2506,20 @@ function ClientDetail() {
                   </div>
                 </label>
               </div>
+            )}
+
+            {/* R28: Consent-to-record microcopy — shown next to upload input, not in a modal */}
+            {!sessionUploading && !sessionUploadFile && (
+              <p className="text-xs text-stone-500 mb-3">
+                {t('session.upload.consentNote')}{' '}
+                <Link
+                  to="/dashboard/guide#consent-to-record"
+                  className="text-teal-700 underline hover:text-teal-900 transition-colors"
+                  data-testid="consent-to-record-link"
+                >
+                  {t('session.upload.consentLearnMore')}
+                </Link>
+              </p>
             )}
 
             {/* Always-visible Dropzone (drag-n-drop + click-to-select) */}

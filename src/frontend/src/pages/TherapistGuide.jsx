@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation } from 'react-router-dom';
 import AccordionItem from '../components/AccordionItem';
 
 function GuideImage({ src, alt }) {
@@ -29,8 +30,22 @@ function HighlightText({ text, query }) {
 
 export default function TherapistGuide() {
   const { t } = useTranslation();
+  const location = useLocation();
   const [openSection, setOpenSection] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Auto-open section when navigating via anchor (#section-id)
+  useEffect(() => {
+    const hash = location.hash.replace('#', '');
+    if (hash) {
+      setOpenSection(hash);
+      // Allow layout to settle, then scroll to the element
+      setTimeout(() => {
+        const el = document.getElementById(hash);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
+    }
+  }, [location.hash]);
 
   const toggleSection = (id) => {
     setOpenSection(prev => (prev === id ? null : id));
@@ -128,6 +143,28 @@ export default function TherapistGuide() {
           </ol>
           <p className="mt-3">{t('guide.section4Statuses')}</p>
           <GuideImage src="/images/guide/sessions.svg" alt={t('guide.section4ImgAlt')} />
+        </>
+      ),
+    },
+    {
+      id: 'consent-to-record',
+      title: t('guide.sectionConsentTitle'),
+      searchText: t('guide.sectionConsentTitle') + ' ' + t('guide.sectionConsentBody') + ' ' + t('guide.sectionConsentGdpr') + ' ' + t('guide.sectionConsentTemplateIntro'),
+      content: (
+        <>
+          <p>{t('guide.sectionConsentBody')}</p>
+          <p className="mt-3 font-semibold text-stone-700">{t('guide.sectionConsentLegalHead')}</p>
+          <p className="mt-1">{t('guide.sectionConsentGdpr')}</p>
+          <p className="mt-3 font-semibold text-stone-700">{t('guide.sectionConsentTemplateHead')}</p>
+          <p className="mt-1">{t('guide.sectionConsentTemplateIntro')}</p>
+          <ul className="list-disc pl-5 mt-3 space-y-2">
+            <li><span className="font-medium">{t('guide.sectionConsentTemplateEnLabel')}</span> {t('guide.sectionConsentTemplateEn')}</li>
+            <li><span className="font-medium">{t('guide.sectionConsentTemplateRuLabel')}</span> {t('guide.sectionConsentTemplateRu')}</li>
+            <li><span className="font-medium">{t('guide.sectionConsentTemplateEsLabel')}</span> {t('guide.sectionConsentTemplateEs')}</li>
+            <li><span className="font-medium">{t('guide.sectionConsentTemplateUkLabel')}</span> {t('guide.sectionConsentTemplateUk')}</li>
+          </ul>
+          <p className="mt-3">{t('guide.sectionConsentVideo')}</p>
+          <p className="mt-3">{t('guide.sectionConsentStorage')}</p>
         </>
       ),
     },

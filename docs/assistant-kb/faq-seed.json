@@ -302,5 +302,13 @@
     "question": "Are the testimonials and numbers on the PR-TOP landing page real?",
     "answer": "Yes — or they are not shown at all. PR-TOP enforces a strict no-fabrication rule: the 'Professional Proof' section of the landing page only renders when the product owner has supplied verified, consent-approved data. Testimonials require written consent from the named user. Numbers (like therapist counts) must be verifiable from actual usage data. If no verified facts are available, the section is silently omitted from the page. There are no placeholder quotes, no stock-photo attributions, and no fabricated statistics.",
     "tags": ["trust", "testimonials", "social proof", "numbers", "transparency"]
+  },
+  {
+    "id": "consent-to-record",
+    "audience": "public",
+    "locale": "en",
+    "question": "Do I need client consent before uploading a session recording?",
+    "answer": "Yes. Recording a therapy session without the client's explicit prior written consent may violate GDPR (EU/EEA), professional ethics codes, and national law. Under GDPR Article 9, session recordings are special-category health data requiring explicit consent (Article 9(2)(a)) or a recognised professional-secrecy basis under national law. PR-TOP checks the 'Recording consent granted' flag on the client profile before allowing an upload — if the flag is No, the upload button is disabled. Store the signed consent document in your own secure records (not in PR-TOP). If the client has not consented, use the single-track option to record only your own voice: the client's audio is discarded server-side before any transcript is stored. See the Consent to Record guide in the Therapist Guide (Dashboard → Guide) for ready-to-use wording templates in English, Russian, Spanish, and Ukrainian.",
+    "tags": ["consent", "recording", "gdpr", "legal", "upload", "session", "compliance"]
   }
 ]

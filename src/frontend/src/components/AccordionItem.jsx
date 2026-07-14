@@ -14,7 +14,7 @@ export default function AccordionItem({ title, isOpen, onToggle, children, id })
   const headerId = `accordion-header-${id}`;
 
   return (
-    <div className="border border-gray-200 rounded-lg mb-3 overflow-hidden bg-white shadow-sm">
+    <div id={id} className="border border-gray-200 rounded-lg mb-3 overflow-hidden bg-white shadow-sm">
       <button
         id={headerId}
         aria-expanded={isOpen}

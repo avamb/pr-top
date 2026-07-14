@@ -429,7 +429,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `guide.section2Dot1` — Green dot — client was active within the last day
 - `guide.section2Dot2` — Teal dot — client was active within the last 7 days
 - `guide.section2Dot3` — Amber dot — client was active within the last 30 days
-- _+ 94 more keys_
+- _+ 110 more keys_
 
 ## inquiry
 
@@ -501,7 +501,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `landing.tierFeat.clients30` — Up to 30 clients
 - `landing.tierFeat.clientsUnlimited` — Unlimited clients
 - `landing.tierFeat.sessions5` — 5 sessions / month
-- _+ 143 more keys_
+- _+ 144 more keys_
 
 ## landingConfirm
 
@@ -687,7 +687,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `security.enc.appLayerItem3` — Conversation messages between therapist and client
 - `security.enc.appLayerItem4` — Therapist-entered anamnesis, contraindications, and clinical context fields
 - `security.enc.appLayerItem5` — SOS alert content and exercise responses
-- _+ 52 more keys_
+- _+ 110 more keys_
 
 ## seo
 
@@ -705,10 +705,14 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `seo.securityAuditLog.description` — PR-TOP keeps an immutable audit log of every access to encrypted client data. Therapist...
 - `seo.securityDataSovereignty.title` — Data Sovereignty & Residency — PR-TOP Security
 - `seo.securityDataSovereignty.description` — PR-TOP stores all client data on EU-only servers (Hetzner). No cross-border transfers, ...
+- `seo.securityAiProcessing.title` — How AI Processing Works — PR-TOP Transparency
+- `seo.securityAiProcessing.description` — Full transparency: which AI models PR-TOP uses, what data leaves the platform, for whic...
 
 ## session
 
 - `session.upload.newSession` — + New Session
+- `session.upload.consentNote` — Recording a session requires the client's prior consent (EU/GDPR).
+- `session.upload.consentLearnMore` — Consent templates & guidance →
 - `session.upload.dragDrop` — Drag & drop a session recording here
 - `session.upload.dropHere` — Drop the file here to upload
 - `session.upload.clickToBrowse` — or click to browse
@@ -726,9 +730,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `session.upload.inquiryNone` — — No inquiry —
 - `session.upload.singleTrack.label` — Keep only my voice (single-track)
 - `session.upload.singleTrack.hint` — Use when the client did not consent to recording. After upload you'll pick which detect...
-- `session.upload.singleTrack.badge` — Single-track
-- `session.upload.singleTrack.diarizing` — Detecting speakers in the recording…
-- _+ 83 more keys_
+- _+ 85 more keys_
 
 ## sessionDetail
 
