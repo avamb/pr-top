@@ -15372,3 +15372,45 @@ VERIFICATION:
 - git commit: ffa7858
 
 Stats after session 207: #453 status: passing (452/457, 98.9%).
+
+================================================================
+Session 208 (2026-07-14) - Feature #454 PASSING (R6 section reorder + tech section)
+================================================================
+Assigned: #454 R6 — New section ordering + 'Technologies inside PR-TOP' at end
+
+IMPLEMENTATION:
+1. src/frontend/src/components/landing/TechSection.jsx (NEW)
+   - New component for "Technology inside PR-TOP" section (id="tech-inside")
+   - 4 tech cards: language models (Claude-class), Telegram as client channel,
+     application-level encryption, European hosting
+   - All copy is factual, calm, no hype — per POSITIONING_ADDENDUM §4 mandate
+   - Closing line: "The technology is a tool. Every decision about your clients stays with you."
+
+2. src/frontend/src/pages/Landing.jsx
+   - Re-ordered main content to spec: Hero → Features(R2) → Week-in-practice(R5)
+     → Control(R3) → Protocol(R4) → Anti-Burnout → Technology(R6) → FAQ → Pricing
+   - Re-surfaced R2 feature cards grid (featureKeys/highlightIcons arrays were
+     defined but orphaned — now rendered as section id="features")
+   - Moved contextual solution links from after WeekInPractice to bottom of the
+     Features section (per spec: "at the bottom of the Features section")
+   - Added <TechSection /> import and render after Anti-Burnout
+
+3. src/frontend/src/i18n/{en,ru,uk,es}.json
+   - Added landing.tech* keys (techTitle, techLead, tech1-4 Title/Desc, techClose)
+     in all 4 locales; native-quality copy, professional tone, no hype
+
+VERIFICATION:
+- npm run build --prefix src/frontend: 88 pages, 0 errors
+- Section order in prerendered dist/index.html confirmed:
+  aria-label="Hero" → id="features" → id="week-in-practice"
+  → id="therapist-control" → Agreed protocol → id="tech-inside"
+  → id="faq" → id="pricing"
+- Tech section renders in EN/RU/UK/ES with correct locale strings
+- 7 solution links still present in features section (SEO graph unchanged)
+- node _t_geo_audit.js: 18 passed, 0 failed
+- node _t_seo_i18n_audit.js: 15 passed, 0 failed
+- node _t_link_graph_w6.js: 52 checks, 0 errors
+- node _t_assistant_kb_audit.js: 79 passed, 0 failed
+- git commit: 810846f
+
+Stats after session 208: #454 status: passing (454/457, 99.3%).
