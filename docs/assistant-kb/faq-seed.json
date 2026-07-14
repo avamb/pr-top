@@ -76,7 +76,7 @@
     "audience": "public",
     "locale": "en",
     "question": "Who owns the data in PR-TOP?",
-    "answer": "The therapist owns the professional record and the client owns their personal content. Client consent is required for storage of diary and session material. Both parties can export their data as PDF/JSON/CSV, and deletion requests are honored end-to-end.",
+    "answer": "The therapist owns the professional record and the client owns their personal content. Client consent is required for storage of diary and session material. Both parties can export their data as PDF/JSON/CSV, and deletion requests are fully honored across the platform.",
     "tags": ["privacy", "data", "gdpr"]
   },
   {

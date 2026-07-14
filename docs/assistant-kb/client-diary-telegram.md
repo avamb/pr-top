@@ -23,8 +23,9 @@ sees, what you see, and how privacy is enforced.
 - Voice notes (transcribed automatically).
 - Short video notes.
 - Answers to exercises you have assigned.
-- **SOS** — a one-tap crisis button. See the crisis how-to for what
-  happens next.
+- **SOS** — a one-tap crisis button that notifies the therapist as
+  part of the pre-agreed protocol (not an emergency service call).
+  See the crisis how-to for what happens next.
 
 Every message is encrypted at rest before it lands in the database.
 

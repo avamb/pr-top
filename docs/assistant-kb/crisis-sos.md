@@ -3,9 +3,12 @@
 # How the crisis / SOS channel works
 
 PR-TOP includes a one-tap crisis trigger inside the Telegram bot so
-a client in acute distress can reach you between sessions. This
-how-to explains the flow from the client's tap to your response and
-the lifecycle tracking that keeps you accountable.
+a client in acute distress can reach you between sessions. The SOS
+command is part of your pre-agreed between-session protocol with
+the client — it is a direct notification to you, their therapist,
+not a call to emergency services or a crisis line. This how-to
+explains the flow from the client's tap to your response and the
+lifecycle tracking that keeps you accountable.
 
 ## Client side
 

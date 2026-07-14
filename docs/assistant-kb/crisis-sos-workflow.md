@@ -4,10 +4,20 @@
 The SOS system is the highest-priority signal path in PR-TOP. When a
 client taps the SOS command in Telegram, the platform fires an alert
 to every notification channel you have configured and pins the event
-on your dashboard until it is resolved. This how-to walks a therapist
-through what happens on receipt of an alert, how to respond inside
-PR-TOP, and how to mark the incident resolved. Labels come from the
-`notifications`, `security`, and `dashboard` namespaces.
+on your dashboard until it is resolved.
+
+**Important framing:** the SOS command is part of the agreed
+between-session protocol you establish with each client before they
+connect. It is a direct notification to you, their therapist — not a
+call to emergency services or a crisis hotline. The bot always
+reminds the client to call local emergency services if life is
+immediately at risk, but PR-TOP itself remains your clinical
+communication channel, not a substitute for 911 or local equivalents.
+
+This how-to walks a therapist through what happens on receipt of an
+alert, how to respond inside PR-TOP, and how to mark the incident
+resolved. Labels come from the `notifications`, `security`, and
+`dashboard` namespaces.
 
 ## Prerequisites
 
@@ -16,8 +26,10 @@ PR-TOP, and how to mark the incident resolved. Labels come from the
   but not receive the multi-channel push (email + WebSocket + optional
   Telegram to the therapist).
 - The client must have been briefed that the SOS command exists and
-  what it does. The bot's `/help` output includes a short explanation
-  in the client's language.
+  what it does — specifically that tapping it notifies you as their
+  therapist within your agreed protocol, and does not contact
+  emergency services on their behalf. The bot's `/help` output
+  includes a short explanation in the client's language.
 - Your notification preferences (Settings → Notifications) must be
   configured with at least an email address.
 

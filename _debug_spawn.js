@@ -1,0 +1,11 @@
+const {spawnSync} = require('child_process');
+const path = require('path');
+const backendDir = path.join('/c/Projects/dev-psy-bot', 'src', 'backend');
+const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+console.log('Platform:', process.platform, 'npmBin:', npmBin);
+const result = spawnSync(npmBin, ['run', 'docs:assistant:check'], {cwd: backendDir, encoding: 'utf8', timeout: 60000});
+console.log('status:', result.status);
+console.log('error:', result.error ? result.error.message : 'none');
+console.log('signal:', result.signal);
+console.log('stdout:', (result.stdout||'').slice(0,300));
+console.log('stderr:', (result.stderr||'').slice(0,300));

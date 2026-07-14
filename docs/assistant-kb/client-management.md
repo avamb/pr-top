@@ -1,5 +1,5 @@
 <!-- audience: public -->
-# Client management end-to-end
+# Managing clients: full lifecycle
 
 This how-to covers the complete lifecycle of a client record on PR-TOP:
 inviting the person, watching the connection status flip when they open

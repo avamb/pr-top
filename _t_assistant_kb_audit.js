@@ -421,12 +421,12 @@ async function main() {
   try {
     const { spawnSync } = require('child_process');
     const backendDir = path.join(__dirname, 'src', 'backend');
-    // Use npm.cmd on Windows, npm elsewhere.
+    // Use shell:true on Windows to avoid EINVAL with npm.cmd + spawnSync.
     const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm';
     const result = spawnSync(
       npmBin,
       ['run', 'docs:assistant:check'],
-      { cwd: backendDir, encoding: 'utf8', timeout: 60000 }
+      { cwd: backendDir, encoding: 'utf8', timeout: 60000, shell: process.platform === 'win32' }
     );
     if (result.status === 0) {
       pass('docs:assistant:check exited 0 — reference docs are in sync with source');

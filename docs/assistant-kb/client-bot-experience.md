@@ -23,8 +23,9 @@ After the client taps **Start** on the invite link, the bot introduces
 itself in the client's Telegram language, confirms the therapist name
 they are connected to, and shows a persistent menu of commands. The
 introduction states that the therapist has read-access to diary
-entries and reminds the client that the SOS button is available at
-any time.
+entries and reminds the client that the SOS command is available at any time
+as part of the agreed between-session protocol — it notifies the
+therapist directly but does not contact emergency services.
 
 ## Commands the client can use
 
@@ -35,7 +36,9 @@ any time.
   scores, "meh"/"okay"/"good" words (mapped to 3/5/7), and multiple
   languages.
 - `/exercise` — open the next assigned exercise if one is waiting.
-- `/sos` — trigger a crisis alert. See the crisis how-to.
+- `/sos` — trigger a crisis alert as part of the agreed between-session
+  protocol (notifies the therapist; does not contact emergency services).
+  See the crisis how-to.
 - `/streak` — show the current diary streak. Streaks are calendar-day
   counters that reset if the client misses a day.
 - `/reminders` — set or clear a nightly diary reminder. Default is a
@@ -70,7 +73,7 @@ chat, so the client rarely has to type them.
 1. On day one, send them the invite link and a short "here is what
    the bot will ask" message with the diary and exercise commands.
 2. Ask them to try `/diary` right away with one sentence — this
-   confirms the binding works end-to-end.
+   confirms the binding is working correctly.
 3. Turn on `/reminders` (either you show them or ask them to turn it
    on themselves). A gentle nightly nudge dramatically improves
    between-session engagement.

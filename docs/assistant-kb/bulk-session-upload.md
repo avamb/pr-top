@@ -87,7 +87,7 @@ here come from the `sessions` and `bulkImport` i18n namespaces.
 
 **Q: How long does transcription take?**
 A: Roughly 0.1× real-time on the default transcription provider — a
-60-minute recording takes about six minutes end-to-end, plus queue
+60-minute recording takes about six minutes in total, plus queue
 wait if you submitted a big batch.
 
 **Q: Can I upload video as easily as audio?**
