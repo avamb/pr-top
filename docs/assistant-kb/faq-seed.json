@@ -262,5 +262,29 @@
     "question": "Where is my data stored? Is there a US region or self-hosted option?",
     "answer": "All client data is stored exclusively in the European Union — PR-TOP runs on Hetzner infrastructure within the EU. There is no US region, no multi-region choice, and no self-hosted deployment option. PR-TOP is a managed SaaS service. You control access (who reads client data) through authentication, consent enforcement, and role-based permissions, but the physical storage is EU-only.",
     "tags": ["security", "gdpr", "data", "eu", "storage"]
+  },
+  {
+    "id": "ai-draft-model",
+    "audience": "public",
+    "locale": "en",
+    "question": "Does PR-TOP automatically save AI-generated notes to the client record?",
+    "answer": "No. Everything the AI generates — session summaries, transcripts, voice memo drafts — is saved privately as a draft first. The draft is visible only to you and is not part of the client's clinical record. It enters the client record only after you review and explicitly confirm it. Nothing is committed without your approval.",
+    "tags": ["ai", "notes", "draft", "session", "review"]
+  },
+  {
+    "id": "voice-memo-draft",
+    "audience": "public",
+    "locale": "en",
+    "question": "When I voice a quick memo in PR-TOP, where does it go?",
+    "answer": "The voice memo is transcribed and saved as a private draft under the right client file. It does not automatically enter the clinical record. You will find it in draft state on the client timeline, ready for you to review, edit, and confirm. Only after your approval does it become part of the client's record.",
+    "tags": ["voice", "memo", "draft", "notes"]
+  },
+  {
+    "id": "pwa-install",
+    "audience": "public",
+    "locale": "en",
+    "question": "Can I install PR-TOP as an app on my device?",
+    "answer": "Yes. PR-TOP is a Progressive Web App (PWA). After you sign in, your browser shows an 'Add PR-TOP to Home Screen' banner at the bottom of any dashboard page. Click Install and your OS creates a standalone shortcut. The install prompt and the 'new version available' update banner appear only inside the signed-in area — they will not interrupt visitors on the public marketing pages or the registration flow.",
+    "tags": ["pwa", "install", "app", "home screen", "update"]
   }
 ]

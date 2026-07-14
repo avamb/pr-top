@@ -270,7 +270,7 @@
     "feature4Title": "Una jornada laboral que termina cuando usted lo decide",
     "feature4Desc": "Defina las horas en que el servicio gestiona los mensajes entrantes. Sus clientes se sienten acompañados; usted tiene un cierre claro de su día profesional y tiempo para recuperarse.",
     "feature5Title": "Registre un pensamiento en el momento en que surge",
-    "feature5Desc": "Dicte una observación breve entre citas — se transcribe y se adjunta al expediente del cliente de forma automática. Nada se pierde en el intervalo entre sesiones.",
+    "feature5Desc": "Dicte una observación breve entre citas — se transcribe y se guarda como borrador privado bajo el expediente del cliente. Nada se pierde en el intervalo entre sesiones; el borrador pasa al expediente solo tras su revisión.",
     "feature6Title": "Un canal familiar para sus clientes — en sus propios términos",
     "feature6Desc": "Sus clientes llevan un diario, completan ejercicios y envían actualizaciones a través de un canal que ya conocen. Usted recibe un flujo estructurado — sin nuevas aplicaciones para ellos, sin ruido para usted. El canal es Telegram.",
     "week": {
@@ -294,7 +294,7 @@
       "step4": {
         "label": "Jueves por la tarde",
         "title": "El pensamiento que casi se escapa",
-        "body": "Una observación no quedó en las notas de sesión. Abre PR-TOP y dicta un apunte rápido. Se transcribe y se archiva bajo el cliente correcto automáticamente. Nada se pierde."
+        "body": "Una observación no quedó en las notas de sesión. Abre PR-TOP y dicta un apunte rápido. Se transcribe y se guarda como borrador privado bajo el cliente correcto. Nada se pierde — el borrador llega al expediente del cliente solo tras su revisión."
       },
       "step5": {
         "label": "Viernes, fin de semana",
@@ -307,7 +307,7 @@
     "techTitle": "Tecnología dentro de PR-TOP",
     "techLead": "Cómo está construida la plataforma, sin tecnicismos.",
     "tech1Title": "Modelos de lenguaje para procesar texto",
-    "tech1Desc": "Un modelo de lenguaje de la categoría Claude redacta notas de sesión a partir de grabaciones y responde búsquedas en el historial del cliente. Usted revisa y aprueba todo lo que genera el sistema antes de guardarlo.",
+    "tech1Desc": "Un modelo de lenguaje de la categoría Claude redacta notas de sesión a partir de grabaciones y responde búsquedas en el historial del cliente. El borrador se guarda de forma privada; solo pasa al registro del cliente tras su revisión y aprobación.",
     "tech2Title": "Telegram como canal para clientes",
     "tech2Desc": "Los clientes interactúan a través del Telegram que ya utilizan. Usted configura el canal — horarios, ejercicios y protocolos. El servicio no escribe a los clientes en su nombre por iniciativa propia.",
     "tech3Title": "Cifrado a nivel de aplicación",
