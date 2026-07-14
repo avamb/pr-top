@@ -289,3 +289,78 @@ Split into four independent features R21a–R21d, ordered by priority. Common ru
 **Acceptance steps:**
 1. Fixture test in the PR: "The diary is Premium-only." in a scratch KB file → audit FAILS; "Supervisors get a read-only view on Premium." with a valid `gate:` annotation → passes; remove fixtures.
 2. Zero new unannotated claims across the KB with the corrected regex; full audit suite green.
+
+---
+
+# Wave 3 — Legal & Operational Transparency (third Hermes UX audit, 2026-07-14 18:35)
+
+Audit verdict: the site now reads as a mature practice product; the last barrier is evidential transparency around AI processing, recording consent, and legal/data responsibilities. All findings below were verified against the code by the owner on 2026-07-14 (verification notes inline). The §4 copywriting mandate and truth-before-copy mandate apply to every feature; tier claims need `gate:` annotations (R23).
+
+### R24 — P0: One trial length everywhere (7-day meta vs 14-day site)
+**Context (verified):** `seo.home.description` EN and the `Seo` fallback in `Landing.jsx:229` still say "7-day free trial", while registration/pricing say 14-day and the code grants 14 days (`auth.js: trialDays = 14`; Stripe customer NULL). RU/UK/ES home metas avoid a number. Onboarding emails already say 14 (emailService.js:241-286). The 7-day wording is correct ONLY for the confirm-funnel reminders plan.
+**Description:** Sweep every surface for trial-length mentions and pin them to the single source of truth (14-day for the main product): `seo.home.description` (all 4 locales — state the number consistently or omit it consistently), `Landing.jsx` fallback props, OG/Twitter descriptions (emitted from the same strings via `Seo.jsx` — verify), `index.html` static description, JSON-LD `SoftwareApplication`/offers if it mentions a trial, `/terms` (check the clause), assistant-KB (`registration-and-onboarding.md`, `subscription-management.md`, `faq-seed.json`). The confirm-funnel pages keep 7-day but must name the reminders plan explicitly so the two numbers can never be read as the same offer.
+**Acceptance steps:**
+1. Grep repo-wide (frontend src + dist + docs/assistant-kb): every "7-day"/"7 дней"/"7 días"/"7 днів" occurrence sits in a confirm-funnel context that names the reminders plan; all main-product mentions say 14.
+2. Build; puppeteer `/`: `meta[name=description]`, `og:description`, `twitter:description` agree with visible pricing (14 or no number) in all 4 locales.
+3. Audit suite green; screenshots re-captured.
+
+### R25 — P0: Privacy/Terms/GDPR/security pages speak the new narrative
+**Context (verified):** stale wording at `privacy.dataCollection.intro` ("therapist assistant services"), `privacy.dataUsage.intro` ("therapeutic assistant service"), `security.gdpr.minimizationP1` (same), and — worst — `security.enc.appLayerItem4` = "AI-generated insights, anamnesis, and contraindications". Fact-check: anamnesis and contraindications are **therapist-entered fields** on the client card (`clientDetail.anamnesis*` / `clientDetail.contraindications*`, en.json:902-907), NOT AI outputs — the current line is both clinically alarming and factually wrong.
+**Description:** Editorial + truth pass over `privacy.*`, `terms.*`, `security.gdpr.*`, `security.enc.*` in all 4 locales: (a) replace "therapist/therapeutic assistant service" with the workspace language of the landing; (b) rewrite `appLayerItem4` truthfully — "Therapist-entered client history and precautions (anamnesis, contraindications)" — and keep AI outputs as their own item, "AI-generated draft notes and summaries — always subject to therapist review"; never present AI as producing insights/anamnesis/contraindications; (c) align SOS mentions with the agreed-protocol lexicon (terms.disclaimers.p3 is close — keep its honesty, adopt the protocol term); (d) verify every remaining claim on these pages against code while editing.
+**Acceptance steps:**
+1. Grep i18n (all 4 locales): zero "assistant service"/"therapeutic assistant" in privacy/terms/security namespaces; `appLayerItem4` no longer attributes anamnesis/contraindications to AI.
+2. Build; puppeteer `/privacy`, `/security/encryption`, `/security/gdpr`, `/terms` (EN+RU): new wording renders; JSON-LD parses; no raw keys.
+3. Cross-consistency read (noted in the PR): nothing on these pages contradicts "does not make diagnoses / clinical decisions" from the landing.
+4. Audit suite green.
+
+### R26 — P0: Replace "Your data belongs to you alone" with a legally accurate claim
+**Context (verified):** `landing.feature3Title` EN = "Your data belongs to you alone" — contradicts the honest access model (operator-held key, client as data subject, controller/processor roles) and overreaches legally for clinical data.
+**Description:** Rewrite the card title + description (all 4 locales) per the audit's options: e.g. title "Your practice controls access", body "Clinical content is encrypted, stored in the EU, and you decide who within your practice can access it." Terminology consistent with R12/R13. No other cards change.
+**Acceptance steps:**
+1. Grep all locales: no "belongs to you alone"-style ownership absolutes in `landing.*`.
+2. Build + puppeteer `/` + `/ru/`: card renders, consistent with the security page; audit suite green; screenshots re-captured.
+
+### R27 — P1: "How AI processing works" transparency page
+**Context (verified):** landing says "a Claude-class language model"; `privacy.*.aiDesc` says "e.g., OpenAI, Anthropic, Google" with a blanket no-retention claim; the code has four provider adapters (`src/backend/src/services/aiProviders/{anthropic,google,openai,openrouter}.js`). A cautious professional cannot tell which provider actually touches clinical data, where, or how to opt out.
+**Description:** Build a public page `how-ai-processing-works` (all 4 locales; register in `routes.mjs`; follows CONTENT_RULES fully) answering, in order: (1) what exactly is sent for processing (transcript fragments vs full audio — verify from the transcription/summary pipeline); (2) which providers can process it — name the four adapters honestly, which function each serves (transcription, summaries, embeddings) and which is active by default (verified from config/env); (3) where processing happens — only claims verifiable from provider documentation, cited; (4) retention/training policy — link each provider's actual zero-retention terms instead of one blanket sentence, and soften `privacy.aiDesc` where a claim cannot be cited; (5) what always stays under therapist review (draft model, R14); (6) how to disable AI features while keeping the workspace — verify whether such a toggle exists; if not, do NOT promise it: state current behavior and file a product feature; (7) subprocessor list + DPA pointer (`[HUMAN]` — only if the owner provides a DPA). Link the page from the landing tech section and privacy's AI clause. Add a matching assistant-KB article (`how-ai-processing-works.md`).
+**Acceptance steps:**
+1. Every factual statement carries a verification note in the PR (code path or provider-doc URL); unverifiable claims absent.
+2. Build; page prerendered: one H1, direct-answer block, FAQ JSON-LD, Updated stamp; in sitemap; `_t_geo_audit.js` passes with it included.
+3. Landing tech section and privacy link to it (all locales); KB article indexed, `_t_assistant_kb_audit.js` green.
+4. If the AI-disable toggle does not exist, the page says so plainly and a follow-up product feature is filed instead of implying it.
+
+### R28 — P1: Recording-consent microcopy at the upload scenario
+**Context:** the week-in-practice step "you upload the recording" raises the practitioner question "do I have documented consent?". A session-recording consent flag already exists in the product (KB references it; verify the flag in code while implementing).
+**Description:** Add one calm sentence + link near the upload step (`landing.week.step2` area, all 4 locales): "Use session recording only with appropriate client consent and in accordance with your local professional requirements.", linking to a short guidance anchor — a section of the R27 page or a `recording-consent` FAQ entry (rendered + JSON-LD). Verify onboarding does not promise consent templates that do not exist; if templates are absent, the guidance describes the in-product consent flag instead.
+**Acceptance steps:**
+1. Build + puppeteer `/` (EN+RU): microcopy renders at the scenario step with a working link; tone per mandate (no legal scare).
+2. Guidance target exists in all locales, no raw keys; audit suite green; screenshots re-captured.
+
+### R29 — P1: One English dialect + micro-copy fixes
+**Context (verified):** en.json mixes dialects — organise(1)/organize(1), recognize(1), anonymised(1)/anonymized(3), behavior(5). US forms dominate and the Phase-3 market is US-first → standardize on **US English** (owner may override to UK before implementation starts).
+**Description:** Normalize the entire EN locale (landing + auth + privacy/terms/security + user-facing KB prose) to US spelling; apply the audit's copy nits, incl. `landing.controlClose` "Every meaningful action requires your review and confirmation." → a precise scope such as "Nothing enters a client's record without your review." Read-aloud pass per mandate. RU/UK/ES untouched except where meaning shifted.
+**Acceptance steps:**
+1. Grep en.json + docs/assistant-kb: zero UK variants (organise/recognise/anonymised/behaviour/colour) outside proper nouns/quotes.
+2. `_t_r9_qa.js` assertions still pass (update literals referencing changed strings in the same commit); audit suite green; screenshots re-captured.
+
+### R30 — P2: Fix the empty band before the Technology section (Anti-Burnout reveal)
+**Context (verified):** the Anti-Burnout section renders with `opacity-0 translate-y-8` and reveals via IntersectionObserver (`Landing.jsx:119-131`); in prerendered HTML and whenever the observer fires late or never (fast scroll, reduced motion, JS delay) the section is an invisible full-height band — the audit saw exactly "a large empty area before Technology" on desktop, and it appears empty in the review screenshots too.
+**Description:** Make the section visible by default; treat the animation as progressive enhancement: no `opacity-0` in server-rendered markup — apply the hidden state only when JS mounts AND the section is below the viewport, and add a `prefers-reduced-motion` bypass plus a timeout fallback that force-reveals. Prerendered `dist/` must contain the visible section.
+**Acceptance steps:**
+1. Grep `dist/index.html`: burnout section markup carries no `opacity-0`.
+2. Puppeteer with JS disabled: section text visible; with JS: animation still plays on scroll; 375px mobile viewport — no dead band.
+3. Re-captured screenshots show the section content in all 4 locales.
+
+### R31 — P2: "Explore the workspace" block instead of 8 SEO tags (graph-safe)
+**Context:** the related-links chip row after the feature cards reads as SEO navigation, not user help. **Constraint: the internal link graph is load-bearing** (CONTENT_RULES rule 6, `_t_link_graph_w6.js`) — no href from `/` to a solution page may disappear.
+**Description:** Replace the chip row with a compact "Explore the workspace" paragraph + 3–4 primary links (session notes, client diary, secure practice, compare tools), and move the remaining solution links into the existing footer Solutions column (verify each is already there; add any that is not). Net result: the same set of hrefs on `/`, better UX placement. All 4 locales.
+**Acceptance steps:**
+1. Puppeteer `/`: snapshot of all internal solution/compare hrefs before vs after — identical set (placement may shift, no href disappears).
+2. `node _t_link_graph_w6.js` passes unchanged; audit suite green; screenshots re-captured.
+
+### R32 — P2: Security page — human summary first, technical details expandable
+**Context:** `/security/encryption` is honest now but leads with IV/ciphertext/env-var language the core audience does not read.
+**Description:** Restructure (all 4 locales): top — a five-line human summary (clinical data is encrypted; stored in the EU; support does not routinely read clinical content; you can export or delete everything; the operator holds the encryption key, so this is not end-to-end encryption). Below — the existing sections inside an expandable "Technical details for your IT or compliance reviewer" (reuse `AccordionItem`). No claims change — structure only; the honest non-E2EE sentence stays above the fold.
+**Acceptance steps:**
+1. Puppeteer `/security/encryption` (EN+RU): summary first, non-E2EE sentence visible without scrolling at 1280×800; accordion expands to the technical sections; exactly one H1.
+2. Grep: all R12-era honest wording preserved (no claim regressions); JSON-LD/meta unchanged; audit suite green.
