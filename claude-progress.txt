@@ -1,4 +1,56 @@
 ================================================================
+Session 211 (2026-07-14) - Feature #458 PASSING (R10 final repositioning polish)
+================================================================
+
+Assigned: #458 R10 — Final repositioning polish (terminology, RU fixes, meta, footer, screenshots)
+
+IMPLEMENTATION:
+
+1. src/frontend/src/i18n/en.json
+   - landing.week.step5.body: "the bot tells clients you're available Monday"
+     -> "the service lets clients know you're available Monday"
+   - landing.faqA2: "a designated signal in the Telegram bot"
+     -> "a designated signal sent through the client's usual Telegram channel"
+
+2. src/frontend/src/i18n/ru.json
+   - landing.week.lead: "которые узнают терапевты" -> "знакомых каждому терапевту"
+   - landing.featuresTitle: "стала проще" -> "— проще" (em-dash present-tense form)
+   - landing.feature2Desc: added missing comma before participial clause "зная точно"
+   - landing.week.step5.body: "бот сообщает клиентам" -> "сервис уведомит клиентов"
+   - landing.faqA2: "в Telegram-боте" -> "в Telegram"
+
+3. src/frontend/src/i18n/es.json
+   - landing.week.step5.body: "el bot informe a los clientes" -> "el servicio informe a sus clientes"
+   - landing.faqA2: "en el bot de Telegram" -> "en el canal de Telegram habitual del cliente"
+
+4. src/frontend/src/i18n/uk.json
+   - landing.week.step5.body: "бот повідомляє клієнтів" -> "сервіс повідомить клієнтів"
+   - landing.faqA2: "у Telegram-боті" -> "у Telegram"
+
+5. src/frontend/index.html
+   - Static <title>: changed from old "AI Assistant ... Telegram Bot" to new dual-intent
+     "PR-TOP — Practice Workspace for Therapists & Psychologists | Client Diary, Session Notes, AI Support Between Sessions"
+
+6. src/frontend/src/pages/Landing.jsx
+   - Footer Product column: Features link href changed from #week-in-practice to #features
+     (label 'Features' now matches the section id="features")
+
+7. docs/seo/reports/repositioning-screens/ (NEW DIRECTORY)
+   - landing-en.png, landing-ru.png, landing-es.png, landing-uk.png
+   - Full-page screenshots captured via Puppeteer for mandatory human review before prod merge
+
+VERIFICATION:
+- node _t_r9_qa.js: 76 passed, 0 failed
+- node _t_geo_audit.js: 18 passed, 0 failed
+- node _t_seo_i18n_audit.js: 15 passed, 0 failed
+- node _t_assistant_kb_audit.js: 79 passed, 0 failed
+- node _t_link_graph_w6.js: 52 passed, 0 failed
+- npm run build (via run-build.js): 92 prerendered pages (88 public + 4 noindex), exit 0
+- git commit: b53a79c
+
+Stats after session 211: #458 status: passing (458/458, 100%).
+
+================================================================
 Session 210 (2026-07-14) - Feature #456 PASSING (R8 routine-intent SEO page)
 ================================================================
 
