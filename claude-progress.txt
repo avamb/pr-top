@@ -1,4 +1,41 @@
 ================================================================
+Session 231 (2026-07-14) - Feature #485 PASSING (R30 Anti-Burnout section visibility)
+================================================================
+
+Assigned: #485 R30 — Invisible Anti-Burnout section — make visible by default
+
+PROBLEM:
+Anti-Burnout section div had opacity-0 translate-y-8 baked into its static className.
+IntersectionObserver removed those classes when the element came into view. In
+prerender (SSR/static), the JS never runs → section is invisible in all prerendered
+pages and screenshots.
+
+IMPLEMENTATION:
+
+1. src/frontend/src/styles/index.css:
+   - Added .scroll-reveal (opacity:0, translateY(2rem), transition) — applied by JS on mount
+   - Added .scroll-reveal.is-revealed (opacity:1, translateY(0)) — applied by observer
+   - Added @media (prefers-reduced-motion: reduce) block — forces visible, no transition
+
+2. src/frontend/src/pages/Landing.jsx:
+   - Removed opacity-0 translate-y-8 transition-all duration-700 ease-out from div className
+   - div is now visible by default (no hidden classes in static HTML)
+   - Rewrote useEffect: checks prefers-reduced-motion first (exits early if set)
+   - JS adds 'scroll-reveal' class on mount (progressive enhancement)
+   - IntersectionObserver adds 'is-revealed' (does NOT remove classes)
+
+3. docs/assistant-kb/reference/ui-labels.md (REGENERATED via docs:assistant)
+
+VERIFICATION:
+- Build: 96 prerendered pages, exit 0
+- Grep dist/index.html for opacity-0: 0 matches (PASS)
+- scroll-reveal in HTML: only in inlined CSS <style>, not on element (PASS)
+- No other sections found with same defect (grep: 0 hits)
+- node _t_assistant_kb_audit.js: 92 passed, 0 failed
+- git commit: aea4365
+- Feature #485 marked PASSING
+
+================================================================
 Session 229 (2026-07-14) - Feature #482 PASSING (R27 AI transparency page)
 ================================================================
 
@@ -16845,3 +16882,52 @@ VERIFICATION:
 - Feature #483 marked PASSING
 
 Stats after session 230: 482/487 (98.9%)
+
+================================================================
+Session 230 (2026-07-14) - Feature #484 PASSING (R29 US English dialect)
+================================================================
+
+Assigned: #484 R29 - Единый диалект английского (US) + точечные правки формулировок
+
+TASK: Standardize all EN content to US English dialect (market Phase 3 = USA)
+
+BRITISH SPELLINGS FIXED across 16 files:
+- organise/organised/organises → organize/organized/organizes
+- anonymised → anonymized
+- summarised/summarisation → summarized/summarization
+- minimisation → minimization
+- modelled → modeled
+- counsellors/counsellor → counselors/counselor
+- centres/centre → centers/center
+- recognised → recognized
+- behaviour → behavior
+- neighbourhood → neighborhood
+- organisation → organization
+
+FILES CHANGED:
+- src/frontend/src/i18n/en.json (heroDesc, singleTrack.hint, sectionConsentGdpr, zeroKnowledgeP1, residencyP1)
+- src/frontend/src/seo/routes.mjs
+- src/frontend/src/pages/PracticeManagementForTherapists.jsx (multiple)
+- src/frontend/src/pages/HipaaAndGdprForTherapySoftware.jsx (gdprP1, gdprP2, gdprP3 FAQ)
+- src/frontend/src/pages/ClientDetail.jsx (comment)
+- src/frontend/src/pages/AiSessionNotesForTherapists.jsx
+- src/frontend/src/pages/ClientDiaryForTherapists.jsx
+- src/frontend/src/pages/TherapistAiAssistant.jsx
+- src/frontend/src/pages/SecurePracticeManagement.jsx
+- src/frontend/src/pages/CoachingSessionManagement.jsx
+- src/backend/src/services/reminderService.js (comment)
+- src/backend/src/routes/sessions.js (comments)
+- src/backend/src/services/assignmentReports.js (comment)
+- docs/assistant-kb/security-overview.md
+- docs/assistant-kb/feature-overview.md
+- docs/assistant-kb/settings-and-preferences.md
+- docs/assistant-kb/faq-seed.json
+- docs/assistant-kb/consent-to-record.md
+
+VERIFICATION:
+- Frontend build: PASSED (96 prerendered pages generated)
+- npm run docs:assistant: PASSED (no changes to reference docs)
+- node _t_assistant_kb_audit.js: PASSED (92/92 checks)
+- git commit: 3643a35
+
+STATUS: 483/487 features passing (99.2%)
