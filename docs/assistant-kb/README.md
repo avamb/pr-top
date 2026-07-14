@@ -15,6 +15,23 @@ paperwork.
 | Generated reference | `reference/endpoints.md`, `reference/ui-labels.md`, `reference/pricing.md` | **Automatic**: `npm run docs:assistant` (in `src/backend`) regenerates them from routes / i18n / plan config. Run before every release. Never edit by hand. |
 | Authored how-tos | every other `.md` here | **Manual/agent-authored**: updated by whoever ships the feature. The generator never overwrites them ("kept"). |
 
+## Drift detection — `npm run docs:assistant:check`
+
+A companion `--check` mode renders the three reference files into memory and
+compares them to what is currently on disk. If any file would change, it
+prints a line-level diff and exits with code 1.
+
+```bash
+# In src/backend:
+npm run docs:assistant:check     # verify — exits 0 (in sync) or 1 (drift)
+npm run docs:assistant           # fix — regenerate and write
+```
+
+This check is wired into `node _t_assistant_kb_audit.js` (section 12g) so it
+runs automatically as part of the definition-of-done gate. It catches the
+classic mistake: a developer changes an i18n label, an API route, or a plan
+price, then forgets to regenerate the reference docs before merging.
+
 ## Definition of done for ANY new or changed feature
 
 1. Does the feature change what a therapist or client sees or can do?
@@ -23,7 +40,8 @@ paperwork.
    → FAQ). Every factual claim (limits, plan gating, button labels)
    must be verified against code/i18n — no invented behavior.
 2. Run `npm run docs:assistant` so the generated reference picks up new
-   routes / labels / pricing.
+   routes / labels / pricing. Then run `npm run docs:assistant:check` to
+   confirm the on-disk files match the generated output (exit 0 = in sync).
 3. Run `node _t_assistant_kb_audit.js` — it enforces ≥20 authored docs,
    ≥600 words each, valid audience markers, FAQ sections, and that no
    `src/`-sourced chunks leak into the index.

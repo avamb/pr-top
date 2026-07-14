@@ -417,6 +417,33 @@ async function main() {
     fail('S6 authored-docs audit threw: ' + e.message);
   }
 
+  section('12g. R22c — docs:assistant:check reports no drift (reference/*.md in sync with source)');
+  try {
+    const { spawnSync } = require('child_process');
+    const backendDir = path.join(__dirname, 'src', 'backend');
+    // Use npm.cmd on Windows, npm elsewhere.
+    const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    const result = spawnSync(
+      npmBin,
+      ['run', 'docs:assistant:check'],
+      { cwd: backendDir, encoding: 'utf8', timeout: 60000 }
+    );
+    if (result.status === 0) {
+      pass('docs:assistant:check exited 0 — reference docs are in sync with source');
+    } else {
+      const preview = ((result.stdout || '') + (result.stderr || ''))
+        .split('\n').slice(0, 25).map(l => '  ' + l).join('\n');
+      fail(
+        'docs:assistant:check exited ' + result.status +
+        ' — reference docs have drifted from source.\n' +
+        '  Fix: cd src/backend && npm run docs:assistant, then commit.\n' +
+        preview
+      );
+    }
+  } catch (e) {
+    fail('R22c docs:assistant:check threw: ' + e.message);
+  }
+
   section('12. S2 — publicAssistant.js and assistant.js call search with correct audience');
   try {
     const publicRoute = fs.readFileSync(path.join(__dirname, 'src/backend/src/routes/publicAssistant.js'), 'utf8');

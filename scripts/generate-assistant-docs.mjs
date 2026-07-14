@@ -35,7 +35,7 @@
  *   npm run docs:assistant      # regenerate deterministic + seed prose
  *   node scripts/generate-assistant-docs.mjs --check   # dry run
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, relative, join } from 'node:path';
 
@@ -57,6 +57,32 @@ function ensureDir(dir) {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 
+/**
+ * Produce a minimal "unified-style" diff between two strings (line-level).
+ * Capped at 50 changed lines to keep terminal output readable.
+ */
+function simpleDiff(oldText, newText, label) {
+  const oldLines = oldText.split('\n');
+  const newLines = newText.split('\n');
+  const out = ['--- ' + label + '  (on disk)', '+++ ' + label + '  (generated)'];
+  let diffCount = 0;
+  const maxLines = Math.max(oldLines.length, newLines.length);
+  for (let i = 0; i < maxLines; i++) {
+    const o = i < oldLines.length ? oldLines[i] : undefined;
+    const n = i < newLines.length ? newLines[i] : undefined;
+    if (o !== n) {
+      if (o !== undefined) out.push('-' + o);
+      if (n !== undefined) out.push('+' + n);
+      diffCount++;
+      if (diffCount >= 50) {
+        out.push('... diff truncated after 50 changed lines — run: npm run docs:assistant');
+        break;
+      }
+    }
+  }
+  return out.join('\n');
+}
+
 function writeIfChanged(absPath, contents) {
   ensureDir(dirname(absPath));
   const rel = relative(PROJECT_ROOT, absPath).replace(/\\/g, '/');
@@ -66,8 +92,17 @@ function writeIfChanged(absPath, contents) {
       log('unchanged  ' + rel);
       return false;
     }
+    if (CHECK_ONLY) {
+      log('DRIFT      ' + rel);
+      console.log(simpleDiff(cur, contents, rel));
+      return true;
+    }
+  } else if (CHECK_ONLY) {
+    log('WOULD write ' + rel + '  (new file — run: npm run docs:assistant)');
+    return true;
   }
   if (CHECK_ONLY) {
+    // Should not reach here, but guard anyway.
     log('WOULD write ' + rel);
     return true;
   }
@@ -813,6 +848,12 @@ function main() {
   }
   if (selfCheckFail) {
     log('one or more generated files failed the prose guardrail');
+    process.exit(1);
+  }
+
+  if (CHECK_ONLY && wroteAny) {
+    log('DRIFT DETECTED — generated reference docs are out of date with source.');
+    log('Fix: run  npm run docs:assistant  (in src/backend) then commit the updated files.');
     process.exit(1);
   }
 
