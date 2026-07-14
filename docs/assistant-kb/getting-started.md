@@ -36,6 +36,31 @@ from **Clients → open client → Diary**. Private therapist notes live on
 the same page and are never shown to the client or included in bot
 replies.
 
+## Installing PR-TOP as a Progressive Web App (PWA)
+
+After signing in, your browser may show a banner at the bottom of the
+screen offering to add PR-TOP to your home screen. This is the PWA
+install prompt, and it appears **only inside the signed-in area**
+(dashboard, clients, settings, etc.) — never on public marketing pages or
+the registration / login flows.
+
+To install the PWA:
+1. Sign in and navigate to any dashboard page.
+2. When the "Add PR-TOP to Home Screen" banner appears, click **Install**.
+3. Your OS installs a standalone shortcut. Future visits open directly
+   without a browser address bar.
+
+To dismiss permanently: click **Not now** — the banner will not appear
+again on that device. To re-prompt, clear the site data in your browser
+settings.
+
+**Update banner:** When a new version of PR-TOP is deployed, a teal
+"A new version is available" banner appears at the bottom-right corner of
+any dashboard page. Click **Refresh** to reload and get the update.
+Like the install prompt, the update banner is restricted to the
+authenticated zone and will not interrupt visitors browsing the landing
+page.
+
 ## What the assistant can help with
 
 The signed-in assistant (this bot) can walk you through platform tasks

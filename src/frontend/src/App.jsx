@@ -176,11 +176,45 @@ function LocaleSync() {
   return null;
 }
 
+/**
+ * R15 — PWA/update banner gating.
+ *
+ * InstallPrompt (PWA add-to-home-screen) and the SW update banner must only
+ * appear inside the authenticated therapist/admin zone, never on public
+ * marketing pages, the registration flow, or other public routes.
+ *
+ * Authenticated routes are those wrapped by GuardedLayout or AdminLayout:
+ *   /dashboard, /clients, /sessions, /exercises, /analytics,
+ *   /settings, /subscription, /admin
+ *
+ * Public routes (/, /register, /login, /security/*, /compare/*, etc.)
+ * must NOT show the banner — it would confuse visitors and distract from
+ * the marketing funnel.
+ */
+const AUTHENTICATED_PREFIXES = [
+  '/dashboard',
+  '/clients',
+  '/sessions',
+  '/exercises',
+  '/analytics',
+  '/settings',
+  '/subscription',
+  '/admin',
+];
+
+function GatedInstallPrompt() {
+  const { pathname } = useLocation();
+  const isInAuthenticatedZone = AUTHENTICATED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(prefix + '/')
+  );
+  return isInAuthenticatedZone ? <InstallPrompt /> : null;
+}
+
 function App() {
   return (
     <BrowserRouter>
       <LocaleSync />
-      <InstallPrompt />
+      <GatedInstallPrompt />
       <Routes>
         {/* Public marketing routes at the root (English default). */}
         {PUBLIC_MARKETING_ROUTES.map((r) => (
