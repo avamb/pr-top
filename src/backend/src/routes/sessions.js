@@ -98,8 +98,8 @@ router.post('/', authenticate, requireRole('therapist', 'superadmin'), upload.si
     // being recorded but the therapist still wants AI summary, the upload is
     // marked recording_mode='single_track'. The system then runs speaker
     // diarization and waits for the therapist to confirm which detected
-    // speaker is their own voice; only that track is transcribed/summarised.
-    // Default 'mixed' preserves the original behaviour for consented sessions.
+    // speaker is their own voice; only that track is transcribed/summarized.
+    // Default 'mixed' preserves the original behavior for consented sessions.
     const rawRecordingMode = typeof req.body.recording_mode === 'string'
       ? req.body.recording_mode.trim().toLowerCase()
       : 'mixed';
@@ -197,7 +197,7 @@ router.post('/', authenticate, requireRole('therapist', 'superadmin'), upload.si
     logger.info(`Session audio uploaded: session_id=${sessionId}, therapist=${therapistId}, client=${clientId}, mode=${recordingMode}`);
 
     // Trigger downstream processing asynchronously (don't block the response).
-    // - mixed:        run transcription → summary chain (legacy behaviour)
+    // - mixed:        run transcription → summary chain (legacy behavior)
     // - single_track: run diarization first; the therapist must then call
     //                 POST /api/sessions/:id/select-speaker, which kicks off
     //                 transcription with the chosen speaker filter.

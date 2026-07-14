@@ -232,7 +232,7 @@ function ClientDetail() {
   const [sessionInquiryId, setSessionInquiryId] = useState('');
   // T-19: when the client did not consent to recording, the therapist can
   // upload a Zoom-style mixed audio file and have the system keep only their
-  // voice. Default false (= mixed mode = legacy behaviour).
+  // voice. Default false (= mixed mode = legacy behavior).
   const [sessionSingleTrack, setSessionSingleTrack] = useState(false);
   const sessionFileInputRef = useRef(null);
 
@@ -2501,7 +2501,7 @@ function ClientDetail() {
                     </div>
                     <div className="text-xs text-amber-800 mt-1">
                       {t('session.upload.singleTrack.hint',
-                        "Use when the client did not consent to recording. After upload you'll pick which detected speaker is your voice; only that voice is transcribed and summarised. The other speaker's audio is discarded.")}
+                        "Use when the client did not consent to recording. After upload you'll pick which detected speaker is your voice; only that voice is transcribed and summarized. The other speaker's audio is discarded.")}
                     </div>
                   </div>
                 </label>

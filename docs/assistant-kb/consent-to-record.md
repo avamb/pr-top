@@ -93,7 +93,7 @@ sign the form; keep the original in your own secure records.
 
 > I, **[client full name]**, consent to audio and/or video recording of my
 > therapy sessions with **[therapist full name]**, a licensed
-> **[psychologist / psychotherapist / counsellor]**, for the sole purpose of
+> **[psychologist / psychotherapist / counselor]**, for the sole purpose of
 > producing session notes and summaries that form part of my clinical record.
 >
 > I understand that:

@@ -129,7 +129,7 @@ const CONTENT = {
     aiProvidersP1:
       'PR-TOP is multi-provider by design: you configure which AI backend handles transcription summaries and other AI tasks. Supported providers are OpenAI (GPT-4o and later models), Anthropic (Claude), Google Gemini, and OpenRouter (which gives access to dozens of third-party models via a single API). Whisper is used exclusively for transcription.',
     aiProvidersP2:
-      'This means you are not locked into a single AI vendor\'s pricing or quality trajectory. If a new model outperforms your current choice for clinical summarisation, you switch providers in settings — no migration, no data export. All AI-generated content (summaries, note drafts) is treated as Class A data and encrypted before storage, regardless of which provider generated it.',
+      'This means you are not locked into a single AI vendor\'s pricing or quality trajectory. If a new model outperforms your current choice for clinical summarization, you switch providers in settings — no migration, no data export. All AI-generated content (summaries, note drafts) is treated as Class A data and encrypted before storage, regardless of which provider generated it.',
     aiProvidersLead: 'Compare specific tools: ',
     aiProvidersLinkUpheal: 'PR-TOP vs Upheal',
     aiProvidersAnd: ', ',

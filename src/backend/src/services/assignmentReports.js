@@ -448,7 +448,7 @@ async function processReportTranscription(reportId) {
   }
 
   // Lazy-require to avoid a circular import (diaryTranscription pulls in
-  // services from this module's neighbourhood).
+  // services from this module's neighborhood).
   const diaryTx = require('./diaryTranscription');
 
   // Mark processing.

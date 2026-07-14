@@ -9,7 +9,7 @@ import useLocalePath from '../hooks/useLocalePath';
  * /practice-management-for-therapists  —  Routine-intent SEO landing page.
  *
  * Feature R8 — targets non-AI queries: "practice management for therapists",
- * "reduce admin private practice", "how to organise therapy clients".
+ * "reduce admin private practice", "how to organize therapy clients".
  *
  * Follows docs/seo/CONTENT_RULES.md (all 7 rules):
  *   1. 40-60 word direct-answer block right below H1
@@ -28,21 +28,21 @@ const CONTENT = {
   en: {
     seoTitle: 'Practice Management for Therapists — PR-TOP Workspace (2026)',
     seoDescription:
-      'Practice management for therapists: PR-TOP organises client records, session notes, analytics and a between-session channel for diary and exercises. GDPR-first.',
-    articleHeadline: 'Practice Management for Therapists — How PR-TOP Organises Your Practice',
+      'Practice management for therapists: PR-TOP organizes client records, session notes, analytics and a between-session channel for diary and exercises. GDPR-first.',
+    articleHeadline: 'Practice Management for Therapists — How PR-TOP Organizes Your Practice',
     articleDescription:
-      'How PR-TOP helps therapists manage their practice: organised client records, session documentation, notes workflow and a between-session client channel — without billing or scheduling overhead.',
+      'How PR-TOP helps therapists manage their practice: organized client records, session documentation, notes workflow and a between-session client channel — without billing or scheduling overhead.',
     badge: 'Practice management',
     h1: 'Practice management for therapists',
     stamp: 'Updated: July 2026 · Reviewed by the PR-TOP team',
     backHome: 'Back to home',
 
     intro:
-      'PR-TOP organises your therapy practice around the therapeutic relationship, not billing cycles. Manage your client roster, session records, notes and analytics in one encrypted workspace — then add the between-session layer: a client channel for voice diary, exercises and crisis alerts, delivered through Telegram with no separate app needed.',
+      'PR-TOP organizes your therapy practice around the therapeutic relationship, not billing cycles. Manage your client roster, session records, notes and analytics in one encrypted workspace — then add the between-session layer: a client channel for voice diary, exercises and crisis alerts, delivered through Telegram with no separate app needed.',
 
     coreWorkflowTitle: 'The core practice workflow PR-TOP handles',
     coreWorkflowP1:
-      'A well-run private practice needs four things working together: organised client records, reliable session documentation, a way to stay in contact between appointments, and a clear picture of how clients are progressing. Most tools cover one or two of these. PR-TOP is designed to cover all four without the billing, scheduling and insurance overhead of a full EHR.',
+      'A well-run private practice needs four things working together: organized client records, reliable session documentation, a way to stay in contact between appointments, and a clear picture of how clients are progressing. Most tools cover one or two of these. PR-TOP is designed to cover all four without the billing, scheduling and insurance overhead of a full EHR.',
     coreWorkflowList: [
       'Client roster — unlimited encrypted profiles, consent tracking, and a timeline view of all sessions, diary entries and exercises in chronological order. Nothing falls between the cracks.',
       'Session records — upload an audio or video recording (up to 100 MB), transcribe it automatically, receive a structured summary and draft a progress note. The full record is encrypted at the application layer before it touches the database.',
@@ -164,7 +164,7 @@ const CONTENT = {
       },
       {
         label: 'Best for',
-        p: 'EU/CIS/LATAM therapists who need organised records and a between-session client channel',
+        p: 'EU/CIS/LATAM therapists who need organized records and a between-session client channel',
         sp: 'US therapists needing a full EHR with billing and scheduling',
         jane: 'Canadian therapists needing scheduling, billing and telehealth',
         ehr: 'Clinics needing regulated clinical records + billing compliance',
@@ -175,20 +175,20 @@ const CONTENT = {
 
     adminLoadTitle: 'Reducing administrative load in a private practice',
     adminLoadP1:
-      'Administrative overhead in a solo or small-group practice falls into three categories: documentation (session notes, progress records), communication (client contact between sessions) and organisation (knowing where every client stands at any given moment). PR-TOP is designed to compress all three.',
+      'Administrative overhead in a solo or small-group practice falls into three categories: documentation (session notes, progress records), communication (client contact between sessions) and organization (knowing where every client stands at any given moment). PR-TOP is designed to compress all three.',
     adminLoadP2:
-      'Session documentation is the most time-intensive. Uploading a recording and receiving a structured draft note typically takes less than five minutes of active therapist time — the rest is the transcription and summarisation running in the background. The draft is yours to edit, approve or discard; the technology assists, it does not decide.',
+      'Session documentation is the most time-intensive. Uploading a recording and receiving a structured draft note typically takes less than five minutes of active therapist time — the rest is the transcription and summarization running in the background. The draft is yours to edit, approve or discard; the technology assists, it does not decide.',
     adminLoadP3:
       'Between-session communication is the most fragmented. Most therapists currently manage it across informal message threads, voice memos and their own memory. PR-TOP consolidates it into a single encrypted channel per client, visible on the client timeline, searchable and structured.',
     adminLoadP4:
-      'Organisation is the least visible but most corrosive. Not knowing which client was assigned which exercise three weeks ago, or not having a summary of the last four diary entries before a session starts, adds mental overhead that accumulates across a full week of appointments. The client timeline and weekly digest features exist specifically to eliminate that overhead.',
+      'Organization is the least visible but most corrosive. Not knowing which client was assigned which exercise three weeks ago, or not having a summary of the last four diary entries before a session starts, adds mental overhead that accumulates across a full week of appointments. The client timeline and weekly digest features exist specifically to eliminate that overhead.',
     adminLoadLinkSecure: 'Read about how client data is protected',
 
     faqTitle: 'Frequently asked questions',
     faqItems: [
       {
         q: 'What does practice management for therapists actually mean?',
-        a: 'In the PR-TOP context it means: an organised client roster with consent tracking; structured session records with transcription and note drafting; a between-session client channel for diary entries, exercises and urgency signals; practice analytics; and four-language support. It does not include scheduling, billing or insurance claims — those require a dedicated EHR or billing platform.',
+        a: 'In the PR-TOP context it means: an organized client roster with consent tracking; structured session records with transcription and note drafting; a between-session client channel for diary entries, exercises and urgency signals; practice analytics; and four-language support. It does not include scheduling, billing or insurance claims — those require a dedicated EHR or billing platform.',
       },
       {
         q: 'How is PR-TOP different from SimplePractice for practice management?',

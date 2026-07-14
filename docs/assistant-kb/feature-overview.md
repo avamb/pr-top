@@ -74,7 +74,7 @@ interact with a Telegram bot on their phone.
 ## FAQ
 
 **Q: Who uses PR-TOP?**
-A: Licensed psychologists, therapists, and counsellors who want a
+A: Licensed psychologists, therapists, and counselors who want a
 tool to preserve between-session context and reduce documentation
 double-work.
 

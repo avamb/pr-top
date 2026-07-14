@@ -12,7 +12,7 @@
 //
 // Design notes:
 //   - All wall-clock-anchored math uses Intl.DateTimeFormat with timeZone for
-//     DST-safe behaviour (matches the helper in routes/clients.js:29–81).
+//     DST-safe behavior (matches the helper in routes/clients.js:29–81).
 //   - INSERT OR IGNORE relies on uq_srd_session_offset_channel (T-27) for
 //     idempotency under cron overlap or restart.
 //   - The dispatcher re-reads session.attendance_status immediately before

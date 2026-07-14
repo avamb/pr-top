@@ -86,7 +86,7 @@ const CONTENT = {
     sovereigntyP2:
       'A Data Processing Addendum is available by default for all paying plans. Therapists in EU member states can reference the DPA in their own data processing documentation for clients. The operator can also choose to self-host the entire PR-TOP stack on their own EU server, in which case no data leaves their infrastructure at all.',
     sovereigntyP3:
-      'This matters for therapists working under national health authority contracts, school counsellors subject to local authority data governance rules, and any practice registered with a EU supervisory body that audits data residency.',
+      'This matters for therapists working under national health authority contracts, school counselors subject to local authority data governance rules, and any practice registered with a EU supervisory body that audits data residency.',
     sovereigntySee: 'Full details: ',
     sovereigntyLink: 'data sovereignty and EU hosting →',
 
@@ -97,8 +97,8 @@ const CONTENT = {
         label: 'Hosting',
         p: 'EU-only (Hetzner)',
         g: 'Varies — often US or mixed',
-        u: 'US data centres',
-        d: 'US data centres',
+        u: 'US data centers',
+        d: 'US data centers',
       },
       {
         label: 'Encryption model',

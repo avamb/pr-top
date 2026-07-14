@@ -165,7 +165,7 @@ const CONTENT = {
       },
       {
         q: 'Does the client diary replace session notes?',
-        a: 'No — it complements them. Session notes (transcription via Whisper, AI summarisation) capture what happened during the appointment. The client diary captures what happened between appointments. Both appear on the client\'s timeline in the same dashboard, giving you a continuous record that neither tool could provide alone. Most PR-TOP therapists use the diary and session notes together; some also use a specialist note-taker alongside PR-TOP for deeper clinical template formats.',
+        a: 'No — it complements them. Session notes (transcription via Whisper, AI summarization) capture what happened during the appointment. The client diary captures what happened between appointments. Both appear on the client\'s timeline in the same dashboard, giving you a continuous record that neither tool could provide alone. Most PR-TOP therapists use the diary and session notes together; some also use a specialist note-taker alongside PR-TOP for deeper clinical template formats.',
       },
       {
         q: 'Can I try the client diary feature without a credit card?',

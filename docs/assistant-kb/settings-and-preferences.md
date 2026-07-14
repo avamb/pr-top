@@ -81,7 +81,7 @@ therapists who invoice outside the platform.
    least 8 characters long. On save, all other sessions are signed
    out.
 3. **Active sessions** — a list of every browser and device currently
-   signed in. Revoke any you don't recognise.
+   signed in. Revoke any you don't recognize.
 4. **Two-factor authentication (2FA)** — enrol a TOTP authenticator
    app (Aegis, 1Password, Authy). PR-TOP shows a QR code and
    verifies before enabling. Recovery codes are shown once — store

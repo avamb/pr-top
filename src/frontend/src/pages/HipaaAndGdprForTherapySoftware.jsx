@@ -104,11 +104,11 @@ const CONTENT = {
 
     gdprTitle: 'Why GDPR-first may be the right choice for your practice',
     gdprP1:
-      'GDPR (the EU General Data Protection Regulation) sets a high bar for data processing: lawful basis, data minimisation, purpose limitation, rights for data subjects (access, rectification, erasure, portability), mandatory breach notification, and — for processors — a Data Processing Addendum (DPA). PR-TOP meets all of these requirements by design.',
+      'GDPR (the EU General Data Protection Regulation) sets a high bar for data processing: lawful basis, data minimization, purpose limitation, rights for data subjects (access, rectification, erasure, portability), mandatory breach notification, and — for processors — a Data Processing Addendum (DPA). PR-TOP meets all of these requirements by design.',
     gdprP2:
-      'For EU-licensed therapists, GDPR is the binding legal framework. For Ukrainian therapists, the Law on Personal Data Protection applies and is closely aligned with GDPR principles. For LATAM therapists, national frameworks (LGPD in Brazil, Ley 1581 in Colombia, etc.) are either modelled on GDPR or compatible with it. In each case, the correct compliance framework is local law, not HIPAA.',
+      'For EU-licensed therapists, GDPR is the binding legal framework. For Ukrainian therapists, the Law on Personal Data Protection applies and is closely aligned with GDPR principles. For LATAM therapists, national frameworks (LGPD in Brazil, Ley 1581 in Colombia, etc.) are either modeled on GDPR or compatible with it. In each case, the correct compliance framework is local law, not HIPAA.',
     gdprP3:
-      'PR-TOP processes all data on EU infrastructure (Hetzner data centres). There are no US-based sub-processors for client data. A Data Processing Addendum is available by default — not on request, not behind an enterprise tier. Clients can exercise GDPR data subject rights (access, rectification, erasure) directly through the therapist dashboard. You can export or wipe an entire client record in one action.',
+      'PR-TOP processes all data on EU infrastructure (Hetzner data centers). There are no US-based sub-processors for client data. A Data Processing Addendum is available by default — not on request, not behind an enterprise tier. Clients can exercise GDPR data subject rights (access, rectification, erasure) directly through the therapist dashboard. You can export or wipe an entire client record in one action.',
     gdprLead: 'See: ',
     gdprLinkGdpr: 'GDPR compliance details',
     gdprAnd: ', ',
@@ -144,11 +144,11 @@ const CONTENT = {
       },
       {
         q: 'Is PR-TOP safe for EU therapists under GDPR?',
-        a: 'Yes. PR-TOP is designed and hosted in the EU (Hetzner infrastructure). It processes all client data under a GDPR-compliant framework: lawful basis, data minimisation, data subject rights, and a Data Processing Addendum available by default. There are no third-party analytics trackers — analytics run on self-hosted Umami. You can export or delete a complete client record in one action.',
+        a: 'Yes. PR-TOP is designed and hosted in the EU (Hetzner infrastructure). It processes all client data under a GDPR-compliant framework: lawful basis, data minimization, data subject rights, and a Data Processing Addendum available by default. There are no third-party analytics trackers — analytics run on self-hosted Umami. You can export or delete a complete client record in one action.',
       },
       {
         q: 'Can US therapists use PR-TOP?',
-        a: 'US therapists who are not covered entities under HIPAA (e.g., coaches, certain counsellors, therapists who do not bill insurance) can use PR-TOP and benefit from its strong encryption and GDPR-aligned controls. US therapists who are covered entities and must sign a BAA with their software vendors cannot use PR-TOP for PHI, as PR-TOP does not offer a BAA. Consult your own legal counsel if you are unsure of your HIPAA status.',
+        a: 'US therapists who are not covered entities under HIPAA (e.g., coaches, certain counselors, therapists who do not bill insurance) can use PR-TOP and benefit from its strong encryption and GDPR-aligned controls. US therapists who are covered entities and must sign a BAA with their software vendors cannot use PR-TOP for PHI, as PR-TOP does not offer a BAA. Consult your own legal counsel if you are unsure of your HIPAA status.',
       },
       {
         q: 'What data does PR-TOP encrypt?',

@@ -105,7 +105,7 @@ export. Backups are also encrypted; restoring requires the key.
 A: Decryption requires the ENCRYPTION_MASTER_KEY, which is held by
 the service operator and stored in a protected environment variable —
 never in the database. Under normal operation no PR-TOP team member
-accesses clinical content; support works with anonymised metadata and
+accesses clinical content; support works with anonymized metadata and
 logs only.
 
 **Q: Where is PR-TOP's data stored?**

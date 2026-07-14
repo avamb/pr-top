@@ -138,7 +138,7 @@ const CONTENT = {
     faqItems: [
       {
         q: 'Is PR-TOP designed for coaches or therapists?',
-        a: 'PR-TOP was built for any professional who works in a repeating session model with clients — therapists, psychologists, counsellors, and coaches. The feature set (between-session check-ins, homework assignments, urgent support requests, journal entries, streak tracking) maps directly to coaching workflows. You do not need any clinical background to use it, and the platform language is configurable to match your niche.',
+        a: 'PR-TOP was built for any professional who works in a repeating session model with clients — therapists, psychologists, counselors, and coaches. The feature set (between-session check-ins, homework assignments, urgent support requests, journal entries, streak tracking) maps directly to coaching workflows. You do not need any clinical background to use it, and the platform language is configurable to match your niche.',
       },
       {
         q: 'Does my client need to download a new app?',

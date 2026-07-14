@@ -43,7 +43,7 @@ const CONTENT = {
     backHome: 'Back to home',
 
     intro:
-      'AI session notes transcribe and summarise your sessions so you can write progress notes in seconds instead of minutes. PR-TOP does that — and unlike pure note-takers it also keeps a real-time client channel open between sessions: Telegram diary, exercises and one-tap crisis alerts, all encrypted.',
+      'AI session notes transcribe and summarize your sessions so you can write progress notes in seconds instead of minutes. PR-TOP does that — and unlike pure note-takers it also keeps a real-time client channel open between sessions: Telegram diary, exercises and one-tap crisis alerts, all encrypted.',
 
     whyNotEnoughTitle: 'Why session notes alone are not enough',
     whyNotEnoughP1:
@@ -147,7 +147,7 @@ const CONTENT = {
       },
       {
         q: 'How does Whisper transcription work in PR-TOP?',
-        a: 'You upload an audio or video file (up to 100 MB) from any source — Zoom recording, a local recorder, a phone voice memo. PR-TOP sends it to OpenAI Whisper for transcription, then passes the transcript to your chosen AI provider for summarisation. The raw transcript is encrypted as Class A data immediately after transcription and never stored in plaintext. Streaming playback of the original file is also available from the session detail view.',
+        a: 'You upload an audio or video file (up to 100 MB) from any source — Zoom recording, a local recorder, a phone voice memo. PR-TOP sends it to OpenAI Whisper for transcription, then passes the transcript to your chosen AI provider for summarization. The raw transcript is encrypted as Class A data immediately after transcription and never stored in plaintext. Streaming playback of the original file is also available from the session detail view.',
       },
       {
         q: 'Can I use PR-TOP alongside a specialist note-taker like Quill or Supanote?',
