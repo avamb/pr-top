@@ -40,6 +40,8 @@ const PUBLIC_ROUTES = [
   '/hipaa-and-gdpr-for-therapy-software',
   '/coaching-session-management',
   '/client-diary-for-therapists',
+  // R8 routine-intent cluster — 2026-07-14
+  '/practice-management-for-therapists',
 ];
 
 let passed = 0;
@@ -236,6 +238,7 @@ const PRIMARY_KEYWORDS = {
   '/hipaa-and-gdpr-for-therapy-software': { en: 'HIPAA and GDPR', ru: 'HIPAA и GDPR', uk: 'HIPAA і GDPR', es: 'HIPAA y GDPR' },
   '/coaching-session-management': { en: 'coaching session management', ru: 'управления сессиями', uk: 'управління сесіями', es: 'gestión de sesiones de coaching' },
   '/client-diary-for-therapists': { en: 'client diary for therapists', ru: 'дневник клиента', uk: 'щоденник клієнта', es: 'diario del cliente' },
+  '/practice-management-for-therapists': { en: 'practice management for therapists', ru: 'управление практикой психолога', uk: 'управління практикою психолога', es: 'gestión de consulta para terapeutas' },
 };
 let w3KeywordChecks = 0;
 for (const p of pageMeta) {

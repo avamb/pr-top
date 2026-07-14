@@ -220,6 +220,16 @@ export const PUBLIC_ROUTES = [
       'How PR-TOP\'s client diary works: clients send voice, text and video entries via Telegram; therapists see all entries in an encrypted dashboard before every session. Currently ranked #3 for "client diary for therapists online".',
     primaryKeyword: { en: 'client diary for therapists', ru: 'дневник клиента для психологов', uk: 'щоденник клієнта для психологів', es: 'diario del cliente para terapeutas' },
   },
+  // R8 — Routine-intent cluster (no AI in H1/meta title) — 2026-07-14
+  {
+    path: '/practice-management-for-therapists',
+    changefreq: 'monthly',
+    priority: 0.8,
+    title: 'Practice management for therapists — PR-TOP workspace (2026)',
+    summary:
+      'How PR-TOP organises a therapy practice: client roster, session records, encrypted notes, analytics, and a between-session client channel — without billing or scheduling overhead. Targets routine-management intent.',
+    primaryKeyword: { en: 'practice management for therapists', ru: 'управление практикой психолога', uk: 'управління практикою психолога', es: 'gestión de consulta para terapeutas' },
+  },
 ];
 
 /**
@@ -259,6 +269,7 @@ export const LLMS_SECTIONS = [
       '/hipaa-and-gdpr-for-therapy-software',
       '/coaching-session-management',
       '/client-diary-for-therapists',
+      '/practice-management-for-therapists',
     ],
   },
 ];

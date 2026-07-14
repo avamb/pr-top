@@ -54,6 +54,7 @@ import TherapistAiAssistant from './pages/TherapistAiAssistant';
 import HipaaAndGdprForTherapySoftware from './pages/HipaaAndGdprForTherapySoftware';
 import CoachingSessionManagement from './pages/CoachingSessionManagement';
 import ClientDiaryForTherapists from './pages/ClientDiaryForTherapists';
+import PracticeManagementForTherapists from './pages/PracticeManagementForTherapists';
 import VerifyLead from './pages/VerifyLead';
 import SupervisionView from './pages/SupervisionView';
 import NotFound from './pages/NotFound';
@@ -131,6 +132,7 @@ const PUBLIC_MARKETING_ROUTES = [
   { path: '/hipaa-and-gdpr-for-therapy-software', element: <HipaaAndGdprForTherapySoftware /> },
   { path: '/coaching-session-management',       element: <CoachingSessionManagement /> },
   { path: '/client-diary-for-therapists',       element: <ClientDiaryForTherapists /> },
+  { path: '/practice-management-for-therapists', element: <PracticeManagementForTherapists /> },
 ];
 
 function localePrefixedPath(locale, routePath) {

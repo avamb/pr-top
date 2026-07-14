@@ -400,6 +400,7 @@ export default function Landing() {
               <Link to={lp('/therapist-ai-assistant')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.solTherapistAssistant')}</Link>
               <Link to={lp('/client-diary-for-therapists')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.solClientDiary')}</Link>
               <Link to={lp('/secure-practice-management')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.solSecurePractice')}</Link>
+              <Link to={lp('/practice-management-for-therapists')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.solPracticeManagement')}</Link>
               <Link to={lp('/best-ai-assistant-for-therapists')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.bestAiAssistants')}</Link>
             </div>
           </div>
@@ -599,6 +600,7 @@ export default function Landing() {
                 <li><Link to={lp('/coaching-session-management')} className="hover:text-white transition-colors">{t('landing.solCoachingSessions')}</Link></li>
                 <li><Link to={lp('/client-diary-for-therapists')} className="hover:text-white transition-colors">{t('landing.solClientDiary')}</Link></li>
                 <li><Link to={lp('/secure-practice-management')} className="hover:text-white transition-colors">{t('landing.solSecurePractice')}</Link></li>
+                <li><Link to={lp('/practice-management-for-therapists')} className="hover:text-white transition-colors">{t('landing.solPracticeManagement')}</Link></li>
               </ul>
             </div>
 

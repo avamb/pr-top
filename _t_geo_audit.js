@@ -5,7 +5,7 @@
 //   1. robots.txt contains 7 explicit AI-crawler blocks.
 //   2. dist/llms.txt (if it exists — conditional until F18 lands) lists every
 //      manifest route.
-//   3. sitemap.xml URL count equals manifest routes × locales (16 × 4 = 64).
+//   3. sitemap.xml URL count equals manifest routes × locales (22 × 4 = 88).
 //   4. Every prerendered page has exactly one <h1> and a meta description of
 //      length 25–160 chars.
 //   5. All JSON-LD blocks on every prerendered page parse as valid JSON.
@@ -43,6 +43,8 @@ const PUBLIC_ROUTES = [
   '/hipaa-and-gdpr-for-therapy-software',
   '/coaching-session-management',
   '/client-diary-for-therapists',
+  // R8 routine-intent cluster — 2026-07-14
+  '/practice-management-for-therapists',
 ];
 // Legacy: kept for the loops below; empty since the comparison pages gained
 // /ru, /uk, /es mirrors.
