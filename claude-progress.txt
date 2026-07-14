@@ -15330,3 +15330,45 @@ VERIFICATION:
 - node _t_link_graph_w6.js: 52 passed, 0 failed ✓
 
 Stats after session 204: #449 status: passing (449/457, 98.2%).
+
+================================================================
+Session 207 (2026-07-14) - Feature #453 PASSING (R5 week-in-practice section)
+================================================================
+
+Assigned: #453 R5 — 'A week in practice' scenario section
+
+CONTEXT:
+The R4 session (#452, commit 5a4a78b) had already committed the i18n keys
+(landing.week.* in all 4 locales) and Landing.jsx wiring for R5, but the
+component file itself (WeekInPracticeSection.jsx) was missing.
+This session added the missing component to complete the feature.
+
+IMPLEMENTATION:
+1. src/frontend/src/components/landing/WeekInPracticeSection.jsx (NEW)
+   - 5-step vertical timeline replacing the generic features-listing grid
+   - Icons: calendar, check-circle, shield, microphone, home
+   - Uses i18n keys landing.week.{heading,lead,step1-5.{label,title,body}}
+   - Section id="week-in-practice", aria-label from i18n heading
+
+2. src/frontend/src/i18n/{en,ru,es,uk}.json (already committed by R4 session)
+   - landing.week.heading, landing.week.lead
+   - landing.week.step1-5: {label, title, body} per step
+   - Narrative arc: Mon morning (prepared) → after session (5-min notes)
+     → Wed midday (message, no blur) → Thu evening (quick memo) → Fri (leave work at work)
+
+3. src/frontend/src/pages/Landing.jsx (already committed by R4 session)
+   - Import WeekInPracticeSection
+   - Replace <section id="features"> grid with <WeekInPracticeSection />
+   - Contextual solution chip-links moved below the new section
+   - Hero and footer #features anchors updated to #week-in-practice
+
+VERIFICATION:
+- npm run build --prefix src/frontend: 88 prerendered pages, exit 0
+- All 4 locale dist files contain "week-in-practice" section + localized headings
+  EN: "A week in your practice" / RU: "Неделя в практике" /
+  ES: "Una semana en su consulta" / UK: "Тиждень у практиці"
+- node _t_geo_audit.js: 18 passed, 0 failed
+- node _t_seo_i18n_audit.js: 15 passed, 0 failed
+- git commit: ffa7858
+
+Stats after session 207: #453 status: passing (452/457, 98.9%).
