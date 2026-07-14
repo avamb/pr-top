@@ -24,8 +24,9 @@ summary that non-technical therapists can read before the scroll:
 4. **Audit trail** — Every sensitive-data access is recorded in a
    tamper-proof audit log (90-day default retention). Therapists can review
    their own access log in the dashboard.
-5. **GDPR & DPA** — All processing is EU-based. A Data Processing Agreement
-   template is available for clinics and organizations upon request.
+5. **GDPR** — All processing is EU-based. You can request a full export or
+   deletion of your data at any time. Clinics that need a Data Processing
+   Agreement should contact support@pr-top.com to discuss processing terms.
 
 Technical details (algorithms, key management, TLS configuration, access
 model) appear in a collapsible "For your IT reviewer" accordion below the

@@ -1576,7 +1576,7 @@
       "summary2": "How encrypted: Content is protected with application-layer AES-256 encryption. PR-TOP is not end-to-end encrypted and not zero-knowledge — the platform operator holds the decryption keys.",
       "summary3": "Who can access: Only the application layer (using a master key held by the platform operator) can decrypt clinical content. Database-level access alone is insufficient. PR-TOP support does not access your clinical data under normal operation.",
       "summary4": "Audit trail: Every access to sensitive data is recorded in a tamper-proof audit log. Therapists can view their own access log in the dashboard.",
-      "summary5": "GDPR & DPA: All data is stored and processed within the EU. A Data Processing Agreement template is available for clinics and organizations upon request.",
+      "summary5": "GDPR: All data is stored and processed within the EU. You can request a full export or deletion of your data at any time.",
       "itReviewerTitle": "For your IT reviewer — technical details"
     },
     "gdpr": {
@@ -1592,8 +1592,8 @@
       "consentItem2": "When consent is revoked, all client data becomes immediately inaccessible to the therapist — including diary entries, sessions, search, dashboard statistics, and analytics",
       "consentItem3": "Consent status is checked in real-time on every data access request, with full audit logging of consent changes",
       "dpaTitle": "Data Processing Agreement (DPA)",
-      "dpaP1": "For organizations and clinics, PR-TOP provides a Data Processing Agreement template that outlines the responsibilities of both parties regarding personal data handling.",
-      "dpaP2": "The DPA covers data processing purposes, security measures, sub-processor agreements, breach notification procedures, and data subject rights.",
+      "dpaP1": "For organizations and clinics: PR-TOP acts as a processor for the client data you store in the workspace. If your clinic requires a Data Processing Agreement, contact support@pr-top.com to discuss data-processing terms for your organization.",
+      "dpaP2": "A DPA covers data processing purposes, security measures, sub-processor agreements, breach notification procedures, and data subject rights.",
       "processingTitle": "EU Data Processing",
       "processingP1": "PR-TOP supports deployment within the European Union to ensure that data never leaves EU jurisdictions. This satisfies the GDPR requirement for lawful data transfers.",
       "processingP2": "All data is stored and processed within the European Union, ensuring compliance with GDPR data residency requirements."

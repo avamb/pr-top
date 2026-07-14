@@ -1576,7 +1576,7 @@
       "summary2": "Cómo se cifra: el contenido está protegido con cifrado AES-256 a nivel de aplicación. PR-TOP no utiliza cifrado de extremo a extremo (E2EE) y no es zero-knowledge — el operador de la plataforma posee las claves de descifrado.",
       "summary3": "Quién tiene acceso: solo la capa de aplicación (usando la clave maestra del operador de la plataforma) puede descifrar el contenido clínico. El acceso a nivel de base de datos no es suficiente. El soporte de PR-TOP no accede a sus datos clínicos en condiciones normales.",
       "summary4": "Registro de auditoría: cada acceso a datos sensibles queda registrado en un registro de auditoría a prueba de manipulaciones. Los terapeutas pueden ver su propio registro de acceso en el panel.",
-      "summary5": "GDPR y DPA: todos los datos se almacenan y procesan dentro de la UE. Hay disponible una plantilla de Acuerdo de Procesamiento de Datos para clínicas y organizaciones.",
+      "summary5": "GDPR: todos los datos se almacenan y procesan dentro de la UE. Puede solicitar en cualquier momento la exportación completa o la eliminación de sus datos.",
       "itReviewerTitle": "Para su revisor de TI — detalles técnicos"
     },
     "gdpr": {
@@ -1592,8 +1592,8 @@
       "consentItem2": "Cuando se revoca el consentimiento, todos los datos del cliente se vuelven inmediatamente inaccesibles para el terapeuta",
       "consentItem3": "El estado del consentimiento se verifica en tiempo real en cada solicitud de acceso a datos, con registro completo de auditoría",
       "dpaTitle": "Acuerdo de procesamiento de datos (DPA)",
-      "dpaP1": "Para organizaciones y clínicas, PR-TOP proporciona una plantilla de Acuerdo de procesamiento de datos que describe las responsabilidades de ambas partes.",
-      "dpaP2": "El DPA cubre los fines del procesamiento, medidas de seguridad, acuerdos con subprocesadores, procedimientos de notificación de brechas y derechos de los interesados.",
+      "dpaP1": "Para organizaciones y clínicas: PR-TOP actúa como encargado del tratamiento de los datos de clientes que usted almacena en el espacio de trabajo. Si su clínica necesita un Acuerdo de Procesamiento de Datos (DPA), escriba a support@pr-top.com para acordar las condiciones de tratamiento para su organización.",
+      "dpaP2": "Un DPA cubre los fines del tratamiento, las medidas de seguridad, los acuerdos con subencargados, los procedimientos de notificación de brechas y los derechos de los interesados.",
       "processingTitle": "Procesamiento de datos en la UE",
       "processingP1": "PR-TOP admite el despliegue dentro de la Unión Europea para garantizar que los datos nunca salgan de las jurisdicciones de la UE.",
       "processingP2": "Todos los datos se almacenan y procesan en la Unión Europea, garantizando el cumplimiento de los requisitos de residencia de datos del RGPD."
