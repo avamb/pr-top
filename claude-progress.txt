@@ -16374,3 +16374,33 @@ VERIFICATION:
 Stats after session 222: #473 status: passing.
 
 Stats after session 219 (new): #469 status: passing.
+
+=== SESSION 223 — Feature #475 (R22c drift-detector) ===
+Date: 2026-07-14
+
+Completed: Feature #475 — R22c: docs:assistant --check drift-detector
+
+Changes made:
+1. scripts/generate-assistant-docs.mjs:
+   - Added simpleDiff() helper for line-level unified diff output
+   - writeIfChanged() now prints DRIFT label + diff when --check detects drift
+   - main() calls process.exit(1) when CHECK_ONLY && wroteAny (drift found)
+   - Handles new-file case cleanly in check mode
+
+2. _t_assistant_kb_audit.js:
+   - Added section 12g: runs npm run docs:assistant:check via spawnSync
+   - Asserts exit 0 (in sync) as a definition-of-done gate
+   - Reports diff preview on failure with remediation instruction
+
+3. docs/assistant-kb/README.md:
+   - Added Drift detection section documenting npm run docs:assistant:check
+   - Updated DoD step 2 to mention running :check after regenerating
+
+Verification:
+- node scripts/generate-assistant-docs.mjs --check -> exits 0 (in sync)
+- Drift simulation (appended DRIFT_TEST_LINE_475 to pricing.md):
+  exits 1, prints readable diff, restores correctly
+- npm run docs:assistant:check already wired in src/backend/package.json
+
+Stats: 473/475 -> 474/475 passing (99.8%)
+Commit: d4a10f3
