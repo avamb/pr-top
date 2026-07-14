@@ -282,3 +282,10 @@ Split into four independent features R21a–R21d, ordered by priority. Common ru
 1. Regression fixture demonstrated in the PR: the exact pre-fix `dashboard-overview.md` "Plan downgrades" paragraph, placed in a scratch KB file, makes the audit FAIL; remove fixture.
 2. Zero unannotated claims across `docs/assistant-kb/` with the widened detector; every annotation resolves to a plan-gates.json id whose anchor matches code.
 3. Full audit suite green.
+
+### R23c — P2: One-character fix — `(?<!-)only` swallows "Premium-only"
+**Context (verified 2026-07-14):** R23b's `GATE_WORD_RE_KB` uses `(?<!-)only\b` to stop "read-only" from false-positiving. Side effect: any hyphenated tier claim — "Premium-only", "Pro-only" — no longer matches at all. Owner's adversarial test: "The diary is Premium-only for all clients." passes the audit silently (0 fails), while the wrapped-paragraph and "gated by plan" evasions are correctly caught.
+**Description:** Replace the lookbehind with the specific exclusion: `(?<!read-)only\b` (optionally also `(?<!view-)`) so "read-only" stays exempt but "<Tier>-only" is detected again.
+**Acceptance steps:**
+1. Fixture test in the PR: "The diary is Premium-only." in a scratch KB file → audit FAILS; "Supervisors get a read-only view on Premium." with a valid `gate:` annotation → passes; remove fixtures.
+2. Zero new unannotated claims across the KB with the corrected regex; full audit suite green.
