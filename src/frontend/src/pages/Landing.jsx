@@ -226,7 +226,7 @@ export default function Landing() {
         titleKey="seo.home.title"
         descriptionKey="seo.home.description"
         title="PR-TOP — Practice Workspace for Therapists & Psychologists | Client Diary, Session Notes, AI Support Between Sessions"
-        description="PR-TOP — practice workspace for therapists: encrypted client diary, AI session notes, safe communication between sessions. GDPR-compliant. 7-day free trial."
+        description="PR-TOP — practice workspace for therapists: encrypted client diary, AI session notes, safe communication between sessions. GDPR-compliant. 14-day free trial."
       />
       {/* ─── Skip to content ─── */}
       <a href="#main-content" className="skip-to-content">

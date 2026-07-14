@@ -3,7 +3,7 @@
   "seo": {
     "home": {
       "title": "PR-TOP — Practice Workspace for Therapists & Psychologists | Client Diary, Session Notes, AI Support Between Sessions",
-      "description": "PR-TOP — practice workspace for therapists: encrypted client diary, AI session notes, secure communication between sessions. GDPR-compliant. 7-day free trial."
+      "description": "PR-TOP — practice workspace for therapists: encrypted client diary, AI session notes, secure communication between sessions. GDPR-compliant. 14-day free trial."
     },
     "privacy": {
       "title": "Privacy Policy — PR-TOP",
@@ -1538,8 +1538,9 @@
       "appLayerItem1": "Client diary entries (text, voice transcripts, video transcripts)",
       "appLayerItem2": "Therapist session notes and summaries",
       "appLayerItem3": "Conversation messages between therapist and client",
-      "appLayerItem4": "AI-generated insights, anamnesis, and contraindications",
+      "appLayerItem4": "Therapist-entered anamnesis, contraindications, and clinical context fields",
       "appLayerItem5": "SOS alert content and exercise responses",
+      "appLayerItem6": "Draft AI notes and session summaries awaiting therapist review",
       "keyMgmtTitle": "Key Management",
       "keyMgmtP1": "Encryption keys are derived from a master key that is stored separately from the database. The master key is never committed to source code and is injected at runtime through secure environment variables.",
       "keyMgmtP2": "Key rotation procedures are supported to periodically refresh encryption without disrupting service availability.",
@@ -1549,7 +1550,7 @@
     },
     "gdpr": {
       "minimizationTitle": "Data Minimization",
-      "minimizationP1": "PR-TOP collects only the data strictly necessary for providing the therapeutic assistant service. We do not collect browsing habits, advertising identifiers, or any data unrelated to the therapist-client workflow.",
+      "minimizationP1": "PR-TOP collects only the data strictly necessary for providing the PR-TOP service. We do not collect browsing habits, advertising identifiers, or any data unrelated to the therapist-client workflow.",
       "minimizationP2": "Analytics are powered by Umami, a privacy-first, cookie-free analytics platform that collects no personal data and is fully GDPR-compliant.",
       "erasureTitle": "Right to Erasure",
       "erasureP1": "Clients and therapists can request complete data deletion at any time. When a deletion request is processed, all associated data — diary entries, session recordings, transcripts, notes, and AI-generated summaries — is permanently and irreversibly removed from the database.",
@@ -1593,7 +1594,7 @@
       "selfHostedP2": "You can revoke your API token, remove a client connection, and request complete data deletion at any time. The therapist — not the platform — decides who sees what.",
       "noThirdPartyTitle": "No Third-Party Data Sharing",
       "noThirdPartyP1": "PR-TOP never sells, shares, or provides client data to third parties. AI processing (transcription, summarization) uses API calls where only the minimum necessary data is sent, and no data is retained by AI providers after processing.",
-      "noThirdPartyP2": "We do not use client data for model training, advertising, or any purpose beyond providing the requested therapeutic assistant features.",
+      "noThirdPartyP2": "We do not use client data for model training, advertising, or any purpose beyond providing the requested PR-TOP features.",
       "clientOwnershipTitle": "Client Data Ownership",
       "clientOwnershipP1": "Clients own their data. They can export their diary entries and exercise responses at any time, and they can request complete data deletion. Therapists maintain ownership of their own notes and session recordings.",
       "clientOwnershipP2": "PR-TOP acts as a data processor, not a data controller — the therapist and client remain the decision-makers about how their data is used."
@@ -1605,7 +1606,7 @@
     "tableOfContents": "Table of Contents",
     "dataCollection": {
       "title": "What Data We Collect",
-      "intro": "PR-TOP collects only the data necessary to provide its therapist assistant services. We distinguish between the following categories:",
+      "intro": "PR-TOP collects only the data necessary to provide the PR-TOP platform. We distinguish between the following categories:",
       "personalTitle": "Personal Information",
       "personalDesc": "When you register, we collect your email address, name, and chosen password (stored as a cryptographic hash). Therapists may also provide a practice name and professional credentials.",
       "clinicalTitle": "Clinical & Session Data",
@@ -1615,7 +1616,7 @@
     },
     "dataUsage": {
       "title": "How We Use Your Data",
-      "intro": "Your data is used exclusively to provide and improve the PR-TOP therapeutic assistant service:",
+      "intro": "Your data is used exclusively to provide and improve the PR-TOP platform:",
       "item1": "Providing therapist-client workflows: diary access, session management, exercise delivery, SOS alerts",
       "item2": "AI-powered features: speech-to-text transcription, session summarization, semantic search, natural language queries",
       "item3": "Account management: authentication, subscription billing, email notifications",

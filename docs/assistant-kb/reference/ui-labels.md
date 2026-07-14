@@ -581,7 +581,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `privacy.lastUpdated` — Last updated: {{date}}
 - `privacy.tableOfContents` — Table of Contents
 - `privacy.dataCollection.title` — What Data We Collect
-- `privacy.dataCollection.intro` — PR-TOP collects only the data necessary to provide its therapist assistant services. We...
+- `privacy.dataCollection.intro` — PR-TOP collects only the data necessary to provide the PR-TOP platform. We distinguish ...
 - `privacy.dataCollection.personalTitle` — Personal Information
 - `privacy.dataCollection.personalDesc` — When you register, we collect your email address, name, and chosen password (stored as ...
 - `privacy.dataCollection.clinicalTitle` — Clinical & Session Data
@@ -589,7 +589,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `privacy.dataCollection.usageTitle` — Usage Data
 - `privacy.dataCollection.usageDesc` — We collect anonymized usage analytics through Umami, a privacy-first analytics platform...
 - `privacy.dataUsage.title` — How We Use Your Data
-- `privacy.dataUsage.intro` — Your data is used exclusively to provide and improve the PR-TOP therapeutic assistant s...
+- `privacy.dataUsage.intro` — Your data is used exclusively to provide and improve the PR-TOP platform:
 - `privacy.dataUsage.item1` — Providing therapist-client workflows: diary access, session management, exercise delive...
 - `privacy.dataUsage.item2` — AI-powered features: speech-to-text transcription, session summarization, semantic sear...
 - `privacy.dataUsage.item3` — Account management: authentication, subscription billing, email notifications
@@ -685,9 +685,9 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `security.enc.appLayerItem1` — Client diary entries (text, voice transcripts, video transcripts)
 - `security.enc.appLayerItem2` — Therapist session notes and summaries
 - `security.enc.appLayerItem3` — Conversation messages between therapist and client
-- `security.enc.appLayerItem4` — AI-generated insights, anamnesis, and contraindications
+- `security.enc.appLayerItem4` — Therapist-entered anamnesis, contraindications, and clinical context fields
 - `security.enc.appLayerItem5` — SOS alert content and exercise responses
-- _+ 51 more keys_
+- _+ 52 more keys_
 
 ## seo
 
