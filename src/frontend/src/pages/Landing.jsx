@@ -11,6 +11,7 @@ import Seo from '../components/Seo';
 import useLocalePath from '../hooks/useLocalePath';
 import ControlSection from '../components/landing/ControlSection';
 import WeekInPracticeSection from '../components/landing/WeekInPracticeSection';
+import TechSection from '../components/landing/TechSection';
 
 /* ───────── Feature Highlights (icons only, text from i18n) ───────── */
 const highlightIcons = [
@@ -360,13 +361,37 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ─── Week in Practice (R5) — replaces generic features-listing block ─── */}
-      <WeekInPracticeSection />
-
-      {/* Contextual solution links — boost internal link graph for batch-1/2 landings */}
-      <div className="bg-surface pb-8">
+      {/* ─── Feature Cards (R2) — practice outcomes, before week-in-practice ─── */}
+      <section id="features" aria-label={t('landing.featuresTitle')} className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="pt-0 border-t border-surface">
+          <div className="text-center mb-14">
+            <h2 className="text-3xl sm:text-4xl font-bold text-text">
+              {t('landing.featuresTitle')}
+            </h2>
+            <p className="mt-4 max-w-2xl mx-auto text-secondary text-lg">
+              {t('landing.featuresDesc')}
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {featureKeys.map((fk, i) => (
+              <div key={i} className="flex flex-col gap-4 bg-surface rounded-2xl p-6 border border-surface">
+                <div className="flex items-center justify-center w-14 h-14 rounded-xl bg-primary/10 shrink-0">
+                  {highlightIcons[i]}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-text text-base mb-1.5">
+                    {t(fk.titleKey)}
+                  </h3>
+                  <p className="text-sm text-secondary leading-relaxed">
+                    {t(fk.descKey)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Contextual solution links — boost internal link graph for batch-1/2 landings */}
+          <div className="mt-12 pt-8 border-t border-surface">
             <p className="text-secondary text-sm mb-4 font-medium">{t('landing.relatedLinks')}:</p>
             <div className="flex flex-wrap gap-3">
               <Link to={lp('/ai-session-notes-for-therapists')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.solAiSessionNotes')}</Link>
@@ -379,7 +404,10 @@ export default function Landing() {
             </div>
           </div>
         </div>
-      </div>
+      </section>
+
+      {/* ─── Week in Practice (R5) ─── */}
+      <WeekInPracticeSection />
 
       {/* ─── Control Section (R3) ─── */}
       <ControlSection />
@@ -434,6 +462,9 @@ export default function Landing() {
           </p>
         </div>
       </section>
+
+      {/* ─── Technology inside PR-TOP (R6) ─── */}
+      <TechSection />
 
       {/* ─── FAQ ─── */}
       <FaqSection t={t} />

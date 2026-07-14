@@ -282,6 +282,17 @@
     },
     "burnoutTitle": "We built this so you have more time for yourself",
     "burnoutText": "Burnout and compassion fatigue are a reality of helping professions. You need time for proper rest and recovery. We take on the routine tasks, protect your personal boundaries, and free up time for life.",
+    "techTitle": "Technology inside PR-TOP",
+    "techLead": "How the platform is built — in plain terms.",
+    "tech1Title": "Language models for text processing",
+    "tech1Desc": "A Claude-class language model drafts session notes from recordings and answers search queries across your client history. All output is reviewed and approved by you before anything is saved.",
+    "tech2Title": "Telegram as the client channel",
+    "tech2Desc": "Clients interact through Telegram, which they already have. You configure the channel — hours, exercises, and protocols. The service does not initiate contact on your behalf.",
+    "tech3Title": "Application-level encryption",
+    "tech3Desc": "Client records, diary entries, session notes, and transcripts are encrypted before they are written to storage. Not even the service team can read the content.",
+    "tech4Title": "European hosting",
+    "tech4Desc": "Data is stored on servers in the EU, covered by European data-protection law. You can request a full export or deletion at any time.",
+    "techClose": "The technology is a tool. Every decision about your clients stays with you.",
     "faqTitle": "Frequently Asked Questions",
     "faqQ1": "Who can read my notes and client communications?",
     "faqA1": "All confidential data is encrypted at the application level (AES-256). No one but you has access to the content — including the service support and development team.",
@@ -2138,7 +2149,17 @@
     "hero": {
       "headline": "Zero No-Shows. Happy Clients.",
       "subheadline": "Automated session reminders via Telegram — your clients confirm, reschedule, or release their slot in one tap.",
-      "ctaBtn": "Start Free Trial"
+      "ctaBtn": "Start Free Trial",
+      "badge": "Telegram Session Reminders",
+      "trialNote": "7-day free trial · No credit card required · Cancel anytime",
+      "mockBotName": "PR-TOP Reminder",
+      "mockBotType": "bot",
+      "mockMsgTitle": "Session reminder",
+      "mockMsgTime": "Tomorrow at 3:00 PM",
+      "mockMsgTherapist": "with Dr. Maria Ivanova",
+      "mockBtnConfirm": "✅ Confirm session",
+      "mockBtnReschedule": "🔄 Request reschedule",
+      "mockBtnRelease": "🆓 Release slot"
     },
     "pain": {
       "title": "Sound familiar?",
@@ -2156,11 +2177,26 @@
       "step2Title": "Reminders send automatically",
       "step2Body": "Your client gets a Telegram message the day before and 2 hours before the session.",
       "step3Title": "One tap to confirm",
-      "step3Body": "Client taps ✅ to confirm, 🔄 to request a reschedule, or 🆓 to release the slot. You see the update instantly."
+      "step3Body": "Client taps ✅ to confirm, 🔄 to request a reschedule, or 🆓 to release the slot. You see the update instantly.",
+      "stepLabel": "Step"
     },
     "demo": {
       "title": "What Your Client Sees",
-      "caption": "A simple, clear Telegram message — no new apps, no logins required."
+      "caption": "A simple, clear Telegram message — no new apps, no logins required.",
+      "feat1": "Works in existing Telegram",
+      "feat2": "No extra apps for clients",
+      "feat3": "Instant dashboard update",
+      "mockBotName": "PR-TOP Remind",
+      "mockBotType": "bot",
+      "mockMsgTitle": "Session reminder",
+      "mockMsgDate": "Tomorrow · Thu, May 29",
+      "mockMsgTime": "3:00 PM → 4:00 PM",
+      "mockMsgTherapist": "Dr. Maria Ivanova",
+      "mockBtnConfirm": "✅ Confirm session",
+      "mockBtnReschedule": "🔄 Request reschedule",
+      "mockBtnRelease": "🆓 Release slot",
+      "mockClientReply": "✅ Confirm session",
+      "mockBotReply": "🎉 Great, see you tomorrow! Your therapist has been notified."
     },
     "price": {
       "title": "One Plan. No Surprises.",
@@ -2178,7 +2214,8 @@
       "notItem2": "Exercise library",
       "notItem3": "Natural-language queries",
       "ctaBtn": "Start 7-day free trial",
-      "upgradeNote": "Need more? Upgrade to Pro anytime."
+      "upgradeNote": "Need more? Upgrade to Pro anytime.",
+      "planBadge": "Confirm Plan"
     },
     "faq": {
       "title": "Questions & Answers",
@@ -2212,6 +2249,8 @@
       "submitting": "Creating account...",
       "orLogin": "Already have an account?",
       "loginLink": "Log in",
+      "privacyLink": "Privacy Policy",
+      "termsLink": "Terms",
       "errors": {
         "required": "This field is required",
         "invalidEmail": "Please enter a valid email address",
