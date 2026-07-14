@@ -15864,3 +15864,110 @@ AUDITS:
 
 Git commits: 4780bcf (EN/RU/UK changes from R13 session), 75452c5 (ES + docs)
 Feature #462 marked PASSING.
+
+================================================================
+Session 215 (2026-07-14) - Feature #464 PASSING (R16 honest therapist registration)
+================================================================
+Assigned: #464 R16 — Registration — честный онбординг терапевта
+
+IMPLEMENTATION:
+1. src/frontend/src/i18n/{en,ru,uk,es}.json
+   - auth.registerTitle (all 4):
+     EN: "Create your therapist workspace"
+     RU: "Создайте рабочее пространство терапевта"
+     UK: "Створіть робочий простір терапевта"
+     ES: "Crea tu espacio de trabajo de terapeuta"
+   - auth.registerSubtitle (all 4):
+     EN: "14-day free trial. No credit card required."
+     RU: "14 дней бесплатно. Карта не нужна."
+     UK: "14 днів безкоштовно. Картка не потрібна."
+     ES: "14 días gratis. Sin tarjeta de crédito."
+   - auth.registerSecurityNote (all 4):
+     EN: "Application-level encryption. Data stored in the EU."
+     RU/UK/ES: native equivalents
+   - auth.registerTermsLine1, auth.registerTermsLine2 (all 4):
+     Connector strings for inline Terms + Privacy links
+
+2. src/frontend/src/pages/Register.jsx
+   - Updated SEO <title> to "Create your therapist workspace — PR-TOP"
+   - Updated SEO description: 14-day trial, no card, encryption EU
+   - Added security note below h2 (🔒 prefix, xs text)
+   - Added Terms of Service + Privacy Policy links below the form
+     (uses existing landing.termsOfService + landing.privacyPolicy keys)
+   - Reuses /terms and /privacy routes via React Router Link
+   - No mandatory checkbox (flagged as [HUMAN] in steps, skipped)
+   - No DPA mention (also [HUMAN] gated)
+
+3. docs/assistant-kb/registration-and-onboarding.md
+   - Added "The registration form" section before step-by-step
+   - Documents heading, subtitle, security note, terms/privacy links
+   - Updated step-by-step to reference /register route directly
+
+4. docs/assistant-kb/faq-seed.json
+   - Added "register-form-trial" FAQ seed entry
+
+VERIFICATION:
+- npm run build --prefix src/frontend: 92 pages, exit 0
+- grep dist/register/index.html: 0 hits for "7-day" / "7 days"
+- New title "Create your therapist workspace" confirmed in dist
+- node _t_assistant_kb_audit.js: 79 passed, 0 failed
+- node _t_seo_i18n_audit.js: 15 passed, 0 failed
+- node _t_geo_audit.js: 18 passed, 0 failed
+- git commit: aa116ad
+
+Stats after session 215: #464 status: passing (464/468, 99.1%).
+
+================================================================
+Session 216 (2026-07-14) - Feature #465 PASSING (R17 native-English audit + RU/ES/UK rewrite)
+================================================================
+
+Assigned: #465 R17 — Native English per audit table + RU/ES/UK rewrite
+
+CONTEXT:
+Applied the audit's language table to EN, then rewrote RU/ES/UK from the new EN
+using native writing craft (not mechanical translation). Key principle: "clinical
+judgement and client decisions remain with you" replaces the old
+"do not replace the specialist / do not act on their behalf" safety framing.
+
+EN CHANGES (src/frontend/src/i18n/en.json):
+- heroSlogan: "Keep the full client context between sessions. Review every note.
+  Maintain clear professional boundaries."
+- heroDesc: "PR-TOP brings together client diaries, session notes, assignments,
+  and secure communication in one place. It helps you organise routine work,
+  while clinical judgement and client decisions remain with you."
+- seo.home.description: safe->secure communication
+- footerDesc: safe->secure communication
+- feature2Desc: "session thread"->"client timeline"; "regardless of how many
+  people you see"->"however large your caseload"
+- feature4Desc: "Set the hours when client messages are delivered and when you
+  receive notifications..."
+- feature5Desc: "Voice a quick observation"->"Record a quick observation"
+- feature6Desc: full rewrite — Telegram without learning another app, structured
+  workspace (not personal inbox)
+- week.step3.title: "A message, without the blur"->"Client messages without
+  blurred boundaries"
+- week.step4.body: "voice a quick memo"->"record a quick memo"
+- protocolTitle: "Agreed protocol, not an alarm button"->"A pre-agreed protocol
+  — not an emergency service"
+- protocolDesc: slight rewording ("is not a crisis line")
+- tech4Title: "European hosting"->"EU-based data hosting"
+
+RU/ES/UK: rewritten from new EN with native writing craft in all 4 keys:
+heroSlogan, heroDesc, footerDesc, feature2Desc, feature4Desc, feature5Desc,
+feature6Desc, week.step3.title, week.step4.body, protocolTitle, protocolDesc,
+tech4Title (+ tech4Desc for RU/UK: Europe->EU).
+
+QA SAFETY PATTERN: The new heroDesc keeps "routine work" in all locales,
+so the existing _t_r9_qa.js safety-sentence assertions still pass without
+any script changes.
+
+VERIFICATION:
+- npm run build: 92 prerendered pages, exit 0
+- node _t_r9_qa.js: 76 passed, 0 failed
+- node _t_geo_audit.js: 18 passed, 0 failed
+- node _t_seo_i18n_audit.js: 15 passed, 0 failed
+- node _t_assistant_kb_audit.js: 79 passed, 0 failed
+- Grep: zero hits for any old audit phrases in all 4 i18n files
+- git commit: 0329dc4
+
+Stats after session 216: #465 status: passing.
