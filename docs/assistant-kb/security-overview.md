@@ -93,6 +93,23 @@ metadata (IDs, timestamps, roles) — access-controlled plaintext.
 A: The key is held by the operator and never included in a database
 export. Backups are also encrypted; restoring requires the key.
 
+**Q: Who can technically decrypt my clients' data?**
+A: Decryption requires the ENCRYPTION_MASTER_KEY, which is held by
+the service operator and stored in a protected environment variable —
+never in the database. Under normal operation no PR-TOP team member
+accesses clinical content; support works with anonymised metadata and
+logs only. For deployments where even the service provider must have
+zero technical access, PR-TOP supports self-hosted installation where
+you generate and control the key.
+
+**Q: Is PR-TOP end-to-end encrypted or zero-knowledge?**
+A: No. PR-TOP uses application-layer encryption (AES-256) which
+protects data in the database and in backups, but the master key is
+held by the operator on the server. This is not the same as
+true end-to-end encryption (where only the end-user holds keys) or
+zero-knowledge architecture (where the service cannot decrypt at all).
+The honest description is: "encrypted at rest, key held by operator."
+
 **Q: Does the assistant chatbot have my clients' data?**
 A: No. The assistant reads only the public and user-audience
 knowledge base — never a specific client's diary, notes, or

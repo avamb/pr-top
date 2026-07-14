@@ -19,7 +19,7 @@ Connect clients with one link — simple and secure.
 
 🔒 Encryption · GDPR · Your data belongs only to you`,
     welcomeBack: (role) => `Welcome back! You are registered as a ${role}.\n\nUse /help to see available commands.`,
-    chooseRoleIntro: '🧠 PR-TOP — your professional between-session assistant\n\nA secure platform that helps therapists and clients work more effectively between meetings.\n\n🔒 All data is protected with end-to-end encryption\n\nWho are you?',
+    chooseRoleIntro: '🧠 PR-TOP — your professional between-session assistant\n\nA secure platform that helps therapists and clients work more effectively between meetings.\n\n🔒 All clinical data is encrypted at the application layer (AES-256)\n\nWho are you?',
     chooseRole: 'Welcome to PR-TOP! Please choose your role:',
     roleTherapist: '🧑‍⚕️ I am a Therapist',
     roleClient: '🙋 I am a Client',
@@ -243,7 +243,7 @@ Connect clients with one link — simple and secure.
       const roleLabel = role === 'therapist' ? 'Терапевт' : 'Клиент';
       return `С возвращением! Вы зарегистрированы как ${roleLabel}.\n\nИспользуйте /help для просмотра доступных команд.`;
     },
-    chooseRoleIntro: '🧠 PR-TOP — ваш профессиональный помощник между сессиями\n\nБезопасная платформа, которая помогает терапевтам и клиентам работать эффективнее между встречами.\n\n🔒 Все данные защищены сквозным шифрованием\n\nКто вы?',
+    chooseRoleIntro: '🧠 PR-TOP — ваш профессиональный помощник между сессиями\n\nБезопасная платформа, которая помогает терапевтам и клиентам работать эффективнее между встречами.\n\n🔒 Все клинические данные зашифрованы на уровне приложения (AES-256)\n\nКто вы?',
     chooseRole: 'Добро пожаловать в PR-TOP! Выберите вашу роль:',
     roleTherapist: '🧑‍⚕️ Я терапевт',
     roleClient: '🙋 Я клиент',
@@ -697,7 +697,7 @@ Conecta clientes con un enlace — simple y seguro.
       const roleLabel = role === 'therapist' ? 'Терапевт' : 'Клієнт';
       return `З поверненням! Ви зареєстровані як ${roleLabel}.\n\nВикористовуйте /help для перегляду доступних команд.`;
     },
-    chooseRoleIntro: '🧠 PR-TOP — ваш професійний помічник між сесіями\n\nБезпечна платформа, що допомагає терапевтам і клієнтам працювати ефективніше між зустрічами.\n\n🔒 Усі дані захищені наскрізним шифруванням\n\nХто ви?',
+    chooseRoleIntro: '🧠 PR-TOP — ваш професійний помічник між сесіями\n\nБезпечна платформа, що допомагає терапевтам і клієнтам працювати ефективніше між зустрічами.\n\n🔒 Усі клінічні дані зашифровані на рівні застосунку (AES-256)\n\nХто ви?',
     chooseRole: 'Ласкаво просимо до PR-TOP! Оберіть вашу роль:',
     roleTherapist: '🧑‍⚕️ Я терапевт',
     roleClient: '🙋 Я клієнт',
