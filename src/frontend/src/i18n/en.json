@@ -278,7 +278,7 @@
       "step5": {
         "label": "Friday, end of week",
         "title": "The week stays at the office",
-        "body": "You close PR-TOP for the weekend. The working hours you set mean the bot tells clients you're available Monday. You did not carry the week home — professionally or emotionally."
+        "body": "You close PR-TOP for the weekend. The working hours you set mean the service lets clients know you're available Monday. You did not carry the week home — professionally or emotionally."
       }
     },
     "burnoutTitle": "We built this so you have more time for yourself",
@@ -298,7 +298,7 @@
     "faqQ1": "Who can read my notes and client communications?",
     "faqA1": "All confidential data is encrypted at the application level (AES-256). No one but you has access to the content — including the service support and development team.",
     "faqQ2": "What happens if a client needs to reach me between sessions?",
-    "faqA2": "During onboarding, you and each client agree on a specific response protocol — a designated signal in the Telegram bot, what it means, and the expected response window. When a client sends that signal, you receive a notification through your configured channels (Telegram, email, or both). Quiet-hour rules, escalation delay, and response thresholds are all set by you. No automated routing to external services — every decision stays with you.",
+    "faqA2": "During onboarding, you and each client agree on a specific response protocol — a designated signal sent through the client's usual Telegram channel, what it means, and the expected response window. When a client sends that signal, you receive a notification through your configured channels (Telegram, email, or both). Quiet-hour rules, escalation delay, and response thresholds are all set by you. No automated routing to external services — every decision stays with you.",
     "protocolTitle": "Agreed protocol, not an alarm button",
     "protocolDesc": "PR-TOP does not run a crisis line or contact emergency services. Instead, every between-session escalation follows a protocol you and your client agree on together.",
     "protocolPoint1": "You define the signal — what the client sends and what it means.",

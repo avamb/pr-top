@@ -557,7 +557,7 @@ export default function Landing() {
             <div>
               <h4 className="text-white font-semibold text-sm mb-3">{t('landing.footerProduct')}</h4>
               <ul className="space-y-2 text-sm">
-                <li><a href="#week-in-practice" className="hover:text-white transition-colors">{t('landing.features')}</a></li>
+                <li><a href="#features" className="hover:text-white transition-colors">{t('landing.features')}</a></li>
                 <li><a href="#pricing" className="hover:text-white transition-colors">{t('landing.pricing')}</a></li>
                 <li><Link to="/register" className="hover:text-white transition-colors">{t('landing.signUp')}</Link></li>
                 <li><Link to="/login" className="hover:text-white transition-colors">{t('nav.login')}</Link></li>

@@ -278,7 +278,7 @@
       "step5": {
         "label": "Viernes, fin de semana",
         "title": "La semana queda en la consulta",
-        "body": "Cierra PR-TOP para el fin de semana. El horario laboral que configuró hace que el bot informe a los clientes de que está disponible el lunes. No se llevó la semana a casa — ni profesional ni emocionalmente."
+        "body": "Cierra PR-TOP para el fin de semana. El horario laboral que configuró hace que el servicio informe a sus clientes de que está disponible el lunes. No se llevó la semana a casa — ni profesional ni emocionalmente."
       }
     },
     "burnoutTitle": "Creamos esto para que tenga más tiempo para usted",
@@ -298,7 +298,7 @@
     "faqQ1": "¿Quién puede leer mis notas y comunicaciones con clientes?",
     "faqA1": "Todos los datos confidenciales están cifrados a nivel de aplicación (AES-256). Nadie más que usted tiene acceso al contenido — incluyendo el equipo de soporte y desarrollo del servicio.",
     "faqQ2": "¿Qué sucede si un cliente necesita contactarme entre sesiones?",
-    "faqA2": "Durante el proceso de incorporación, usted y cada cliente acuerdan un protocolo de respuesta concreto: una señal específica en el bot de Telegram, su significado y el tiempo de respuesta esperado. Cuando el cliente envía esa señal, usted recibe una notificación a través de sus canales configurados (Telegram, correo electrónico o ambos). Las horas de silencio, el retraso de escalación y los umbrales de respuesta los define usted. Sin enrutamiento automático a servicios externos: todas las decisiones permanecen con usted.",
+    "faqA2": "Durante el proceso de incorporación, usted y cada cliente acuerdan un protocolo de respuesta concreto: una señal específica en el canal de Telegram habitual del cliente, su significado y el tiempo de respuesta esperado. Cuando el cliente envía esa señal, usted recibe una notificación a través de sus canales configurados (Telegram, correo electrónico o ambos). Las horas de silencio, el retraso de escalación y los umbrales de respuesta los define usted. Sin enrutamiento automático a servicios externos: todas las decisiones permanecen con usted.",
     "protocolTitle": "Protocolo acordado, no un botón de alarma",
     "protocolDesc": "PR-TOP no gestiona una línea de crisis ni contacta servicios de emergencia. En cambio, cada escalación entre sesiones sigue un protocolo que usted y su cliente acuerdan juntos.",
     "protocolPoint1": "Usted define la señal: qué envía el cliente y qué significa.",
