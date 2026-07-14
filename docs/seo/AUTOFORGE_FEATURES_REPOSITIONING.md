@@ -114,3 +114,78 @@ Conventions for all features:
 3. Build; puppeteer on preview `/ru/#pricing`: all bullet items in the four cards contain Cyrillic (no Latin-only strings except product/brand names like "PR-TOP", "Telegram", "GDPR"); repeat for `/uk/` (Cyrillic) and `/es/` (no English bullets).
 4. `node _t_r9_qa.js` and `node _t_seo_i18n_audit.js` pass (no regressions); no raw i18n keys render in the pricing section in any locale.
 5. Re-capture the four full-page screenshots into `docs/seo/reports/repositioning-screens/` (overwrite) so the human copy review sees the final state.
+
+---
+
+# Wave 2 — Trust & Truthfulness (second Hermes UX audit, 2026-07-14)
+
+Source: second external UX audit after R1–R11 shipped. Verdict: the repositioning worked; remaining risk is **contradictions between the new narrative and old claims** (security wording, data-location promise, review-vs-autosave, registration screen). Implement in order R12→R20; R12–R15 are P0.
+
+**Truth-before-copy mandate (applies to every Wave-2 feature, in addition to the §4 copywriting mandate):** every factual claim (encryption model, who can decrypt, data location, what is saved automatically, trial length, card requirement) must be **verified against the actual code/architecture in the same session** before the copy is written. Verified facts as of 2026-07-14: encryption is application-level with a server-held `ENCRYPTION_MASTER_KEY` (backend `.env`) — the operator *can* technically decrypt, so "end-to-end encryption", "zero-knowledge" and unqualified "not even the service team can read" are **not** claimable; hosting is a single EU deployment (no region choice, no self-hosting); registration creates a 14-day trial with `stripe_customer_id = NULL` (no card required; confirm-funnel variant is 7 days — `src/backend/src/routes/auth.js:148-163`). If a fact cannot be verified, the agent stops and marks the item `[HUMAN]` instead of writing marketing-safe fiction. Never weaken meta/SEO keywords while fixing copy.
+
+### R12 — P0: One truthful security story (kill E2EE / zero-knowledge contradictions)
+**Description:** The site says "Application-level encryption" on the landing (accurate) but "End-to-end encryption" in the footer (`landing.encryption`) and "End-to-End Encryption" + "Zero-Knowledge Architecture" on `/security/encryption` (`security.encryptionTitle`, `security.enc.zeroKnowledge*`) — a contradiction any DPO will catch, and architecturally false (server-held master key). Fix in all 4 locales: (a) footer link label → "Application-level encryption"; (b) security page H1 → "How PR-TOP protects clinical data" (title/meta keep the keyword-bearing but truthful form, e.g. "Application-level encryption for clinical data"); (c) replace the Zero-Knowledge section with an honest access-model section: what is encrypted → where it is stored → who can technically decrypt (the platform, under strict controls) → what support staff can and cannot access → audit logging; (d) landing sweep: reword "Not even the service team can read your files/content" (`landing.feature3Desc`, `landing.tech3Desc`, `landing.faqA1`) to a claim the architecture supports, e.g. "encrypted at the application level; access is restricted, logged, and never used for support without your explicit consent" — exact wording per copywriting mandate. Do not delete the `/security/encryption` route or its SEO registration.
+**Steps:**
+1. Verify the key model in `src/backend` (master key location, decryption path) and record findings in the PR description.
+2. Update the keys in all 4 locales; grep all locales: zero matches for `end-to-end`/`E2EE`/`zero-knowledge` (case-insensitive) in `landing.*` and `security.*` (the unrelated idiom in `TherapyDocumentationAi.jsx` "handles documentation end-to-end" must also be reworded — it collides with the encryption term).
+3. Build; puppeteer `/security/encryption`: H1 no longer says "End-to-End"; page renders the what/where/who access table; no raw keys.
+4. Puppeteer `/` all 4 locales: footer security column shows the new label; FAQ answer 1 renders the new claim; FAQPage JSON-LD parses.
+
+### R13 — P0: Data-location claim matches reality
+**Description:** `landing.feature3Desc` promises "You decide where the data lives" while `landing.tech4Desc` states EU-only hosting. There is no region choice or self-hosting. Rewrite feature3Desc (all 4 locales) to: data stored in the EU + *you* control who in your practice can access it (access-control is the real user power). Align `landing.tech4Desc` wording ("EU-based data hosting", export/deletion on request). If the owner later adds deployment options, this copy is revisited — do not invent options now.
+**Steps:**
+1. Rewrite the two keys in all 4 locales per mandate.
+2. Grep all locales: no "decide where the data lives"-style phrasing remains (`where the data lives`, `где хранятся данные` in the *choice* sense, etc.).
+3. Build + puppeteer `/`: card 3 and tech section no longer contradict each other; no raw keys in any locale.
+
+### R14 — P0: Review-vs-autosave — one precise truth
+**Description:** `landing.tech1Desc` claims "All output is reviewed and approved by you before anything is saved", but `landing.week.step4.body` says a voice memo "is transcribed and filed under the right client automatically". Verify actual behavior in the backend (diary/notes/transcription flow): drafts *are* persisted server-side before review. Rewrite both (all 4 locales) around the draft model: drafts are saved privately to the specialist's workspace for review; nothing becomes part of the clinical record, and nothing reaches a client, without explicit confirmation. `week.step4` keeps its scene but says the memo lands "as a draft attached to the right client, ready for your review".
+**Steps:**
+1. Verify the persistence flow in `src/backend/src/routes/` (diary, sessions, transcription) and record findings in the PR.
+2. Rewrite `tech1Desc` + `week.step4.body` in all 4 locales; the two statements must be logically consistent (a reviewer reading both must find no contradiction — state the draft model in both).
+3. Build + puppeteer `/` (EN + RU): both texts render, no raw keys; grep: no "before anything is saved" absolute claim remains.
+
+### R15 — P0: No PWA/update banners on public marketing pages
+**Description:** `InstallPrompt` (PWA install + service-worker "new version" banner) is mounted globally in `App.jsx:183`, so both banners appear over the landing hero and the register page. Gate it: render only on authenticated app routes (`/dashboard`, `/clients`, `/sessions`, `/exercises`, `/analytics`, `/settings`, `/subscription`, `/admin`) — never on public marketing/auth routes. Prefer a route-prefix check (reuse the public-route manifest `src/seo/routes.mjs` or an isPublicRoute helper) over scattering per-page flags.
+**Steps:**
+1. Implement the gate; unit-testable helper preferred.
+2. Puppeteer on preview `/`: dispatch `window.dispatchEvent(new CustomEvent('sw-updated'))` — no banner appears; same on `/register`.
+3. Puppeteer stub login → `/dashboard`: dispatch the same event — banner appears (behavior preserved in-app).
+4. No console errors on `/`.
+
+### R16 — P1: Registration screen that closes the trust loop
+**Description:** `/register` currently asks only email/password/confirm — no trial terms, no legal links, no reassurance (verified: no Terms/Privacy/trial strings in `Register.jsx`). Rework the copy side of the screen (all 4 locales): heading "Create your therapist workspace"; sub-line "Start your 14-day free trial. No credit card required. No client data is needed to explore PR-TOP." (facts verified — 14-day trial, `stripe_customer_id NULL` at signup; the 7-day wording applies only to the confirm-funnel plan and must not leak here); consent line under the button: "By creating an account, you agree to the Terms of Service and Privacy Policy" with working links to `/terms` and `/privacy` (locale-prefixed); a one-line security reassurance reusing R12's truthful wording. DPA link: `[HUMAN]` — only add if the owner provides a DPA document/page; do not fabricate one. Keep the form fields and validation logic unchanged.
+**Steps:**
+1. Add the new i18n keys (all 4 locales) and render them in `Register.jsx`; links must be real `<a>`/`<Link>` elements resolving in the active locale.
+2. Puppeteer `/register`: heading, trial line, consent line with two working links render; clicking Terms navigates to `/terms`; no raw keys; `noindex` meta unchanged.
+3. Puppeteer `/ru/register` (or RU-switched): localized strings render.
+4. Grep: the register screen nowhere says "7-day" (that's the confirm-funnel trial only).
+
+### R17 — P1: Native-English polish pass (audit table)
+**Description:** Apply the audit's language table to the EN locale, then re-align RU/ES/UK to the same meaning (translate the *new* EN, not patch the old): heroSlogan → "Keep the full client context between sessions. Review every note. Maintain clear professional boundaries."; heroDesc → "PR-TOP brings together client diaries, session notes, assignments, and secure communication in one place. It helps you organise routine work, while clinical judgement and client decisions remain with you." (drops "automation technologies", "specialist", "do not act on their behalf" — the safety meaning is kept via "clinical judgement…remain with you"); `feature4Desc` → message-delivery hours framing ("Set the hours when client messages are delivered and when you receive notifications…"); `feature6Desc` → "Clients can keep a diary, complete exercises, and send updates in Telegram — without learning another app. You receive everything in a structured workspace, not in your personal inbox."; protocol heading → "A pre-agreed protocol — not an emergency service" + sub-line "PR-TOP is not a crisis line and does not contact emergency services…"; word-level fixes across landing keys: safe→secure communication, session thread→client timeline, "regardless of how many people you see"→caseload phrasing, "Voice a quick observation"→"Record a quick observation", "The channel is Telegram."→"For now, that channel is Telegram.", "A message, without the blur"→"Client messages without blurred boundaries", "European hosting"→"EU-based data hosting". Preserve every truth-fix from R12–R14 (this feature must run after them; if wordings collide, R12–R14 truthfulness wins over style).
+**Steps:**
+1. Apply EN changes; read-aloud pass; then rewrite RU/ES/UK from the new EN per the copywriting mandate (native prose, not calques).
+2. `node _t_r9_qa.js` passes — including the safety-sentence assertion; if the QA script greps the old literal safety sentence, update the assertion to the new "clinical judgement…remain with you" phrasing *in the same commit*.
+3. Build + puppeteer all 4 locales: no raw keys; H1/H2 still contain no `AI`/`bot`.
+4. Re-capture the 4 review screenshots (`node _t_screenshots.js`) and commit them.
+
+### R18 — P1: Real product screenshot in the hero (replace abstract SVG)
+**Description:** The hero illustration is an abstract dashboard drawing; the audit asks for at least one real, anonymized product screenshot (client timeline, note-review screen, communication-hours settings, or protocol settings). Capture from a local run of the actual app **populated only with seeded demo data** (fictional names; never real client data — verify the seed source), export as an optimized image (WebP/PNG ≤ 200 KB, 2x retina), and replace the hero SVG in `Landing.jsx` with the screenshot in a browser-frame wrapper, `alt` text per locale, `loading="eager"`, explicit width/height (no CLS). Keep the old SVG in git history only.
+**Steps:**
+1. Seed demo data; capture the note-review screen (best matches "notes you review and control"); verify no real-looking personal data is visible.
+2. Integrate; build; puppeteer `/`: image loads (naturalWidth > 0), `alt` localized, Lighthouse-style check: no layout shift on load (compare H1 bounding box before/after image load).
+3. Page weight increase ≤ 250 KB; prerendered `dist/index.html` references the asset.
+
+### R19 — P1: Professional proof section `[HUMAN inputs required]`
+**Description:** The page makes many promises with no external validation. Add a compact trust section (component + keys, all 4 locales) rendered between Pricing and Footer with **only owner-supplied facts**: legal entity name + jurisdiction, DPO/privacy contact, security/compliance facts already truthfully claimable (EU hosting, GDPR export/deletion, audit log — reuse R12 wording), and testimonials/advisor names **only if the owner provides real ones**. The agent must NOT invent testimonials, client counts, certifications, or advisory boards; if no testimonials are provided, ship the section with the legal/security facts only and leave a clearly-marked extension point.
+**Steps:**
+1. Collect owner-provided inputs from `docs/seo/TRUST_FACTS.md` (create the template with `[HUMAN]` placeholders if absent and implement only the rows that are filled in).
+2. Render the section; build + puppeteer all 4 locales: section renders only filled facts; grep the diff for invented superlatives ("trusted by", "hundreds of therapists") — must be absent unless sourced from TRUST_FACTS.md.
+3. FAQ/JSON-LD untouched; no raw keys.
+
+### R20 — P2: Footer & related-links labels — stop pulling the site back to the old position
+**Description:** The visible anchor texts of the internal SEO links ("AI session notes", "AI therapist assistant", "Best AI assistants for therapists", footer "Compare" column) re-introduce AI-first framing on the repositioned home page. Keep every URL and target page unchanged (SEO), but reword the *visible labels* (all 4 locales) toward task-first phrasing where the target page allows it (e.g. "AI session notes" → "Session notes & transcription", "AI therapist assistant" → "Your assistant between sessions", listicle keeps its comparative meaning, e.g. "Compare therapist tools"). Do not change `seo.*` meta of the target pages; do not reduce the number of links (internal graph must stay intact).
+**Steps:**
+1. Reword the label keys (all 4 locales); URLs and link count unchanged (assert in a puppeteer check: same hrefs before/after — snapshot the href list in the test).
+2. `node _t_link_graph_w6.js` passes (link-graph audit unchanged).
+3. Build + puppeteer `/` + `/ru/`: labels render, hrefs intact, no raw keys.
