@@ -15682,3 +15682,99 @@ VERIFICATION:
 Stats after session 212: #459 status: passing — 459/459 (100%) COMPLETE
 
 Stats after session 208: #454 status: passing (454/457, 99.3%).
+
+================================================================
+Session 213 (2026-07-14) - Feature #460 PASSING (R12 honest security messaging)
+================================================================
+Assigned: #460 R12 — Единая честная security-история (убрать E2EE/zero-knowledge)
+
+IMPLEMENTATION:
+1. src/frontend/src/i18n/{en,ru,uk,es}.json
+   - landing.encryption (footer badge): "End-to-end encryption" → honest per-locale
+     EN: "Data encrypted at rest" / RU: "Данные зашифрованы в хранилище" /
+     UK: "Дані зашифровані у сховищі" / ES: "Datos cifrados en reposo"
+   - landing.feature3Desc: removed "Not even the service team can read your files"
+     → "encrypted at application level using AES-256. You decide..." (all 4)
+   - landing.tech3Desc: removed "Not even the service team can read the content"
+     → "encrypted at application layer... key held separately" (all 4)
+   - landing.faqA1: replaced false zero-access claim with honest model:
+     "key held by PR-TOP, no team access in normal ops, self-hosted option"
+   - security.encryptionTitle: "End-to-End Encryption" → "Encryption & Data Protection"
+   - security.enc.zeroKnowledgeTitle: "Zero-Knowledge Architecture" →
+     "Access Model & Transparency"
+   - security.enc.zeroKnowledgeP1/P2: honest schema —
+     what is encrypted / who can decrypt / what support sees / operator holds key
+
+2. src/bot/src/i18n.js
+   - chooseRoleIntro EN: "protected with end-to-end encryption" →
+     "encrypted at the application layer (AES-256)"
+   - chooseRoleIntro RU: "сквозным шифрованием" → "на уровне приложения (AES-256)"
+   - chooseRoleIntro UK: "наскрізним шифруванням" → "на рівні застосунку (AES-256)"
+
+3. docs/assistant-kb/security-overview.md
+   - Added 2 new FAQ entries:
+     "Who can technically decrypt my clients' data?" → honest operator key model
+     "Is PR-TOP end-to-end encrypted or zero-knowledge?" → explicit NO with explanation
+
+VERIFICATION:
+- npm run build --prefix src/frontend: 92 prerendered pages, exit 0
+- grep dist/**/index.html: zero hits for "end-to-end", "E2EE", "zero-knowledge",
+  "Not even the service team", "Zero-Knowledge Architecture"
+- Honest phrases confirmed in dist: "Data encrypted at rest", "AES-256", "application layer"
+- npm run docs:assistant --prefix src/backend: all 6 authored docs kept
+- node _t_assistant_kb_audit.js: 79 passed, 0 failed
+- node _t_geo_audit.js: 18 passed, 0 failed
+- node _t_seo_i18n_audit.js: 15 passed, 0 failed
+- git commit: d956034
+
+================================================================
+Session 213 (2026-07-14) - Feature #461 PASSING (R13 remove "You decide where the data lives")
+================================================================
+
+Assigned: #461 R13 -- Remove false "You decide where the data lives" claim
+
+CONTEXT:
+The product has no region choice (EU/US) and no self-hosting option.
+It is deployed on Hetzner in the EU only. Old copy falsely implied
+users could choose data location or self-host.
+
+IMPLEMENTATION:
+1. src/frontend/src/i18n/{en,ru,uk,es}.json
+   - landing.feature3Desc (all 4 locales): removed "You decide where the
+     data lives" -> replaced with "Data is stored in the EU. You control
+     who has access." (+ locale-native equivalents in RU/UK/ES)
+   - faqA1 (EN/RU/UK): removed self-hosted installation sentence
+   - security.enc.zeroKnowledgeP2 (all 4): removed self-hosted key claim
+   - security.gdpr.processingP2 (all 4): replaced self-hosted reference
+     with EU-only GDPR statement
+   - security.ds.residencyTitle: "(EU / US)" -> "Data Residency" (x4)
+   - security.ds.residencyP1: EU-only factual statement (x4)
+   - security.ds.residencyP2: no cross-border transfers (x4)
+   - security.ds.selfHostedTitle: "Self-Hosted Deployment" -> "You Control
+     Access" (x4 locales)
+   - security.ds.selfHostedP1/P2: access-control description replacing
+     Docker self-hosting claims (x4 locales)
+
+2. src/frontend/src/pages/SecurityDataSovereignty.jsx
+   - Updated hardcoded fallback Seo description to remove "region choices"
+
+3. docs/assistant-kb/security-overview.md
+   - Deployment section: added explicit EU (Hetzner) statement
+   - Removed false "PR-TOP supports self-hosted installation" FAQ entry
+   - Added new FAQ: "Where is PR-TOP's data stored?" with EU-only answer
+
+4. docs/assistant-kb/faq-seed.json
+   - Added "data-location" seed entry: EU-only, no US region, no self-host
+
+VERIFICATION:
+- npm run build --prefix src/frontend: 92 pages (88 public + 4 noindex), exit 0
+- grep dist pages: 0 hits for old "where the data lives" / self-host content
+- New "Data is stored in the EU" text confirmed in all 4 locale homepages
+- node _t_assistant_kb_audit.js: 79 passed, 0 failed
+- node _t_geo_audit.js: 18 passed, 0 failed
+- node _t_seo_i18n_audit.js: 15 passed, 0 failed
+- git commit: 4780bcf
+
+Stats after session 213: #461 status: passing (460/468, 98.3%).
+
+Stats after session 213: #460 status: passing (460/460, 100%).
