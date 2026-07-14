@@ -72,8 +72,9 @@ daily backups run on a configurable retention schedule.
 
 - **Cannot upload a session.** Confirm the session-recording consent
   flag on the client page is on.
-- **Cannot generate a supervision-share link.** Confirm the
-  supervision consent flag is on and that your plan is Premium.
+- **Supervision-share link shows less than expected.** The share is
+  read-only, and diary content appears in it only when the client's
+  therapist-access consent flag is on.
 - **Audit log missing an event.** Audit entries are append-only and
   never edited. If you cannot find an event, widen the filter or
   check the correct client's timeline.

@@ -1,21 +1,20 @@
 <!-- audience: public -->
 # Supervision sharing
 
-Supervision share lets a Premium therapist grant a supervising
-colleague read-only access to a specific client's record — timeline,
-diary, sessions, transcripts, AI summaries, exercise responses — for
-the purpose of case consultation and supervision. This how-to explains
+Supervision share lets a therapist grant a supervising colleague
+read-only access to a specific client's record — timeline, diary,
+sessions, transcripts, AI summaries, exercise responses — for the
+purpose of case consultation and supervision. It is available on
+every plan. This how-to explains
 what supervisors see and don't see, how to grant and revoke access,
 and how consent interacts with sharing. Labels come from the
 `supervision` and `supervisionShare` i18n namespaces.
 
 ## Prerequisites
 
-- The sharing therapist must be on **Premium**. Trial, Basic, and
-  Pro tiers see the Supervision tab but with a locked overlay.
-- The supervising colleague must have their own PR-TOP account (any
-  paid tier — Trial supervisors receive the share but cannot re-share
-  onward).
+- The supervising colleague does not need a PR-TOP account: the share
+  is an opaque, expiring link, and the supervisor authenticates by
+  possession of that link. Every access is recorded in the audit log.
 - The client's **Supervision share consent** flag must be on. This is
   a separate consent from diary storage and session recording. The
   platform enforces it on every share.

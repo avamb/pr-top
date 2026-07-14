@@ -228,7 +228,7 @@
     "audience": "public",
     "locale": "en",
     "question": "Can multiple therapists share a practice?",
-    "answer": "Each therapist has their own account and their own client roster; PR-TOP does not currently merge case loads across therapists. What you can do today is supervision sharing (per case, time-boxed link) and, on the Premium plan, hand off a client to another therapist inside the platform.",
+    "answer": "Each therapist has their own account and their own client roster; PR-TOP does not currently merge case loads across therapists. What you can do today is supervision sharing (a per-case, time-boxed read-only link). A built-in handoff of a client from one therapist to another is not available yet — contact support if you need to migrate a client between accounts.",
     "tags": ["team", "practice"]
   },
   {

@@ -120,7 +120,7 @@ five minutes, refresh to reconnect.
 
 **Q: Do co-therapists see the same dashboard?**
 A: Every therapist has a fully independent dashboard scoped to their
-own client roster. Supervision share (Premium) grants a read-only view
+own client roster. Supervision share grants a read-only view
 of a specific client to a supervising colleague, not access to your
 dashboard.
 
