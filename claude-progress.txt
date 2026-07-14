@@ -16598,3 +16598,130 @@ VERIFICATION:
 Stats after session 226: 478/478 (100%). BACKLOG COMPLETE.
 
 Stats after session 225: 477/477 (100%). ALL FEATURES COMPLETE.
+
+================================================================
+Session 227 (2026-07-14) - Feature #479 PASSING (R24 Trial Duration Consistency)
+================================================================
+
+Assigned: #479 R24 — Единая длительность триала (14 дней) — свип мет/OG/JSON-LD/Terms/KB
+
+PROBLEM:
+seo.home.description (EN) in en.json and fallback description prop in Landing.jsx:229
+both said "7-day free trial" while the actual backend code (auth.js) grants 14 days.
+The onboarding emails, register page, and pricing UI all already said "14-day".
+
+AUDIT FINDINGS:
+- en.json line 6: seo.home.description said "7-day free trial" → FIXED
+- Landing.jsx:229: fallback description prop said "7-day free trial" → FIXED
+- ru.json, es.json, uk.json: home SEO descriptions don't specify a number ("Пробный
+  период", "Prueba gratis", "Пробний термін") → no change needed
+- en.json lines 2199-2313 (landingConfirm.*): all "7-day" refs are for the Confirm
+  plan (session reminders) which legitimately has a 7-day trial → correctly left as-is
+- docs/assistant-kb/: already uses "14-day" consistently for main product → no change
+- index.html JSON-LD Offer: no trial duration mentioned → no change needed
+- Terms/Privacy: generic "free trial period" language without number → no change needed
+
+IMPLEMENTATION:
+1. src/frontend/src/i18n/en.json:6 — "7-day free trial" → "14-day free trial"
+2. src/frontend/src/pages/Landing.jsx:229 — fallback description same fix
+3. npm run docs:assistant → regenerated docs/assistant-kb/reference/ui-labels.md
+4. node _t_assistant_kb_audit.js → 92 passed, 0 failed
+
+VERIFICATION:
+- Seo.jsx uses effectiveDescription for name/og:description/twitter:description →
+  fixing en.json key also fixes all three meta tags for EN locale
+- OG description for main landing was auto-fixed via the i18n key update
+- JSON-LD in index.html (Offer) has no trial duration, no change needed
+- Confirm plan pages (landingConfirm.*) correctly keep "7-day" with plan context
+- Audit: 92 passed, 0 failed (no regressions)
+- git commit: f63dac5
+
+Stats after session 227: 479/487 (98.4%)
+
+================================================================
+Session 228 (2026-07-14) - Feature #481 PASSING (R26 Data Ownership Rewording)
+================================================================
+
+Assigned: #481 R26 — Replace "Your data belongs to you alone" with legally accurate claim
+
+PROBLEM:
+landing.feature3Title used the phrase "Your data belongs to you alone" across all 4 locales.
+This is legally inaccurate: PR-TOP processes data as a data processor (not owner), data sits
+in EU infrastructure under operator control, and "belongs to you alone" overstates ownership
+in a clinical/GDPR context.
+
+IMPLEMENTATION:
+Updated feature3Title and feature3Desc in all 4 locale i18n files:
+
+1. src/frontend/src/i18n/en.json:
+   - Title: "Your data belongs to you alone" → "Your practice controls access"
+   - Desc: updated to mention "Clinical content", EU storage, practice-level access control,
+     and PR-TOP acting as a data processor
+
+2. src/frontend/src/i18n/ru.json:
+   - Title: "Ваши данные принадлежат только вам" → "Ваша практика управляет доступом"
+   - Desc: updated to match EN semantics in Russian
+
+3. src/frontend/src/i18n/es.json:
+   - Title: "Sus datos son solo suyos" → "Su consulta controla el acceso"
+   - Desc: updated to match EN semantics in Spanish
+
+4. src/frontend/src/i18n/uk.json:
+   - Title: "Ваші дані належать тільки вам" → "Ваша практика керує доступом"
+   - Desc: updated to match EN semantics in Ukrainian
+
+VERIFICATION:
+- grep for old phrases: zero hits in all source files (excluding AUTOFORGE spec)
+- KB audit: 92 passed, 0 failed (no regressions)
+- npm run docs:assistant: no changes (ui-labels.md doesn't index these landing keys)
+- docs drift check: exits 0, no drift
+- git commit: d6f0ce7
+
+Stats after session 228: 480/487 (98.6%)
+
+================================================================
+Session 229 (2026-07-14) - Feature #480 PASSING (R25 honest AI language)
+================================================================
+
+Assigned: #480 R25 — Honest AI language: anamnesis/contraindications therapist-entered, not AI-generated
+
+PROBLEM:
+security.enc.appLayerItem4 in all 4 locales incorrectly bundled therapist-entered
+clinical fields (anamnesis, contraindications) together with "AI-generated insights"
+as if they were all AI outputs. Separately, privacy/GDPR namespaces across all 4
+locales used "therapeutic assistant service" / "therapist assistant services" — stale
+assistant-narrative language predating the workspace repositioning.
+
+IMPLEMENTATION:
+
+1. i18n/en.json, ru.json, uk.json, es.json:
+   - appLayerItem4 → therapist-entered anamnesis, contraindications, clinical context fields
+   - appLayerItem6 (NEW) → Draft AI notes and session summaries awaiting therapist review
+   - Removed "therapeutic assistant service" / "therapist assistant services" from:
+     security.gdpr.minimizationP1, security.gdpr.noThirdPartyP2,
+     privacy.dataCollection.intro, privacy.dataUsage.intro (all 4 locales)
+   - Replaced with: "PR-TOP service" / "PR-TOP platform" / "PR-TOP features"
+
+2. src/frontend/src/pages/SecurityEncryption.jsx:
+   - Added <li>{t('security.enc.appLayerItem6')}</li> to render new item
+
+3. docs/assistant-kb/security-overview.md:
+   - Updated Class A data description to explicitly list therapist-entered
+     anamnesis/contraindications and clarify they are NOT AI-generated
+   - Added note: AI produces only draft notes/summaries requiring therapist review
+
+NOTE: Changes were committed via concurrent agent commits f63dac5 (R24) and
+d6f0ce7 (R26) which picked up my staged files. All changes verified in HEAD.
+
+VERIFICATION:
+- grep for "AI-generated.*anamnesis" / "therapeutic assistant": zero hits in all 4 locales
+- appLayerItem4 in all 4 locales: therapist-entered language confirmed
+- appLayerItem6 in all 4 locales: draft AI notes language confirmed
+- SecurityEncryption.jsx renders appLayerItem6
+- node _t_assistant_kb_audit.js: 92 passed, 0 failed
+- npm run docs:assistant:check: exits 0, no changes
+- Build: 92 prerendered pages, exit 0
+- New text ("Therapist-entered anamnesis") confirmed in dist/security/encryption/index.html
+- Old text ("AI-generated insights, anamnesis") confirmed absent from dist
+
+Stats after session 229: 480/487 (98.6%). Feature #480 PASSING.
