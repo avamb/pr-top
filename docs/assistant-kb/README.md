@@ -84,13 +84,69 @@ permitted ONLY when it is backed by a real code-level gate registered in
 
 ### What counts as a "tariff-gating claim"
 
-The audit flags any line in a how-to `.md` that contains BOTH:
+The audit flags any **sentence** in a how-to `.md` that contains BOTH:
 - a plan tier name (`Premium`, `Pro`, `Basic`, `Trial` — capitalised), AND
-- one of: `only`, `available on`, `locked`, `unlock`, `limited to`
+- one of the registered gate words (see full list below)
+
+Sentences are detected **across soft-wrapped lines**: the scanner collapses
+single-newline breaks within a paragraph before splitting on `[.!?]`, so
+a claim split over two lines is treated as one sentence.
 
 Descriptive pricing sentences that merely list plan names without
 restricting a specific feature (e.g., "The four tiers are Trial, Basic,
 Pro, and Premium") do not trigger the rule.
+
+#### Full gate-word list (R23b)
+
+| Word / phrase | Example trigger |
+|---|---|
+| `only` | "Pro only", "available on Premium only" |
+| `available on` | "available on Pro and Premium" |
+| `locked` | "locked card", "locked for Trial users" |
+| `unlock` | "upgrade to Pro to unlock", "Pro and Premium unlock" |
+| `limited to` | "limited to Premium subscribers" |
+| `gated` | "gated by plan", "gated on Basic" _(added R23b)_ |
+| `blocked` | "blocked on Trial", "blocked for Basic" _(added R23b)_ |
+
+The words `upgrade`, `requires`, and `missing` are intentionally **not** in
+the registry — they produce too many false positives in pricing/payment copy.
+
+#### How to annotate a claim correctly
+
+Place `<!-- gate: <id> -->` anywhere in the **same paragraph block** as the
+claim, or in the **immediately preceding paragraph block** (separated by one
+blank line, with no markdown heading between). The annotation may appear on
+the same line or on its own line. Inline-within-the-sentence also works.
+
+**Correct — annotation on own line before paragraph:**
+```markdown
+<!-- gate: nl-queries-pro -->
+Natural-language queries are available on Pro and Premium only;
+the other dashboard cards work the same on every plan.
+```
+
+**Correct — annotation inline in sentence (even mid-sentence):**
+```markdown
+Natural-language queries are available on Pro and Premium only <!-- gate: nl-queries-pro -->;
+the other dashboard cards work the same on every plan.
+```
+
+**Correct — annotation covers a soft-wrapped claim (R23b):**
+```markdown
+<!-- gate: nl-queries-pro -->
+If you downgrade from Pro or Premium to Basic
+mid-cycle, the mood-trend strip stops responding.
+```
+
+**Wrong — heading between annotation and claim:**
+```markdown
+<!-- gate: nl-queries-pro -->
+
+## Some Other Section
+
+Natural-language queries are available on Pro and Premium only.
+```
+_(The heading breaks the section scope; the claim is ungated.)_
 
 ### Currently registered gates
 

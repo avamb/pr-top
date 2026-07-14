@@ -481,39 +481,145 @@ async function main() {
     }
   }
 
-  // Detect tariff gating lines in KB docs (excluding docs/assistant-kb/reference/ — auto-generated).
-  // A gating line: contains a plan-tier name (Premium|Pro|Basic|Trial — case-sensitive) AND
-  // a gating keyword (only|available on|locked|unlock|limited to) on the SAME line.
-  // Each such line MUST have a <!-- gate: <id> --> annotation within 5 lines before it or inline.
-  // "upgrade" and "requires" are intentionally excluded: they produce too many false positives
-  // for billing/payment descriptions ("upgrade to Pro", "requires no card").
+  // ── R23b: shared constants and helpers for sentence-level gate detection ──────
+  // Used by both section 12i (KB scan) and section 12j (regression fixtures).
+  //
+  // Gate-word registry (R23b — expanded from R23):
+  //   Added 'gated' and 'blocked' to catch evasion patterns from commit 1fd37e6:
+  //     • "supervision share ... are gated by plan"   — 'gated' was absent
+  //     • "flips to a locked card" split across lines  — soft-wrap not detected
+  //     • "session access is blocked on Basic"         — 'blocked' was absent
+  const TIER_RE_KB = /\b(Premium|Pro|Basic|Trial)\b/;
+  // "only" uses a negative lookbehind to avoid matching "read-only" compound adjective.
+  const GATE_WORD_RE_KB = /(?<!-)only\b|available\s+on\b|\blocked\b|\bunlock\b|limited\s+to\b|\bgated\b|\bblocked\b/i;
+  const ANNOTATION_RE_KB = /<!--\s*gate:\s*([\w-]+)\s*-->/;
+  const HEADING_RE_KB = /^#{1,6}\s/;
+
+  // Parse md content into paragraph blocks for sentence-level scanning.
+  // Soft-wrap (single newline within a paragraph) is collapsed to a space.
+  // Headings and blank-line-separated paragraphs become separate blocks.
+  // Returns: Array<{text, startLine, isHeading, annotation}>
+  function parseMdBlocks(content) {
+    const lines = content.split('\n');
+    const blocks = [];
+    let bLines = [];
+    let bStart = 0;
+    function flush() {
+      if (!bLines.length) return;
+      const text = bLines.join(' ').trim();
+      if (!text) { bLines = []; return; }
+      const am = text.match(ANNOTATION_RE_KB);
+      blocks.push({ text, startLine: bStart + 1, isHeading: false, annotation: am ? am[1] : null });
+      bLines = [];
+    }
+    for (let i = 0; i <= lines.length; i++) {
+      const ln = i < lines.length ? lines[i] : '';
+      if (HEADING_RE_KB.test(ln)) {
+        flush();
+        blocks.push({ text: ln, startLine: i + 1, isHeading: true, annotation: null });
+        bStart = i + 1;
+      } else if (!ln.trim()) {
+        flush();
+        bStart = i + 1;
+      } else {
+        if (!bLines.length) bStart = i;
+        bLines.push(ln);
+      }
+    }
+    flush();
+    return blocks;
+  }
+
+  // Split a block's text into sentences on [.!?] boundaries.
+  function splitSentencesKB(text) {
+    return text.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean);
+  }
+
+  // Determine if a sentence is covered by a gate annotation.
+  // Coverage rules (R23b):
+  //   1. An inline <!-- gate: id --> in the sentence itself.
+  //   2. An annotation anywhere in the current block (same paragraph).
+  //   3. An annotation in the immediately preceding non-heading, non-empty block
+  //      of the same section (no heading may separate annotation from claim).
+  // Returns the annotationId if covered, null otherwise.
+  function gateAnnotationIdFor(sentence, curBlock, prevBlocks) {
+    const m = sentence.match(ANNOTATION_RE_KB);
+    if (m) return m[1];
+    if (curBlock.annotation) return curBlock.annotation;
+    for (let j = prevBlocks.length - 1; j >= 0; j--) {
+      const b = prevBlocks[j];
+      if (b.isHeading) return null;         // stop at section boundary
+      if (b.annotation) return b.annotation; // found annotation
+      if (b.text.trim()) return null;        // non-empty non-annotation block: stop
+    }
+    return null;
+  }
+
+  // Scan a single KB file (.md or .json) and return an array of failure strings.
+  function detectUngatedKBClaims(filePath, validGateIds, relPath) {
+    const out = [];
+    const content = fs.readFileSync(filePath, 'utf8');
+
+    if (filePath.endsWith('.json')) {
+      // JSON files (faq-seed.json) cannot carry HTML comment annotations.
+      // Check per-sentence in answer + question text.
+      let data;
+      try { data = JSON.parse(content); } catch (_) { return out; }
+      const items = Array.isArray(data) ? data : [];
+      for (const item of items) {
+        const text = (item.answer || '') + ' ' + (item.question || '');
+        for (const sentence of text.split(/(?<=[.!?])\s+/)) {
+          if (TIER_RE_KB.test(sentence) && GATE_WORD_RE_KB.test(sentence)) {
+            out.push(relPath + ': faq entry "' + (item.id || 'no-id') +
+              '" has ungated tier claim: "' + sentence.trim().slice(0, 120) + '"');
+          }
+        }
+      }
+      return out;
+    }
+
+    // .md files: paragraph/sentence-level scanning with soft-wrap normalization
+    const blocks = parseMdBlocks(content);
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
+      if (block.isHeading) continue;
+      const prev = blocks.slice(0, i);
+      for (const sentence of splitSentencesKB(block.text)) {
+        if (!TIER_RE_KB.test(sentence) || !GATE_WORD_RE_KB.test(sentence)) continue;
+        const annotId = gateAnnotationIdFor(sentence, block, prev);
+        if (annotId) {
+          if (validGateIds && !validGateIds.has(annotId)) {
+            out.push(relPath + ':' + block.startLine +
+              ': gate "' + annotId + '" not in plan-gates.json: "' + sentence.trim().slice(0, 120) + '"');
+          }
+          // else: valid annotation — claim is covered
+        } else {
+          out.push(relPath + ':' + block.startLine +
+            ': ungated tier claim: "' + sentence.trim().slice(0, 120) + '"');
+        }
+      }
+    }
+    return out;
+  }
+
   section('12i. R23 — every tariff-gating claim in docs/assistant-kb/ carries a <!-- gate: <id> --> annotation');
   try {
     const KB_DIR = path.join(__dirname, 'docs', 'assistant-kb');
-    const KB_REF_DIR = path.join(KB_DIR, 'reference'); // auto-generated, excluded entirely
-    // Case-sensitive: matches plan-tier names as proper nouns (Trial/Basic/Pro/Premium)
-    // NOT "trial" (lowercase, general word), "pro" (as in Stripe pro-rates), etc.
-    const TIER_RE = /\b(Premium|Pro|Basic|Trial)\b/;
-    // Gating words that indicate a feature is restricted to a plan tier.
-    // "only" catches "Pro only", "only on Premium", "Premium-only"
-    // "available on" catches "available on Pro and Premium"
-    // "locked" catches "locked card", "locked for Trial"
-    // "unlock" catches "Pro and Premium unlock", "to unlock"
-    // "limited to" catches "limited to Premium"
-    const GATE_WORD_RE = /\bonly\b|available\s+on\b|\blocked\b|\bunlock\b|limited\s+to\b/i;
-    const ANNOTATION_RE = /<!--\s*gate:\s*([\w-]+)\s*-->/;
+    const KB_REF_DIR = path.join(KB_DIR, 'reference');
 
     function getKbFiles(dir, results) {
       results = results || [];
-      const entries = fs.readdirSync(dir);
-      for (const e of entries) {
+      for (const e of fs.readdirSync(dir)) {
         const full = path.join(dir, e);
         const stat = fs.statSync(full);
         if (stat.isDirectory()) {
-          // Skip the auto-generated reference/ directory entirely
           if (full === KB_REF_DIR) continue;
           getKbFiles(full, results);
-        } else if (e.endsWith('.md') || e.endsWith('.json')) {
+        } else if (e.endsWith('.json')) {
+          results.push(full);
+        } else if (e.endsWith('.md') && e !== 'README.md') {
+          // README.md is a meta-document that discusses gate words in examples;
+          // it is excluded from the plan-gate scan to avoid false positives.
           results.push(full);
         }
       }
@@ -522,78 +628,56 @@ async function main() {
 
     const kbFiles = getKbFiles(KB_DIR);
     let ungatedCount = 0;
-
     for (const filePath of kbFiles) {
       const relPath = path.relative(__dirname, filePath).replace(/\\/g, '/');
-      const content = fs.readFileSync(filePath, 'utf8');
-
-      if (filePath.endsWith('.json')) {
-        // faq-seed.json: JSON entries cannot carry HTML comment annotations.
-        // They must not contain gating sentences (tier + gating word in same sentence).
-        // We check per-item answer text; split on sentence boundaries.
-        let data;
-        try { data = JSON.parse(content); } catch (_) { continue; }
-        const items = Array.isArray(data) ? data : [];
-        for (const item of items) {
-          const text = (item.answer || '') + ' ' + (item.question || '');
-          // Split on sentence-ending punctuation
-          const sentences = text.split(/(?<=[.!?])\s+/);
-          for (const sentence of sentences) {
-            if (TIER_RE.test(sentence) && GATE_WORD_RE.test(sentence)) {
-              const id = item.id || '(no id)';
-              fail('faq-seed.json entry "' + id + '" has ungated tier-restriction claim: "' + sentence.trim().slice(0, 120) + '"');
-              ungatedCount++;
-            }
-          }
-        }
-        continue;
-      }
-
-      // For .md files: scan line by line
-      const lines = content.split('\n');
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (!TIER_RE.test(line) || !GATE_WORD_RE.test(line)) continue;
-
-        // Check if this line itself contains a gate annotation
-        const inlineMatch = line.match(ANNOTATION_RE);
-        if (inlineMatch) {
-          const annotatedId = inlineMatch[1];
-          if (!gateIds.has(annotatedId)) {
-            fail(relPath + ':' + (i + 1) + ': inline gate "' + annotatedId + '" not in plan-gates.json');
-            ungatedCount++;
-          }
-          continue; // annotated inline
-        }
-
-        // Check 5 lines before for a gate annotation
-        let annotated = false;
-        for (let j = Math.max(0, i - 5); j < i; j++) {
-          const prevLine = lines[j];
-          const prevMatch = prevLine.match(ANNOTATION_RE);
-          if (prevMatch) {
-            const annotatedId = prevMatch[1];
-            if (!gateIds.has(annotatedId)) {
-              fail(relPath + ':' + (i + 1) + ': gate annotation "' + annotatedId + '" not in plan-gates.json');
-              ungatedCount++;
-            }
-            annotated = true;
-            break;
-          }
-        }
-
-        if (!annotated) {
-          fail(relPath + ':' + (i + 1) + ': tariff-gating claim has no <!-- gate: <id> --> annotation: "' + line.trim().slice(0, 120) + '"');
-          ungatedCount++;
-        }
+      for (const msg of detectUngatedKBClaims(filePath, gateIds, relPath)) {
+        fail(msg);
+        ungatedCount++;
       }
     }
-
     if (ungatedCount === 0) {
-      pass('All tariff-gating claims in docs/assistant-kb/ carry valid <!-- gate: <id> --> annotations');
+      pass('All tariff-gating claims in docs/assistant-kb/ carry valid <!-- gate: <id> --> annotations (sentence-level scan)');
     }
   } catch (e) {
     fail('R23 trust-gate scan threw: ' + e.message);
+  }
+
+  section('12j. R23b — regression fixtures: detector catches all three bypass patterns');
+  try {
+    const FIXTURES_DIR = path.join(__dirname, 'tests', 'fixtures');
+    const REG_FIXTURE  = path.join(FIXTURES_DIR, 'kb-gate-regression.md');
+    const POS_FIXTURE  = path.join(FIXTURES_DIR, 'kb-gate-positive.md');
+
+    // Regression fixture: verbatim pre-fix "Plan downgrades" content PLUS two
+    // additional ungated claims demonstrating the 'gated' and 'blocked' bypasses.
+    // The enhanced R23b detector must flag exactly 3 failures.
+    if (!fs.existsSync(REG_FIXTURE)) {
+      fail('R23b: regression fixture missing — tests/fixtures/kb-gate-regression.md');
+    } else {
+      const regFails = detectUngatedKBClaims(REG_FIXTURE, gateIds, 'tests/fixtures/kb-gate-regression.md');
+      if (regFails.length === 3) {
+        pass('R23b regression fixture: exactly 3 ungated claims detected (gated, locked, blocked bypasses)');
+      } else {
+        fail('R23b regression fixture: expected 3 ungated claim failures, got ' + regFails.length +
+          (regFails.length ? ': ' + regFails.slice(0, 3).join(' | ').slice(0, 300) : ''));
+      }
+    }
+
+    // Positive fixture: same three claims, each preceded by a valid gate annotation
+    // placed BEFORE a soft-wrapped line break. Must produce 0 failures.
+    if (!fs.existsSync(POS_FIXTURE)) {
+      fail('R23b: positive fixture missing — tests/fixtures/kb-gate-positive.md');
+    } else {
+      const posFails = detectUngatedKBClaims(POS_FIXTURE, gateIds, 'tests/fixtures/kb-gate-positive.md');
+      if (posFails.length === 0) {
+        pass('R23b positive fixture: all three annotated claims pass (0 ungated failures)');
+      } else {
+        fail('R23b positive fixture: expected 0 failures, got ' + posFails.length +
+          ': ' + posFails.slice(0, 3).join(' | ').slice(0, 300));
+      }
+    }
+  } catch (e) {
+    fail('R23b fixture tests threw: ' + e.message);
   }
 
   section('12. S2 — publicAssistant.js and assistant.js call search with correct audience');

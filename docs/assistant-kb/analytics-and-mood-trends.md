@@ -11,10 +11,10 @@ the underlying data. Labels come from the `analytics`, `dashboard`, and
 
 ## Prerequisites
 
-- Analytics as a top-level dashboard tab is available to every plan,
-  but the tier-gated pieces (mood-trend sparklines on the dashboard,
-  per-client comparative charts, and PDF/JSON/CSV export) require Pro
-  or Premium.
+- Analytics as a top-level dashboard tab is available to every plan.
+  Structured export (PDF, JSON, CSV) is covered in the data export
+  how-to and requires a paid plan; see that page for plan-specific
+  limits.
 - The client must have at least a handful of events for a chart to
   render — most charts need three data points in the window, otherwise
   they show an "not enough data" placeholder.

@@ -13,8 +13,8 @@ the Basic plan and above.
   enforces the consent flag on their client record — without it, the
   upload button is disabled.
 - You are on the Basic, Pro, or Premium plan. Trial accounts can
-  attach an audio file to a manual note, but transcription is gated to
-  paid tiers.
+  attach an audio file to a manual note, but transcription requires a
+  paid plan.
 - The file is under 100 MB and in a common audio or video container
   (mp3, m4a, wav, mp4, webm).
 

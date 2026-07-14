@@ -10,9 +10,10 @@ here come from the `sessions` and `bulkImport` i18n namespaces.
 
 ## Prerequisites
 
-- Basic, Pro, or Premium plan (transcription is gated). Trial can hold
-  a bulk upload of files but transcription remains blocked; each
-  session becomes a "manual notes" entry.
+- Basic, Pro, or Premium plan (transcription requires a paid plan).
+  Trial accounts can hold a bulk upload of files, but transcription is
+  not included in the Trial tier; each session becomes a "manual notes"
+  entry.
 - Each client involved in the batch must have the session-recording
   consent flag on. Files for clients without consent are rejected up
   front and highlighted red in the queue.

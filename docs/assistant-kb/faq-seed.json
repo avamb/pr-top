@@ -156,7 +156,7 @@
     "audience": "public",
     "locale": "en",
     "question": "What analytics does PR-TOP provide?",
-    "answer": "The dashboard shows client-engagement stats, session activity, mood-trend charts, and exercise completion rates. You can filter by date range and client, and export the underlying data as PDF, JSON, or CSV. Advanced charts and per-client comparisons are gated to Pro and Premium.",
+    "answer": "The dashboard shows client-engagement stats, session activity, mood-trend charts, and exercise completion rates. You can filter by date range and client, and export the underlying data as PDF, JSON, or CSV. Advanced charts and per-client comparisons require Pro or Premium.",
     "tags": ["analytics", "dashboard"]
   },
   {

@@ -34,7 +34,7 @@ Every message is encrypted at rest before it lands in the database.
 - A running diary timeline on the client page.
 - Voice transcriptions inline with the audio.
 - Private therapist notes on the same page — visible only to you and,
-  if you enabled it, a supervising colleague on the Premium plan.
+  if you enabled it, a supervising colleague with access to this client.
 
 ## Privacy boundaries
 
