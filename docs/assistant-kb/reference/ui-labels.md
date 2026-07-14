@@ -501,7 +501,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `landing.tierFeat.clients30` — Up to 30 clients
 - `landing.tierFeat.clientsUnlimited` — Unlimited clients
 - `landing.tierFeat.sessions5` — 5 sessions / month
-- _+ 144 more keys_
+- _+ 145 more keys_
 
 ## landingConfirm
 

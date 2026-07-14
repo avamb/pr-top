@@ -118,15 +118,25 @@ export default function Landing() {
   const pricingTrackedRef = useRef(false);
   const burnoutRef = useRef(null);
 
-  // Fade-in animation for burnout section on scroll
+  // Scroll-reveal animation for burnout section (progressive enhancement).
+  // JS adds 'scroll-reveal' on mount to set the initial hidden state, then
+  // IntersectionObserver adds 'is-revealed' to animate in.
+  // Without JS the element has no hidden classes → always visible in prerender.
   useEffect(() => {
     const el = burnoutRef.current;
     if (!el) return;
+
+    // Respect prefers-reduced-motion: skip animation entirely
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReduced) return;
+
+    // Progressive enhancement: hide element now that JS is running
+    el.classList.add('scroll-reveal');
+
     const obs = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          el.classList.add('opacity-100', 'translate-y-0');
-          el.classList.remove('opacity-0', 'translate-y-8');
+          el.classList.add('is-revealed');
           obs.disconnect();
         }
       },
@@ -341,19 +351,18 @@ export default function Landing() {
             ))}
           </div>
 
-          {/* Contextual solution links — boost internal link graph for batch-1/2 landings */}
-          <div className="mt-12 pt-8 border-t border-surface">
-            <p className="text-secondary text-sm mb-4 font-medium">{t('landing.relatedLinks')}:</p>
-            <div className="flex flex-wrap gap-3">
-              <Link to={lp('/ai-session-notes-for-therapists')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.solAiSessionNotes')}</Link>
-              <Link to={lp('/for-coaches')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.solForCoaches')}</Link>
-              <Link to={lp('/therapy-documentation-ai')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.solTherapyDocumentation')}</Link>
-              <Link to={lp('/therapist-ai-assistant')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.solTherapistAssistant')}</Link>
-              <Link to={lp('/client-diary-for-therapists')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.solClientDiary')}</Link>
-              <Link to={lp('/secure-practice-management')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.solSecurePractice')}</Link>
-              <Link to={lp('/practice-management-for-therapists')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.solPracticeManagement')}</Link>
-              <Link to={lp('/best-ai-assistant-for-therapists')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.bestAiAssistants')}</Link>
-            </div>
+          {/* Explore CTA — replaces 8-tag block; all solution links preserved in footer #explore-solutions */}
+          <div className="mt-12 pt-8 border-t border-surface flex justify-center">
+            <a
+              href="#explore-solutions"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-lg border border-primary text-primary font-semibold text-sm hover:bg-primary hover:text-white transition-colors"
+              data-testid="explore-workspace-cta"
+            >
+              {t('landing.exploreWorkspace')}
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </a>
           </div>
         </div>
       </section>
@@ -401,7 +410,7 @@ export default function Landing() {
       <section aria-label="Anti-Burnout" className="py-20 bg-gradient-to-b from-teal-50 to-white">
         <div
           ref={burnoutRef}
-          className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center opacity-0 translate-y-8 transition-all duration-700 ease-out"
+          className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center"
         >
           <svg className="w-12 h-12 mx-auto mb-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
@@ -545,8 +554,8 @@ export default function Landing() {
               </ul>
             </div>
 
-            {/* Solutions — batch-1/2 landing pages */}
-            <div>
+            {/* Solutions — batch-1/2 landing pages; anchor target for #explore-solutions CTA */}
+            <div id="explore-solutions">
               <h4 className="text-white font-semibold text-sm mb-3">{t('landing.footerSolutions')}</h4>
               <ul className="space-y-2 text-sm">
                 <li><Link to={lp('/ai-session-notes-for-therapists')} className="hover:text-white transition-colors">{t('landing.solAiSessionNotes')}</Link></li>
