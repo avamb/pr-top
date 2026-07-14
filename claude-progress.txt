@@ -16200,3 +16200,47 @@ No KB doc update needed — no existing docs/assistant-kb/ file for this page.
 The H2 heading is page-internal copy, not a KB-documented capability.
 
 Stats after session 219: #470 status: passing (469/472, 99.4%).
+
+================================================================
+Session 220 (2026-07-14) - Feature #471 PASSING (R21c real WebP for hero)
+================================================================
+
+Assigned: #471 R21c — Настоящий WebP для hero-скриншота (хвост R18)
+
+PROBLEM:
+hero-dashboard.webp was a PNG renamed with .webp extension (same 216,958 bytes).
+There was also a PNG duplicate hero-dashboard.png (same size). Neither was a real WebP.
+
+IMPLEMENTATION:
+1. _r21c_convert_webp.js (NEW)
+   - Uses sharp (from src/frontend/node_modules/sharp) to convert
+   - PNG → WebP quality 85, effort 6
+   - Falls back to 1920×1200 downscale if > 120 KB (not needed)
+   - Verifies magic bytes (RIFF....WEBP) before finishing
+   - Deletes PNG duplicate on success
+
+2. src/frontend/public/images/hero-dashboard.webp (REPLACED)
+   - Was: PNG renamed to .webp (216,958 bytes / 217 KB)
+   - Now: Real WebP, quality 85, 2560×1600 (109,476 bytes / 107 KB)
+   - Under 120 KB target at full 2x resolution — no downscale needed
+   - Magic bytes: RIFF....WEBP confirmed
+
+3. src/frontend/public/images/hero-dashboard.png (DELETED)
+   - PNG duplicate removed from public/ and git
+
+4. _t_r21c_webp_verify.js (NEW)
+   - 6 checks: file exists, size ≤ 120 KB, magic bytes RIFF....WEBP,
+     PNG duplicate absent, img src unchanged in Landing.jsx, dist references
+
+No changes to Landing.jsx img markup or src (unchanged as required).
+
+VERIFICATION:
+- node _r21c_convert_webp.js: 107 KB output, magic bytes OK
+- node _t_r21c_webp_verify.js: 6 passed, 0 failed
+- node run-build.js: 92 prerendered pages, exit 0
+- node _t_assistant_kb_audit.js: 79 passed, 0 failed
+- node _t_geo_audit.js: 18 passed, 0 failed
+- node _t_seo_i18n_audit.js: 15 passed, 0 failed
+- git commit: 9202cde
+
+Stats after session 220: #471 status: passing (470/472, 99.6%).
