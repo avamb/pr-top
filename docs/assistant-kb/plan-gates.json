@@ -1,0 +1,38 @@
+[
+  {
+    "id": "voice-queries-pro",
+    "statement": "Voice queries (POST /api/bot/voice-query) are available on Pro and Premium plans only.",
+    "code_ref": "src/backend/src/routes/bot.js",
+    "anchor": "\\['pro',\\s*'premium'\\]\\.includes\\(plan\\)"
+  },
+  {
+    "id": "nl-queries-pro",
+    "statement": "Natural language text queries (POST /api/query) are available on Pro and Premium plans only.",
+    "code_ref": "src/backend/src/routes/query.js",
+    "anchor": "\\['pro',\\s*'premium'\\]\\.includes\\(plan\\)"
+  },
+  {
+    "id": "client-kb-pro",
+    "statement": "The personal knowledge base (/api/kb) is available on Pro and Premium plans only.",
+    "code_ref": "src/backend/src/routes/kb.js",
+    "anchor": "\\['pro',\\s*'premium'\\]\\.includes\\(plan\\)"
+  },
+  {
+    "id": "data-export-pro",
+    "statement": "Full client data export (CSV, structured notes JSON) is available on Pro and Premium plans. Trial and Basic receive diary-only JSON export.",
+    "code_ref": "src/backend/src/routes/export.js",
+    "anchor": "\\['pro',\\s*'premium'\\]\\.includes\\(plan\\)"
+  },
+  {
+    "id": "analytics-export-premium",
+    "statement": "Analytics data export (CSV or PDF report) is available on the Premium plan only.",
+    "code_ref": "src/backend/src/routes/export.js",
+    "anchor": "plan\\s*!==\\s*'premium'"
+  },
+  {
+    "id": "client-seats-limit",
+    "statement": "Client seat limits are enforced per plan tier: Trial 3 seats, Basic 10, Pro 30, Premium unlimited.",
+    "code_ref": "src/backend/src/utils/planLimits.js",
+    "anchor": "DEFAULT_LIMITS"
+  }
+]

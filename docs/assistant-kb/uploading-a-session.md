@@ -99,7 +99,8 @@ a 60-minute recording takes about six minutes, plus queue wait.
 
 **Q: Are video files supported?**
 A: Yes. mp4 and webm up to 100 MB. Only the audio track is
-transcribed; video playback is available on Pro and Premium.
+transcribed; the original video file is preserved for streaming
+playback via the session player.
 
 **Q: Where do transcripts live?**
 A: On the session page. Both the transcript and the AI summary are

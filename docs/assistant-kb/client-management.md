@@ -54,7 +54,7 @@ Open the client and tap **Consent**. There are three independent flags:
 - **Session recording** — required for session uploads and
   transcription; the upload button is disabled without it.
 - **Supervision share** — required before you can generate a share
-  link for a supervising colleague (Premium only).
+  link for a supervising colleague.
 
 Every flag change is logged in the client timeline with a timestamp
 and the therapist who changed it.
@@ -104,9 +104,9 @@ entries.
 - **Row stuck at "pending invite" after a day.** The link may have
   been forwarded and someone else consumed it. Generate a fresh one
   from the client page; the old code invalidates.
-- **Consent toggle greyed out.** Some flags depend on plan: supervision
-  share is Premium-only. The tooltip on the disabled toggle explains
-  which plan is required.
+- **Consent toggle greyed out.** The supervision-share consent flag
+  is greyed until the client accepts the standard consent. The tooltip
+  on the disabled toggle explains which prerequisite is missing.
 - **Timeline missing an entry.** Confirm the entry exists on the
   Diary or Sessions tab. If the client edited it, the timeline shows
   the latest version; the older version is in the audit log.

@@ -92,8 +92,8 @@ wait if you submitted a big batch.
 
 **Q: Can I upload video as easily as audio?**
 A: Yes. Video files (mp4, webm) are accepted up to the same 100 MB
-cap. Only the audio track is transcribed; video streaming playback is
-available on Pro and Premium via the `player` UI area.
+cap. Only the audio track is transcribed; the original video file is
+preserved and available for streaming playback via the `player` UI area.
 
 **Q: Are files encrypted before upload?**
 A: Uploads travel over HTTPS to the backend and are encrypted at rest

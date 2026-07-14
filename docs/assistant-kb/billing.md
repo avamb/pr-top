@@ -70,7 +70,7 @@ page.
 
 **Q: Do I need a credit card to try PR-TOP?**
 A: No. The 14-day Trial does not ask for a card. You are prompted
-for one only when you upgrade to Basic, Pro, or Premium.
+for one only when switching to any paid plan.
 
 **Q: What currency am I billed in?**
 A: Your card's home currency. Stripe converts from USD at the

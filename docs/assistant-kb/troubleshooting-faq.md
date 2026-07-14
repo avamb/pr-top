@@ -89,9 +89,10 @@ namespaces.
 
 ## Notification issues
 
-- **SOS email never arrived.** Confirm the alert email in Settings →
-  Notifications. On Trial, Basic, and Pro only in-dashboard SOS is
-  guaranteed; email is Premium. Check spam.
+- **SOS email never arrived.** Confirm the alert email is enabled in
+  Settings → Notifications (the `sos_email` toggle). Also check the
+  spam/junk folder — platform emails sometimes land there on first
+  delivery.
 - **Weekly digest missing.** Digests fire Monday morning in your time
   zone. If your time zone was changed recently, the first digest
   may skip a week to re-anchor.

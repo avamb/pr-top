@@ -444,6 +444,158 @@ async function main() {
     fail('R22c docs:assistant:check threw: ' + e.message);
   }
 
+  section('12h. R23 — Trust Gate: plan-gates.json exists and all gate anchors are found in code');
+  const PLAN_GATES_PATH = path.join(__dirname, 'docs', 'assistant-kb', 'plan-gates.json');
+  let planGates = [];
+  try {
+    const raw = fs.readFileSync(PLAN_GATES_PATH, 'utf8');
+    planGates = JSON.parse(raw);
+    if (!Array.isArray(planGates) || planGates.length === 0) {
+      fail('plan-gates.json must be a non-empty array');
+    } else {
+      pass('plan-gates.json loaded: ' + planGates.length + ' gates');
+    }
+  } catch (e) {
+    fail('Could not load plan-gates.json: ' + e.message);
+  }
+
+  // Reverse check: every gate anchor must exist in its code_ref
+  const gateIds = new Set();
+  for (const gate of planGates) {
+    if (!gate.id || !gate.code_ref || !gate.anchor) {
+      fail('plan-gates.json entry missing id, code_ref, or anchor: ' + JSON.stringify(gate));
+      continue;
+    }
+    gateIds.add(gate.id);
+    try {
+      const codeFile = path.join(__dirname, gate.code_ref);
+      const codeContent = fs.readFileSync(codeFile, 'utf8');
+      const anchorRe = new RegExp(gate.anchor);
+      if (anchorRe.test(codeContent)) {
+        pass('Gate "' + gate.id + '" anchor found in ' + gate.code_ref);
+      } else {
+        fail('Gate "' + gate.id + '" orphaned: anchor /' + gate.anchor + '/ not found in ' + gate.code_ref);
+      }
+    } catch (e) {
+      fail('Gate "' + gate.id + '" reverse-check failed: ' + e.message);
+    }
+  }
+
+  // Detect tariff gating lines in KB docs (excluding docs/assistant-kb/reference/ — auto-generated).
+  // A gating line: contains a plan-tier name (Premium|Pro|Basic|Trial — case-sensitive) AND
+  // a gating keyword (only|available on|locked|unlock|limited to) on the SAME line.
+  // Each such line MUST have a <!-- gate: <id> --> annotation within 5 lines before it or inline.
+  // "upgrade" and "requires" are intentionally excluded: they produce too many false positives
+  // for billing/payment descriptions ("upgrade to Pro", "requires no card").
+  section('12i. R23 — every tariff-gating claim in docs/assistant-kb/ carries a <!-- gate: <id> --> annotation');
+  try {
+    const KB_DIR = path.join(__dirname, 'docs', 'assistant-kb');
+    const KB_REF_DIR = path.join(KB_DIR, 'reference'); // auto-generated, excluded entirely
+    // Case-sensitive: matches plan-tier names as proper nouns (Trial/Basic/Pro/Premium)
+    // NOT "trial" (lowercase, general word), "pro" (as in Stripe pro-rates), etc.
+    const TIER_RE = /\b(Premium|Pro|Basic|Trial)\b/;
+    // Gating words that indicate a feature is restricted to a plan tier.
+    // "only" catches "Pro only", "only on Premium", "Premium-only"
+    // "available on" catches "available on Pro and Premium"
+    // "locked" catches "locked card", "locked for Trial"
+    // "unlock" catches "Pro and Premium unlock", "to unlock"
+    // "limited to" catches "limited to Premium"
+    const GATE_WORD_RE = /\bonly\b|available\s+on\b|\blocked\b|\bunlock\b|limited\s+to\b/i;
+    const ANNOTATION_RE = /<!--\s*gate:\s*([\w-]+)\s*-->/;
+
+    function getKbFiles(dir, results) {
+      results = results || [];
+      const entries = fs.readdirSync(dir);
+      for (const e of entries) {
+        const full = path.join(dir, e);
+        const stat = fs.statSync(full);
+        if (stat.isDirectory()) {
+          // Skip the auto-generated reference/ directory entirely
+          if (full === KB_REF_DIR) continue;
+          getKbFiles(full, results);
+        } else if (e.endsWith('.md') || e.endsWith('.json')) {
+          results.push(full);
+        }
+      }
+      return results;
+    }
+
+    const kbFiles = getKbFiles(KB_DIR);
+    let ungatedCount = 0;
+
+    for (const filePath of kbFiles) {
+      const relPath = path.relative(__dirname, filePath).replace(/\\/g, '/');
+      const content = fs.readFileSync(filePath, 'utf8');
+
+      if (filePath.endsWith('.json')) {
+        // faq-seed.json: JSON entries cannot carry HTML comment annotations.
+        // They must not contain gating sentences (tier + gating word in same sentence).
+        // We check per-item answer text; split on sentence boundaries.
+        let data;
+        try { data = JSON.parse(content); } catch (_) { continue; }
+        const items = Array.isArray(data) ? data : [];
+        for (const item of items) {
+          const text = (item.answer || '') + ' ' + (item.question || '');
+          // Split on sentence-ending punctuation
+          const sentences = text.split(/(?<=[.!?])\s+/);
+          for (const sentence of sentences) {
+            if (TIER_RE.test(sentence) && GATE_WORD_RE.test(sentence)) {
+              const id = item.id || '(no id)';
+              fail('faq-seed.json entry "' + id + '" has ungated tier-restriction claim: "' + sentence.trim().slice(0, 120) + '"');
+              ungatedCount++;
+            }
+          }
+        }
+        continue;
+      }
+
+      // For .md files: scan line by line
+      const lines = content.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (!TIER_RE.test(line) || !GATE_WORD_RE.test(line)) continue;
+
+        // Check if this line itself contains a gate annotation
+        const inlineMatch = line.match(ANNOTATION_RE);
+        if (inlineMatch) {
+          const annotatedId = inlineMatch[1];
+          if (!gateIds.has(annotatedId)) {
+            fail(relPath + ':' + (i + 1) + ': inline gate "' + annotatedId + '" not in plan-gates.json');
+            ungatedCount++;
+          }
+          continue; // annotated inline
+        }
+
+        // Check 5 lines before for a gate annotation
+        let annotated = false;
+        for (let j = Math.max(0, i - 5); j < i; j++) {
+          const prevLine = lines[j];
+          const prevMatch = prevLine.match(ANNOTATION_RE);
+          if (prevMatch) {
+            const annotatedId = prevMatch[1];
+            if (!gateIds.has(annotatedId)) {
+              fail(relPath + ':' + (i + 1) + ': gate annotation "' + annotatedId + '" not in plan-gates.json');
+              ungatedCount++;
+            }
+            annotated = true;
+            break;
+          }
+        }
+
+        if (!annotated) {
+          fail(relPath + ':' + (i + 1) + ': tariff-gating claim has no <!-- gate: <id> --> annotation: "' + line.trim().slice(0, 120) + '"');
+          ungatedCount++;
+        }
+      }
+    }
+
+    if (ungatedCount === 0) {
+      pass('All tariff-gating claims in docs/assistant-kb/ carry valid <!-- gate: <id> --> annotations');
+    }
+  } catch (e) {
+    fail('R23 trust-gate scan threw: ' + e.message);
+  }
+
   section('12. S2 — publicAssistant.js and assistant.js call search with correct audience');
   try {
     const publicRoute = fs.readFileSync(path.join(__dirname, 'src/backend/src/routes/publicAssistant.js'), 'utf8');

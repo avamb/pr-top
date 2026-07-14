@@ -10,8 +10,11 @@ and deleting your entire therapist account. Labels are drawn from the
 
 ## Prerequisites
 
-- Basic, Pro, or Premium tier for structured export in JSON/CSV. PDF
-  export of a per-client summary is available on Pro/Premium.
+<!-- gate: data-export-pro -->
+- Pro or Premium subscription for full structured export in CSV format
+  and private-notes export. Trial and Basic users receive diary-only
+  JSON export. PDF export of a per-client summary is available on Pro
+  and Premium.
 - You must be the primary therapist on the client record (supervisors
   cannot export).
 - For an account-level export, keep the browser tab open until the

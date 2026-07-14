@@ -58,6 +58,50 @@ price, then forgets to regenerate the reference docs before merging.
   surfaces (API endpoint map, UI-label dump) and anything that would
   help an attacker more than a customer.
 
+## Plan-tier gating rules — Feature #476 (R23)
+
+**Truth-before-copy mandate**: a tariff restriction in `docs/assistant-kb/` is
+permitted ONLY when it is backed by a real code-level gate registered in
+`docs/assistant-kb/plan-gates.json`.
+
+### Workflow for writing a plan-tier claim
+
+1. **Check the registry first.** Read `plan-gates.json`. If the gate you
+   need is already listed (e.g., `nl-queries-pro`, `data-export-pro`),
+   proceed to step 3.
+2. **Add a new gate entry** if the code check does not exist yet:
+   - `id`: kebab-case identifier, e.g. `my-feature-pro`
+   - `statement`: one human-readable sentence describing the restriction
+   - `code_ref`: repo-relative path to the source file that enforces it
+   - `anchor`: a regex that MUST match inside `code_ref` (the actual gate
+     condition, e.g. `\\['pro',\\s*'premium'\\]\\.includes\\(plan\\)`)
+   - The audit script will reject the entry if the anchor is not found.
+3. **Annotate the claim** by placing `<!-- gate: <id> -->` on the line
+   immediately before the restricting sentence in the `.md` file.
+   `faq-seed.json` entries must not contain tier-restriction language at
+   all — rewrite them to use plan-neutral phrasing.
+4. **Run the audit** — `node _t_assistant_kb_audit.js` must exit 0.
+
+### What counts as a "tariff-gating claim"
+
+The audit flags any line in a how-to `.md` that contains BOTH:
+- a plan tier name (`Premium`, `Pro`, `Basic`, `Trial` — capitalised), AND
+- one of: `only`, `available on`, `locked`, `unlock`, `limited to`
+
+Descriptive pricing sentences that merely list plan names without
+restricting a specific feature (e.g., "The four tiers are Trial, Basic,
+Pro, and Premium") do not trigger the rule.
+
+### Currently registered gates
+
+See `plan-gates.json` for the authoritative list. At the time of writing:
+- `voice-queries-pro` — voice queries require Pro/Premium (`bot.js`)
+- `nl-queries-pro` — NL text queries require Pro/Premium (`query.js`)
+- `client-kb-pro` — personal KB requires Pro/Premium (`kb.js`)
+- `data-export-pro` — full CSV/notes export requires Pro/Premium (`export.js`)
+- `analytics-export-premium` — analytics export requires Premium (`export.js`)
+- `client-seats-limit` — client seat caps enforced by tier (`planLimits.js`)
+
 ## Canned FAQ seed (`faq-seed.json`) — Feature #440 (S7)
 
 `faq-seed.json` is a companion to the how-to pages. It preloads the top

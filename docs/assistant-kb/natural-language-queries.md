@@ -10,6 +10,7 @@ come from the `query` and `search` i18n namespaces on the dashboard.
 
 ## Prerequisites
 
+<!-- gate: nl-queries-pro -->
 - Pro or Premium subscription. Trial and Basic tiers see the query box
   but with a "Available on Pro" locked overlay that links to the
   pricing page.
@@ -78,6 +79,7 @@ come from the `query` and `search` i18n namespaces on the dashboard.
 
 ## Troubleshooting
 
+<!-- gate: nl-queries-pro -->
 - **"Available on Pro" overlay on Basic.** Upgrade to Pro to unlock.
   Existing diary and session data is already indexed and available
   the moment the upgrade goes through.

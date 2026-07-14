@@ -33,10 +33,9 @@ each label comes from the `dashboard` and `nav` i18n namespaces.
    happened on your accounts in the last 14 days: new diary entries,
    completed exercises, uploaded sessions, SOS alerts, client bindings,
    and consent changes. Each row links to the underlying object.
-3. **Mood-trend strip** (Pro and Premium). A compact set of sparklines,
-   one per client, that plots mood scores from diary entries over the
-   last 30 days. Trial and Basic show a locked card that links to the
-   pricing page.
+3. **Activity summary.** A quick-glance strip showing active clients,
+   recent diary entries, and mood score averages across your practice
+   for the last 30 days.
 4. **Assistant panel.** The signed-in assistant chatbox lives in the
    right rail. Ask it "how do I upload a session recording" or "where
    are exercises assigned" and it will answer with excerpts from this

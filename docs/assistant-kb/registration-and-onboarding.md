@@ -136,9 +136,10 @@ pricing reference for full detail on client seats, session quotas,
 and feature gating per tier.
 
 **Q: Is there a free version after the Trial?**
-A: No. After Trial the account is read-only unless you pick a paid
-plan. Data is preserved through a 90-day grace, then a 30-day final
-grace, and then purged if no plan is picked.
+A: No. When the trial ends the account enters a read-access state
+unless a paid plan is selected. Data is preserved through a 90-day
+grace, then a 30-day final grace, and then purged if no plan is
+chosen.
 
 **Q: Where is my data stored?**
 A: PR-TOP is hosted on European infrastructure. Class-A data

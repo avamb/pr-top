@@ -69,10 +69,10 @@ aggregates across your whole roster:
 - **Very short windows.** In the 7-day window, the smoothed mood line
   becomes noisy; the platform automatically widens to 14 days if there
   is not enough data.
-- **Client on Trial diary-only.** Transcription-derived analytics
-  (session duration, topic trend) require Basic and above. On Trial
-  you see session counts but not durations because manual notes don't
-  have audio.
+- **No transcribed sessions available.** Transcription-derived analytics
+  (session duration, topic trend) appear only when audio or video sessions
+  have been uploaded and processed. Without transcriptions, you see session
+  counts but not durations.
 - **Time zones.** The analytics engine buckets days by the therapist's
   time-zone setting, not the client's. Change it under Settings →
   Profile.
@@ -108,12 +108,11 @@ A: It is the arithmetic mean of every explicit mood rating in the
 selected window. Voice/text entries without an explicit rating are
 excluded — the platform does not infer sentiment.
 
-**Q: Why are analytics gated to Pro on the dashboard sparklines but
-free on the per-client tab?**
-A: The per-client tab is always visible so every therapist can review
-individual history. The dashboard mood-trend strip is a
-whole-practice cross-section that is more expensive to compute; that
-is what Pro and Premium unlock.
+**Q: Are the per-client analytics always available?**
+A: Yes. The per-client analytics tab is visible on every plan so every
+therapist can review individual client history. The quality of the data
+depends on what has been recorded — transcription analytics require
+uploaded audio or video sessions.
 
 **Q: Is there a way to compare two clients side by side?**
 A: Not as a built-in chart. Export both to CSV and compare in a

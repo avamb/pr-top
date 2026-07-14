@@ -68,8 +68,8 @@ interact with a Telegram bot on their phone.
 - **Confused about which surface does what?** Dashboard is the
   therapist workflow; Telegram is where the client lives; the API
   glues them together.
-- **Cannot find a feature you saw advertised.** Check whether it is
-  Pro or Premium only (see the plan tiers list above).
+- **Cannot find a feature you saw advertised.** Check the plan tiers
+  list above — some features require a higher-tier subscription.
 
 ## FAQ
 

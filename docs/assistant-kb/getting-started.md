@@ -106,8 +106,8 @@ A: 14 calendar days from account creation. It ends automatically;
 data is preserved through a 90-day grace and a 30-day final grace.
 
 **Q: Do I need a credit card to start?**
-A: No. Trial does not require a card. You are prompted for one only
-at upgrade.
+A: No. The 14-day trial period does not require payment information.
+A card is collected only when you actively switch to a paid plan.
 
 **Q: Can I invite myself as a test client?**
 A: Yes. Use your own Telegram account bound to a "Test client"
