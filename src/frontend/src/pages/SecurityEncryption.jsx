@@ -58,6 +58,7 @@ export default function SecurityEncryption() {
           <li>{t('security.enc.appLayerItem3')}</li>
           <li>{t('security.enc.appLayerItem4')}</li>
           <li>{t('security.enc.appLayerItem5')}</li>
+          <li>{t('security.enc.appLayerItem6')}</li>
         </ul>
       </Section>
 

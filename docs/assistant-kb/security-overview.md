@@ -11,9 +11,14 @@ site (`/security/encryption`, `/security/gdpr`, `/security/audit-log`,
 ## Data classes
 
 - **Class A** — the sensitive body of therapy work: diary entries,
-  private therapist notes, session transcripts, and AI summaries.
-  Class A is encrypted at the application layer with AES before it
-  is written to disk. Even a database dump is opaque without the key.
+  private therapist notes, session transcripts, AI draft summaries awaiting
+  therapist review, therapist-entered anamnesis and contraindications, SOS
+  alert content, and exercise responses. Class A is encrypted at the
+  application layer with AES before it is written to disk. Even a database
+  dump is opaque without the key.
+  Note: anamnesis and contraindications are **therapist-entered fields** on
+  the client card — they are not AI-generated. AI produces only draft notes
+  and session summaries that require explicit therapist review before use.
 - **Class B** — access-controlled plaintext: timestamps, identifiers,
   role labels, and other metadata that must be indexable and
   queryable for the product to function.
