@@ -60,7 +60,7 @@ export default function ConfirmHowItWorks() {
                 </div>
                 {/* Step number badge */}
                 <span className="text-xs font-bold text-primary/60 uppercase tracking-widest mb-2">
-                  Step {step.number}
+                  {t('landingConfirm.howItWorks.stepLabel')} {step.number}
                 </span>
                 <h3 className="text-base font-semibold text-text mb-2">
                   {t(step.titleKey)}

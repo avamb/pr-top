@@ -15,7 +15,7 @@ export default function ConfirmHero({ onCtaClick }) {
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          Telegram Session Reminders
+          {t('landingConfirm.hero.badge')}
         </div>
 
         {/* Headline */}
@@ -42,7 +42,7 @@ export default function ConfirmHero({ onCtaClick }) {
 
           {/* Social proof hint */}
           <p className="mt-4 text-sm text-secondary">
-            7-day free trial · No credit card required · Cancel anytime
+            {t('landingConfirm.hero.trialNote')}
           </p>
         </div>
 
@@ -55,28 +55,28 @@ export default function ConfirmHero({ onCtaClick }) {
               <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-100">
                 <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xs font-bold">RT</div>
                 <div>
-                  <div className="text-xs font-semibold text-text">PR-TOP Reminder</div>
-                  <div className="text-[10px] text-secondary">bot</div>
+                  <div className="text-xs font-semibold text-text">{t('landingConfirm.hero.mockBotName')}</div>
+                  <div className="text-[10px] text-secondary">{t('landingConfirm.hero.mockBotType')}</div>
                 </div>
               </div>
               {/* Reminder message bubble */}
               <div className="bg-primary/10 rounded-2xl rounded-tl-sm p-3 mb-2">
                 <p className="text-xs text-text leading-relaxed">
-                  📅 <strong>Session reminder</strong><br />
-                  Tomorrow at 3:00 PM<br />
-                  <span className="text-secondary">with Dr. Maria Ivanova</span>
+                  📅 <strong>{t('landingConfirm.hero.mockMsgTitle')}</strong><br />
+                  {t('landingConfirm.hero.mockMsgTime')}<br />
+                  <span className="text-secondary">{t('landingConfirm.hero.mockMsgTherapist')}</span>
                 </p>
               </div>
               {/* Inline buttons */}
               <div className="space-y-1.5 mt-2">
                 <button className="w-full text-xs py-2 px-3 bg-green-50 text-green-700 border border-green-200 rounded-lg font-medium">
-                  ✅ Confirm session
+                  {t('landingConfirm.hero.mockBtnConfirm')}
                 </button>
                 <button className="w-full text-xs py-2 px-3 bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-lg font-medium">
-                  🔄 Request reschedule
+                  {t('landingConfirm.hero.mockBtnReschedule')}
                 </button>
                 <button className="w-full text-xs py-2 px-3 bg-gray-50 text-gray-600 border border-gray-200 rounded-lg font-medium">
-                  🆓 Release slot
+                  {t('landingConfirm.hero.mockBtnRelease')}
                 </button>
               </div>
             </div>

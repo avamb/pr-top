@@ -2149,7 +2149,17 @@
     "hero": {
       "headline": "Cero Ausencias. Clientes Satisfechos.",
       "subheadline": "Recordatorios de sesión automáticos por Telegram — tus clientes confirman, reprograman o cancelan con un toque.",
-      "ctaBtn": "Prueba Gratis"
+      "ctaBtn": "Prueba Gratis",
+      "badge": "Recordatorios de sesión por Telegram",
+      "trialNote": "7 días gratis · Sin tarjeta de crédito · Cancela cuando quieras",
+      "mockBotName": "PR-TOP Recordatorio",
+      "mockBotType": "bot",
+      "mockMsgTitle": "Recordatorio de sesión",
+      "mockMsgTime": "Mañana a las 15:00",
+      "mockMsgTherapist": "con la Dra. María Ivanova",
+      "mockBtnConfirm": "✅ Confirmar sesión",
+      "mockBtnReschedule": "🔄 Pedir cambio de horario",
+      "mockBtnRelease": "🆓 Liberar el turno"
     },
     "pain": {
       "title": "¿Te suena familiar?",
@@ -2167,11 +2177,26 @@
       "step2Title": "Los recordatorios se envían solos",
       "step2Body": "Tu cliente recibe un mensaje en Telegram el día anterior y 2 horas antes de la sesión.",
       "step3Title": "Un toque para confirmar",
-      "step3Body": "El cliente toca ✅ para confirmar, 🔄 para pedir un cambio o 🆓 para liberar el hueco. Ves la respuesta al instante."
+      "step3Body": "El cliente toca ✅ para confirmar, 🔄 para pedir un cambio o 🆓 para liberar el hueco. Ves la respuesta al instante.",
+      "stepLabel": "Paso"
     },
     "demo": {
       "title": "Lo Que Ve Tu Cliente",
-      "caption": "Un mensaje claro y sencillo en Telegram — sin apps nuevas, sin contraseñas."
+      "caption": "Un mensaje claro y sencillo en Telegram — sin apps nuevas, sin contraseñas.",
+      "feat1": "Funciona en Telegram sin configuración",
+      "feat2": "El cliente no necesita apps adicionales",
+      "feat3": "El tablero se actualiza al instante",
+      "mockBotName": "PR-TOP Remind",
+      "mockBotType": "bot",
+      "mockMsgTitle": "Recordatorio de sesión",
+      "mockMsgDate": "Mañana · Jue, 29 may.",
+      "mockMsgTime": "15:00 → 16:00",
+      "mockMsgTherapist": "Dra. María Ivanova",
+      "mockBtnConfirm": "✅ Confirmar sesión",
+      "mockBtnReschedule": "🔄 Pedir cambio",
+      "mockBtnRelease": "🆓 Liberar turno",
+      "mockClientReply": "✅ Confirmar sesión",
+      "mockBotReply": "🎉 ¡Hasta mañana! Tu terapeuta ha sido notificado."
     },
     "price": {
       "title": "Un Solo Plan. Sin Sorpresas.",
@@ -2189,7 +2214,8 @@
       "notItem2": "Biblioteca de ejercicios",
       "notItem3": "Consultas en lenguaje natural",
       "ctaBtn": "Empezar 7 días gratis",
-      "upgradeNote": "¿Necesitas más? Mejora a Pro cuando quieras."
+      "upgradeNote": "¿Necesitas más? Mejora a Pro cuando quieras.",
+      "planBadge": "Plan Confirm"
     },
     "faq": {
       "title": "Preguntas Frecuentes",
@@ -2223,6 +2249,8 @@
       "submitting": "Creando cuenta...",
       "orLogin": "¿Ya tienes cuenta?",
       "loginLink": "Iniciar sesión",
+      "privacyLink": "Política de privacidad",
+      "termsLink": "Términos",
       "errors": {
         "required": "Este campo es obligatorio",
         "invalidEmail": "Por favor, introduce un email válido",

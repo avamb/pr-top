@@ -388,9 +388,9 @@ export default function ConfirmSignupForm({ formRef, defaultLanguage = 'en' }) {
                 />
                 <span className="text-xs text-secondary leading-relaxed">
                   {t('landingConfirm.signup.consentPrivacy')}{' '}
-                  <Link to="/privacy" target="_blank" className="text-primary hover:underline">Privacy Policy</Link>
+                  <Link to="/privacy" target="_blank" className="text-primary hover:underline">{t('landingConfirm.signup.privacyLink')}</Link>
                   {' & '}
-                  <Link to="/terms" target="_blank" className="text-primary hover:underline">Terms</Link>
+                  <Link to="/terms" target="_blank" className="text-primary hover:underline">{t('landingConfirm.signup.termsLink')}</Link>
                   . <span className="text-error">*</span>
                 </span>
               </label>

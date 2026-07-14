@@ -41,8 +41,8 @@ export default function ConfirmDemo() {
               <div className="bg-[#232e3c] px-4 py-3 flex items-center gap-3 border-b border-white/5">
                 <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-white text-sm font-bold">R</div>
                 <div>
-                  <div className="text-white text-sm font-semibold">PR-TOP Remind</div>
-                  <div className="text-white/50 text-xs">bot</div>
+                  <div className="text-white text-sm font-semibold">{t('landingConfirm.demo.mockBotName')}</div>
+                  <div className="text-white/50 text-xs">{t('landingConfirm.demo.mockBotType')}</div>
                 </div>
               </div>
 
@@ -52,10 +52,10 @@ export default function ConfirmDemo() {
                 <div className="flex justify-start">
                   <div className="bg-[#182533] rounded-2xl rounded-tl-sm max-w-[85%] px-3 py-2.5">
                     <p className="text-white/90 text-sm leading-relaxed">
-                      📅 <strong className="text-white">Session reminder</strong><br />
-                      <span className="text-white/70 text-xs">Tomorrow · Thu, May 29</span><br />
-                      <span className="text-primary text-xs font-medium">3:00 PM → 4:00 PM</span><br />
-                      <span className="text-white/60 text-xs">Dr. Maria Ivanova</span>
+                      📅 <strong className="text-white">{t('landingConfirm.demo.mockMsgTitle')}</strong><br />
+                      <span className="text-white/70 text-xs">{t('landingConfirm.demo.mockMsgDate')}</span><br />
+                      <span className="text-primary text-xs font-medium">{t('landingConfirm.demo.mockMsgTime')}</span><br />
+                      <span className="text-white/60 text-xs">{t('landingConfirm.demo.mockMsgTherapist')}</span>
                     </p>
                     <p className="text-white/50 text-[10px] text-right mt-1.5">3:47 PM ✓✓</p>
                   </div>
@@ -63,21 +63,21 @@ export default function ConfirmDemo() {
 
                 {/* Inline keyboard */}
                 <div className="space-y-1.5 px-1">
-                  <button className="w-full bg-[#2b5278] hover:bg-[#3a6898] text-white text-sm py-2.5 px-4 rounded-xl font-medium transition-colors text-left flex items-center gap-2">
-                    <span>✅</span> Confirm session
+                  <button className="w-full bg-[#2b5278] hover:bg-[#3a6898] text-white text-sm py-2.5 px-4 rounded-xl font-medium transition-colors text-left">
+                    {t('landingConfirm.demo.mockBtnConfirm')}
                   </button>
-                  <button className="w-full bg-[#2b5278] hover:bg-[#3a6898] text-white text-sm py-2.5 px-4 rounded-xl font-medium transition-colors text-left flex items-center gap-2">
-                    <span>🔄</span> Request reschedule
+                  <button className="w-full bg-[#2b5278] hover:bg-[#3a6898] text-white text-sm py-2.5 px-4 rounded-xl font-medium transition-colors text-left">
+                    {t('landingConfirm.demo.mockBtnReschedule')}
                   </button>
-                  <button className="w-full bg-[#2b5278] hover:bg-[#3a6898] text-white text-sm py-2.5 px-4 rounded-xl font-medium transition-colors text-left flex items-center gap-2">
-                    <span>🆓</span> Release slot
+                  <button className="w-full bg-[#2b5278] hover:bg-[#3a6898] text-white text-sm py-2.5 px-4 rounded-xl font-medium transition-colors text-left">
+                    {t('landingConfirm.demo.mockBtnRelease')}
                   </button>
                 </div>
 
                 {/* Client reply (after confirm tap) */}
                 <div className="flex justify-end">
                   <div className="bg-[#2b5278] rounded-2xl rounded-tr-sm max-w-[80%] px-3 py-2">
-                    <p className="text-white/90 text-sm">✅ Confirm session</p>
+                    <p className="text-white/90 text-sm">{t('landingConfirm.demo.mockClientReply')}</p>
                     <p className="text-white/50 text-[10px] text-right mt-1">3:48 PM ✓✓</p>
                   </div>
                 </div>
@@ -86,7 +86,7 @@ export default function ConfirmDemo() {
                 <div className="flex justify-start">
                   <div className="bg-[#182533] rounded-2xl rounded-tl-sm max-w-[85%] px-3 py-2.5">
                     <p className="text-white/90 text-sm">
-                      🎉 Great, see you tomorrow! Your therapist has been notified.
+                      {t('landingConfirm.demo.mockBotReply')}
                     </p>
                     <p className="text-white/50 text-[10px] text-right mt-1.5">3:48 PM ✓</p>
                   </div>
@@ -100,15 +100,15 @@ export default function ConfirmDemo() {
         <div className="mt-10 flex flex-wrap justify-center gap-4 text-sm text-secondary">
           <span className="flex items-center gap-1.5">
             <svg className="w-4 h-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-            Works in existing Telegram
+            {t('landingConfirm.demo.feat1')}
           </span>
           <span className="flex items-center gap-1.5">
             <svg className="w-4 h-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-            No extra apps for clients
+            {t('landingConfirm.demo.feat2')}
           </span>
           <span className="flex items-center gap-1.5">
             <svg className="w-4 h-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-            Instant dashboard update
+            {t('landingConfirm.demo.feat3')}
           </span>
         </div>
       </div>

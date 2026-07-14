@@ -48,7 +48,7 @@ export default function ConfirmPriceCard({ onCtaClick }) {
             {/* Header */}
             <div className="bg-primary px-8 py-8 text-white text-center">
               <div className="inline-block bg-white/20 text-white text-xs font-bold px-3 py-1 rounded-full mb-4">
-                Confirm Plan
+                {t('landingConfirm.price.planBadge')}
               </div>
               {/* Price */}
               <div className="flex items-baseline justify-center gap-1">
