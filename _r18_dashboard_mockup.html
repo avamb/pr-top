@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PR-TOP Dashboard — Demo</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --primary: #1F8A83;
+    --primary-dark: #163A43;
+    --accent: #A8C9BE;
+    --bg: #F4F7F6;
+    --surface: #FFFFFF;
+    --sidebar-bg: #ECE6DD;
+    --text: #163A43;
+    --text-muted: #6B8A83;
+    --border: #D9E2E0;
+    --green: #10B981;
+    --amber: #F59E0B;
+    --blue: #3B82F6;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    width: 1280px;
+    height: 800px;
+  }
+
+  .app {
+    display: flex;
+    height: 100vh;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 220px;
+    background: var(--primary-dark);
+    color: white;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    padding: 0;
+  }
+
+  .sidebar-logo {
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+
+  .logo-text {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: white;
+  }
+
+  .logo-sub {
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    margin-top: 2px;
+  }
+
+  .sidebar-nav {
+    padding: 12px 0;
+    flex: 1;
+  }
+
+  .nav-section {
+    padding: 8px 16px 4px;
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.35);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 20px;
+    cursor: pointer;
+    font-size: 13.5px;
+    color: rgba(255,255,255,0.7);
+    border-left: 3px solid transparent;
+    transition: all 0.15s;
+  }
+
+  .nav-item.active {
+    color: white;
+    background: rgba(255,255,255,0.1);
+    border-left-color: var(--accent);
+  }
+
+  .nav-item .icon {
+    width: 16px;
+    height: 16px;
+    opacity: 0.8;
+    flex-shrink: 0;
+  }
+
+  .sidebar-footer {
+    padding: 16px 20px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    font-size: 12px;
+    color: rgba(255,255,255,0.5);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .avatar-sm {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+    flex-shrink: 0;
+  }
+
+  /* ── Main area ── */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  /* Top bar */
+  .topbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 28px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .topbar-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .badge {
+    background: var(--primary);
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 12px;
+  }
+
+  .btn-primary {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Content */
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 28px;
+  }
+
+  /* Stats row */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stat-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--primary);
+    border-radius: 0 0 12px 12px;
+    opacity: 0.5;
+  }
+
+  .stat-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .stat-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .stat-icon {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 36px;
+    height: 36px;
+    background: var(--bg);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Two-column layout */
+  .columns {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 20px;
+  }
+
+  /* Client list */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .card-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .card-action {
+    font-size: 12px;
+    color: var(--primary);
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .client-row {
+    display: flex;
+    align-items: center;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    gap: 12px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .client-row:hover {
+    background: var(--bg);
+  }
+
+  .client-row:last-child {
+    border-bottom: none;
+  }
+
+  .client-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: white;
+    flex-shrink: 0;
+  }
+
+  .client-info {
+    flex: 1;
+  }
+
+  .client-name {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+
+  .client-meta {
+    font-size: 11.5px;
+    color: var(--text-muted);
+  }
+
+  .client-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .dot-green { background: var(--green); }
+  .dot-amber { background: var(--amber); }
+  .dot-muted { background: var(--border); }
+
+  .session-badge {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    background: var(--bg);
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+
+  /* Right sidebar */
+  .right-col {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* Activity feed */
+  .activity-item {
+    display: flex;
+    gap: 10px;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .activity-item:last-child {
+    border-bottom: none;
+  }
+
+  .activity-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--primary);
+    margin-top: 5px;
+    flex-shrink: 0;
+  }
+
+  .activity-text {
+    font-size: 12.5px;
+    color: var(--text);
+    line-height: 1.4;
+  }
+
+  .activity-time {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* Upcoming */
+  .upcoming-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .upcoming-item:last-child {
+    border-bottom: none;
+  }
+
+  .upcoming-time {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--primary);
+    min-width: 44px;
+  }
+
+  .upcoming-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .upcoming-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* Telegram badge */
+  .tg-badge {
+    background: #2CA5E0;
+    color: white;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  /* Search bar */
+  .search-bar {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 220px;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-text">PR-TOP</div>
+      <div class="logo-sub">Therapist workspace</div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section">Main</div>
+      <div class="nav-item active">
+        <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="white" stroke-width="1.5">
+          <rect x="1" y="1" width="6" height="6" rx="1.5"/>
+          <rect x="9" y="1" width="6" height="6" rx="1.5"/>
+          <rect x="1" y="9" width="6" height="6" rx="1.5"/>
+          <rect x="9" y="9" width="6" height="6" rx="1.5"/>
+        </svg>
+        Dashboard
+      </div>
+      <div class="nav-item">
+        <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="8" cy="5" r="3"/>
+          <path d="M2 13.5c0-3.31 2.69-6 6-6s6 2.69 6 6"/>
+        </svg>
+        Clients
+      </div>
+      <div class="nav-item">
+        <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M8 2v4l2.5 1.5"/>
+          <circle cx="8" cy="8" r="6"/>
+        </svg>
+        Sessions
+      </div>
+      <div class="nav-section">Tools</div>
+      <div class="nav-item">
+        <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M3 3h10M3 7h6M3 11h8"/>
+        </svg>
+        Exercises
+      </div>
+      <div class="nav-item">
+        <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M2 12L8 6l3 3 5-5"/>
+        </svg>
+        Analytics
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="avatar-sm">DT</div>
+      <div>
+        <div style="font-size:12px;color:white;font-weight:500;">Dr. Demo</div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.4)">demo@pr-top.com</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">Dashboard</div>
+      <div class="topbar-right">
+        <div class="search-bar">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="6" cy="6" r="4"/><path d="M10 10l2.5 2.5"/>
+          </svg>
+          Search clients…
+        </div>
+        <span class="badge">Trial</span>
+        <button class="btn-primary">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="white" stroke-width="2">
+            <path d="M7 2v10M2 7h10"/>
+          </svg>
+          Add client
+        </button>
+      </div>
+    </div>
+
+    <div class="content">
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Active clients</div>
+          <div class="stat-value">5</div>
+          <div class="stat-sub">2 new this month</div>
+          <div class="stat-icon">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#1F8A83" stroke-width="1.5">
+              <circle cx="9" cy="6" r="3.5"/>
+              <path d="M2 16c0-3.87 3.13-7 7-7s7 3.13 7 7"/>
+            </svg>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Sessions this week</div>
+          <div class="stat-value">8</div>
+          <div class="stat-sub">3 with transcripts</div>
+          <div class="stat-icon">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#1F8A83" stroke-width="1.5">
+              <circle cx="9" cy="9" r="7"/>
+              <path d="M9 5v4l2.5 1.5"/>
+            </svg>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Diary entries</div>
+          <div class="stat-value">23</div>
+          <div class="stat-sub">↑ 8 since last week</div>
+          <div class="stat-icon">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#1F8A83" stroke-width="1.5">
+              <path d="M4 3h10a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V4a1 1 0 011-1z"/>
+              <path d="M6 7h6M6 10h4"/>
+            </svg>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">SOS alerts</div>
+          <div class="stat-value" style="color:#10B981;">0</div>
+          <div class="stat-sub">All clients stable</div>
+          <div class="stat-icon">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#10B981" stroke-width="1.5">
+              <path d="M9 2l1.5 4.5H15l-3.75 2.75 1.5 4.5L9 11.25 5.25 13.75l1.5-4.5L3 6.5h4.5z"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Two-column layout -->
+      <div class="columns">
+        <!-- Client list -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Active clients</span>
+            <span class="card-action">View all →</span>
+          </div>
+          <div class="client-row">
+            <div class="client-avatar" style="background:#1F8A83;">AM</div>
+            <div class="client-info">
+              <div class="client-name">Anna M.</div>
+              <div class="client-meta">CBT · Tuesdays · Next session Jul 15</div>
+            </div>
+            <div class="client-status">
+              <div class="dot dot-green"></div>
+              <span class="session-badge">Session #12</span>
+              <span class="tg-badge">TG</span>
+            </div>
+          </div>
+          <div class="client-row">
+            <div class="client-avatar" style="background:#163A43;">TK</div>
+            <div class="client-info">
+              <div class="client-name">Thomas K.</div>
+              <div class="client-meta">Burnout recovery · Bi-weekly · Next Jul 17</div>
+            </div>
+            <div class="client-status">
+              <div class="dot dot-green"></div>
+              <span class="session-badge">Session #7</span>
+              <span class="tg-badge">TG</span>
+            </div>
+          </div>
+          <div class="client-row">
+            <div class="client-avatar" style="background:#A8C9BE;color:#163A43;">MS</div>
+            <div class="client-info">
+              <div class="client-name">Maria S.</div>
+              <div class="client-meta">Grief counselling · Weekly · Next Jul 16</div>
+            </div>
+            <div class="client-status">
+              <div class="dot dot-amber"></div>
+              <span class="session-badge">Session #5</span>
+            </div>
+          </div>
+          <div class="client-row">
+            <div class="client-avatar" style="background:#1F8A83;opacity:0.75;">LV</div>
+            <div class="client-info">
+              <div class="client-name">Lena V.</div>
+              <div class="client-meta">Relationships · New client · First session</div>
+            </div>
+            <div class="client-status">
+              <div class="dot dot-muted"></div>
+              <span class="session-badge">Session #1</span>
+              <span class="tg-badge">TG</span>
+            </div>
+          </div>
+          <div class="client-row">
+            <div class="client-avatar" style="background:#163A43;opacity:0.8;">DR</div>
+            <div class="client-info">
+              <div class="client-name">David R.</div>
+              <div class="client-meta">Stress management · Monthly · Good progress</div>
+            </div>
+            <div class="client-status">
+              <div class="dot dot-green"></div>
+              <span class="session-badge">Session #9</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right column -->
+        <div class="right-col">
+          <!-- Upcoming -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Upcoming sessions</span>
+            </div>
+            <div class="upcoming-item">
+              <div class="upcoming-time">Tue 14:00</div>
+              <div>
+                <div class="upcoming-name">Anna M.</div>
+                <div class="upcoming-sub">CBT session #12</div>
+              </div>
+            </div>
+            <div class="upcoming-item">
+              <div class="upcoming-time">Wed 11:30</div>
+              <div>
+                <div class="upcoming-name">Maria S.</div>
+                <div class="upcoming-sub">Session #5 — grief work</div>
+              </div>
+            </div>
+            <div class="upcoming-item">
+              <div class="upcoming-time">Thu 10:00</div>
+              <div>
+                <div class="upcoming-name">Thomas K.</div>
+                <div class="upcoming-sub">Burnout — bi-weekly</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Activity feed -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Recent activity</span>
+            </div>
+            <div class="activity-item">
+              <div class="activity-dot" style="background:var(--green)"></div>
+              <div>
+                <div class="activity-text"><strong>Anna M.</strong> sent a diary entry</div>
+                <div class="activity-time">Today, 08:42</div>
+              </div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-dot"></div>
+              <div>
+                <div class="activity-text">Session summary ready — <strong>Thomas K.</strong></div>
+                <div class="activity-time">Yesterday, 17:15</div>
+              </div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-dot" style="background:var(--amber)"></div>
+              <div>
+                <div class="activity-text"><strong>Maria S.</strong> completed exercise</div>
+                <div class="activity-time">Yesterday, 14:03</div>
+              </div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-dot"></div>
+              <div>
+                <div class="activity-text"><strong>Lena V.</strong> connected via Telegram</div>
+                <div class="activity-time">Jul 13, 09:21</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
