@@ -15642,3 +15642,43 @@ VERIFICATION:
 - git commit: 810846f
 
 Stats after session 208: #454 status: passing (454/457, 99.3%).
+
+================================================================
+Session 212 (2026-07-14) - Feature #459 PASSING (R11 tier card i18n)
+================================================================
+
+Assigned: #459 R11 — Pricing tier card localization (i18n for tiers feature bullets in Landing.jsx)
+
+IMPLEMENTATION:
+1. src/frontend/src/i18n/{en,ru,uk,es}.json
+   - Added landing.tierFeat nested object with 19 keys per locale:
+     clients3/10/30/Unlimited, sessions5/20/60/Unlimited, transcription,
+     exercisesBasic/Full/Custom, agreedProtocol, timeline,
+     dashboardBasic/Full, nlQuery, prioritySupport, analyticsExport
+   - RU/UK/ES: native-quality translations, not machine-generated
+   - agreedProtocol bullet reuses R4 terminology in each locale:
+     EN: "Agreed client protocol" / RU: "Согласованный протокол" /
+     UK: "Узгоджений протокол" / ES: "Protocolo acordado"
+
+2. src/frontend/src/pages/Landing.jsx
+   - Replaced 28 hardcoded English string literals in the tiers array
+     with t('landing.tierFeat.*') calls
+   - Prices ($19/$49/$99) and tier names (Trial/Basic/Pro/Premium)
+     left unchanged (product names/numbers, not translatable copy)
+   - grep confirms: 0 English bullet literals remain in tiers array
+
+VERIFICATION:
+- npm run build --prefix src/frontend: 92 prerendered pages, exit 0
+- grep dist/ru/index.html: 0 English bullet matches; Cyrillic confirmed
+- grep dist/uk/index.html: 0 English bullet matches; Cyrillic confirmed
+- grep dist/es/index.html: 0 English bullet matches; Spanish confirmed
+- dist/index.html: EN bullets all present
+- node _t_r9_qa.js: 76 passed, 0 failed
+- node _t_seo_i18n_audit.js: 15 passed, 0 failed
+- node _t_geo_audit.js: 18 passed, 0 failed
+- node _t_assistant_kb_audit.js: 79 passed, 0 failed
+- git commit: 407bd95
+
+Stats after session 212: #459 status: passing — 459/459 (100%) COMPLETE
+
+Stats after session 208: #454 status: passing (454/457, 99.3%).
