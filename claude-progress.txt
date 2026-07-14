@@ -16087,3 +16087,116 @@ Step 7 [HUMAN] (final image approval) is pending owner review — this is
 expected as the step is explicitly [HUMAN]-gated.
 
 Stats after session 218: #466 status: passing (465/468, 99.4%).
+
+================================================================
+Session 218 (2026-07-14) - Feature #468 PASSING (R20 task-first AI-link labels)
+================================================================
+
+Assigned: #468 R20 — Reformulate AI-links in footer/related without changing URLs or SEO meta
+
+IMPLEMENTATION:
+All changes in i18n only (src/frontend/src/i18n/{en,ru,uk,es}.json).
+URLs, href attrs, title/meta description/canonical: UNTOUCHED.
+
+Keys updated (all 4 locales):
+
+1. bestAiAssistants:
+   EN: "Best AI assistants for therapists" -> "Compare therapist tools"
+   RU: "Лучшие ИИ-ассистенты для терапевтов" -> "Сравнить инструменты терапевта"
+   UK: "Найкращі ШІ-асистенти для терапевтів" -> "Порівняти інструменти терапевта"
+   ES: "Mejores asistentes de IA para terapeutas" -> "Comparar herramientas para terapeutas"
+
+2. solAiSessionNotes:
+   EN: "AI session notes" -> "Session notes & transcription"
+   RU: "ИИ-заметки к сессиям" -> "Заметки и транскрипция сессий"
+   UK: "ШІ-нотатки до сесій" -> "Нотатки і транскрипція сесій"
+   ES: "Notas de sesión con IA" -> "Notas y transcripción de sesiones"
+
+3. solAiPracticeManagement:
+   EN: "AI practice management" -> "Practice efficiency tools"
+   RU: "ИИ для практики" -> "Инструменты для практики"
+   UK: "ШІ для практики" -> "Інструменти для практики"
+   ES: "Gestión de práctica con IA" -> "Herramientas para la consulta"
+
+4. solTherapyDocumentation (RU/UK/ES had AI prefix, EN was already task-first):
+   RU: "ИИ для документации" -> "Документация сессий"
+   UK: "ШІ для документації" -> "Документація сесій"
+   ES: "Documentación con IA" -> "Documentación de sesiones"
+
+5. solTherapistAssistant:
+   EN: "AI therapist assistant" -> "Your assistant between sessions"
+   RU: "ИИ-ассистент терапевта" -> "Ассистент между сессиями"
+   UK: "ШІ-асистент терапевта" -> "Асистент між сесіями"
+   ES: "Asistente IA para terapeutas" -> "Tu asistente entre sesiones"
+
+6. faqCompareLink (FAQ section link to best-ai-assistant page):
+   EN: "See our comparison of AI assistants for therapists" -> "See our comparison of therapist tools"
+   RU: "Смотрите наше сравнение ИИ-ассистентов для терапевтов" -> "Смотрите наше сравнение инструментов для терапевтов"
+   UK: "Дивіться наше порівняння ШІ-асистентів для терапевтів" -> "Дивіться наше порівняння інструментів для терапевтів"
+   ES: "Vea nuestra comparativa de asistentes de IA para terapeutas" -> "Vea nuestra comparativa de herramientas para terapeutas"
+
+VERIFICATION:
+- npm run build (via run-build.js): 92 prerendered pages, exit 0
+- SEO titles on target pages unchanged (verified /ai-session-notes-for-therapists, /therapist-ai-assistant)
+- New labels confirmed in dist/index.html: "Compare therapist tools" x2, "Your assistant between sessions" x2
+- Old AI-first labels absent from footer/related in EN dist
+- node _t_assistant_kb_audit.js: 79 passed, 0 failed
+- node _t_seo_i18n_audit.js: 15 passed, 0 failed
+- node _t_geo_audit.js: 18 passed, 0 failed
+- git commit: 3c9d19f
+
+Stats after session 218: #468 status: passing (468/468, 100%).
+BACKLOG COMPLETE!
+
+================================================================
+Session 219 (2026-07-14) - Feature #470 PASSING (R21b remove remaining end-to-end)
+================================================================
+
+Assigned: #470 R21b — Убрать оставшееся «end-to-end» (хвост R12)
+
+PROBLEM:
+howPrtopTitle H2 in TherapyDocumentationAi.jsx in all 4 locales still contained
+"end-to-end" equivalents:
+- EN: "...handles therapy documentation end-to-end"
+- RU: "...от начала до конца" (literally "from beginning to end")
+- UK: "...від початку до кінця" (same)
+- ES: "...de extremo a extremo" (exact E2EE encryption Spanish equivalent)
+
+The ES one was worst — it re-introduced the exact phrase used for E2E encryption
+claims that R12 removed, causing confusion in the security story.
+
+IMPLEMENTATION:
+1. src/frontend/src/pages/TherapyDocumentationAi.jsx
+   - EN: 'How PR-TOP handles therapy documentation end-to-end'
+     → 'How PR-TOP handles therapy documentation from session to client record'
+   - RU: 'Как PR-TOP ведёт документацию терапии от начала до конца'
+     → 'Как PR-TOP ведёт документацию терапии: от сессии до карты клиента'
+   - UK: 'Як PR-TOP веде документацію терапії від початку до кінця'
+     → 'Як PR-TOP веде документацію терапії: від сесії до картки клієнта'
+   - ES: 'Cómo gestiona PR-TOP la documentación de terapia de extremo a extremo'
+     → 'Cómo gestiona PR-TOP la documentación de terapia, de la sesión al expediente'
+   - JSX comment: "end-to-end documentation" → "session-to-record coverage"
+
+WRITING MANDATE OBSERVED:
+- Kept "therapy documentation" keyword in all 4 locales ✓
+- "from session to client record" is meaningful — it describes PR-TOP covering
+  both the session note and the between-session diary (the full client record)
+- Meta tags (seoTitle, seoDescription) are UNTOUCHED ✓
+- Native writing craft applied, not mechanical replacement ✓
+
+VERIFICATION:
+- grep src/frontend/src for "end-to-end" (case-insensitive): 0 hits ✓
+- All 4 locale dist pages confirmed: new H2 text present ✓
+- Meta titles unchanged: "Therapy documentation AI — guide for therapists (2026)" ✓
+- npm run build (via run-build.js): 92 prerendered pages, exit 0 ✓
+- _t_geo_audit.js: 18 passed, 0 failed ✓
+- _t_assistant_kb_audit.js: 79 passed, 0 failed ✓
+- _t_seo_i18n_audit.js: 15 passed, 0 failed ✓
+- _t_r9_qa.js: all R1–R8 checks green ✓
+- FAQ JSON-LD and direct-answer block intact ✓
+- git commit: f50d9fd
+
+No KB doc update needed — no existing docs/assistant-kb/ file for this page.
+The H2 heading is page-internal copy, not a KB-documented capability.
+
+Stats after session 219: #470 status: passing (469/472, 99.4%).
