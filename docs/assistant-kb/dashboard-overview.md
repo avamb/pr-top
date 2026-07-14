@@ -12,8 +12,9 @@ is missed.
 ## Prerequisites
 
 - A signed-in therapist account. Trial, Basic, Pro, and Premium tiers
-  all show the same dashboard layout, but some cards (analytics,
-  natural-language queries, supervision share) are gated by plan.
+  all show the same dashboard layout. Natural-language queries are
+  available on Pro and Premium only <!-- gate: nl-queries-pro -->; the
+  other dashboard cards work the same on every plan.
 - At least one client on your roster. A brand-new account with zero
   clients shows a large empty-state card instead of the activity feed;
   everything else on this page assumes you have working data.
@@ -76,10 +77,12 @@ clients and scales linearly beyond that.
 - **Very large rosters.** The activity feed paginates at 50 rows per
   page. Use the search box in the top-right to filter by client name
   before scrolling deeper.
-- **Plan downgrades.** If you downgrade from Pro or Premium to Basic
-  mid-cycle, the mood-trend strip stays visible until the end of the
-  billing period, then flips to a locked card. Your existing data is
-  never deleted — only the read view is gated.
+- **Plan downgrades.** A downgrade takes effect at the end of the
+  current billing period — you keep everything until then. Your
+  existing data is never deleted. Afterwards, natural-language and
+  voice queries stop responding because they are
+  Pro and Premium only <!-- gate: nl-queries-pro -->; the dashboard
+  layout itself does not change.
 - **Language switching.** The language you chose on first login can be
   changed under Settings. All dashboard labels re-render immediately;
   historical numbers do not change.
@@ -94,7 +97,7 @@ clients and scales linearly beyond that.
   diary entry is edited by the client after it was already delivered.
   The dashboard shows both the original and the edit; the client page
   timeline consolidates them.
-- **Mood-trend strip missing on Pro.** The strip needs at least three
+- **Mood-trend strip missing for a client.** The strip needs at least three
   diary entries with a mood score in the last 30 days for a given
   client. Clients with only text/voice diary and no explicit mood
   ratings are excluded.

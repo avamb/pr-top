@@ -274,3 +274,11 @@ Split into four independent features R21a–R21d, ordered by priority. Common ru
 3. Positive test: annotate a real claim with its gate id — audit passes.
 4. Full audit suite green (`_t_assistant_kb_audit.js`, `_t_r9_qa.js`, `_t_geo_audit.js`, `_t_seo_i18n_audit.js`, `_t_link_graph_w6.js`); `npm run docs:assistant:check` reports no drift.
 5. The §4 copywriting mandate and truth-before-copy note in this doc gain one line: "tier restrictions may only be stated with a `gate:` annotation backed by plan-gates.json".
+
+### R23b — P2: Harden the tier-claim detector (gaps found in owner review of R23)
+**Context (verified 2026-07-14):** the R23 detector works (negative test fails correctly), but three false claims slipped past it in the same commit's rewrite of `dashboard-overview.md` because (a) `gated` and `blocked` are not in `GATE_WORD_RE`, and (b) md scanning is line-based while wrapped sentences span lines ("downgrade from Pro or Premium to Basic … [next line] … flips to a locked card"). The owner corrected the file directly; the detector must catch this class next time.
+**Description:** In `_t_assistant_kb_audit.js` section 12i: add `\bgated\b` and `\bblocked\b` to `GATE_WORD_RE`; for md files, scan sentence-wise over unwrapped paragraphs (join soft-wrapped lines within a paragraph, then split on sentence boundaries, mirroring the faq-seed.json path) instead of line-by-line — an annotation anywhere in the paragraph covers it. Backfill any newly-flagged legitimate claims with `gate:` annotations; anything flagged that has no code anchor is a myth and must be reworded instead.
+**Acceptance steps:**
+1. Regression fixture demonstrated in the PR: the exact pre-fix `dashboard-overview.md` "Plan downgrades" paragraph, placed in a scratch KB file, makes the audit FAIL; remove fixture.
+2. Zero unannotated claims across `docs/assistant-kb/` with the widened detector; every annotation resolves to a plan-gates.json id whose anchor matches code.
+3. Full audit suite green.
