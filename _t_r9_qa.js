@@ -301,6 +301,61 @@ for (const locale of LOCALES) {
 }
 
 // ============================================================
+console.log('\n=== R21d QA: Screenshot freshness — PNGs must be newer than i18n/Landing ===');
+
+const skipFreshness = process.argv.includes('--skip-screenshot-freshness');
+
+if (skipFreshness) {
+  console.log('  SKIP  Screenshot freshness check bypassed (--skip-screenshot-freshness)');
+} else {
+  const screensDir = path.join(__dirname, 'docs', 'seo', 'reports', 'repositioning-screens');
+  const i18nDir = path.join(__dirname, 'src', 'frontend', 'src', 'i18n');
+  const landingJsx = path.join(__dirname, 'src', 'frontend', 'src', 'pages', 'Landing.jsx');
+
+  // Find the newest mtime among all i18n/*.json files and Landing.jsx
+  const srcFiles = [];
+  if (fs.existsSync(i18nDir)) {
+    fs.readdirSync(i18nDir)
+      .filter(f => f.endsWith('.json'))
+      .forEach(f => srcFiles.push(path.join(i18nDir, f)));
+  }
+  if (fs.existsSync(landingJsx)) {
+    srcFiles.push(landingJsx);
+  }
+
+  let newestSrcMs = 0;
+  let newestSrcFile = '(none)';
+  srcFiles.forEach(f => {
+    const ms = fs.statSync(f).mtimeMs;
+    if (ms > newestSrcMs) {
+      newestSrcMs = ms;
+      newestSrcFile = path.basename(f);
+    }
+  });
+
+  if (!fs.existsSync(screensDir)) {
+    assert(false,
+      `R21d: repositioning-screens/ directory exists — run: node _t_screenshots.js`);
+  } else {
+    const pngs = fs.readdirSync(screensDir).filter(f => f.endsWith('.png'));
+    if (pngs.length === 0) {
+      assert(false,
+        `R21d: repositioning-screens/ contains at least one PNG — run: node _t_screenshots.js`);
+    } else {
+      pngs.forEach(png => {
+        const pngMs = fs.statSync(path.join(screensDir, png)).mtimeMs;
+        const isFresh = pngMs >= newestSrcMs;
+        assert(isFresh,
+          `R21d: ${png} is fresh ` +
+          `(png mtime: ${new Date(pngMs).toISOString().slice(0, 19)}, ` +
+          `newest src: ${newestSrcFile} at ${new Date(newestSrcMs).toISOString().slice(0, 19)}) ` +
+          `— run: node _t_screenshots.js`);
+      });
+    }
+  }
+}
+
+// ============================================================
 // Summary
 console.log('\n============================================================');
 console.log(`R9 QA AUDIT: ${passed} passed, ${failed} failed`);

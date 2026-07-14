@@ -70,6 +70,7 @@ Paraphrase encouraged, but the four load-bearing nouns (diary, exercises, crisis
 - [ ] Page added to `src/frontend/src/seo/routes.mjs` (title + summary + priority + changefreq) — this auto-registers it with sitemap.xml, prerender, and llms.txt
 - [ ] `npm run build --prefix src/frontend` succeeds and prerenders the new route
 - [ ] `node _t_geo_audit.js` passes with the new page included
+- [ ] **Screenshot freshness:** if you changed any landing copy (i18n/*.json or Landing.jsx), re-take repositioning screenshots before merging — run `node _t_screenshots.js`, commit the 4 PNGs, then verify `node _t_r9_qa.js` passes without `--skip-screenshot-freshness`
 - [ ] **Human review of copy** completed before merging `dev` → `prod` (clinical-adjacent niche: tone + claims must be human-vetted)
 
 ---
