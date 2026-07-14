@@ -255,3 +255,22 @@ Split into four independent features R21a–R21d, ordered by priority. Common ru
 **Acceptance steps:**
 1. Demonstrate in the PR: change a tier bullet key in `en.json`, run the audit — it fails on drift; run `npm run docs:assistant`, audit passes; revert the demo change.
 2. Checklist updated; full audit suite green.
+
+---
+
+## R23 — P1: Plan-gating claims in the assistant KB must be backed by code (anti-myth gate)
+
+**Context (verified 2026-07-14):** agents twice wrote plausible-sounding tier restrictions into `docs/assistant-kb/` that the code does not contain — "SOS delivery is Premium" (4 files), "supervision share requires Premium / a locked overlay / a supervisor account" (3 files), "Premium client handoff" (a feature that does not exist at all). All were corrected by the owner in commits fb7858a and 95e0d24 after code verification. The truth-before-copy mandate catches topics a feature explicitly names, but not background facts — this needs an automated gate.
+
+**Description:** Add a tier-claim verification section to `_t_assistant_kb_audit.js`:
+1. **Claim detector.** Scan every file under `docs/assistant-kb/` (md + `faq-seed.json`) for plan-gating language: case-insensitive matches of `(Premium|Pro|Basic|Trial)` within the same sentence as gating words (`only|requires|available on|gated|locked|upgrade|not available on|plan allows`). Tier names in *pricing enumerations* (reference/pricing.md tier tables) are exempt via an explicit path allowlist.
+2. **Gate registry.** Create `docs/assistant-kb/plan-gates.json` — the machine-readable list of REAL gates, each entry: `{ "id", "claim" (short human phrase), "code_ref" (repo-relative file), "anchor" (a regex that must match inside that file, e.g. the actual gating condition) }`. Seed it with the gates verified today: voice queries Pro/Premium (`src/backend/src/routes/bot.js`, anchor `['pro', 'premium'].includes(plan)`), NL-query upgrade path (`src/frontend/src/pages/ClientDetail.jsx`, anchor `required_plans`), per-plan client seat limit (`src/backend/src/routes/clients.js`, anchor `plan !== 'premium' && limit > 0`), session quotas and analytics-export gating (find and anchor the real checks the same way — verify in code first; if a gate cannot be found, it does not go into the registry).
+3. **Audit rule.** Every detected claim must reference a registry id via an inline HTML comment next to the claim (`<!-- gate: voice-queries-pro -->`) or the audit fails with the offending file/line. For every registry entry, the audit greps `code_ref` for `anchor` — if the anchor no longer matches (gate removed/renamed), the audit fails, forcing the KB and registry to be updated together with the code.
+4. **Backfill.** Annotate the legitimate tier statements currently in the KB (subscription-management.md quota/seat text, natural-language-queries.md, reference/pricing.md is path-exempt) with their gate ids; there must be zero unannotated claims at merge time.
+
+**Acceptance steps:**
+1. `docs/assistant-kb/plan-gates.json` exists; every entry's `code_ref` file exists and `anchor` matches (audit proves it).
+2. Negative test demonstrated in the PR: add a fake claim "Diary is Premium-only" to a KB file, run `node _t_assistant_kb_audit.js` — it fails naming the file and line; revert.
+3. Positive test: annotate a real claim with its gate id — audit passes.
+4. Full audit suite green (`_t_assistant_kb_audit.js`, `_t_r9_qa.js`, `_t_geo_audit.js`, `_t_seo_i18n_audit.js`, `_t_link_graph_w6.js`); `npm run docs:assistant:check` reports no drift.
+5. The §4 copywriting mandate and truth-before-copy note in this doc gain one line: "tier restrictions may only be stated with a `gate:` annotation backed by plan-gates.json".
