@@ -251,13 +251,47 @@
     "feature5Desc": "Dicte una observación breve entre citas — se transcribe y se adjunta al expediente del cliente de forma automática. Nada se pierde en el intervalo entre sesiones.",
     "feature6Title": "Un canal familiar para sus clientes — en sus propios términos",
     "feature6Desc": "Sus clientes llevan un diario, completan ejercicios y envían actualizaciones a través de un canal que ya conocen. Usted recibe un flujo estructurado — sin nuevas aplicaciones para ellos, sin ruido para usted. El canal es Telegram.",
+    "week": {
+      "heading": "Una semana en su consulta con PR-TOP",
+      "lead": "Cinco momentos que los terapeutas reconocen — y cómo el espacio de trabajo encaja en cada uno.",
+      "step1": {
+        "label": "Lunes por la mañana",
+        "title": "Entrar preparado",
+        "body": "Tiene seis clientes esta semana. Antes de la primera sesión abre PR-TOP: la última nota, las entradas del diario desde entonces y el ejercicio asignado. Entra sabiendo exactamente dónde lo dejó, incluso tras un descanso."
+      },
+      "step2": {
+        "label": "Después de la sesión",
+        "title": "Notas en cinco minutos",
+        "body": "Una sesión de 50 minutos termina. En vez de reconstruirla de memoria por la tarde, sube la grabación. Un borrador estructurado — temas, próximos pasos, citas clave — está listo para revisar. Corrige dos frases y confirma."
+      },
+      "step3": {
+        "label": "Miércoles al mediodía",
+        "title": "Un mensaje, sin fronteras difusas",
+        "body": "Un cliente envía una nota de voz al mediodía. Llega al diario seguro en PR-TOP, no a su teléfono personal. Lo lee cuando abre el panel. Sin WhatsApp. Sin fronteras difusas."
+      },
+      "step4": {
+        "label": "Jueves por la tarde",
+        "title": "El pensamiento que casi se escapa",
+        "body": "Una observación no quedó en las notas de sesión. Abre PR-TOP y dicta un apunte rápido. Se transcribe y se archiva bajo el cliente correcto automáticamente. Nada se pierde."
+      },
+      "step5": {
+        "label": "Viernes, fin de semana",
+        "title": "La semana queda en la consulta",
+        "body": "Cierra PR-TOP para el fin de semana. El horario laboral que configuró hace que el bot informe a los clientes de que está disponible el lunes. No se llevó la semana a casa — ni profesional ni emocionalmente."
+      }
+    },
     "burnoutTitle": "Creamos esto para que tenga más tiempo para usted",
     "burnoutText": "El agotamiento y la fatiga por compasión son una realidad de las profesiones de ayuda. Necesita tiempo para un descanso adecuado y recuperación. Nosotros nos encargamos de las tareas rutinarias, protegemos sus límites personales y liberamos tiempo para la vida.",
     "faqTitle": "Preguntas frecuentes",
     "faqQ1": "¿Quién puede leer mis notas y comunicaciones con clientes?",
     "faqA1": "Todos los datos confidenciales están cifrados a nivel de aplicación (AES-256). Nadie más que usted tiene acceso al contenido — incluyendo el equipo de soporte y desarrollo del servicio.",
-    "faqQ2": "¿Hay un botón SOS para que los clientes me contacten urgentemente?",
-    "faqA2": "Sí. El sistema integrado de alertas SOS permite a los clientes enviar una señal de emergencia directamente a través del bot de Telegram. Recibirá una notificación instantánea y podrá responder de inmediato.",
+    "faqQ2": "¿Qué sucede si un cliente necesita contactarme entre sesiones?",
+    "faqA2": "Durante el proceso de incorporación, usted y cada cliente acuerdan un protocolo de respuesta concreto: una señal específica en el bot de Telegram, su significado y el tiempo de respuesta esperado. Cuando el cliente envía esa señal, usted recibe una notificación a través de sus canales configurados (Telegram, correo electrónico o ambos). Las horas de silencio, el retraso de escalación y los umbrales de respuesta los define usted. Sin enrutamiento automático a servicios externos: todas las decisiones permanecen con usted.",
+    "protocolTitle": "Protocolo acordado, no un botón de alarma",
+    "protocolDesc": "PR-TOP no gestiona una línea de crisis ni contacta servicios de emergencia. En cambio, cada escalación entre sesiones sigue un protocolo que usted y su cliente acuerdan juntos.",
+    "protocolPoint1": "Usted define la señal: qué envía el cliente y qué significa.",
+    "protocolPoint2": "La plataforma entrega la notificación al canal que usted elija: Telegram, correo electrónico o ambos.",
+    "protocolPoint3": "Los tiempos de respuesta, las horas de silencio y los umbrales de escalación los establece usted.",
     "faqQ3": "Tengo pocos clientes y me las arreglo sola. ¿Cómo puede ayudarme?",
     "faqA3": "Incluso con pocos clientes, el servicio se encarga de la rutina: transcripciones, notas, recordatorios. Obtiene más tiempo libre. Y a medida que crece su práctica — una infraestructura lista que escala con usted.",
     "faqQ4": "¿Hay funciones de recordatorios y mensajes para clientes?",

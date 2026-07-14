@@ -251,13 +251,47 @@
     "feature5Desc": "Voice a quick observation between appointments — it is transcribed and attached to the right client file automatically. Nothing slips through the gap between sessions.",
     "feature6Title": "A familiar channel for clients — on your terms",
     "feature6Desc": "Clients keep a diary, complete exercises, and send updates through a channel they already know. You receive a structured feed — no extra apps for them, no noise for you. The channel is Telegram.",
+    "week": {
+      "heading": "A week in your practice with PR-TOP",
+      "lead": "Five moments therapists recognize — and how the workspace fits into each one.",
+      "step1": {
+        "label": "Monday morning",
+        "title": "Walking in prepared",
+        "body": "You have six clients this week. Before your first session you open PR-TOP — last note, diary entries since then, the exercise you assigned. You walk in knowing exactly where you left off, even after a break."
+      },
+      "step2": {
+        "label": "After the session",
+        "title": "Notes in five minutes",
+        "body": "A 50-minute session ends. Instead of spending your evening reconstructing it from memory, you upload the recording. A structured draft — themes, next steps, key quotes — is ready to review. You adjust two sentences and confirm."
+      },
+      "step3": {
+        "label": "Wednesday, midday",
+        "title": "A message, without the blur",
+        "body": "A client sends a voice note at noon. It arrives in their secure diary feed in PR-TOP — not your personal phone. You read it when you open the dashboard. No crossed boundaries. No WhatsApp."
+      },
+      "step4": {
+        "label": "Thursday evening",
+        "title": "The thought that nearly slipped",
+        "body": "An observation didn't make it into the session notes. You open PR-TOP, voice a quick memo. It is transcribed and filed under the right client automatically. Nothing falls through the gap."
+      },
+      "step5": {
+        "label": "Friday, end of week",
+        "title": "The week stays at the office",
+        "body": "You close PR-TOP for the weekend. The working hours you set mean the bot tells clients you're available Monday. You did not carry the week home — professionally or emotionally."
+      }
+    },
     "burnoutTitle": "We built this so you have more time for yourself",
     "burnoutText": "Burnout and compassion fatigue are a reality of helping professions. You need time for proper rest and recovery. We take on the routine tasks, protect your personal boundaries, and free up time for life.",
     "faqTitle": "Frequently Asked Questions",
     "faqQ1": "Who can read my notes and client communications?",
     "faqA1": "All confidential data is encrypted at the application level (AES-256). No one but you has access to the content — including the service support and development team.",
-    "faqQ2": "Is there an SOS button for clients to reach me urgently?",
-    "faqA2": "Yes. The built-in SOS alert system lets clients send an emergency signal directly through the Telegram bot. You'll receive an instant notification and can respond promptly.",
+    "faqQ2": "What happens if a client needs to reach me between sessions?",
+    "faqA2": "During onboarding, you and each client agree on a specific response protocol — a designated signal in the Telegram bot, what it means, and the expected response window. When a client sends that signal, you receive a notification through your configured channels (Telegram, email, or both). Quiet-hour rules, escalation delay, and response thresholds are all set by you. No automated routing to external services — every decision stays with you.",
+    "protocolTitle": "Agreed protocol, not an alarm button",
+    "protocolDesc": "PR-TOP does not run a crisis line or contact emergency services. Instead, every between-session escalation follows a protocol you and your client agree on together.",
+    "protocolPoint1": "You define the signal — what the client sends and what it means.",
+    "protocolPoint2": "The platform delivers the notification to your chosen channel: Telegram, email, or both.",
+    "protocolPoint3": "Response timing, quiet hours, and escalation thresholds are all set by you.",
     "faqQ3": "I only have a few clients and manage fine on my own. How can this help?",
     "faqA3": "Even with a small caseload, the service handles the routine: transcriptions, notes, reminders. You get more free time. And as your practice grows — a ready infrastructure that scales with you.",
     "faqQ4": "Are there reminder and messaging features for clients?",

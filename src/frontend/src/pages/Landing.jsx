@@ -10,6 +10,7 @@ import PublicAssistantChatPanel from '../components/PublicAssistantChatPanel';
 import Seo from '../components/Seo';
 import useLocalePath from '../hooks/useLocalePath';
 import ControlSection from '../components/landing/ControlSection';
+import WeekInPracticeSection from '../components/landing/WeekInPracticeSection';
 
 /* ───────── Feature Highlights (icons only, text from i18n) ───────── */
 const highlightIcons = [
@@ -163,7 +164,7 @@ export default function Landing() {
         '5 sessions / month',
         'Transcription & summary',
         'Basic exercise library',
-        'SOS alerts',
+        'Agreed client protocol',
         'Client timeline',
         'Basic web dashboard',
       ],
@@ -178,7 +179,7 @@ export default function Landing() {
         '20 sessions / month',
         'Transcription & summary',
         'Full exercise library',
-        'SOS alerts',
+        'Agreed client protocol',
         'Client timeline',
         'Basic web dashboard',
       ],
@@ -194,7 +195,7 @@ export default function Landing() {
         'Transcription & summary',
         'Full + custom exercises',
         'Natural-language queries',
-        'SOS alerts',
+        'Agreed client protocol',
         'Full analytics dashboard',
       ],
     },
@@ -278,7 +279,7 @@ export default function Landing() {
                   {t('landing.startTrial')}
                 </Link>
                 <a
-                  href="#features"
+                  href="#week-in-practice"
                   className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3 rounded-lg border border-primary/30 text-primary font-semibold text-base hover:bg-primary-50 transition-colors"
                 >
                   {t('landing.learnMore')}
@@ -359,35 +360,13 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ─── Features ─── */}
-      <section id="features" aria-label="Features" className="py-20 bg-surface">
+      {/* ─── Week in Practice (R5) — replaces generic features-listing block ─── */}
+      <WeekInPracticeSection />
+
+      {/* Contextual solution links — boost internal link graph for batch-1/2 landings */}
+      <div className="bg-surface pb-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold text-text">
-              {t('landing.featuresTitle')}
-            </h2>
-            <p className="mt-4 max-w-2xl mx-auto text-secondary text-lg">
-              {t('landing.featuresDesc')}
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {featureKeys.map((fk, i) => (
-              <div
-                key={i}
-                className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow border border-surface"
-              >
-                <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary-50 mb-4">
-                  {highlightIcons[i]}
-                </div>
-                <h3 className="text-lg font-semibold text-text mb-2">{t(fk.titleKey)}</h3>
-                <p className="text-secondary text-sm leading-relaxed">{t(fk.descKey)}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Contextual solution links — boost internal link graph for batch-1/2 landings */}
-          <div className="mt-12 pt-8 border-t border-surface">
+          <div className="pt-0 border-t border-surface">
             <p className="text-secondary text-sm mb-4 font-medium">{t('landing.relatedLinks')}:</p>
             <div className="flex flex-wrap gap-3">
               <Link to={lp('/ai-session-notes-for-therapists')} className="text-sm px-3 py-1.5 border border-surface rounded-full text-secondary hover:text-primary hover:border-primary transition-colors">{t('landing.solAiSessionNotes')}</Link>
@@ -400,10 +379,43 @@ export default function Landing() {
             </div>
           </div>
         </div>
-      </section>
+      </div>
 
       {/* ─── Control Section (R3) ─── */}
       <ControlSection />
+
+      {/* ─── Agreed Protocol (R4) ─── */}
+      <section aria-label="Agreed protocol" className="py-20 bg-white">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="rounded-2xl border border-surface bg-surface p-8 sm:p-10">
+            <div className="flex items-start gap-4">
+              <div className="shrink-0 w-10 h-10 rounded-xl bg-primary-50 flex items-center justify-center mt-1">
+                <svg className="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-xl sm:text-2xl font-bold text-text mb-3">
+                  {t('landing.protocolTitle')}
+                </h2>
+                <p className="text-secondary leading-relaxed mb-6">
+                  {t('landing.protocolDesc')}
+                </p>
+                <ul className="space-y-3">
+                  {['protocolPoint1', 'protocolPoint2', 'protocolPoint3'].map((key) => (
+                    <li key={key} className="flex items-start gap-3 text-sm text-secondary">
+                      <svg className="w-5 h-5 shrink-0 mt-0.5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                      </svg>
+                      {t(`landing.${key}`)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* ─── Anti-Burnout ─── */}
       <section aria-label="Anti-Burnout" className="py-20 bg-gradient-to-b from-teal-50 to-white">
@@ -513,7 +525,7 @@ export default function Landing() {
             <div>
               <h4 className="text-white font-semibold text-sm mb-3">{t('landing.footerProduct')}</h4>
               <ul className="space-y-2 text-sm">
-                <li><a href="#features" className="hover:text-white transition-colors">{t('landing.features')}</a></li>
+                <li><a href="#week-in-practice" className="hover:text-white transition-colors">{t('landing.features')}</a></li>
                 <li><a href="#pricing" className="hover:text-white transition-colors">{t('landing.pricing')}</a></li>
                 <li><Link to="/register" className="hover:text-white transition-colors">{t('landing.signUp')}</Link></li>
                 <li><Link to="/login" className="hover:text-white transition-colors">{t('nav.login')}</Link></li>
