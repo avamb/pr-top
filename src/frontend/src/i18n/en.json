@@ -270,7 +270,7 @@
     "feature4Title": "A workday that ends when you choose",
     "feature4Desc": "Set the hours when the service handles incoming messages. Clients feel supported; you have a clear end to your professional day and time to recover properly.",
     "feature5Title": "Capture a thought the moment it comes",
-    "feature5Desc": "Voice a quick observation between appointments — it is transcribed and attached to the right client file automatically. Nothing slips through the gap between sessions.",
+    "feature5Desc": "Voice a quick observation between appointments — it is transcribed and saved as a private draft under the right client file. Nothing slips through the gap between sessions; the draft enters the clinical record only after your review.",
     "feature6Title": "A familiar channel for clients — on your terms",
     "feature6Desc": "Clients keep a diary, complete exercises, and send updates through a channel they already know. You receive a structured feed — no extra apps for them, no noise for you. The channel is Telegram.",
     "week": {
@@ -294,7 +294,7 @@
       "step4": {
         "label": "Thursday evening",
         "title": "The thought that nearly slipped",
-        "body": "An observation didn't make it into the session notes. You open PR-TOP, voice a quick memo. It is transcribed and filed under the right client automatically. Nothing falls through the gap."
+        "body": "An observation didn't make it into the session notes. You open PR-TOP, voice a quick memo. It is transcribed and saved as a private draft under the right client. Nothing falls through the gap — the draft reaches the client record only after you review it."
       },
       "step5": {
         "label": "Friday, end of week",
@@ -307,7 +307,7 @@
     "techTitle": "Technology inside PR-TOP",
     "techLead": "How the platform is built — in plain terms.",
     "tech1Title": "Language models for text processing",
-    "tech1Desc": "A Claude-class language model drafts session notes from recordings and answers search queries across your client history. All output is reviewed and approved by you before anything is saved.",
+    "tech1Desc": "A Claude-class language model drafts session notes from recordings and answers search queries across your client history. The draft is saved privately; it enters the client record only after your review and approval.",
     "tech2Title": "Telegram as the client channel",
     "tech2Desc": "Clients interact through Telegram, which they already have. You configure the channel — hours, exercises, and protocols. The service does not initiate contact on your behalf.",
     "tech3Title": "Application-level encryption",

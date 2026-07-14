@@ -40,7 +40,9 @@ reply is returned or cached.
 ## Deployment
 
 PR-TOP runs as a Docker Compose stack (six services) behind an
-nginx reverse proxy, deployed via Dokploy on Hetzner. Encrypted
+nginx reverse proxy, deployed via Dokploy on Hetzner in the European
+Union. All client data is stored and processed within the EU — no
+data is transferred to servers outside EU jurisdiction. Encrypted
 daily backups run on a configurable retention schedule.
 
 ## Consent enforcement
@@ -98,9 +100,14 @@ A: Decryption requires the ENCRYPTION_MASTER_KEY, which is held by
 the service operator and stored in a protected environment variable —
 never in the database. Under normal operation no PR-TOP team member
 accesses clinical content; support works with anonymised metadata and
-logs only. For deployments where even the service provider must have
-zero technical access, PR-TOP supports self-hosted installation where
-you generate and control the key.
+logs only.
+
+**Q: Where is PR-TOP's data stored?**
+A: All client data is stored exclusively in the European Union
+(Hetzner infrastructure). There is no US region and no self-hosting
+option — PR-TOP is a managed SaaS product. The therapist controls
+access (who can read client data) through authentication, consent,
+and role-based permissions; the physical location is EU-only.
 
 **Q: Is PR-TOP end-to-end encrypted or zero-knowledge?**
 A: No. PR-TOP uses application-layer encryption (AES-256) which

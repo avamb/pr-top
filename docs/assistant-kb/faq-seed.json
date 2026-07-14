@@ -254,5 +254,13 @@
     "question": "How do I reset my password?",
     "answer": "On the sign-in page click \"Forgot password\", enter your email, and PR-TOP sends a reset link. The link is single-use and expires; you can then set a new password and sign back in. If the email does not arrive, check your spam folder or contact support.",
     "tags": ["account", "password"]
+  },
+  {
+    "id": "data-location",
+    "audience": "public",
+    "locale": "en",
+    "question": "Where is my data stored? Is there a US region or self-hosted option?",
+    "answer": "All client data is stored exclusively in the European Union — PR-TOP runs on Hetzner infrastructure within the EU. There is no US region, no multi-region choice, and no self-hosted deployment option. PR-TOP is a managed SaaS service. You control access (who reads client data) through authentication, consent enforcement, and role-based permissions, but the physical storage is EU-only.",
+    "tags": ["security", "gdpr", "data", "eu", "storage"]
   }
 ]
