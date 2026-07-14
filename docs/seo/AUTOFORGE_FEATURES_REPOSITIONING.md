@@ -190,11 +190,42 @@ Source: second external UX audit after R1–R11 shipped. Verdict: the reposition
 2. `node _t_link_graph_w6.js` passes (link-graph audit unchanged).
 3. Build + puppeteer `/` + `/ru/`: labels render, hrefs intact, no raw keys.
 
-### R21 — Wave-2 fix pack (findings of the 2026-07-14 R12–R20 review)
-**Description:** Four follow-ups from the owner-side review of the shipped Wave 2. **(a) R19 main defect — render the approved company facts.** The R19 agent created its own empty template at `docs/TRUST_FACTS.md` and never read the owner-filled **`docs/seo/TRUST_FACTS.md`** (the authoritative file, committed b1101c4). Result: `ProfessionalProofSection` renders nothing (`hasTrustFacts()` false) and the approved facts (ABH TEAM OÜ, registry code 14162982 with link to the public register, Estonia/EU, registered address, operating since 2016, support@pr-top.com) are absent from the site. Fix: extend the section (or a compact footer legal block) with a `legalEntity` fact group sourced from `docs/seo/TRUST_FACTS.md` "publish: yes" rows only, localized in all 4 locales; delete the duplicate `docs/TRUST_FACTS.md` and point every reference (trustFacts.js header comment) at `docs/seo/TRUST_FACTS.md`. Hard rules stay: no surnames, no personal codes, no invented numbers; testimonials/advisors arrays remain empty. **(b) R12 leftover:** `TherapyDocumentationAi.jsx` H2 "How PR-TOP handles therapy documentation end-to-end" — the phrase collides with the banned encryption term; reword (e.g. "…from session to record") in all locales that page has. **(c) R18 leftover:** `public/images/hero-dashboard.webp` is a renamed PNG (file magic `PNG`, 217 KB) and an identical `.png` twin is committed. Convert to real WebP (target ≤ 120 KB at 2560×1600 or downscale to 1920×1200), keep a single file, update the `<img src>`; verify `file`/magic bytes and visual quality. **(d) Screenshot freshness rule:** add the re-capture step (`node _t_screenshots.js`) to the definition-of-done of any feature touching landing copy or hero visuals — it was skipped again after R17/R18/R20 (the owner re-captured manually on 2026-07-14 12:42; keep them fresh going forward). Note the in-app stat card "SOS ALERTS" is visible in the hero screenshot — renaming that in-product label (e.g. "Protocol alerts") is a separate product decision; flag it to the owner in the PR, do not rename unilaterally.
-**Steps:**
-1. Implement the legalEntity block from `docs/seo/TRUST_FACTS.md`; grep the built `dist/index.html` (all 4 locales): contains `ABH TEAM OÜ` and `14162982`, zero matches for the withheld surnames/personal codes; register link resolves.
-2. `docs/TRUST_FACTS.md` deleted; `git grep -l "docs/TRUST_FACTS.md"` returns nothing (all references point to `docs/seo/TRUST_FACTS.md`).
-3. Reword the TherapyDocumentationAi heading; grep frontend src: zero case-insensitive `end-to-end` matches outside i18n keys already cleared by R12.
-4. Real WebP: magic bytes are `RIFF....WEBP`, size ≤ 120 KB, PNG twin removed from `public/`; puppeteer `/`: hero image loads (naturalWidth > 0), no visible quality loss at 2x.
-5. All audits green (`_t_r9_qa.js`, `_t_geo_audit.js`, `_t_seo_i18n_audit.js`, `_t_link_graph_w6.js`); re-capture the 4 review screenshots and commit them in the same PR.
+## R21 — Wave-2 fix pack (findings of the 2026-07-14 owner review of shipped R12–R20)
+
+Split into four independent features R21a–R21d, ordered by priority. Common rules: the §4 copywriting mandate and the truth-before-copy mandate apply; every feature ends with the audit suite green (`node _t_r9_qa.js`, `_t_geo_audit.js`, `_t_seo_i18n_audit.js`, `_t_link_graph_w6.js` — 0 failures) and, if the landing changed visually, with re-captured review screenshots (`node _t_screenshots.js`, commit the 4 PNGs in the same PR).
+
+### R21a — P0: Render the approved company facts (R19 defect)
+**Context (verified 2026-07-14):** the R19 agent created its own empty template at `docs/TRUST_FACTS.md` and never read the owner-filled authoritative file **`docs/seo/TRUST_FACTS.md`** (commit b1101c4). `src/frontend/src/data/trustFacts.js` contains only empty `numbers/associations/advisors/testimonials` arrays, so `hasTrustFacts()` is false and `ProfessionalProofSection` renders **nothing**. The owner-approved facts are absent from the site.
+**Description:** Add a `legalEntity` fact group to `trustFacts.js`, sourced **only** from the `publish: yes` rows of `docs/seo/TRUST_FACTS.md`: legal entity "ABH TEAM OÜ (private limited company)", registry code "14162982" linked to `https://ariregister.rik.ee/eng/company/14162982`, jurisdiction "Estonia — European Union", registered address "Narva mnt 5, 10117 Tallinn, Estonia", operating since 2016, privacy/support contact `support@pr-top.com`. Render it in `ProfessionalProofSection` (update `hasTrustFacts()` to count the new group) as a calm one-or-two-line legal block — suggested wording is in TRUST_FACTS.md §"Suggested rendering"; localize naturally in all 4 locales (company name, address and code stay untranslated). Delete the duplicate `docs/TRUST_FACTS.md`; update the header comment in `trustFacts.js` to point at `docs/seo/TRUST_FACTS.md`. Hard rules remain: no surnames, no personal identification codes, no invented numbers; `testimonials`/`advisors`/`numbers`/`associations` stay empty.
+**Acceptance steps:**
+1. Build; grep prerendered `dist/index.html`, `dist/ru/index.html`, `dist/es/index.html`, `dist/uk/index.html`: each contains `ABH TEAM OÜ` and `14162982`; zero matches for the withheld surnames (`Bakanova`, `Andreev` as personal names) and personal codes (`4710207`, `3620127`) anywhere in `dist/`.
+2. Puppeteer on preview `/` and `/ru/`: the proof/legal block renders between Pricing and Footer; the registry-code link points to the e-Business Register URL; no raw i18n keys.
+3. `docs/TRUST_FACTS.md` deleted; `git grep -l "docs/TRUST_FACTS.md"` over the repo returns nothing (every reference reads `docs/seo/TRUST_FACTS.md`).
+4. Audit suite green; screenshots re-captured and committed.
+
+### R21b — P1: Remove the leftover "end-to-end" wording (R12 residue)
+**Context (verified):** `src/frontend/src/pages/TherapyDocumentationAi.jsx:59` H2 reads "How PR-TOP handles therapy documentation end-to-end". R12 banned the term sitewide because it collides with the retired "end-to-end encryption" claim; this heading survived the sweep.
+**Description:** Reword the heading (and any sibling strings on that page using the idiom) so no reader can misread an encryption promise — e.g. "How PR-TOP handles therapy documentation, from session to record". Apply to every locale variant the page has; keep the H2's keyword value (therapy documentation) intact; do not touch the page's meta/SEO keys otherwise.
+**Acceptance steps:**
+1. Grep `src/frontend/src` (jsx + i18n): zero case-insensitive matches for `end-to-end`/`end to end` (the R12-cleared i18n keys must stay clean too).
+2. Build; puppeteer on the page route: new H2 renders, page still passes `node _t_geo_audit.js` (direct-answer block, FAQ JSON-LD intact).
+3. Audit suite green.
+
+### R21c — P1: Real WebP for the hero screenshot (R18 residue)
+**Context (verified):** `src/frontend/public/images/hero-dashboard.webp` has PNG magic bytes — it is a renamed PNG (216 958 bytes), and an identical `hero-dashboard.png` twin is also committed. Browsers render it by content sniffing, but the file misses WebP compression and the twin bloats the repo/dist.
+**Description:** Produce a genuine WebP from the PNG source (`cwebp`/sharp, quality ~85): target ≤ 120 KB at 2560×1600, or downscale to 1920×1200 if needed to hit the budget without visible quality loss on a 2x display. Keep exactly one file (`hero-dashboard.webp`), remove the PNG twin from `public/`, keep the `<img>` markup (`width`/`height`/`aspectRatio`/`loading="eager"`) unchanged apart from the src if the name changes.
+**Acceptance steps:**
+1. Magic bytes of the shipped file are `RIFF....WEBP` (verify with a byte check, not the extension); size ≤ 120 KB; `hero-dashboard.png` no longer exists under `public/` or `dist/images/`.
+2. Puppeteer on preview `/`: hero image loads (`naturalWidth > 0`), no layout shift (H1 bounding box stable across load).
+3. Visual spot-check at 2x zoom: text in the screenshot (sidebar labels, client names) stays legible; if not, raise quality/resolution and re-check the budget.
+4. Audit suite green; screenshots re-captured and committed.
+
+### R21d — P2: Screenshot freshness as definition-of-done
+**Context:** the re-capture step was skipped after R17/R18/R20 (twice overall); the owner re-captured manually on 2026-07-14 12:42.
+**Description:** Make freshness structural, not tribal: (a) add a repo-root note to `_t_screenshots.js` usage in `docs/seo/CONTENT_RULES.md` pre-merge checklist ("landing copy or hero visuals changed → re-run `node _t_screenshots.js`, commit the 4 PNGs"); (b) extend `_t_r9_qa.js` with a freshness assertion: fail if any `docs/seo/reports/repositioning-screens/*.png` is older (mtime) than the newest file under `src/frontend/src/i18n/` or `src/frontend/src/pages/Landing.jsx` — with a `--skip-screenshot-freshness` escape hatch for CI environments without the artifacts.
+**Acceptance steps:**
+1. CONTENT_RULES.md checklist gains the re-capture line.
+2. `node _t_r9_qa.js` fails when a landing i18n file is touched after the PNGs (demonstrate in the PR by touching a file, running, reverting), and passes after `node _t_screenshots.js`.
+3. Full audit suite green at the end.
+
+> **Owner decision pending (not for agents):** the in-app stat card label "SOS ALERTS" is visible in the hero screenshot and clashes with the agreed-protocol language. Renaming an in-product label (e.g. "Protocol alerts") is a product decision — flag in the PR, do not rename unilaterally.
