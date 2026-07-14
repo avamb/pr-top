@@ -59,8 +59,9 @@ client's bot session.
 ## Troubleshooting
 
 - **No email arrived.** Confirm your alert email in Settings →
-  Notifications. Multichannel SOS delivery (email + Telegram + push)
-  is Premium; other tiers rely on in-dashboard push.
+  Notifications and make sure email is enabled in your SOS escalation
+  preferences. Multichannel delivery (email + Telegram + push) is
+  available on every plan.
 - **SOS card missing from the dashboard.** The WebSocket connection
   may have dropped. Refresh the page to reconnect.
 - **Resolve button greyed out.** The incident must be acknowledged

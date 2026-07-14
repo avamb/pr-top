@@ -45,10 +45,10 @@ and is regenerated from source at every release.
 
 1. Open **Settings → Subscription** and tap **Change plan**.
 2. Pick a lower tier. The confirmation modal shows a summary of what
-   you will lose: any Pro-only features (NL queries, custom
-   exercises), any Premium-only features (supervision share, SOS
-   channels), the reduced client seat cap, and the reduced session
-   quota.
+   you will lose: higher-tier features (natural-language and voice
+   queries, custom exercises), the reduced client seat cap, and the
+   reduced session quota. SOS alerts and their delivery channels stay
+   available on every plan.
 3. Confirm. The downgrade is scheduled to take effect at the end of
    the current billing period, so you keep everything until then.
 4. Cancel the pending downgrade any time before the effective date

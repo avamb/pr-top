@@ -62,8 +62,9 @@ therapists who invoice outside the platform.
 1. Open **Settings → Notifications.**
 2. **Email address for alerts** — defaults to your login email;
    override if you want alerts routed elsewhere.
-3. **SOS delivery** (Premium) — choose email only, or email plus
-   Telegram-to-therapist plus in-dashboard push.
+3. **SOS delivery** — choose email only, or email plus
+   Telegram-to-therapist plus in-dashboard push. Available on every
+   plan.
 4. **Session-ready pings** — get an email or in-dashboard push when a
    transcript finishes processing. Handy after a bulk upload.
 5. **Weekly digest** — a Monday-morning email summarizing the last

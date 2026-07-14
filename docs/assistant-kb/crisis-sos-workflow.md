@@ -21,10 +21,10 @@ resolved. Labels come from the `notifications`, `security`, and
 
 ## Prerequisites
 
-- SOS delivery to your therapist account is available on Premium.
-  Trial, Basic, and Pro can see incoming SOS events on the dashboard
-  but not receive the multi-channel push (email + WebSocket + optional
-  Telegram to the therapist).
+- SOS alerts are delivered on every plan. Which channels fire —
+  email, Telegram-to-therapist, in-dashboard push — is controlled by
+  your escalation preferences in Settings → Notifications, not by
+  your subscription tier.
 - The client must have been briefed that the SOS command exists and
   what it does — specifically that tapping it notifies you as their
   therapist within your agreed protocol, and does not contact
@@ -93,8 +93,9 @@ The client's message and the bot's reply are logged as an SOS event.
 ## Troubleshooting
 
 - **No email arrived.** Check your spam folder and confirm the email
-  address in Settings → Notifications is correct. On Trial, Basic, and
-  Pro, only in-dashboard SOS is guaranteed; email is Premium.
+  address in Settings → Notifications is correct, and that email is
+  enabled in your SOS escalation preferences. Email delivery works on
+  every plan.
 - **SOS card missing from the dashboard.** Refresh the tab. The
   WebSocket connection sometimes drops on network changes; a
   page-refresh reconnects it.
