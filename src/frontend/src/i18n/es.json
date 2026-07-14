@@ -195,6 +195,7 @@
     "heroTitle1": "Un espacio de trabajo unificado",
     "heroTitle2": "para terapeutas y su práctica.",
     "heroSlogan": "Mantenga el contexto completo del cliente entre sesiones. Revise cada nota. Preserve límites profesionales claros.",
+    "heroImageAlt": "Panel de control PR-TOP — lista de clientes, próximas sesiones y actividad reciente (datos de demostración)",
     "heroDesc": "PR-TOP reúne los diarios de clientes, las notas de sesión, las tareas y la comunicación segura en un solo lugar. Le ayuda a organizar el trabajo rutinario, mientras el juicio clínico y las decisiones sobre sus clientes permanecen con usted.",
     "startTrial": "Prueba gratuita",
     "learnMore": "Cómo funciona",
@@ -315,6 +316,14 @@
     "tech4Title": "Almacenamiento de datos en la UE",
     "tech4Desc": "Los datos se almacenan en servidores de la UE, bajo la normativa europea de protección de datos. Puede solicitar una exportación completa o la eliminación de sus datos en cualquier momento.",
     "techClose": "La tecnología es una herramienta. Cada decisión sobre sus clientes permanece con usted.",
+    "proof": {
+      "heading": "La confianza de los profesionales",
+      "subheading": "Psicólogos y terapeutas que ya usan PR-TOP en su consulta.",
+      "numbersTitle": "En cifras",
+      "associationsTitle": "Reconocimiento profesional",
+      "advisorsTitle": "Asesores expertos",
+      "testimonialsTitle": "Desde la consulta"
+    },
     "faqTitle": "Preguntas frecuentes",
     "faqQ1": "¿Quién puede leer mis notas y comunicaciones con clientes?",
     "faqA1": "Todos los datos confidenciales están cifrados a nivel de aplicación (AES-256). La clave de cifrado la custodia PR-TOP, almacenada por separado de la base de datos. En condiciones normales de operación, ningún miembro del equipo accede a sus notas clínicas.",

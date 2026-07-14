@@ -483,8 +483,9 @@ of truth — see `src/frontend/src/i18n/en.json`._
 
 - `landing.heroTitle1` — A unified workspace
 - `landing.heroTitle2` — for therapists and their practice.
-- `landing.heroSlogan` — Client context between sessions. Notes you review and control. Professional boundaries ...
-- `landing.heroDesc` — PR-TOP brings together the client diary, session notes, assignments and safe communicat...
+- `landing.heroSlogan` — Keep the full client context between sessions. Review every note. Maintain clear profes...
+- `landing.heroImageAlt` — PR-TOP therapist dashboard — client list, upcoming sessions, and recent activity (demo ...
+- `landing.heroDesc` — PR-TOP brings together client diaries, session notes, assignments, and secure communica...
 - `landing.startTrial` — Start Free Trial
 - `landing.learnMore` — See How It Works
 - `landing.featuresTitle` — Your Practice, Simplified
@@ -500,8 +501,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `landing.tierFeat.clients30` — Up to 30 clients
 - `landing.tierFeat.clientsUnlimited` — Unlimited clients
 - `landing.tierFeat.sessions5` — 5 sessions / month
-- `landing.tierFeat.sessions20` — 20 sessions / month
-- _+ 128 more keys_
+- _+ 135 more keys_
 
 ## landingConfirm
 

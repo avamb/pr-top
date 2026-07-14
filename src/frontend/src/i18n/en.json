@@ -195,6 +195,7 @@
     "heroTitle1": "A unified workspace",
     "heroTitle2": "for therapists and their practice.",
     "heroSlogan": "Keep the full client context between sessions. Review every note. Maintain clear professional boundaries.",
+    "heroImageAlt": "PR-TOP therapist dashboard — client list, upcoming sessions, and recent activity (demo data only)",
     "heroDesc": "PR-TOP brings together client diaries, session notes, assignments, and secure communication in one place. It helps you organise routine work, while clinical judgement and client decisions remain with you.",
     "startTrial": "Start Free Trial",
     "learnMore": "See How It Works",
@@ -315,6 +316,14 @@
     "tech4Title": "EU-based data hosting",
     "tech4Desc": "Data is stored on servers in the EU, covered by European data-protection law. You can request a full export or deletion at any time.",
     "techClose": "The technology is a tool. Every decision about your clients stays with you.",
+    "proof": {
+      "heading": "Trusted by practitioners",
+      "subheading": "Professionals who have put PR-TOP to work in their practice.",
+      "numbersTitle": "In numbers",
+      "associationsTitle": "Professional recognition",
+      "advisorsTitle": "Expert advisors",
+      "testimonialsTitle": "From the practice"
+    },
     "faqTitle": "Frequently Asked Questions",
     "faqQ1": "Who can read my notes and client communications?",
     "faqA1": "All confidential data is encrypted at the application level (AES-256). The encryption key is held by PR-TOP and stored separately from the database. Under normal operation, no support or development team member accesses your clinical notes.",

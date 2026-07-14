@@ -45,6 +45,7 @@ Mount prefix: `/api/admin`
 - `GET /api/admin/assistant/cached-answers` — GET /api/admin/assistant/cached-answers - List cached answers (paginated)
 - `PUT /api/admin/assistant/cached-answers/:id` — PUT /api/admin/assistant/cached-answers/:id - Edit a cached answer
 - `DELETE /api/admin/assistant/cached-answers/:id` — DELETE /api/admin/assistant/cached-answers/:id - Delete a cached answer
+- `POST /api/admin/assistant/seed-faq` — redeploy after editing the seed file. Startup runs the same seeder too.
 - `GET /api/admin/assistant/analytics` — GET /api/admin/assistant/analytics - Aggregated assistant chat statistics
 - `GET /api/admin/assistant/conversations` — GET /api/admin/assistant/conversations - Paginated conversation list
 - `GET /api/admin/assistant/conversations/:id/messages` — GET /api/admin/assistant/conversations/:id/messages - Messages for a conversation

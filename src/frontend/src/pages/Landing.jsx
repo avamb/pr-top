@@ -12,6 +12,7 @@ import useLocalePath from '../hooks/useLocalePath';
 import ControlSection from '../components/landing/ControlSection';
 import WeekInPracticeSection from '../components/landing/WeekInPracticeSection';
 import TechSection from '../components/landing/TechSection';
+import ProfessionalProofSection from '../components/landing/ProfessionalProofSection';
 
 /* ───────── Feature Highlights (icons only, text from i18n) ───────── */
 const highlightIcons = [
@@ -288,69 +289,18 @@ export default function Landing() {
               </div>
             </div>
 
-            {/* Right: Hero illustration */}
+            {/* Right: Hero product screenshot (demo data only — R18) */}
             <div className="flex justify-center lg:justify-end" data-testid="hero-illustration">
-              <svg
-                className="w-full max-w-md lg:max-w-lg"
-                viewBox="0 0 500 400"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                role="img"
-                aria-label="Therapist dashboard illustration"
-              >
-                {/* Background card / dashboard mockup */}
-                <rect x="60" y="40" width="380" height="280" rx="20" fill="#F4F7F6" stroke="#1F8A83" strokeWidth="2" opacity="0.8" />
-                {/* Header bar */}
-                <rect x="60" y="40" width="380" height="50" rx="20" fill="#163A43" opacity="0.95" />
-                <rect x="60" y="70" width="380" height="20" fill="#163A43" opacity="0.95" />
-                {/* Header dots */}
-                <circle cx="90" cy="65" r="6" fill="#fff" opacity="0.6" />
-                <circle cx="110" cy="65" r="6" fill="#fff" opacity="0.6" />
-                <circle cx="130" cy="65" r="6" fill="#fff" opacity="0.6" />
-
-                {/* Sidebar */}
-                <rect x="60" y="90" width="100" height="230" fill="#ECE6DD" />
-                {/* Sidebar items */}
-                <rect x="75" y="110" width="70" height="8" rx="4" fill="#1F8A83" opacity="0.5" />
-                <rect x="75" y="130" width="55" height="8" rx="4" fill="#1F8A83" opacity="0.3" />
-                <rect x="75" y="150" width="65" height="8" rx="4" fill="#1F8A83" opacity="0.3" />
-                <rect x="75" y="170" width="50" height="8" rx="4" fill="#1F8A83" opacity="0.3" />
-                <rect x="75" y="190" width="60" height="8" rx="4" fill="#1F8A83" opacity="0.3" />
-
-                {/* Main content area - client cards */}
-                <rect x="175" y="100" width="250" height="60" rx="10" fill="#fff" stroke="#D9E2E0" strokeWidth="1.5" />
-                <circle cx="200" cy="130" r="15" fill="#A8C9BE" />
-                <rect x="225" y="118" width="80" height="8" rx="4" fill="#163A43" opacity="0.6" />
-                <rect x="225" y="134" width="120" height="6" rx="3" fill="#1F8A83" opacity="0.3" />
-
-                <rect x="175" y="170" width="250" height="60" rx="10" fill="#fff" stroke="#D9E2E0" strokeWidth="1.5" />
-                <circle cx="200" cy="200" r="15" fill="#1F8A83" opacity="0.5" />
-                <rect x="225" y="188" width="90" height="8" rx="4" fill="#163A43" opacity="0.6" />
-                <rect x="225" y="204" width="100" height="6" rx="3" fill="#1F8A83" opacity="0.3" />
-
-                <rect x="175" y="240" width="250" height="60" rx="10" fill="#fff" stroke="#D9E2E0" strokeWidth="1.5" />
-                <circle cx="200" cy="270" r="15" fill="#163A43" opacity="0.4" />
-                <rect x="225" y="258" width="70" height="8" rx="4" fill="#163A43" opacity="0.6" />
-                <rect x="225" y="274" width="110" height="6" rx="3" fill="#1F8A83" opacity="0.3" />
-
-                {/* Status indicators on cards */}
-                <circle cx="405" cy="125" r="6" fill="#10B981" />
-                <circle cx="405" cy="195" r="6" fill="#10B981" />
-                <circle cx="405" cy="265" r="6" fill="#A8C9BE" />
-
-                {/* Chat bubble overlay */}
-                <rect x="320" y="310" width="140" height="70" rx="12" fill="#1F8A83" opacity="0.95" />
-                <path d="M340 380 L350 395 L360 380" fill="#1F8A83" opacity="0.95" />
-                <rect x="340" y="325" width="100" height="6" rx="3" fill="#fff" opacity="0.7" />
-                <rect x="340" y="338" width="80" height="6" rx="3" fill="#fff" opacity="0.5" />
-                <rect x="340" y="351" width="90" height="6" rx="3" fill="#fff" opacity="0.5" />
-
-                {/* Shield / security icon */}
-                <g transform="translate(45, 290)">
-                  <path d="M20 5 L35 12 L35 25 C35 35 28 42 20 45 C12 42 5 35 5 25 L5 12 Z" fill="#1F8A83" opacity="0.9" />
-                  <path d="M15 25 L19 29 L27 20" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                </g>
-              </svg>
+              <img
+                src="/images/hero-dashboard.webp"
+                alt={t('landing.heroImageAlt')}
+                width="1280"
+                height="800"
+                className="w-full max-w-md lg:max-w-2xl rounded-2xl shadow-2xl border border-border/40"
+                loading="eager"
+                decoding="async"
+                style={{ aspectRatio: '8/5' }}
+              />
             </div>
           </div>
         </div>
@@ -466,6 +416,9 @@ export default function Landing() {
 
       {/* ─── Technology inside PR-TOP (R6) ─── */}
       <TechSection />
+
+      {/* ─── Professional Proof (R19) — renders only when trustFacts.js is populated ─── */}
+      <ProfessionalProofSection />
 
       {/* ─── FAQ ─── */}
       <FaqSection t={t} />
