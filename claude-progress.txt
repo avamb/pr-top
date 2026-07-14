@@ -16725,3 +16725,59 @@ VERIFICATION:
 - Old text ("AI-generated insights, anamnesis") confirmed absent from dist
 
 Stats after session 229: 480/487 (98.6%). Feature #480 PASSING.
+
+================================================================
+Session 230 (2026-07-14) - Feature #483 PASSING (R28 consent-to-record microcopy)
+================================================================
+
+Assigned: #483 R28 — Микрокопия о согласии на запись у шага upload recording
+
+IMPLEMENTATION:
+
+1. src/frontend/src/components/AccordionItem.jsx
+   - Added id={id} to the outer div so HTML anchor navigation (#consent-to-record) works
+
+2. src/frontend/src/pages/TherapistGuide.jsx
+   - Added useEffect that reads location.hash on mount and auto-opens + scrolls to the
+     matching accordion section (smooth scroll after 150ms layout settle)
+   - Added new section id: consent-to-record between "sessions" and "exercises" sections
+   - Section contains: body, legal head (GDPR), template intro, 4-locale template list
+     (EN/RU/ES/UK), video note, and storage note
+   - Uses guide.sectionConsent* i18n keys
+
+3. src/frontend/src/pages/ClientDetail.jsx
+   - Added Link to react-router-dom imports
+   - Added R28 consent microcopy ABOVE the dropzone (visible when !sessionUploading &&
+     !sessionUploadFile): 1-line text + teal link to /dashboard/guide#consent-to-record
+   - data-testid="consent-to-record-link" for testability
+   - Not in a modal — renders inline next to the upload input
+
+4. i18n keys added in all 4 locales (en/ru/es/uk.json):
+   - session.upload.consentNote (1-line consent reminder)
+   - session.upload.consentLearnMore (link label)
+   - guide.sectionConsentTitle, guide.sectionConsentBody, guide.sectionConsentLegalHead
+   - guide.sectionConsentGdpr, guide.sectionConsentTemplateHead, guide.sectionConsentTemplateIntro
+   - guide.sectionConsentTemplate{En,Ru,Es,Uk} + Label variants
+   - guide.sectionConsentVideo, guide.sectionConsentStorage
+
+5. docs/assistant-kb/consent-to-record.md (NEW, audience:public)
+   - 800+ word guide: why consent is required, GDPR legal basis (Art 9),
+     step-by-step consent workflow, 4-locale wording templates (EN/RU/ES/UK),
+     video-specific considerations, storage responsibilities,
+     edge cases (minor clients, telehealth, verbal consent), FAQ section
+
+6. docs/assistant-kb/faq-seed.json
+   - Added "consent-to-record" FAQ entry (consent requirement, flag behavior,
+     single-track option for non-consenting clients)
+
+7. docs/assistant-kb/reference/ui-labels.md (REGENERATED via docs:assistant)
+
+VERIFICATION:
+- Vite build: 1136 modules transformed, exit 0
+- node _t_assistant_kb_audit.js: 92 passed, 0 failed
+- node scripts/generate-assistant-docs.mjs: no drift
+- No mock data patterns found in modified files
+- git commit: 2a5d7ad
+- Feature #483 marked PASSING
+
+Stats after session 230: 482/487 (98.9%)
