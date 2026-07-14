@@ -16341,4 +16341,36 @@ VERIFICATION:
 - node _t_assistant_kb_audit.js: 79 passed, 0 failed
 - git commit: 82c8289
 
+================================================================
+Session 222 (2026-07-14) - Feature #473 PASSING (R22a remove false E2EE from generator)
+================================================================
+
+Assigned: #473 R22a - Remove false end-to-end encryption claim from generator reference/pricing.md
+
+PROBLEM:
+scripts/generate-assistant-docs.mjs lines 391-393 had hardcoded:
+  "All plans include end-to-end encryption of the most sensitive client data"
+This propagated into docs/assistant-kb/reference/pricing.md on every docs:assistant
+run, directly contradicting security-overview.md (which correctly states PR-TOP is
+NOT E2EE and NOT zero-knowledge, keys held by operator).
+
+IMPLEMENTATION:
+
+1. scripts/generate-assistant-docs.mjs (lines 390-394)
+   Changed to: "application-layer AES encryption ... at rest; keys are held by the
+   operator, not the therapist or client. PR-TOP is not end-to-end encrypted and is
+   not zero-knowledge"
+
+2. docs/assistant-kb/reference/pricing.md (REGENERATED)
+   - npm run docs:assistant from src/backend regenerated with correct text
+   - Terminology now matches security-overview.md exactly
+
+VERIFICATION:
+- grep reference/ for E2EE/end-to-end/zero-knowledge: only explicit negation remains
+- faq-seed.json "honored end-to-end" = process completion (not encryption), OK
+- node _t_assistant_kb_audit.js: 79 passed, 0 failed
+- git commit: d384901
+
+Stats after session 222: #473 status: passing.
+
 Stats after session 219 (new): #469 status: passing.
