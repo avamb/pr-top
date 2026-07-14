@@ -56,7 +56,7 @@ const CONTENT = {
     whyNotEnoughP3:
       'PR-TOP closes that gap. It handles session-side documentation (Whisper transcription, AI summary, streaming session playback, encrypted storage) and then keeps a real-time client channel open via Telegram: clients keep a voice, text or video diary, complete assigned exercises, and can fire a one-tap SOS that lands straight in your inbox. All content is AES-encrypted at the application layer. When you sit down before the next session, the full picture — notes plus between-session record — is in one dashboard.',
 
-    howPrtopTitle: 'How PR-TOP handles therapy documentation end-to-end',
+    howPrtopTitle: 'How PR-TOP handles therapy documentation from session to client record',
     howPrtopP1:
       'On the session side, you upload an audio or video file (up to 100 MB) from any source — Zoom, a local recorder, a phone voice memo. OpenAI Whisper transcribes it; the raw transcript is encrypted immediately as Class A data, meaning the database never holds client content in plaintext. Your chosen AI provider (OpenAI, Anthropic, Gemini, OpenRouter) then generates a summary against a configurable template. The note and the transcript land on the client timeline in your encrypted dashboard.',
     howPrtopP2:
@@ -200,7 +200,7 @@ const CONTENT = {
     whyNotEnoughP3:
       'PR-TOP закрывает этот пробел. Он обрабатывает документацию сессии (транскрипция Whisper, AI-резюме, потоковое воспроизведение, зашифрованное хранение) и затем поддерживает канал с клиентом в Telegram: клиенты ведут голосовой, текстовый или видео-дневник, выполняют назначенные упражнения и могут отправить SOS одним нажатием прямо вам. Всё зашифровано AES на уровне приложения. Когда вы садитесь перед следующей сессией, полная картина — заметки и записи между сессиями — в одном кабинете.',
 
-    howPrtopTitle: 'Как PR-TOP ведёт документацию терапии от начала до конца',
+    howPrtopTitle: 'Как PR-TOP ведёт документацию терапии: от сессии до карты клиента',
     howPrtopP1:
       'На стороне сессии вы загружаете аудио- или видеофайл (до 100 МБ) из любого источника — Zoom, местный диктофон, голосовое сообщение с телефона. OpenAI Whisper расшифровывает его; необработанный транскрипт сразу шифруется как данные класса A — база данных никогда не хранит контент клиентов в открытом виде. Выбранный вами AI-провайдер (OpenAI, Anthropic, Gemini, OpenRouter) затем генерирует резюме по настраиваемому шаблону. Заметка и транскрипт попадают на временную шкалу клиента в вашем зашифрованном кабинете.',
     howPrtopP2:
@@ -344,7 +344,7 @@ const CONTENT = {
     whyNotEnoughP3:
       'PR-TOP закриває цю прогалину. Він обробляє документацію сесії (транскрипція Whisper, AI-резюме, потокове відтворення, зашифроване зберігання) і потім підтримує канал із клієнтом у Telegram: клієнти ведуть голосовий, текстовий або відео-щоденник, виконують призначені вправи та можуть надіслати SOS одним дотиком просто вам. Усе зашифровано AES на рівні застосунку. Коли ви сідаєте перед наступною сесією, повна картина — нотатки та записи між сесіями — в одному кабінеті.',
 
-    howPrtopTitle: 'Як PR-TOP веде документацію терапії від початку до кінця',
+    howPrtopTitle: 'Як PR-TOP веде документацію терапії: від сесії до картки клієнта',
     howPrtopP1:
       'На боці сесії ви завантажуєте аудіо- або відеофайл (до 100 МБ) з будь-якого джерела — Zoom, місцевий диктофон, голосове повідомлення з телефону. OpenAI Whisper транскрибує його; необроблений транскрипт одразу шифрується як дані класу A — база даних ніколи не зберігає контент клієнтів у відкритому вигляді. Обраний вами AI-провайдер (OpenAI, Anthropic, Gemini, OpenRouter) генерує резюме за налаштовуваним шаблоном. Нотатка та транскрипт потрапляють на часову шкалу клієнта у вашому зашифрованому кабінеті.',
     howPrtopP2:
@@ -488,7 +488,7 @@ const CONTENT = {
     whyNotEnoughP3:
       'PR-TOP cierra esa brecha. Gestiona la documentación de la sesión (transcripción Whisper, resumen con IA, reproducción en streaming, almacenamiento cifrado) y luego mantiene un canal de cliente en tiempo real vía Telegram: los clientes llevan un diario de voz, texto o vídeo, completan ejercicios asignados y pueden enviar un SOS con un toque directamente a su bandeja. Todo está cifrado con AES en la capa de aplicación. Cuando se sienta antes de la próxima sesión, el cuadro completo — notas más registro entre sesiones — está en un solo panel.',
 
-    howPrtopTitle: 'Cómo gestiona PR-TOP la documentación de terapia de extremo a extremo',
+    howPrtopTitle: 'Cómo gestiona PR-TOP la documentación de terapia, de la sesión al expediente',
     howPrtopP1:
       'En el lado de la sesión, usted carga un archivo de audio o vídeo (hasta 100 MB) de cualquier fuente — Zoom, grabadora local, nota de voz del teléfono. OpenAI Whisper lo transcribe; la transcripción sin procesar se cifra inmediatamente como datos de clase A, de modo que la base de datos nunca almacena el contenido del cliente en texto claro. Su proveedor de IA elegido (OpenAI, Anthropic, Gemini, OpenRouter) genera un resumen según una plantilla configurable. La nota y la transcripción aparecen en la línea de tiempo del cliente en su panel cifrado.',
     howPrtopP2:
@@ -696,7 +696,7 @@ export default function TherapyDocumentationAi() {
           <p className="text-gray-700 leading-relaxed">{c.whyNotEnoughP3}</p>
         </section>
 
-        {/* Rule 7 — PR-TOP wedge in second H2: end-to-end documentation (diary + exercises + SOS + Telegram named again). */}
+        {/* Rule 7 — PR-TOP wedge in second H2: session-to-record coverage (diary + exercises + SOS + Telegram named again). */}
         <section className="mb-10">
           <h2 className="text-2xl font-semibold text-gray-900 mb-4">
             {c.howPrtopTitle}
