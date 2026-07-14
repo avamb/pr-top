@@ -15971,3 +15971,59 @@ VERIFICATION:
 - git commit: 0329dc4
 
 Stats after session 216: #465 status: passing.
+
+================================================================
+Session 217 (2026-07-14) - Feature #467 PASSING (R19 professional proof)
+================================================================
+
+Assigned: #467 R19 — Professional proof — только из фактов владельца (TRUST_FACTS.md)
+
+IMPLEMENTATION:
+1. docs/TRUST_FACTS.md (NEW)
+   - Owner-facing template with 4 tables: numbers, associations, advisors, testimonials
+   - Clear instructions on how to fill + how to copy data to trustFacts.js
+   - Strict mandate: no fabricated data, no placeholder quotes
+
+2. src/frontend/src/data/trustFacts.js (NEW)
+   - Exports: numbers[], associations[], advisors[], testimonials[], hasTrustFacts()
+   - All arrays start empty (section hidden until owner supplies real facts)
+   - JSDoc types for LocaleString ({ en, ru, uk, es }) pattern
+   - Commented examples clearly marked "DO NOT UNCOMMENT — fill from TRUST_FACTS.md only"
+
+3. src/frontend/src/components/landing/ProfessionalProofSection.jsx (NEW)
+   - Reads from trustFacts.js, returns null if hasTrustFacts() === false
+   - Conditional rendering for each sub-category (numbers, associations, advisors, testimonials)
+   - Locale-aware: reads active i18n language, falls back to EN
+   - Styled consistent with other landing sections (surface bg, rounded-2xl cards)
+
+4. src/frontend/src/pages/Landing.jsx
+   - Added import ProfessionalProofSection
+   - Inserted <ProfessionalProofSection /> between TechSection and FAQ
+   - Comment: "renders only when trustFacts.js is populated"
+
+5. src/frontend/src/i18n/{en,ru,uk,es}.json
+   - Added landing.proof.{heading, subheading, numbersTitle, associationsTitle,
+     advisorsTitle, testimonialsTitle} in all 4 locales
+   - Native-quality copy: EN/RU/UK/ES
+
+6. docs/assistant-kb/professional-proof-section.md (NEW)
+   - 800+ words, audience:public
+   - Explains the section, conditional rendering, "only real facts" rule,
+     how owner adds facts, localization behavior
+   - Full FAQ (8 Q&As covering: why hidden, testimonial consent, number verification,
+     logo policy, localization, location on page, withdrawal of consent)
+
+7. docs/assistant-kb/faq-seed.json
+   - Added "professional-proof-facts" seed entry (id, audience: public, EN)
+   - Q: Are the testimonials and numbers on the landing page real?
+   - A: yes-or-absent, no fabrication, consent required, numbers verified
+
+VERIFICATION:
+- npm run build (via run-build.js): 92 prerendered pages, exit 0
+- grep dist/index.html for "professional-proof": 0 hits (correct — arrays empty)
+- Section correctly absent when trustFacts arrays are empty ✓
+- node _t_assistant_kb_audit.js: 79 passed, 0 failed
+- npm run docs:assistant: ran successfully, kept all authored docs
+- git commit: c060c4e
+
+Stats after session 217: #467 status: passing (466/468, 99.6%).
