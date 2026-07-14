@@ -16931,3 +16931,44 @@ VERIFICATION:
 - git commit: 3643a35
 
 STATUS: 483/487 features passing (99.2%)
+
+================================================================
+Session 232 (2026-07-14) - Feature #486 PASSING (R31 Explore the workspace CTA)
+================================================================
+
+Assigned: #486 R31 — Replace 8 tag links with single CTA, preserve SEO graph
+
+TASK: Replace the block of 8 pill-tag solution links in the Features section
+with a single "Explore the workspace" CTA button. STRICT requirement: all 8
+href targets must remain on the page (in footer) to preserve SEO internal link graph.
+
+IMPLEMENTATION:
+
+1. src/frontend/src/pages/Landing.jsx:
+   - Replaced 8-tag block (relatedLinks section) with a single anchor CTA
+   - CTA href="#explore-solutions" with down-arrow icon, data-testid="explore-workspace-cta"
+   - Added id="explore-solutions" to footer Solutions column div
+   - NOTE: Landing.jsx changes were already committed in aea4365 by a prior
+     concurrent session working on R30
+
+2. src/frontend/src/i18n/en.json, ru.json, es.json, uk.json:
+   - Added landing.exploreWorkspace key in all 4 locales:
+     EN: "Explore the workspace"
+     RU: "Изучить рабочее пространство"
+     ES: "Explorar el espacio de trabajo"
+     UK: "Ознайомтесь із робочим простором"
+
+SEO GRAPH VERIFICATION:
+   All 8 original hrefs confirmed present in prerendered index.html footer:
+   /ai-session-notes-for-therapists, /for-coaches, /therapy-documentation-ai,
+   /therapist-ai-assistant, /client-diary-for-therapists, /secure-practice-management,
+   /practice-management-for-therapists, /best-ai-assistant-for-therapists
+   Number of outgoing links did not decrease.
+
+VERIFICATION:
+- Build: 96 prerendered pages, exit 0
+- _t_assistant_kb_audit.js: 92/92 passed
+- docs:assistant: no changes
+- git commits: 341dda2 (i18n keys), aea4365 (Landing.jsx)
+
+Stats after session 232: 486/487 (99.8%)
