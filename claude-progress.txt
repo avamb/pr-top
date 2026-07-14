@@ -15778,3 +15778,51 @@ VERIFICATION:
 Stats after session 213: #461 status: passing (460/468, 98.3%).
 
 Stats after session 213: #460 status: passing (460/460, 100%).
+
+================================================================
+Session 214 (2026-07-14) - Feature #463 PASSING (R15 PWA/update banner gating)
+================================================================
+Assigned: #463 R15 — Гейтинг PWA/update-баннеров — только в авторизованной зоне
+
+PROBLEM:
+InstallPrompt was mounted globally in App.jsx (line 183) as <InstallPrompt />,
+so both the PWA install banner and the SW update banner appeared on ALL routes,
+including the landing page, /register, /login, /security/*, /compare/*, etc.
+
+IMPLEMENTATION:
+1. src/frontend/src/App.jsx
+   - Added AUTHENTICATED_PREFIXES array listing all authenticated route prefixes:
+     /dashboard, /clients, /sessions, /exercises, /analytics,
+     /settings, /subscription, /admin
+   - Added GatedInstallPrompt component (uses useLocation from react-router-dom):
+     * Reads current pathname
+     * Renders <InstallPrompt /> only if pathname matches an authenticated prefix
+     * Returns null on all public routes
+   - Replaced <InstallPrompt /> with <GatedInstallPrompt /> in App return
+   - Added JSDoc comment explaining the gating rationale (R15)
+
+2. docs/assistant-kb/getting-started.md
+   - Added "Installing PR-TOP as a Progressive Web App (PWA)" section
+   - Documents that install prompt appears only in signed-in area
+   - Documents the SW update banner and its gating
+   - Placed before "What the assistant can help with" section
+
+3. docs/assistant-kb/faq-seed.json
+   - Added "pwa-install" FAQ entry: audience public, EN locale
+   - Q: "Can I install PR-TOP as an app on my device?"
+   - A: explains PWA, where banner appears, gating to authenticated zone
+
+4. _t_r15_pwa_gating.js (new verification script)
+   - Tests 16 public paths: all correctly return isInAuthenticatedZone=false
+   - Tests 15 auth paths: all correctly return isInAuthenticatedZone=true
+   - 31 checks, 0 failures
+
+VERIFICATION:
+- _t_r15_pwa_gating.js: 31 passed, 0 failed
+- npm run build --prefix src/frontend: 92 prerendered pages, exit 0
+- node _t_geo_audit.js: 18 passed, 0 failed
+- node _t_seo_i18n_audit.js: 15 passed, 0 failed
+- node _t_assistant_kb_audit.js: 79 passed, 0 failed
+- git commit: 9ab58a1
+
+Stats after session 214: #463 status: passing (462/468, 98.7%).
