@@ -1,4 +1,87 @@
 ================================================================
+Session 210 (2026-07-14) - Feature #456 PASSING (R8 routine-intent SEO page)
+================================================================
+
+Assigned: #456 R8 — New routine-intent SEO cluster: practice-management-for-therapists
+
+IMPLEMENTATION:
+
+1. src/frontend/src/pages/PracticeManagementForTherapists.jsx (NEW)
+   - Route: /practice-management-for-therapists
+   - H1: "Practice management for therapists" (no AI/bot tokens) in all 4 locales
+   - Angle: organized practice workspace — client roster, session records, notes,
+     analytics AND the between-session client channel. Not AI-first.
+   - SEO titles/descriptions use routine-intent keywords only (no AI in title)
+   - All 4 locales inline CONTENT dict (EN/RU/UK/ES), native-quality copy
+   - CONTENT_RULES compliance:
+     Rule 1: 40-60 word direct-answer block (PR-TOP organises therapy practice
+             around therapeutic relationship, not billing cycles...)
+     Rule 2: Single H1, clean H2/H3 hierarchy, no AI/bot in H1
+     Rule 3: Honest comparison table vs SimplePractice, Jane App, generic EHR
+             (4 columns + pricing/wins/loses/best-for rows)
+     Rule 4: 6 FAQ Q&A pairs in HTML + FAQPage JSON-LD (all 4 locales)
+     Rule 5: "Updated: July 2026" visible stamp + dateModified in JSON-LD
+     Rule 6: Internal links to /, /ai-session-notes-for-therapists,
+             /secure-practice-management, /security/encryption
+     Rule 7: PR-TOP wedge (diary + exercises + crisis alerts + Telegram) in
+             first two H2 sections
+   - "What PR-TOP is NOT built for" honest limitations section
+   - "Reducing administrative load" section (documentation/communication/org)
+
+2. src/frontend/src/seo/routes.mjs
+   - Added new route entry with routine-intent primaryKeyword:
+     en: 'practice management for therapists', ru: 'управление практикой психолога',
+     uk: 'управління практикою психолога', es: 'gestión de consulta para terapeutas'
+   - Added to LLMS_SECTIONS Comparisons group
+
+3. src/frontend/src/App.jsx
+   - Import PracticeManagementForTherapists
+   - Route: { path: '/practice-management-for-therapists', element: <PracticeManagementForTherapists /> }
+
+4. src/frontend/src/pages/Landing.jsx
+   - Footer Solutions column: added link with t('landing.solPracticeManagement')
+   - Contextual chip-pill links: added /practice-management-for-therapists chip
+
+5. src/frontend/src/i18n/{en,ru,uk,es}.json
+   - Added solPracticeManagement key:
+     EN: "Practice management" / RU: "Управление практикой" /
+     UK: "Управління практикою" / ES: "Gestión de consulta"
+
+6. _t_geo_audit.js + _t_seo_i18n_audit.js
+   - Added /practice-management-for-therapists to both scripts' routes arrays
+   - Added PRIMARY_KEYWORDS entry in seo_i18n_audit for W3 check
+
+7. check-r8.js (NEW) — verification script for this feature
+
+DESCRIPTION LENGTHS (all 140-160 chars):
+- EN: 160 chars — routine-intent only, no AI keyword
+- RU: 159 chars
+- UK: 156 chars
+- ES: 157 chars
+
+VERIFICATION:
+- npm run build --prefix src/frontend: 92 prerendered pages
+  (88 public = 22 routes x 4 locales + 4 noindex auth shells)
+  Sitemap: 88 URLs. llms.txt: 88 route entries.
+- node check-r8.js: 28 passed, 0 failed
+  * All 4 locales: H1 has no AI/bot ✓
+  * All 4 locales: description 140-160 chars ✓
+  * All 4 locales: Updated stamp present ✓
+  * All 4 locales: JSON-LD blocks parse ✓
+  * All 4 locales: FAQPage + Article JSON-LD present ✓
+  * Sitemap: 4 <loc> entries for new route ✓
+  * llms.txt: route present ✓
+  * EN meta title: "Practice Management for Therapists — PR-TOP Workspace (2026)" ✓
+  * EN meta title has no AI token ✓
+- node _t_geo_audit.js: 18 passed, 0 failed (updated from 17 to 18 with new route)
+- node _t_seo_i18n_audit.js: 15 passed, 0 failed (88 locale×route combos checked)
+- node _t_assistant_kb_audit.js: 79 passed, 0 failed (no regressions)
+- node _t_link_graph_w6.js: 52 passed, 0 failed (no regressions)
+- git commit: 2b62531
+
+Stats after session 210: #456 status: passing (456/457 → 455/457 passing).
+
+================================================================
 Session 209 (2026-07-14) - Feature #457 PASSING (R9 final QA pass)
 ================================================================
 
