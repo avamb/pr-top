@@ -229,3 +229,29 @@ Split into four independent features R21a–R21d, ordered by priority. Common ru
 3. Full audit suite green at the end.
 
 > **Owner decision pending (not for agents):** the in-app stat card label "SOS ALERTS" is visible in the hero screenshot and clashes with the agreed-protocol language. Renaming an in-product label (e.g. "Protocol alerts") is a product decision — flag in the PR, do not rename unilaterally.
+
+---
+
+## R22 — Support-assistant KB truth sync (owner audit 2026-07-14)
+
+**Context (verified):** the support chatbot answers from `docs/assistant-kb/` — md files are auto-reindexed into `assistant_knowledge` (embeddings) on every backend startup (`src/backend/src/index.js:443`) and `faq-seed.json` re-seeds cached answers with answer-text refresh, so *indexing* is automatic on deploy. The *content*, however, is only partially synced with the repositioning: the deterministic layer was regenerated during Wave 2 (2026-07-14 12:22) and `security-overview.md` is exemplary (it honestly explains why PR-TOP is NOT E2EE/zero-knowledge), but **the generator itself hardcodes a false claim** — `scripts/generate-assistant-docs.mjs:391` writes "All plans include end-to-end encryption of the …" into `reference/pricing.md` (line 8), directly contradicting the site and `security-overview.md` inside the same KB. 19 of 26 prose files are dated 2026-07-07 (pre-repositioning); `client-bot-experience.md:26` and `crisis-sos-workflow.md:26,70` still frame crisis handling as an "SOS button", and 4 files + `faq-seed.json:79` use "end-to-end" as a process idiom (banned collision). Deterministic regeneration (`npm run docs:assistant`) is not wired into any build/release step — it relies on discipline.
+
+### R22a — P0: Fix the false E2EE claim in the docs generator
+**Description:** In `scripts/generate-assistant-docs.mjs` replace the hardcoded "All plans include end-to-end encryption…" pricing lead with the R12-truthful wording ("All plans include application-level encryption (AES-256) of clinical content; see the security overview for the exact access model."). Regenerate the deterministic layer (`npm run docs:assistant`) and commit the refreshed `reference/*.md`. Sweep the whole KB for encryption-sense E2EE claims.
+**Acceptance steps:**
+1. Grep `scripts/generate-assistant-docs.mjs` + `docs/assistant-kb/reference/`: zero matches for `end-to-end encrypt` (case-insensitive).
+2. `docs/assistant-kb/reference/pricing.md` regenerated in the same commit; `node _t_assistant_kb_audit.js` passes.
+3. Cross-consistency check: `security-overview.md`'s "No, not E2EE" answer and `pricing.md` no longer contradict each other (manual read, noted in PR).
+
+### R22b — P1: Reposition the stale prose how-tos (19 files of 2026-07-07)
+**Description:** Editorial pass over every prose file older than the repositioning, under the §4 copywriting mandate + truth-before-copy: crisis pages (`crisis-sos.md`, `crisis-sos-workflow.md`, `client-bot-experience.md`) adopt the agreed-protocol framing — the `/sos` command and pinned button remain factually described as the *mechanism*, but the narrative is "a pre-agreed response protocol, not an emergency service" (mirror the landing's R4/R17 language, including "PR-TOP is not a crisis line and does not contact emergency services"); replace "end-to-end" process idioms in `client-management.md` (H1!), `bulk-session-upload.md`, `client-bot-experience.md`, `faq-seed.json` (e.g. "from start to finish"); align terminology with the site (practice workspace, client channel, drafts-for-review model from R14). Facts (commands, flows, limits) must be re-verified against the code, not assumed.
+**Acceptance steps:**
+1. Grep `docs/assistant-kb/`: zero case-insensitive `end-to-end` matches; `SOS button` appears only inside factual UI references, with the protocol framing present in the same section (crisis files contain "not a crisis line"/"not an emergency service" wording in every locale-relevant file).
+2. `node _t_assistant_kb_audit.js` passes; `faq-seed.json` seeds re-applied (answer-text refresh confirmed via the seed upsert path).
+3. Spot-check three regenerated answers through the assistant retrieval path (dev run): pricing/security/crisis questions return the new wording.
+
+### R22c — P2: Wire deterministic docs regeneration into the release gate
+**Description:** `npm run docs:assistant --check` (dry-run drift detector) must run as part of the standard audit chain so a release cannot ship with `reference/*.md` out of sync with routes/i18n/tiers: add it to `_t_assistant_kb_audit.js` (fail on drift) or as a separate `docs:assistant:check` invocation in the documented pre-release checklist in `docs/seo/CONTENT_RULES.md`, mirroring the R21d screenshot-freshness pattern.
+**Acceptance steps:**
+1. Demonstrate in the PR: change a tier bullet key in `en.json`, run the audit — it fails on drift; run `npm run docs:assistant`, audit passes; revert the demo change.
+2. Checklist updated; full audit suite green.
