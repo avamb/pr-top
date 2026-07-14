@@ -16449,3 +16449,52 @@ VERIFICATION:
 - git commit: 563c205
 
 Stats after session 222: #474 status: passing (473/475, 99.6%).
+
+================================================================
+Session 224 (2026-07-14) - Feature #476 PASSING (R23 Trust Gate)
+================================================================
+
+Assigned: #476 R23 - Anti-myth gate for tariff claims in assistant-kb (P1)
+
+PROBLEM: KB had fictional plan-tier restrictions not backed by code.
+Agents wrote "X is Pro-only" or "SOS email is Premium" without real gates.
+
+IMPLEMENTATION:
+
+1. docs/assistant-kb/plan-gates.json (NEW)
+   6 code-verified gates: voice-queries-pro, nl-queries-pro, client-kb-pro,
+   data-export-pro, analytics-export-premium, client-seats-limit.
+   Each has: id, statement, code_ref, anchor (regex that must match in code).
+
+2. _t_assistant_kb_audit.js - sections 12h + 12i added:
+   12h: loads plan-gates.json; verifies each anchor found in its code_ref
+   12i: scans KB .md files (excluding reference/) for lines combining
+        tier name (Premium|Pro|Basic|Trial) + gating word
+        (only|available on|locked|unlock|limited to); each must carry
+        a gate annotation within 5 lines above or inline.
+        faq-seed.json checked per-sentence for same pattern.
+
+3. KB files - removed fictional tier restrictions:
+   - analytics-and-mood-trends.md: dropped "require Basic and above" and
+     sparkline Pro/Premium FAQ (component not in frontend)
+   - bulk-session-upload.md: dropped "available on Pro and Premium" for video
+   - client-management.md: dropped "(Premium only)" from supervision share
+   - dashboard-overview.md: rewrote mood-trend strip (no such component)
+   - troubleshooting-faq.md: dropped "email is Premium" from SOS section
+   - billing.md, feature-overview.md, getting-started.md,
+     registration-and-onboarding.md, uploading-a-session.md: minor fixes
+
+4. KB files - added gate annotations to real gates:
+   - data-export-and-deletion.md: gate: data-export-pro
+   - natural-language-queries.md: gate: nl-queries-pro (x2)
+
+5. docs/assistant-kb/README.md: truth-before-copy mandate section added.
+
+VERIFICATION:
+- node _t_assistant_kb_audit.js: 88 passed, 0 failed (was 80)
+- npm run docs:assistant:check: exits 0, no drift
+- Injected "Diary is Premium-only" -> audit caught file:line correctly
+- Real gate annotation passes without error
+- git commit: 1fd37e6
+
+Stats after session 224: 476/476 (100%). BACKLOG COMPLETE.
