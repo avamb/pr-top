@@ -194,8 +194,8 @@
   "landing": {
     "heroTitle1": "Un espacio de trabajo unificado",
     "heroTitle2": "para terapeutas y su práctica.",
-    "heroSlogan": "Contexto del cliente entre sesiones. Notas que revisas y controlas. Límites profesionales que se sostienen.",
-    "heroDesc": "PR-TOP reúne el diario del cliente, las notas de sesión, las tareas y la comunicación segura en un solo lugar protegido. Las tecnologías de automatización ayudan a estructurar la rutina, pero no sustituyen al especialista ni actúan en su nombre. Cumple con GDPR.",
+    "heroSlogan": "Mantenga el contexto completo del cliente entre sesiones. Revise cada nota. Preserve límites profesionales claros.",
+    "heroDesc": "PR-TOP reúne los diarios de clientes, las notas de sesión, las tareas y la comunicación segura en un solo lugar. Le ayuda a organizar el trabajo rutinario, mientras el juicio clínico y las decisiones sobre sus clientes permanecen con usted.",
     "startTrial": "Prueba gratuita",
     "learnMore": "Cómo funciona",
     "featuresTitle": "Su consulta, sin las fricciones habituales",
@@ -264,15 +264,15 @@
     "feature1Title": "Notas de sesión que usted revisa y controla",
     "feature1Desc": "Tras cada sesión, un borrador estructurado le espera para revisión. Usted lee, ajusta y confirma — la documentación se convierte en una tarea de cinco minutos, no en un proyecto para la noche.",
     "feature2Title": "El contexto completo, siempre disponible",
-    "feature2Desc": "El historial, las notas y el hilo de trabajo de cada cliente están en un lugar protegido. Llegue a su próxima cita sabiendo exactamente dónde lo dejó, independientemente de cuántas personas atienda.",
+    "feature2Desc": "El historial, las notas y la cronología de cada cliente están en un lugar protegido. Llegue a su próxima cita sabiendo exactamente dónde lo dejó, sea cual sea su carga de trabajo.",
     "feature3Title": "Sus datos son solo suyos",
     "feature3Desc": "Todos los registros y comunicaciones están cifrados a nivel de aplicación con AES-256. Los datos se almacenan en la UE. Usted controla quién tiene acceso.",
     "feature4Title": "Una jornada laboral que termina cuando usted lo decide",
-    "feature4Desc": "Defina las horas en que el servicio gestiona los mensajes entrantes. Sus clientes se sienten acompañados; usted tiene un cierre claro de su día profesional y tiempo para recuperarse.",
+    "feature4Desc": "Defina las horas en que los mensajes de sus clientes se entregan y recibe notificaciones. Sus clientes se sienten acompañados; usted tiene un cierre claro de su día profesional y tiempo para recuperarse.",
     "feature5Title": "Registre un pensamiento en el momento en que surge",
-    "feature5Desc": "Dicte una observación breve entre citas — se transcribe y se guarda como borrador privado bajo el expediente del cliente. Nada se pierde en el intervalo entre sesiones; el borrador pasa al expediente solo tras su revisión.",
+    "feature5Desc": "Grabe una observación breve entre citas — se transcribe y se guarda como borrador privado bajo el expediente del cliente. Nada se pierde en el intervalo entre sesiones; el borrador pasa al expediente solo tras su revisión.",
     "feature6Title": "Un canal familiar para sus clientes — en sus propios términos",
-    "feature6Desc": "Sus clientes llevan un diario, completan ejercicios y envían actualizaciones a través de un canal que ya conocen. Usted recibe un flujo estructurado — sin nuevas aplicaciones para ellos, sin ruido para usted. El canal es Telegram.",
+    "feature6Desc": "Sus clientes pueden llevar un diario, completar ejercicios y enviar actualizaciones en Telegram — sin aprender otra aplicación. Usted recibe todo en un espacio de trabajo estructurado, no en su bandeja personal.",
     "week": {
       "heading": "Una semana en su consulta con PR-TOP",
       "lead": "Cinco momentos que los terapeutas reconocen — y cómo el espacio de trabajo encaja en cada uno.",
@@ -288,13 +288,13 @@
       },
       "step3": {
         "label": "Miércoles al mediodía",
-        "title": "Un mensaje, sin fronteras difusas",
+        "title": "Mensajes de clientes sin fronteras difusas",
         "body": "Un cliente envía una nota de voz al mediodía. Llega al diario seguro en PR-TOP, no a su teléfono personal. Lo lee cuando abre el panel. Sin WhatsApp. Sin fronteras difusas."
       },
       "step4": {
         "label": "Jueves por la tarde",
         "title": "El pensamiento que casi se escapa",
-        "body": "Una observación no quedó en las notas de sesión. Abre PR-TOP y dicta un apunte rápido. Se transcribe y se guarda como borrador privado bajo el cliente correcto. Nada se pierde — el borrador llega al expediente del cliente solo tras su revisión."
+        "body": "Una observación no quedó en las notas de sesión. Abre PR-TOP y graba un apunte rápido. Se transcribe y se guarda como borrador privado bajo el cliente correcto. Nada se pierde — el borrador llega al expediente del cliente solo tras su revisión."
       },
       "step5": {
         "label": "Viernes, fin de semana",
@@ -312,7 +312,7 @@
     "tech2Desc": "Los clientes interactúan a través del Telegram que ya utilizan. Usted configura el canal — horarios, ejercicios y protocolos. El servicio no escribe a los clientes en su nombre por iniciativa propia.",
     "tech3Title": "Cifrado a nivel de aplicación",
     "tech3Desc": "Los registros de clientes, diarios, notas de sesión y transcripciones se cifran a nivel de aplicación antes de escribirse en disco. La clave de cifrado se almacena de forma separada de los datos.",
-    "tech4Title": "Alojamiento europeo",
+    "tech4Title": "Almacenamiento de datos en la UE",
     "tech4Desc": "Los datos se almacenan en servidores de la UE, bajo la normativa europea de protección de datos. Puede solicitar una exportación completa o la eliminación de sus datos en cualquier momento.",
     "techClose": "La tecnología es una herramienta. Cada decisión sobre sus clientes permanece con usted.",
     "faqTitle": "Preguntas frecuentes",
@@ -320,8 +320,8 @@
     "faqA1": "Todos los datos confidenciales están cifrados a nivel de aplicación (AES-256). La clave de cifrado la custodia PR-TOP, almacenada por separado de la base de datos. En condiciones normales de operación, ningún miembro del equipo accede a sus notas clínicas.",
     "faqQ2": "¿Qué sucede si un cliente necesita contactarme entre sesiones?",
     "faqA2": "Durante el proceso de incorporación, usted y cada cliente acuerdan un protocolo de respuesta concreto: una señal específica en el canal de Telegram habitual del cliente, su significado y el tiempo de respuesta esperado. Cuando el cliente envía esa señal, usted recibe una notificación a través de sus canales configurados (Telegram, correo electrónico o ambos). Las horas de silencio, el retraso de escalación y los umbrales de respuesta los define usted. Sin enrutamiento automático a servicios externos: todas las decisiones permanecen con usted.",
-    "protocolTitle": "Protocolo acordado, no un botón de alarma",
-    "protocolDesc": "PR-TOP no gestiona una línea de crisis ni contacta servicios de emergencia. En cambio, cada escalación entre sesiones sigue un protocolo que usted y su cliente acuerdan juntos.",
+    "protocolTitle": "Un protocolo pactado de antemano — no un servicio de emergencias",
+    "protocolDesc": "PR-TOP no es una línea de crisis ni contacta servicios de emergencia. Cada situación entre sesiones se gestiona según el protocolo que usted y su cliente han pactado de antemano.",
     "protocolPoint1": "Usted define la señal: qué envía el cliente y qué significa.",
     "protocolPoint2": "La plataforma entrega la notificación al canal que usted elija: Telegram, correo electrónico o ambos.",
     "protocolPoint3": "Los tiempos de respuesta, las horas de silencio y los umbrales de escalación los establece usted.",

@@ -264,15 +264,15 @@
     "feature1Title": "Session notes you review and control",
     "feature1Desc": "After each session, a structured draft is ready for your review. You read, adjust, and confirm — documentation becomes a five-minute task, not an evening project.",
     "feature2Title": "Full context, always at hand",
-    "feature2Desc": "Every client's history, notes, and session thread are in one protected place. Walk into your next appointment knowing exactly where you left off — regardless of how many people you see.",
+    "feature2Desc": "Every client's history, notes, and client timeline are in one protected place. Walk into your next appointment knowing exactly where you left off, however large your caseload.",
     "feature3Title": "Your data belongs to you alone",
     "feature3Desc": "All records and communications are encrypted at the application level using AES-256. Data is stored in the EU. You control who has access.",
     "feature4Title": "A workday that ends when you choose",
-    "feature4Desc": "Set the hours when the service handles incoming messages. Clients feel supported; you have a clear end to your professional day and time to recover properly.",
+    "feature4Desc": "Set the hours when client messages are delivered and when you receive notifications. Clients feel supported; you have a clear end to your professional day and time to recover properly.",
     "feature5Title": "Capture a thought the moment it comes",
-    "feature5Desc": "Voice a quick observation between appointments — it is transcribed and saved as a private draft under the right client file. Nothing slips through the gap between sessions; the draft enters the clinical record only after your review.",
+    "feature5Desc": "Record a quick observation between appointments — it is transcribed and saved as a private draft under the right client file. Nothing slips through the gap between sessions; the draft enters the clinical record only after your review.",
     "feature6Title": "A familiar channel for clients — on your terms",
-    "feature6Desc": "Clients keep a diary, complete exercises, and send updates through a channel they already know. You receive a structured feed — no extra apps for them, no noise for you. The channel is Telegram.",
+    "feature6Desc": "Clients can keep a diary, complete exercises, and send updates in Telegram — without learning another app. You receive everything in a structured workspace, not in your personal inbox.",
     "week": {
       "heading": "A week in your practice with PR-TOP",
       "lead": "Five moments therapists recognize — and how the workspace fits into each one.",
@@ -288,13 +288,13 @@
       },
       "step3": {
         "label": "Wednesday, midday",
-        "title": "A message, without the blur",
+        "title": "Client messages without blurred boundaries",
         "body": "A client sends a voice note at noon. It arrives in their secure diary feed in PR-TOP — not your personal phone. You read it when you open the dashboard. No crossed boundaries. No WhatsApp."
       },
       "step4": {
         "label": "Thursday evening",
         "title": "The thought that nearly slipped",
-        "body": "An observation didn't make it into the session notes. You open PR-TOP, voice a quick memo. It is transcribed and saved as a private draft under the right client. Nothing falls through the gap — the draft reaches the client record only after you review it."
+        "body": "An observation didn't make it into the session notes. You open PR-TOP, record a quick memo. It is transcribed and saved as a private draft under the right client. Nothing falls through the gap — the draft reaches the client record only after you review it."
       },
       "step5": {
         "label": "Friday, end of week",
@@ -312,7 +312,7 @@
     "tech2Desc": "Clients interact through Telegram, which they already have. You configure the channel — hours, exercises, and protocols. The service does not initiate contact on your behalf.",
     "tech3Title": "Application-level encryption",
     "tech3Desc": "Client records, diary entries, session notes, and transcripts are encrypted at the application layer before they are written to storage. The encryption key is held separately from the data.",
-    "tech4Title": "European hosting",
+    "tech4Title": "EU-based data hosting",
     "tech4Desc": "Data is stored on servers in the EU, covered by European data-protection law. You can request a full export or deletion at any time.",
     "techClose": "The technology is a tool. Every decision about your clients stays with you.",
     "faqTitle": "Frequently Asked Questions",
@@ -320,8 +320,8 @@
     "faqA1": "All confidential data is encrypted at the application level (AES-256). The encryption key is held by PR-TOP and stored separately from the database. Under normal operation, no support or development team member accesses your clinical notes.",
     "faqQ2": "What happens if a client needs to reach me between sessions?",
     "faqA2": "During onboarding, you and each client agree on a specific response protocol — a designated signal sent through the client's usual Telegram channel, what it means, and the expected response window. When a client sends that signal, you receive a notification through your configured channels (Telegram, email, or both). Quiet-hour rules, escalation delay, and response thresholds are all set by you. No automated routing to external services — every decision stays with you.",
-    "protocolTitle": "Agreed protocol, not an alarm button",
-    "protocolDesc": "PR-TOP does not run a crisis line or contact emergency services. Instead, every between-session escalation follows a protocol you and your client agree on together.",
+    "protocolTitle": "A pre-agreed protocol — not an emergency service",
+    "protocolDesc": "PR-TOP is not a crisis line and does not contact emergency services. Every between-session escalation follows a protocol you and your client agree on together.",
     "protocolPoint1": "You define the signal — what the client sends and what it means.",
     "protocolPoint2": "The platform delivers the notification to your chosen channel: Telegram, email, or both.",
     "protocolPoint3": "Response timing, quiet hours, and escalation thresholds are all set by you.",
