@@ -1570,7 +1570,14 @@
       "keyMgmtP2": "Se admiten procedimientos de rotación de claves para actualizar periódicamente el cifrado sin interrumpir la disponibilidad del servicio.",
       "zeroKnowledgeTitle": "Modelo de acceso y transparencia",
       "zeroKnowledgeP1": "Qué se cifra: todos los datos de Clase A (diarios, notas de sesión, transcripciones, resúmenes de IA). Quién puede descifrar: únicamente la capa de aplicación mediante la clave maestra almacenada en una variable de entorno protegida — el acceso a la base de datos por sí solo no es suficiente. Qué ve el soporte: en condiciones normales de operación, ningún empleado de PR-TOP accede al contenido clínico; el soporte técnico trabaja exclusivamente con metadatos anonimizados y registros.",
-      "zeroKnowledgeP2": "La clave maestra la custodia el operador del servicio y se almacena en un entorno protegido, separado de la base de datos. En caso de una brecha en el servidor, el atacante encontraría solo texto cifrado — sin la clave, los datos son inaccesibles."
+      "zeroKnowledgeP2": "La clave maestra la custodia el operador del servicio y se almacena en un entorno protegido, separado de la base de datos. En caso de una brecha en el servidor, el atacante encontraría solo texto cifrado — sin la clave, los datos son inaccesibles.",
+      "summaryTitle": "Seguridad en lenguaje sencillo",
+      "summary1": "Dónde se almacena: todos los datos se procesan y almacenan en centros de datos de la Unión Europea.",
+      "summary2": "Cómo se cifra: el contenido está protegido con cifrado AES-256 a nivel de aplicación. PR-TOP no utiliza cifrado de extremo a extremo (E2EE) y no es zero-knowledge — el operador de la plataforma posee las claves de descifrado.",
+      "summary3": "Quién tiene acceso: solo la capa de aplicación (usando la clave maestra del operador de la plataforma) puede descifrar el contenido clínico. El acceso a nivel de base de datos no es suficiente. El soporte de PR-TOP no accede a sus datos clínicos en condiciones normales.",
+      "summary4": "Registro de auditoría: cada acceso a datos sensibles queda registrado en un registro de auditoría a prueba de manipulaciones. Los terapeutas pueden ver su propio registro de acceso en el panel.",
+      "summary5": "GDPR y DPA: todos los datos se almacenan y procesan dentro de la UE. Hay disponible una plantilla de Acuerdo de Procesamiento de Datos para clínicas y organizaciones.",
+      "itReviewerTitle": "Para su revisor de TI — detalles técnicos"
     },
     "gdpr": {
       "minimizationTitle": "Minimización de datos",

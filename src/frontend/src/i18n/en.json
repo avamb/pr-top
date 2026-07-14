@@ -1570,7 +1570,14 @@
       "keyMgmtP2": "Key rotation procedures are supported to periodically refresh encryption without disrupting service availability.",
       "zeroKnowledgeTitle": "Access Model & Transparency",
       "zeroKnowledgeP1": "What is encrypted: all Class A data (diary entries, session notes, transcripts, AI summaries). Who can decrypt: only the application layer using the master key stored in a protected environment variable — database-level access alone is not sufficient. What support sees: under normal operation, no PR-TOP team member accesses your clinical content; technical support works with anonymized metadata and logs only.",
-      "zeroKnowledgeP2": "The master key is held by the service operator and stored in a protected environment, separate from the database. In the event of a server breach, an attacker would encounter only encrypted ciphertext without the key."
+      "zeroKnowledgeP2": "The master key is held by the service operator and stored in a protected environment, separate from the database. In the event of a server breach, an attacker would encounter only encrypted ciphertext without the key.",
+      "summaryTitle": "Security in plain language",
+      "summary1": "Where stored: All data is processed and stored in European Union data centers.",
+      "summary2": "How encrypted: Content is protected with application-layer AES-256 encryption. PR-TOP is not end-to-end encrypted and not zero-knowledge — the platform operator holds the decryption keys.",
+      "summary3": "Who can access: Only the application layer (using a master key held by the platform operator) can decrypt clinical content. Database-level access alone is insufficient. PR-TOP support does not access your clinical data under normal operation.",
+      "summary4": "Audit trail: Every access to sensitive data is recorded in a tamper-proof audit log. Therapists can view their own access log in the dashboard.",
+      "summary5": "GDPR & DPA: All data is stored and processed within the EU. A Data Processing Agreement template is available for clinics and organizations upon request.",
+      "itReviewerTitle": "For your IT reviewer — technical details"
     },
     "gdpr": {
       "minimizationTitle": "Data Minimization",

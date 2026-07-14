@@ -687,7 +687,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `security.enc.appLayerItem3` — Conversation messages between therapist and client
 - `security.enc.appLayerItem4` — Therapist-entered anamnesis, contraindications, and clinical context fields
 - `security.enc.appLayerItem5` — SOS alert content and exercise responses
-- _+ 110 more keys_
+- _+ 117 more keys_
 
 ## seo
 

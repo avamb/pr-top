@@ -8,6 +8,30 @@ see `docs/PRD.md` and the dedicated Security pages on the marketing
 site (`/security/encryption`, `/security/gdpr`, `/security/audit-log`,
 `/security/data-sovereignty`).
 
+## Security in plain language (five-point summary)
+
+The `/security/encryption` page opens with a five-point human-readable
+summary that non-technical therapists can read before the scroll:
+
+1. **Where stored** — All data is processed and stored in EU data centers.
+2. **How encrypted** — Application-layer AES-256. **PR-TOP is not
+   end-to-end encrypted and not zero-knowledge.** The platform operator
+   holds the decryption keys. A database dump alone reveals only ciphertext.
+3. **Who can access** — Only the application layer (using the operator-held
+   master key) can decrypt clinical content. Database-level access is
+   insufficient. PR-TOP support does not access clinical data under normal
+   operation.
+4. **Audit trail** — Every sensitive-data access is recorded in a
+   tamper-proof audit log (90-day default retention). Therapists can review
+   their own access log in the dashboard.
+5. **GDPR & DPA** — All processing is EU-based. A Data Processing Agreement
+   template is available for clinics and organizations upon request.
+
+Technical details (algorithms, key management, TLS configuration, access
+model) appear in a collapsible "For your IT reviewer" accordion below the
+summary, so technical and non-technical visitors each get the information
+they need.
+
 ## Data classes
 
 - **Class A** — the sensitive body of therapy work: diary entries,
