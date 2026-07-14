@@ -15826,3 +15826,41 @@ VERIFICATION:
 - git commit: 9ab58a1
 
 Stats after session 214: #463 status: passing (462/468, 98.7%).
+
+================================================================
+Session 215 (2026-07-14) - Feature #462 PASSING (R14 draft model)
+================================================================
+
+Assigned: #462 R14 — Harmonize tech1Desc and week.step4.body (draft model)
+
+PROBLEM RESOLVED:
+tech1Desc said "nothing saved without review" while step4.body and feature5Desc
+said "filed automatically" — a direct contradiction. Unified model applied:
+draft saved privately first; client record updated only after therapist approval.
+
+CHANGES (all 4 locales):
+- EN/RU/UK: feature5Desc, week.step4.body, tech1Desc — already committed by
+  concurrent R13 session (4780bcf). This session confirmed correctness.
+- ES: feature5Desc, week.step4.body, tech1Desc — committed in 75452c5.
+  ES: borrador privado model, review required before expediente update.
+
+DOCS:
+- docs/assistant-kb/uploading-a-session.md: added "The draft model" section
+  (3-step: draft saved privately, therapist reviews, therapist approves).
+  Added 3 new FAQ entries about draft behavior.
+- docs/assistant-kb/faq-seed.json: added "ai-draft-model" and "voice-memo-draft"
+  canned Q&As for fast cache-served answers.
+
+GREP VERIFICATION (no conflicting phrases remain in i18n):
+- filed automatically: 0 hits
+- attached automatically: 0 hits
+- nothing is saved: 0 hits
+
+AUDITS:
+- node _t_assistant_kb_audit.js: 79 passed, 0 failed
+- npm run build: 92 prerendered pages, exit 0
+- node _t_geo_audit.js: 18 passed, 0 failed
+- node _t_seo_i18n_audit.js: 15 passed, 0 failed
+
+Git commits: 4780bcf (EN/RU/UK changes from R13 session), 75452c5 (ES + docs)
+Feature #462 marked PASSING.
