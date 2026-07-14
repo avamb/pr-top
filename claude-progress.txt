@@ -1,4 +1,39 @@
 ================================================================
+Session 206 (2026-07-14) - Feature #452 PASSING (R4 Agreed protocol)
+================================================================
+
+Assigned: #452 R4 — Replace SOS with agreed protocol block + FAQ rewrite
+
+IMPLEMENTATION:
+1. src/frontend/src/i18n/{en,ru,uk,es}.json
+   - landing.faqQ2/faqA2 rewritten in all 4 locales: removed "SOS button"
+     / "SOS alert system" / "crisis alert" framing. Replaced with
+     "agreed response protocol" language — client sends a signal defined
+     by the therapist during onboarding, notification routed through
+     therapist's configured channels; no automated routing to external
+     services; all decisions stay with the therapist.
+   - Added 5 new landing keys in each locale: protocolTitle,
+     protocolDesc, protocolPoint1, protocolPoint2, protocolPoint3
+     describing the "Agreed protocol, not an alarm button" philosophy.
+
+2. src/frontend/src/pages/Landing.jsx
+   - Replaced 'SOS alerts' feature label in Trial/Basic/Pro pricing tiers
+     with 'Agreed client protocol'.
+   - Added new "Agreed Protocol (R4)" section (card with 3 bullet points)
+     between the ControlSection and Anti-Burnout sections.
+
+VERIFICATION:
+- grep: 0 occurrences of 'SOS'/'crisis alert' in prerendered landing
+  pages (dist/index.html, dist/ru, dist/uk, dist/es).
+- Build: 88 pages (84 public + 4 noindex auth shells) — no errors.
+- node _t_geo_audit.js -> 18 passed, 0 failed.
+- node _t_seo_i18n_audit.js -> 15 passed, 0 failed.
+- node _t_assistant_kb_audit.js -> 79 passed, 0 failed.
+- git commit: 5a4a78b
+
+Stats after session 206: #452 status: passing (452/457, 98.9%).
+
+================================================================
 Session 205 (2026-07-14) - Feature #451 PASSING (R3 Control section)
 ================================================================
 
