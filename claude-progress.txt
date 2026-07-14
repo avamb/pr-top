@@ -15979,7 +15979,7 @@ Session 217 (2026-07-14) - Feature #467 PASSING (R19 professional proof)
 Assigned: #467 R19 — Professional proof — только из фактов владельца (TRUST_FACTS.md)
 
 IMPLEMENTATION:
-1. docs/TRUST_FACTS.md (NEW)
+1. docs/seo/TRUST_FACTS.md — owner-facing template (was also created at docs root as duplicate, deleted in R21a)
    - Owner-facing template with 4 tables: numbers, associations, advisors, testimonials
    - Clear instructions on how to fill + how to copy data to trustFacts.js
    - Strict mandate: no fabricated data, no placeholder quotes

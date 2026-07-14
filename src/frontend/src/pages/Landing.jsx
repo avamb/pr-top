@@ -13,6 +13,7 @@ import ControlSection from '../components/landing/ControlSection';
 import WeekInPracticeSection from '../components/landing/WeekInPracticeSection';
 import TechSection from '../components/landing/TechSection';
 import ProfessionalProofSection from '../components/landing/ProfessionalProofSection';
+import LegalEntitySection from '../components/landing/LegalEntitySection';
 
 /* ───────── Feature Highlights (icons only, text from i18n) ───────── */
 const highlightIcons = [
@@ -491,6 +492,9 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      {/* ─── Legal Entity (R21a) — company facts between Pricing and Footer ─── */}
+      <LegalEntitySection />
 
       </main>
 

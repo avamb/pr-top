@@ -324,6 +324,16 @@
       "advisorsTitle": "Expert advisors",
       "testimonialsTitle": "From the practice"
     },
+    "legalEntity": {
+      "heading": "About the company",
+      "intro": "PR-TOP is operated by",
+      "operatingSinceLabel": "operating since",
+      "registryCodeLabel": "Registry code",
+      "jurisdictionLabel": "Jurisdiction",
+      "addressLabel": "Registered address",
+      "contactLabel": "Privacy & support",
+      "registerLink": "View in e-Business Register"
+    },
     "faqTitle": "Frequently Asked Questions",
     "faqQ1": "Who can read my notes and client communications?",
     "faqA1": "All confidential data is encrypted at the application level (AES-256). The encryption key is held by PR-TOP and stored separately from the database. Under normal operation, no support or development team member accesses your clinical notes.",

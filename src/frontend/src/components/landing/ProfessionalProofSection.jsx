@@ -1,12 +1,12 @@
 /**
  * ProfessionalProofSection — R19
  *
- * Renders only when docs/TRUST_FACTS.md has been filled and the data has been
+ * Renders only when docs/seo/TRUST_FACTS.md has been filled and the data has been
  * copied to src/frontend/src/data/trustFacts.js. If every array is empty, this
  * component returns null (section omitted from the HTML entirely).
  *
  * MANDATE: All content must come from trustFacts.js which is populated
- * exclusively from docs/TRUST_FACTS.md (owner-supplied, consent-approved facts).
+ * exclusively from docs/seo/TRUST_FACTS.md (owner-supplied, consent-approved facts).
  * No placeholder testimonials, fabricated logos, or invented numbers are permitted.
  */
 import React from 'react';

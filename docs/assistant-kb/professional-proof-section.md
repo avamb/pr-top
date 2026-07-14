@@ -30,7 +30,7 @@ section can display up to four types of proof:
 ## When the section does not appear
 
 The section is intentionally hidden until real facts are available. If the
-`docs/TRUST_FACTS.md` file has not been filled by the product owner, or if no
+`docs/seo/TRUST_FACTS.md` file has not been filled by the product owner, or if no
 facts have been copied to `src/frontend/src/data/trustFacts.js`, the section
 simply does not render in the HTML output — no placeholder quotes, no stock
 "5-star" widgets, no fake logos.
@@ -58,13 +58,13 @@ commented-out examples for reference, all clearly marked "DO NOT UNCOMMENT."
 
 ## How to add facts (for the product owner)
 
-1. Open `docs/TRUST_FACTS.md` and fill in the relevant tables with your
+1. Open `docs/seo/TRUST_FACTS.md` and fill in the relevant tables with your
    verified data.
 2. Copy each entry into `src/frontend/src/data/trustFacts.js`, following
    the type annotations in the file.
 3. Run `npm run build --prefix src/frontend` to verify the section renders
    with your new content.
-4. Commit both `docs/TRUST_FACTS.md` and `src/frontend/src/data/trustFacts.js`.
+4. Commit both `docs/seo/TRUST_FACTS.md` and `src/frontend/src/data/trustFacts.js`.
 
 The section goes live on the next deployment.
 
@@ -84,7 +84,7 @@ does not have a translation, the English text is shown as a fallback.
 
 **Q: Why is the professional proof section missing from the landing page?**
 A: The section only renders when the product owner has filled in verified,
-consent-approved data in `docs/TRUST_FACTS.md` and copied it to the
+consent-approved data in `docs/seo/TRUST_FACTS.md` and copied it to the
 `trustFacts.js` data file. If neither has been done, the section is deliberately
 omitted. There is no bug; the design prefers an empty page over a misleading one.
 
@@ -117,16 +117,28 @@ formally granted.
 **Q: Is the professional proof section available in Russian, Ukrainian, and Spanish?**
 A: Yes. All section labels (headings, category titles) are fully translated. For
 testimonials and advisor quotes, the product owner supplies the text in each
-locale when filling in `docs/TRUST_FACTS.md`. If a particular quote has not been
+locale when filling in `docs/seo/TRUST_FACTS.md`. If a particular quote has not been
 translated, the English version is shown as a fallback.
 
 **Q: Where is the professional proof section located on the landing page?**
-A: The section appears after the "Technology inside PR-TOP" block and before the
-FAQ accordion. It carries the anchor `id="professional-proof"` if you need to
-link directly to it.
+A: The social-proof section (numbers, associations, advisors, testimonials) appears
+after the "Technology inside PR-TOP" block and before the FAQ accordion (`id="professional-proof"`).
+A separate company information block (`id="legal-entity"`) showing the legal entity
+details — ABH TEAM OÜ, registry code 14162982, jurisdiction, address — appears
+between the Pricing section and the page footer. This block is always visible and
+does not depend on owner-supplied social proof.
+
+**Q: What company information is shown on the landing page?**
+A: A "About the company" / "О компании" block between Pricing and the footer shows
+the legal entity facts approved for publication: the company name (ABH TEAM OÜ),
+the Estonian registry code (14162982) with a link to the public e-Business Register
+record, the jurisdiction (Estonia — European Union), the registered address
+(Narva mnt 5, 10117 Tallinn, Estonia), the year of operation (since 2016), and the
+support/privacy contact (support@pr-top.com). Personal surnames and personal
+identification codes are not published anywhere on the site.
 
 **Q: What happens if the product owner removes a testimonial (e.g., because the user withdrew consent)?**
-A: The product owner removes the entry from `docs/TRUST_FACTS.md` and from
+A: The product owner removes the entry from `docs/seo/TRUST_FACTS.md` and from
 `src/frontend/src/data/trustFacts.js`, then deploys. The testimonial is removed
 from the live page within minutes of deployment. If removing the last remaining
 entry in all four categories, the entire section disappears from the page.
