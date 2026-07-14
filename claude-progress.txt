@@ -16498,3 +16498,59 @@ VERIFICATION:
 - git commit: 1fd37e6
 
 Stats after session 224: 476/476 (100%). BACKLOG COMPLETE.
+
+================================================================
+Session 225 (2026-07-14) - Feature #477 PASSING (R23b plan-gate hardening)
+================================================================
+
+Assigned: #477 R23b — Harden plan-gate detector (gated/blocked + sentence-level md scanning)
+
+PROBLEM:
+The R23 plan-gate detector (commit 1fd37e6) had three detection gaps:
+1. Gate-word "gated" not in registry — "supervision share gated by plan" bypassed
+2. Line-by-line md scanning — claims split across soft-wrapped lines not caught
+3. Annotation matching was per-line (5 lines before), not section-aware
+
+IMPLEMENTATION:
+
+1. _t_assistant_kb_audit.js — section 12i refactored:
+   - GATE_WORD_RE_KB expanded: added \bgated\b and \bblocked\b
+   - Added (?<!-) lookbehind to "only" to avoid "read-only" false positives
+   - Replaced line-by-line md scanning with paragraph/sentence-level:
+     parseMdBlocks() collapses soft-wrap; splitSentencesKB() splits on [.!?]
+   - gateAnnotationIdFor(): covers if annotation in same sentence, same block,
+     or immediately preceding block (no heading crossing)
+   - Extracted detectUngatedKBClaims() shared helper function
+   - Excluded README.md from scan (meta-doc with gate-word examples)
+
+2. _t_assistant_kb_audit.js — new section 12j:
+   - Tests regression fixture (3 ungated myths) → expects exactly 3 failures
+   - Tests positive fixture (same 3 myths, each with gate annotation) → expects 0 failures
+
+3. tests/fixtures/kb-gate-regression.md (NEW):
+   - Three ungated tier claims demonstrating gated/locked/blocked bypass patterns
+   - No gate annotations (negative case)
+
+4. tests/fixtures/kb-gate-positive.md (NEW):
+   - Same three claims, each preceded by <!-- gate: nl-queries-pro -->
+   - Demonstrates sentence-level annotation matching works through soft-wrap
+
+5. docs/assistant-kb/README.md:
+   - Expanded gate-word list table (7 words including new gated/blocked)
+   - Added lookbehind note for "read-only" exclusion
+   - Added examples of correct annotation placement including soft-wrap case
+
+6. KB content fixes (false positives from new gate words):
+   - analytics-and-mood-trends.md: removed "tier-gated pieces" myth
+   - bulk-session-upload.md: "transcription is gated" → "requires a paid plan"
+   - uploading-a-session.md: "transcription is gated" → "requires a paid plan"
+   - faq-seed.json "analytics": "gated to Pro and Premium" → "require Pro or Premium"
+   - client-diary-telegram.md: removed "on the Premium plan" from supervision line
+
+VERIFICATION:
+- node _t_assistant_kb_audit.js: 90 passed, 0 failed (was 88)
+- Section 12j: regression fixture = 3 failures (expected); positive fixture = 0 failures
+- Section 12g: docs:assistant:check exits 0, no drift
+- git commit: 16c6872
+
+Stats after session 225: 477/477 (100%). ALL FEATURES COMPLETE.
