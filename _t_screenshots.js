@@ -1,6 +1,8 @@
 /**
- * R10 screenshots: full-page PNG for all 4 locales
- * Saves to docs/seo/reports/repositioning-screens/
+ * Repositioning review screenshots: full-page PNG for all 4 locales (EN/RU/ES/UK).
+ * Saves to docs/seo/reports/repositioning-screens/ — re-run after any landing copy
+ * change so the mandatory human copy review sees the current state.
+ * Usage: node _t_screenshots.js (serves the existing dist/ via vite preview; build first).
  */
 const puppeteer = require('puppeteer');
 const path = require('path');
