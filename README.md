@@ -232,6 +232,21 @@ docker-compose up --build -d
 - The `backend-uploads` volume persists encrypted audio/video session files separately
 - Health checks are configured on all services; nginx waits for backend, frontend, and umami to be healthy
 
+### Backend Resilience (auto-restart on hang / memory growth)
+
+Docker only *marks* a container unhealthy — it never restarts it. After a
+two-day API hang in September 2026 (slow memory growth → GC thrash → blocked
+event loop → every `/api/*` request hanging) the backend now has layered
+guard rails; details and the incident write-up are in
+[`docs/troubleshooting/backend-hang-runbook.md`](docs/troubleshooting/backend-hang-runbook.md).
+
+- `GET /api/health/live` — cheap liveness probe (no Stripe/network calls) used by the container healthcheck.
+- `src/backend/healthcheck.sh` — after `HEALTHCHECK_MAX_FAILURES` consecutive misses it kills the node process; `restart: unless-stopped` recreates it (compose runs the container with `init: true` so the kill is honoured).
+- In-process memory watchdog — logs `[MEMORY] rss=…` hourly and exits (→ restart) once RSS ≥ `MEMORY_WATCHDOG_MAX_RSS_MB` (default 1024).
+- `NODE_OPTIONS=--max-old-space-size=768 --heapsnapshot-signal=SIGUSR2` — V8 aborts fast on a leak; `docker kill -s SIGUSR2 <backend>` writes a heap snapshot to `/app` for analysis.
+- `mem_limit`/`memswap_limit` (1536m backend, 512m bot) — hard ceiling, no swap, so one service can no longer drag the host into swap thrash.
+- Graceful shutdown on SIGTERM: scheduler stopped, in-memory SQLite flushed to disk, server closed.
+
 ### Common Commands
 
 ```bash

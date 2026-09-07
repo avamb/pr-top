@@ -11,5 +11,9 @@ RUN npm ci --omit=dev
 # Copy application source
 COPY src/ ./src/
 
-# Bot runs as a long-running process, no port exposed
-CMD ["npm", "start"]
+ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=384"
+
+# Bot runs as a long-running process, no port exposed.
+# Run node directly so signals and fatal aborts terminate the container.
+CMD ["node", "src/index.js"]

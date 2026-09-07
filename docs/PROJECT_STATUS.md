@@ -69,4 +69,5 @@ Public landing bot + authenticated therapist bot, shared but audience-scoped kno
 - Frontend: `src/frontend/` (React+Vite). Routes manifest `src/frontend/src/seo/routes.mjs` drives sitemap/prerender/llms. Build chain in `src/frontend/package.json` (`docs:assistant`, `indexnow` are separate scripts).
 - Backend: `src/backend/` (Express, SQLite). Assistant: `routes/publicAssistant.js`, `routes/assistant.js`, `services/assistant*.js`.
 - Knowledge base: `docs/assistant-kb/` (authored + `reference/` generated). Serving nginx: `src/frontend/nginx.conf` (the top-level `nginx/` dir is legacy). Deploy: Dokploy on Hetzner, Cloudflare in front.
+- Backend resilience (2026-09-07, after a 2-day API hang): liveness route `/api/health/live`, healthcheck-driven kill + restart (`src/backend/healthcheck.sh`, compose `init: true`), in-process memory watchdog with hourly `[MEMORY]` log lines, V8 heap cap + container `mem_limit`, graceful SIGTERM. Runbook: `docs/troubleshooting/backend-hang-runbook.md`.
 - Audits at repo root: `_t_seo_i18n_audit.js`, `_t_geo_audit.js`, `_t_assistant_kb_audit.js`.

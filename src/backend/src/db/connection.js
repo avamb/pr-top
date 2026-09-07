@@ -47,7 +47,20 @@ function saveDatabase() {
         try { db.run('PRAGMA wal_checkpoint(FULL)'); } catch (e2) { /* ignore */ }
       }
       dbDirty = false;
-      const data = db.export();
+      let data;
+      try {
+        data = db.export();
+      } catch (exportErr) {
+        // sql.js export() closes and re-opens the WASM SQLite handle. If the
+        // re-open fails (typically WASM heap exhaustion) the handle is left
+        // dangling and every later query misbehaves (seen in production as
+        // "unknown function: datetime()" right before a two-day hang).
+        // Continuing would serve garbage and risk corrupting the file, so
+        // exit and let the container restart from the last good save.
+        logger.error('FATAL: database export failed, restarting process: ' + exportErr.message);
+        setTimeout(() => process.exit(1), 250).unref();
+        return;
+      }
       const buffer = Buffer.from(data);
       // Write directly and fsync to ensure data is flushed to disk
       const fd = fs.openSync(dbPath, 'w');

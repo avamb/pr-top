@@ -12,6 +12,7 @@ const { logger } = require('./utils/logger');
 const { initStripe, getStripeStatus, isConfigured: isStripeConfigured } = require('./services/stripe');
 const scheduler = require('./services/scheduler');
 const { initWebSocket, getStats: getWsStats } = require('./services/websocketService');
+const memoryWatchdog = require('./utils/memoryWatchdog');
 const cookieParser = require('cookie-parser');
 const { csrfProtection, csrfTokenEndpoint } = require('./middleware/csrf');
 const { requireActiveSubscription, authenticate } = require('./middleware/auth');
@@ -155,6 +156,20 @@ app.get('/api/user/referral-link', authenticate, (req, res) => {
     logger.error('Referral link error: ' + error.message);
     res.status(500).json({ error: 'Failed to get referral link' });
   }
+});
+
+// Liveness probe for the container healthcheck (src/backend/healthcheck.sh).
+// Deliberately cheap: proves the event loop is responsive and the in-memory
+// SQLite handle still answers, without touching Stripe or the network.
+app.get('/api/health/live', (req, res) => {
+  const db = global.db;
+  try {
+    if (!db) throw new Error('database not initialised');
+    db.exec('SELECT 1');
+  } catch (e) {
+    return res.status(503).json({ status: 'error', error: e.message });
+  }
+  res.json({ status: 'ok', uptime_s: Math.round(process.uptime()) });
 });
 
 // Health check endpoint
@@ -467,6 +482,26 @@ async function start() {
     // Attach WebSocket server for real-time notifications
     initWebSocket(server);
     logger.info('WebSocket server attached for real-time notifications');
+
+    // Memory watchdog: log usage periodically and exit (-> container restart)
+    // before slow growth turns into GC thrash with a blocked event loop.
+    memoryWatchdog.start({ beforeExit: () => saveDatabase() });
+
+    // Graceful shutdown: flush the in-memory SQLite DB to disk and stop the
+    // scheduler when Docker sends SIGTERM (or on Ctrl+C locally).
+    let shuttingDown = false;
+    const shutdown = (signal) => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      logger.info(`Received ${signal}, shutting down gracefully...`);
+      try { scheduler.stop(); } catch (e) { logger.warn('Scheduler stop failed: ' + e.message); }
+      try { saveDatabase(); } catch (e) { logger.error('Final database save failed: ' + e.message); }
+      server.close(() => process.exit(0));
+      // Do not wait forever for open keep-alive connections.
+      setTimeout(() => process.exit(0), 5000).unref();
+    };
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
   } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);

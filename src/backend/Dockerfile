@@ -22,8 +22,21 @@ COPY docker-compose.yml README.md .env.example /app/project-root/
 # Create data directories for SQLite and file uploads
 RUN mkdir -p /app/data /app/data/sessions
 
+# Liveness probe + watchdog used by the compose healthcheck (see healthcheck.sh)
+COPY src/backend/healthcheck.sh /app/healthcheck.sh
+RUN chmod +x /app/healthcheck.sh
+
+ENV NODE_ENV=production
+# Cap the V8 heap well below the container memory limit so a leak ends in a
+# fast "heap out of memory" abort (and a restart) instead of hours of GC
+# thrashing with a blocked event loop. SIGUSR2 writes a heap snapshot to /app
+# for offline analysis (`docker kill -s SIGUSR2 <container>`).
+ENV NODE_OPTIONS="--max-old-space-size=768 --heapsnapshot-signal=SIGUSR2"
+
 # Expose backend port
 EXPOSE 3001
 
-# Run database migrations then start the server
-CMD ["npm", "start"]
+# Run node directly (not via `npm start`) so signals reach the process and a
+# fatal V8 abort terminates the container immediately. compose sets
+# `init: true`, so docker-init is PID 1 and node is an ordinary child.
+CMD ["node", "src/index.js"]
