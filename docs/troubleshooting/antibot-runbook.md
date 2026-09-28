@@ -65,6 +65,8 @@ Because the frontend key is baked in at build time, wave 1 backend (track 1A) an
 
 The backend also logs a startup warning in production while `ORIGIN_LOCKED` is not `true`: it is a reminder that `CF-Connecting-IP` is only trustworthy once the origin accepts traffic from Cloudflare exclusively (see "In production" below). Set `ORIGIN_LOCKED=true` after the firewall / Authenticated Origin Pulls are in place.
 
+**Status on the `lead-parser` host (verified 2026-09-28): already locked.** Host iptables (persisted by `netfilter-persistent`, `/etc/iptables/rules.v4|v6`) routes inbound `eth0` traffic through `CF-LOCK-IN` (INPUT) and `CF-LOCK-FWD` (DOCKER-USER, i.e. traffic to containers); both send tcp/80, tcp/443 and udp/443 to `CF-SRC`, which `RETURN`s only Cloudflare's published IPv4 (15) and IPv6 (7) ranges and `DROP`s everything else. Dokploy/Swarm ports 3000, 18088, 9876, 2377, 7946, 4789 are dropped outright. Check from outside: `curl -m 10 -H 'Host: pr-top.com' http://78.46.176.249/` must time out (exit 28), while `https://pr-top.com/api/health` returns 200. Inspect on the host: `iptables -S CF-SRC`, `ip6tables -S CF-SRC`. There is no cron refreshing the Cloudflare ranges — if Cloudflare adds ranges, update `CF-SRC` and `netfilter-persistent save`. So `ORIGIN_LOCKED=true` is correct for this deployment.
+
 ## Temporarily disabling protection layers
 
 ### Disable Turnstile verification
