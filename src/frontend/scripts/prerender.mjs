@@ -141,6 +141,16 @@ function outputPathFor(routePath) {
 async function prerenderRoute(browser, baseUrl, routePath) {
   const url = `${baseUrl}${routePath}`;
   const context = await browser.newContext();
+  // The build must never depend on third-party network: abort every request
+  // that is not for our own static server. Otherwise a widget that keeps a
+  // connection open (Cloudflare Turnstile on /register and /forgot-password
+  // did exactly this once VITE_TURNSTILE_SITE_KEY was set) stalls
+  // `networkidle` and fails the whole Docker build. Aborted scripts fire
+  // `onerror`, components fall back gracefully, and the <h1> still renders.
+  await context.route(
+    (requestUrl) => requestUrl.hostname !== '127.0.0.1' && requestUrl.hostname !== 'localhost',
+    (route) => route.abort(),
+  );
   const page = await context.newPage();
   try {
     // Fail loudly if a route silently 404s or errors out — we want the build to break.
