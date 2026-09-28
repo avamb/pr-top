@@ -57,6 +57,7 @@ import CoachingSessionManagement from './pages/CoachingSessionManagement';
 import ClientDiaryForTherapists from './pages/ClientDiaryForTherapists';
 import PracticeManagementForTherapists from './pages/PracticeManagementForTherapists';
 import VerifyLead from './pages/VerifyLead';
+import VerifyEmail from './pages/VerifyEmail';
 import SupervisionView from './pages/SupervisionView';
 import NotFound from './pages/NotFound';
 import InstallPrompt from './components/InstallPrompt';
@@ -245,6 +246,7 @@ function App() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/verify-lead" element={<VerifyLead />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/share/supervision/:token" element={<SupervisionView />} />
 
         {/* Authenticated therapist routes - AuthGuard + TherapistGuard + AppLayout */}

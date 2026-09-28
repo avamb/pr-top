@@ -4,6 +4,8 @@
  * when the JWT token is invalid or expired.
  */
 
+import { dispatchEmailNotVerified } from './emailVerificationEvents';
+
 const SESSION_EXPIRED_EVENT = 'session-expired';
 
 /**
@@ -50,6 +52,17 @@ export async function fetchApi(url, options = {}) {
     localStorage.removeItem('user');
     // Notify the app
     notifySessionExpired();
+  }
+
+  // Handle 403 EMAIL_NOT_VERIFIED - a gated mutation was blocked by the
+  // email-verification gate (spec: SPEC_ANTIBOT_WAVES.md, Трек 2D, п.4).
+  // Peek at a clone so the caller can still read the original body/json().
+  if (response.status === 403) {
+    response.clone().json().then((data) => {
+      if (data && data.code === 'EMAIL_NOT_VERIFIED') {
+        dispatchEmailNotVerified();
+      }
+    }).catch(() => { /* not JSON or empty body - ignore */ });
   }
 
   return response;
