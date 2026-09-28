@@ -36,6 +36,9 @@ COPY . .
 ARG VITE_UMAMI_WEBSITE_ID
 ENV VITE_UMAMI_WEBSITE_ID=$VITE_UMAMI_WEBSITE_ID
 
+ARG VITE_TURNSTILE_SITE_KEY
+ENV VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY
+
 # Build the production bundle. The `build` script also runs:
 #   - scripts/generate-og-image.mjs (sharp OG image, F7)
 #   - scripts/prerender.mjs         (playwright/chromium prerender, F8/F9)

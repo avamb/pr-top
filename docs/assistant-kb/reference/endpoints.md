@@ -93,7 +93,7 @@ Mount prefix: `/api/assistant`
 
 Mount prefix: `/api/auth`
 
-- `POST /api/auth/register` — POST /api/auth/register
+- `POST /api/auth/register` — antibot: honeypot (fake 201) -> timing (400) -> Turnstile (403).
 - `POST /api/auth/login` — POST /api/auth/login
 - `POST /api/auth/register-viewer` — Creates a user with role='viewer', links anonymous session, migrates messages, issues JWT.
 - `POST /api/auth/register-lead` — After registration, lead gets +10 messages in the chat. After email verification, +10 more.

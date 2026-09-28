@@ -41,9 +41,10 @@
 ### Фаза 0 — сегодня, без кода (Cloudflare dashboard, ~15 мин)
 
 1. **Security → WAF → Rate limiting rules**: `POST` на `pr-top.com/api/auth/register*` (покрывает `register-lead`) — 5 запросов / 10 мин с IP → Block на 1 час. На Free доступно 1 правило — это оно.
-2. **Security → Bots → Bot Fight Mode: On.**
+2. **Security → Bots — Bot Fight Mode НЕ включать.** Он челленджит любой автоматизированный трафик на весь сайт и может резать AI-краулеры (GPTBot, ClaudeBot, PerplexityBot, Google-Extended, Applebot, Bingbot), а мы хотим, чтобы нейросети индексировали сайт и отдавали структурную информацию. Там же проверить, что переключатель **«Block AI bots / AI Scrapers and Crawlers» выключен**. Вся защита от ботов — только на POST-эндпоинтах регистрации (правила 1 и 3 + бэкенд), GET-страницы остаются открытыми.
 3. **Security → WAF → Custom rule**: `URI path starts with /register` AND `not cf.client.bot` AND (`User-Agent contains "python-requests"|"curl"|"Go-http-client"` или пустой UA) → Managed Challenge.
 4. **Turnstile → Add widget**: домен `pr-top.com`, режим **Invisible**. Site key → frontend build arg `VITE_TURNSTILE_SITE_KEY`, Secret → backend env `TURNSTILE_SECRET` (Dokploy). До выката кода ключи просто лежат.
+5. **Hetzner firewall**: ограничить 80/443 на origin только с IP-диапазонов Cloudflare (если все сайты хоста за CF); иначе включить Authenticated Origin Pulls для `pr-top.com` в Cloudflare. Причина: `CF-Connecting-IP` заголовок надёжен только если origin недостижим напрямую.
 
 ### Фаза 1 — быстрые фиксы бэкенда (~1 день)
 

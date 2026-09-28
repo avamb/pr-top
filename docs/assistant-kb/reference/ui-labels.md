@@ -197,7 +197,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `auth.networkError` — Network error. Please try again.
 - `auth.emailPasswordRequired` — Email and password are required
 - `auth.passwordMinLength` — Password must be at least 6 characters
-- _+ 45 more keys_
+- _+ 48 more keys_
 
 ## brand
 

@@ -128,6 +128,21 @@ Once you are signed in you can be productive in about an hour.
   desktop and Telegram web sometimes bind to different accounts.
   Confirm the account with the client before they tap Start.
 
+## Protection against automated sign-ups
+
+The registration form includes invisible verification to block bots and prevent abuse. You won't notice it — there are no CAPTCHAs or puzzles to solve.
+
+**What you may see:** If you use an ad blocker, privacy extension, or unusual network path, you may see an error message: **"Verification failed. Please disable ad blockers, reload the page and try again."** This is not a bug; it means the verification step was blocked. To fix it:
+
+1. Disable ad blockers (uBlock Origin, Adblock Plus, etc.) or privacy extensions (Privacy Badger) temporarily for this site.
+2. Disable browser plugins that might intercept requests.
+3. Reload the page.
+4. Try registration again.
+
+**Why is there a name field?** The registration form asks for your name, but it is optional. You do not have to provide one. This field helps us detect patterns and keeps registration lightweight.
+
+**Rate limits:** Registration attempts are limited per network per hour to prevent abuse. If you see **"Too many registration attempts from your network. Please try again in an hour."** it means someone else (or a bot) has tried to register many times from your IP. Wait an hour and retry. This is a network-level limit, not per-account — it affects the whole building or office.
+
 ## FAQ
 
 **Q: How much does PR-TOP cost after the Trial?**
@@ -173,3 +188,16 @@ security overview is the fastest read.
 A: You do. PR-TOP is a data processor acting on your instructions.
 Delete your account and the data is purged; export it and the
 platform hands you a portable JSON archive.
+
+**Q: Why do I see 'Verification failed'?**
+A: The registration form includes an invisible verification step to
+block automated sign-ups. If you see this error, it means the
+verification was blocked — usually by an ad blocker or privacy
+extension. Disable those extensions temporarily, reload the page, and
+try again. If the problem persists, try a different browser.
+
+**Q: Is the name field required?**
+A: No. The name field on the registration form is optional. You can
+leave it blank and register with just email and password. The field
+helps us detect patterns in automated registrations, but it is not
+required for your account to work.

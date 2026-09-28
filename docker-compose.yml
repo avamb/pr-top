@@ -33,6 +33,17 @@ services:
       - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASS=${SMTP_PASS:-}
       - SMTP_FROM=${SMTP_FROM:-PR-TOP <noreply@pr-top.com>}
+      # Anti-bot protection (Cloudflare Turnstile + honeypot)
+      - TURNSTILE_SECRET=${TURNSTILE_SECRET:-}
+      - ANTIBOT_ENABLED=${ANTIBOT_ENABLED:-true}
+      - ANTIBOT_MIN_FORM_MS=${ANTIBOT_MIN_FORM_MS:-3000}
+      - REGISTER_RATE_LIMIT_MAX=${REGISTER_RATE_LIMIT_MAX:-5}
+      - LOGIN_CODE_RATE_LIMIT_MAX=${LOGIN_CODE_RATE_LIMIT_MAX:-10}
+      - LOGIN_CODE_PEPPER=${LOGIN_CODE_PEPPER:-}
+      - LOGIN_CODE_TTL_MIN=${LOGIN_CODE_TTL_MIN:-10}
+      - EMAIL_VERIFICATION_GATE=${EMAIL_VERIFICATION_GATE:-true}
+      - EMAIL_VERIFICATION_TTL_H=${EMAIL_VERIFICATION_TTL_H:-48}
+      - UNVERIFIED_CLEANUP_DAYS=${UNVERIFIED_CLEANUP_DAYS:-7}
       # Resilience (see docs/troubleshooting/backend-hang-runbook.md)
       - MEMORY_WATCHDOG_MAX_RSS_MB=${MEMORY_WATCHDOG_MAX_RSS_MB:-1024}
       - HEALTHCHECK_MAX_FAILURES=${HEALTHCHECK_MAX_FAILURES:-4}
@@ -67,6 +78,7 @@ services:
       dockerfile: Dockerfile
       args:
         - VITE_UMAMI_WEBSITE_ID=${VITE_UMAMI_WEBSITE_ID:-}
+        - VITE_TURNSTILE_SITE_KEY=${VITE_TURNSTILE_SITE_KEY:-}
     restart: unless-stopped
     expose:
       - "80"
