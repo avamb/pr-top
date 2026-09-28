@@ -2,6 +2,7 @@
 const jwt = require('jsonwebtoken');
 const { getDatabase } = require('../db/connection');
 const { logger } = require('../utils/logger');
+const { t } = require('../i18n');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-change-in-production';
 
@@ -157,4 +158,68 @@ function requireActiveSubscription(req, res, next) {
   }
 }
 
-module.exports = { authenticate, requireRole, requireActiveSubscription };
+// ── Email verification gate (wave 2, track 2A) ───────────────────────────
+// docs/security/SPEC_ANTIBOT_WAVES.md §3 "Трек 2A" p.3. Blocks therapists whose
+// email is not yet confirmed from the mutations a bot could abuse (client
+// creation, invite links, uploads, AI chat, exports). Reads are never gated.
+//
+// Self-sufficient: some mounts run this before the route-level `authenticate`
+// (same pattern as requireActiveSubscription), so when req.user is absent the
+// JWT is verified here and the flag is read from the DB. Without a token the
+// request is passed on — the route's own authenticate answers 401.
+function requireVerifiedEmail(req, res, next) {
+  try {
+    if (process.env.EMAIL_VERIFICATION_GATE === 'false') return next();
+
+    let role;
+    let emailVerified;
+    if (req.user) {
+      role = req.user.role;
+      emailVerified = !!req.user.emailVerified;
+    } else {
+      const token = extractToken(req);
+      if (!token) return next();
+      let decoded;
+      try {
+        decoded = jwt.verify(token, JWT_SECRET);
+      } catch (e) {
+        return next();
+      }
+      const db = getDatabase();
+      const result = db.exec('SELECT role, email_verified_at FROM users WHERE id = ?', [decoded.userId]);
+      if (result.length === 0 || result[0].values.length === 0) return next();
+      role = result[0].values[0][0];
+      emailVerified = !!result[0].values[0][1];
+    }
+
+    // Superadmins and (bot) clients are never gated.
+    if (role !== 'therapist' || emailVerified) return next();
+
+    const key = 'auth.emailNotVerified';
+    const message = t(key, req.locale);
+    return res.status(403).json({
+      error: message === key ? 'Please confirm your email address to use this feature.' : message,
+      code: 'EMAIL_NOT_VERIFIED'
+    });
+  } catch (error) {
+    logger.error('Email verification gate error: ' + error.message);
+    next(); // Fail open, like requireActiveSubscription
+  }
+}
+
+// Apply `mw` only to mutating requests (POST/PUT/PATCH/DELETE) and to export
+// routes (any path containing "/export", checked on the full mounted path so
+// both `/api/clients/:id/diary/export` and the `/api/export/*` mount match).
+// Usage: app.use('/api/clients', requireActiveSubscription, gateMutations(requireVerifiedEmail), routes)
+const GATED_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+function gateMutations(mw) {
+  return function gatedMiddleware(req, res, next) {
+    const fullPath = (req.baseUrl || '') + (req.path || '');
+    if (GATED_METHODS.has(req.method) || fullPath.includes('/export')) {
+      return mw(req, res, next);
+    }
+    next();
+  };
+}
+
+module.exports = { authenticate, requireRole, requireActiveSubscription, requireVerifiedEmail, gateMutations };

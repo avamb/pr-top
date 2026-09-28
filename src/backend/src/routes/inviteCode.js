@@ -3,7 +3,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
-const { authenticate, requireRole } = require('../middleware/auth');
+const { authenticate, requireRole, requireVerifiedEmail } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -45,7 +45,9 @@ router.get('/', (req, res) => {
 });
 
 // GET /api/invite-code/link - Get invite deep link for Telegram bot
-router.get('/link', (req, res) => {
+// Gated on email verification (wave 2): the deep link is what a bot would
+// spread; showing the bare code on GET / stays open.
+router.get('/link', requireVerifiedEmail, (req, res) => {
   try {
     const db = getDatabase();
     const therapistId = req.user.id;

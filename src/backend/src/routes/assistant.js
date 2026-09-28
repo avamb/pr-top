@@ -5,7 +5,7 @@
 const express = require('express');
 const router = express.Router();
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, requireVerifiedEmail } = require('../middleware/auth');
 const { logger } = require('../utils/logger');
 const aiProviders = require('../services/aiProviders');
 const { buildAssistantSystemPrompt } = require('../services/assistantPrompt');
@@ -189,7 +189,9 @@ setInterval(() => {
 
 // POST /api/assistant/chat - Send a message to the assistant
 // Supports SSE streaming when stream=true in body or Accept: text/event-stream header
-router.post('/chat', async (req, res) => {
+// Gated on email verification (wave 2, track 2A): unverified therapists get
+// 403 EMAIL_NOT_VERIFIED; history/conversation reads stay open.
+router.post('/chat', requireVerifiedEmail, async (req, res) => {
   try {
     const { message, chat_id, page_context, language, stream } = req.body;
     const useSSE = stream === true || req.headers.accept === 'text/event-stream';

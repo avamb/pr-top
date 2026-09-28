@@ -11,6 +11,7 @@ const { t } = require('../i18n');
 const { antibot } = require('../middleware/antibot');
 const { getClientIp } = require('../utils/clientIp');
 const { issueSession, SESSION_COOKIE_OPTIONS } = require('../utils/session');
+const { createVerificationToken, sendVerificationEmailAsync } = require('./emailVerification');
 
 const router = express.Router();
 
@@ -164,6 +165,7 @@ router.post('/register', antibot({ turnstile: true, fake: 'register', expectedAc
         logger.info(`Confirm subscription (trialing) created for therapist id=${userId}, trial ends ${confirmTrialEnd.toISOString()}`);
         subscriptionPlan = 'confirm';
         nextAction = 'await_stripe_checkout';
+        trialDays = 7; // shown in the verification email; matches confirmTrialEnd
 
         // Update leads table entry for this email if it exists: mark source as landing_confirm.
         try {
@@ -210,6 +212,12 @@ router.post('/register', antibot({ turnstile: true, fake: 'register', expectedAc
       }
     }
 
+    // Email verification (wave 2, track 2A): store sha256(token) + expiry
+    // (EMAIL_VERIFICATION_TTL_H, default 48h); the plaintext only leaves by
+    // email. Applies to the confirm-plan flow too — Stripe checkout may
+    // confirm the address earlier (webhooks.js checkout.session.completed).
+    const verificationToken = createVerificationToken(db, userId);
+
     saveDatabaseAfterWrite();
 
     // Sign JWT + set HttpOnly session cookie
@@ -218,18 +226,9 @@ router.post('/register', antibot({ turnstile: true, fake: 'register', expectedAc
 
     logger.info(`User registered successfully: id=${userId}, email=${user[1]}`);
 
-    // Send welcome email (non-blocking, failure won't break registration)
-    emailService.sendWelcomeEmail(user[1], trialDays, userLanguage)
-      .then(result => {
-        if (result.sent) {
-          logger.info(`Welcome email sent to ${user[1]}`);
-        } else {
-          logger.info(`[EMAIL] Welcome email for ${user[1]}: ${result.error || 'not sent'}`);
-        }
-      })
-      .catch(err => {
-        logger.error(`Welcome email error for ${user[1]}: ${err.message}`);
-      });
+    // Send verification email (non-blocking, failure won't break registration).
+    // Replaces the old welcome email; the template carries the trial length.
+    sendVerificationEmailAsync(user[1], verificationToken, userLanguage, trialDays);
 
     const responseBody = {
       message: 'User registered successfully',
@@ -244,6 +243,10 @@ router.post('/register', antibot({ turnstile: true, fake: 'register', expectedAc
     };
     if (nextAction) {
       responseBody.next_action = nextAction;
+    }
+    // A12: dev-echo for automated tests only (never in production).
+    if (process.env.NODE_ENV !== 'production' && process.env.AUTH_DEV_ECHO === 'true') {
+      responseBody.dev_verification_token = verificationToken;
     }
 
     res.status(201).json(responseBody);
@@ -303,6 +306,20 @@ router.post('/login', async (req, res) => {
     const session = issueSession(res, { id: user[0], email: user[1], role: user[3], timezone: user[5] });
 
     logger.info(`User logged in: id=${user[0]}, email=${user[1]}`);
+
+    // Audit trail (wave 2): the unverified-cleanup job treats accounts with a
+    // 'login' / 'login_code_success' row as real people and never purges them.
+    // Never let audit failure block the login itself.
+    try {
+      db.run(
+        `INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, ip_address, created_at)
+         VALUES (?, 'login', 'user', ?, NULL, ?, datetime('now'))`,
+        [user[0], user[0], getClientIp(req)]
+      );
+      saveDatabaseAfterWrite();
+    } catch (auditError) {
+      logger.warn(`Login audit log failed for user id=${user[0]}: ${auditError.message}`);
+    }
 
     res.json({
       message: 'Login successful',

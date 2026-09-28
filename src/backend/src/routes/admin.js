@@ -15,17 +15,22 @@ router.use(authenticate);
 router.use(requireRole('superadmin'));
 
 // GET /api/admin/therapists - List all therapists
+// GET /api/admin/therapists?verified=0|1 — verified filter added in wave 2 (track 2A)
 router.get('/therapists', (req, res) => {
   try {
     const db = getDatabase();
+    const verifiedFilter = req.query.verified === '1' ? ' AND u.email_verified_at IS NOT NULL'
+      : req.query.verified === '0' ? ' AND u.email_verified_at IS NULL'
+      : '';
     const result = db.exec(`
       SELECT u.id, u.email, u.telegram_id, u.role, u.invite_code, u.language,
              u.created_at, u.updated_at, u.blocked_at,
              s.plan, s.is_manual_override, s.override_reason, s.override_expires_at,
-             u.first_name, u.last_name, u.telegram_username, u.phone, u.other_info
+             u.first_name, u.last_name, u.telegram_username, u.phone, u.other_info,
+             u.email_verified_at, u.suspicious
       FROM users u
       LEFT JOIN subscriptions s ON s.therapist_id = u.id
-      WHERE u.role = 'therapist'
+      WHERE u.role = 'therapist'${verifiedFilter}
       ORDER BY u.created_at DESC
     `);
 
@@ -48,13 +53,58 @@ router.get('/therapists', (req, res) => {
       last_name: row[14] || '',
       telegram_username: row[15] || '',
       phone: row[16] || '',
-      other_info: row[17] || ''
+      other_info: row[17] || '',
+      email_verified_at: row[18] || null,
+      email_verified: !!row[18],
+      suspicious: !!row[19]
     }));
 
     res.json({ therapists });
   } catch (error) {
     logger.error('Admin list therapists error: ' + error.message);
     res.status(500).json({ error: 'Failed to list therapists' });
+  }
+});
+
+// POST /api/admin/therapists/:id/verify-email - Manually confirm a therapist's
+// email (wave 2, track 2A). Idempotent: sets email_verified_at only if NULL.
+router.post('/therapists/:id/verify-email', (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = getDatabase();
+
+    const userResult = db.exec('SELECT id, role, email, email_verified_at FROM users WHERE id = ?', [id]);
+    if (userResult.length === 0 || userResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'Therapist not found' });
+    }
+    const [userId, role, email, verifiedAt] = userResult[0].values[0];
+    if (role !== 'therapist') {
+      return res.status(400).json({ error: 'User is not a therapist' });
+    }
+
+    if (verifiedAt) {
+      return res.json({ message: 'Email already verified', id: userId, email_verified_at: verifiedAt, already_verified: true });
+    }
+
+    db.run(
+      "UPDATE users SET email_verified_at = datetime('now'), verification_token_hash = NULL, verification_expires_at = NULL WHERE id = ?",
+      [userId]
+    );
+    db.run(
+      `INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at)
+       VALUES (?, 'admin_verified_email', 'user', ?, ?, datetime('now'))`,
+      [req.user.id, userId, JSON.stringify({ email, reason: (req.body && req.body.reason) || null })]
+    );
+    saveDatabaseAfterWrite();
+
+    const after = db.exec('SELECT email_verified_at FROM users WHERE id = ?', [userId]);
+    const emailVerifiedAt = after.length && after[0].values.length ? after[0].values[0][0] : null;
+    logger.info(`Admin ${req.user.id} manually verified email for therapist id=${userId}`);
+
+    res.json({ message: 'Email verified', id: userId, email_verified_at: emailVerifiedAt, already_verified: false });
+  } catch (error) {
+    logger.error('Admin verify-email error: ' + error.message);
+    res.status(500).json({ error: 'Failed to verify email' });
   }
 });
 

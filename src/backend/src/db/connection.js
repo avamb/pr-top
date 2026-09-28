@@ -2186,6 +2186,23 @@ function applySchema(db) {
     logger.warn('Email verification backfill skipped: ' + e.message);
   }
 
+  // Wave 2 marker: when verification emails started going out. The
+  // unverified-cleanup job only ever considers accounts created after this
+  // moment — people who registered earlier never received a verification
+  // email and may only have password logins predating the 'login' audit row.
+  // Inserted once (first boot after the wave-2 deploy), never updated.
+  try {
+    const markerRes = db.exec("SELECT value FROM platform_settings WHERE key = 'email_verification_enabled_at'");
+    if (!markerRes.length || !markerRes[0].values.length) {
+      db.run(
+        "INSERT INTO platform_settings (key, value, updated_at) VALUES ('email_verification_enabled_at', datetime('now'), datetime('now'))"
+      );
+      logger.info('Email verification enabled-at marker set (platform_settings.email_verification_enabled_at)');
+    }
+  } catch (e) {
+    logger.warn('Email verification enabled-at marker skipped: ' + e.message);
+  }
+
   // Seed default superadmin account if not exists
   seedSuperadmin(db);
 

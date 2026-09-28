@@ -15,7 +15,7 @@ const { initWebSocket, getStats: getWsStats } = require('./services/websocketSer
 const memoryWatchdog = require('./utils/memoryWatchdog');
 const cookieParser = require('cookie-parser');
 const { csrfProtection, csrfTokenEndpoint } = require('./middleware/csrf');
-const { requireActiveSubscription, authenticate } = require('./middleware/auth');
+const { requireActiveSubscription, authenticate, requireVerifiedEmail, gateMutations } = require('./middleware/auth');
 const { i18nMiddleware } = require('./middleware/i18n');
 const { getClientIp } = require('./utils/clientIp');
 const { t: translate, SUPPORTED_LANGUAGES } = require('./i18n');
@@ -252,18 +252,23 @@ app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/dashboard', requireActiveSubscription, dashboardRoutes);
 app.use('/api/encryption', encryptionRoutes);
-app.use('/api/clients', requireActiveSubscription, require('./routes/clients'));
+// Email-verification gate (wave 2, track 2A; SPEC_ANTIBOT_WAVES.md §3 table):
+// gateMutations() applies requireVerifiedEmail to POST/PUT/PATCH/DELETE and to
+// */export paths only — reads stay open for unverified therapists.
+// Route-level gates: GET /api/invite-code/link (routes/inviteCode.js) and
+// POST /api/assistant/chat (routes/assistant.js).
+app.use('/api/clients', requireActiveSubscription, gateMutations(requireVerifiedEmail), require('./routes/clients'));
 // T-05: standalone /api/assignments router exposes the spec-shaped
 // POST /api/assignments/:id/reports/:reportId/(accept|return) aliases on
 // top of the nested /api/clients/:cid/assignments/... endpoints.
 app.use('/api/assignments', requireActiveSubscription, require('./routes/assignments'));
-app.use('/api/invite-code', requireActiveSubscription, require('./routes/inviteCode'));
-app.use('/api/sessions', requireActiveSubscription, require('./routes/sessions'));
+app.use('/api/invite-code', requireActiveSubscription, gateMutations(requireVerifiedEmail), require('./routes/inviteCode'));
+app.use('/api/sessions', requireActiveSubscription, gateMutations(requireVerifiedEmail), require('./routes/sessions'));
 app.use('/api/exercises', requireActiveSubscription, require('./routes/exercises'));
 app.use('/api/settings', requireActiveSubscription, require('./routes/settings'));
 app.use('/api/search', requireActiveSubscription, require('./routes/search'));
 app.use('/api/query', requireActiveSubscription, require('./routes/query'));
-app.use('/api/export', requireActiveSubscription, require('./routes/export'));
+app.use('/api/export', requireActiveSubscription, gateMutations(requireVerifiedEmail), require('./routes/export'));
 app.use('/api/diary', requireActiveSubscription, require('./routes/diary'));
 app.use('/api/assistant', requireActiveSubscription, require('./routes/assistant'));
 app.use('/api/kb', requireActiveSubscription, require('./routes/kb'));

@@ -7,6 +7,9 @@
 // 3. Subscription expiry warning (daily at 9:00 AM)
 // 4. Diary reminder for inactive clients (daily at 10:00 AM)
 // 5. CSRF token cleanup (hourly)
+// 6-10. Database backup, reminder-service jobs (see start())
+// 11. Unverified-therapist cleanup (daily at 3:30 AM) — wave 2, track 2A
+// 12. Login-code cleanup (daily at 2:15 AM, same slot as job 2) — wave 2, track 2A
 
 const cron = require('node-cron');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
@@ -44,6 +47,7 @@ const SCHEDULER_ENABLED = process.env.SCHEDULER_ENABLED !== 'false'; // default 
 const GRACE_PERIOD_DAYS = parseInt(process.env.SUBSCRIPTION_GRACE_PERIOD_DAYS || '7', 10);
 const EXPIRY_WARNING_DAYS = parseInt(process.env.SUBSCRIPTION_EXPIRY_WARNING_DAYS || '3', 10);
 const DIARY_REMINDER_INACTIVE_DAYS = 3;
+const UNVERIFIED_CLEANUP_DEFAULT_DAYS = 7;
 
 const scheduledTasks = [];
 
@@ -515,6 +519,137 @@ function runDatabaseBackup() {
   }
 }
 
+// ── Wave 2 (track 2A) jobs ────────────────────────────────────────────────
+
+function unverifiedCleanupDays() {
+  const n = parseInt(process.env.UNVERIFIED_CLEANUP_DAYS || String(UNVERIFIED_CLEANUP_DEFAULT_DAYS), 10);
+  return Number.isFinite(n) && n > 0 ? n : UNVERIFIED_CLEANUP_DEFAULT_DAYS;
+}
+
+/**
+ * Job 11: Unverified-therapist cleanup (daily at 3:30 AM)
+ * Purge therapist accounts that never confirmed their email, are older than
+ * UNVERIFIED_CLEANUP_DAYS (default 7) and show no sign of a real person:
+ * no clients, no Stripe customer, no login / login-code audit entry, and
+ * created AFTER platform_settings.email_verification_enabled_at (accounts
+ * from before the wave-2 deploy never got a verification email — without
+ * the marker the job does nothing and warns).
+ * Their subscriptions, login_codes and password_reset_tokens go with them;
+ * their own audit_logs rows are kept but detached (actor_id -> NULL, FK).
+ * One audit row per purge: actor NULL, action 'unverified_user_purged',
+ * details { email, user_id, created_at }.
+ * UNVERIFIED_CLEANUP_DRY_RUN=true only logs the candidates.
+ */
+function runUnverifiedCleanup() {
+  try {
+    const db = getDatabase();
+    const days = unverifiedCleanupDays();
+    const dryRun = process.env.UNVERIFIED_CLEANUP_DRY_RUN === 'true';
+
+    const markerRes = db.exec("SELECT value FROM platform_settings WHERE key = 'email_verification_enabled_at'");
+    const enabledAt = markerRes.length && markerRes[0].values.length ? markerRes[0].values[0][0] : null;
+    if (!enabledAt) {
+      logger.warn('[SCHEDULER] Unverified cleanup: platform_settings.email_verification_enabled_at is missing — no candidates considered');
+      return { candidates: 0, purged: 0, dry_run: dryRun, marker_missing: true };
+    }
+
+    const candidates = db.exec(
+      `SELECT u.id, u.email, u.created_at
+       FROM users u
+       WHERE u.role = 'therapist'
+         AND u.email_verified_at IS NULL
+         AND u.created_at > ?
+         AND u.created_at < datetime('now', ?)
+         AND NOT EXISTS (SELECT 1 FROM users c WHERE c.therapist_id = u.id)
+         AND NOT EXISTS (
+           SELECT 1 FROM subscriptions s
+           WHERE s.therapist_id = u.id AND s.stripe_customer_id IS NOT NULL AND s.stripe_customer_id != ''
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM audit_logs a
+           WHERE a.actor_id = u.id AND a.action IN ('login', 'login_code_success')
+         )
+       ORDER BY u.created_at ASC`,
+      [enabledAt, '-' + days + ' days']
+    );
+
+    const rows = candidates.length ? candidates[0].values : [];
+    if (!rows.length) {
+      logger.info('[SCHEDULER] Unverified cleanup: no unverified therapists older than ' + days + ' days');
+      return { candidates: 0, purged: 0, dry_run: dryRun };
+    }
+
+    if (dryRun) {
+      rows.forEach(function(row) {
+        logger.info('[SCHEDULER] Unverified cleanup (dry-run): would purge user id=' + row[0] + ' email=' + row[1] + ' created_at=' + row[2]);
+      });
+      logger.info('[SCHEDULER] Unverified cleanup (dry-run): ' + rows.length + ' candidate(s), nothing deleted');
+      return { candidates: rows.length, purged: 0, dry_run: true };
+    }
+
+    let purged = 0;
+    let skipped = 0;
+    for (const row of rows) {
+      const userId = row[0];
+      const email = row[1];
+      const createdAt = row[2];
+      try {
+        // One SAVEPOINT per user: a foreign-key hit on an unexpected table
+        // rolls that user back and leaves the others untouched.
+        db.run('SAVEPOINT purge_unverified');
+        db.run('DELETE FROM subscriptions WHERE therapist_id = ?', [userId]);
+        db.run('DELETE FROM login_codes WHERE user_id = ?', [userId]);
+        db.run('DELETE FROM password_reset_tokens WHERE user_id = ?', [userId]);
+        db.run('UPDATE audit_logs SET actor_id = NULL WHERE actor_id = ?', [userId]);
+        db.run('DELETE FROM users WHERE id = ?', [userId]);
+        db.run(
+          `INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at)
+           VALUES (NULL, 'unverified_user_purged', 'user', ?, ?, datetime('now'))`,
+          [userId, JSON.stringify({ email: email, user_id: userId, created_at: createdAt })]
+        );
+        db.run('RELEASE SAVEPOINT purge_unverified');
+        purged++;
+        logger.info('[SCHEDULER] Unverified cleanup: purged user id=' + userId + ' (' + email + ', created ' + createdAt + ')');
+      } catch (rowError) {
+        try {
+          db.run('ROLLBACK TO SAVEPOINT purge_unverified');
+          db.run('RELEASE SAVEPOINT purge_unverified');
+        } catch (e) {
+          // savepoint already gone
+        }
+        skipped++;
+        logger.warn('[SCHEDULER] Unverified cleanup: skipped user id=' + userId + ' (' + rowError.message + ')');
+      }
+    }
+
+    if (purged > 0) saveDatabaseAfterWrite();
+    logger.info('[SCHEDULER] Unverified cleanup: purged ' + purged + ' of ' + rows.length + ' candidate(s)' + (skipped ? ', skipped ' + skipped : ''));
+    return { candidates: rows.length, purged: purged, skipped: skipped, dry_run: false };
+  } catch (error) {
+    logger.error('[SCHEDULER] Unverified cleanup error: ' + error.message);
+    return { error: error.message };
+  }
+}
+
+/**
+ * Job 12: Login-code cleanup (runs in the 2:15 AM slot with job 2)
+ * Codes live 10 minutes; anything older than a day is dead weight.
+ * Guarded: the table exists since wave 1, but never let this break job 2.
+ */
+function runLoginCodesCleanup() {
+  try {
+    const db = getDatabase();
+    db.run("DELETE FROM login_codes WHERE created_at < datetime('now', '-1 day')");
+    const deleted = db.getRowsModified();
+    if (deleted > 0) saveDatabaseAfterWrite();
+    logger.info('[SCHEDULER] Login-codes cleanup: deleted ' + deleted + ' stale login codes');
+    return { deleted: deleted };
+  } catch (error) {
+    logger.error('[SCHEDULER] Login-codes cleanup error: ' + error.message);
+    return { error: error.message };
+  }
+}
+
 function start() {
   if (!SCHEDULER_ENABLED) {
     logger.info('[SCHEDULER] Scheduler disabled via SCHEDULER_ENABLED=false');
@@ -530,9 +665,12 @@ function start() {
   }, { name: 'trial-expiration' }));
 
   // Job 2: Subscription downgrade - daily at 2:15 AM
+  // Job 12: Login-code cleanup shares this slot (wave 2, track 2A)
   scheduledTasks.push(cron.schedule('15 2 * * *', function() {
     logger.info('[SCHEDULER] Running subscription downgrade job...');
     runSubscriptionDowngrade();
+    logger.info('[SCHEDULER] Running login-codes cleanup job...');
+    runLoginCodesCleanup();
   }, { name: 'subscription-downgrade' }));
 
   // Job 3: Expiry warning - daily at 9:00 AM
@@ -583,8 +721,14 @@ function start() {
     runMarkNoShows();
   }, { name: 'mark-no-shows' }));
 
+  // Job 11: Unverified-therapist cleanup - daily at 3:30 AM (wave 2, track 2A)
+  scheduledTasks.push(cron.schedule('30 3 * * *', function() {
+    logger.info('[SCHEDULER] Running unverified-cleanup job...');
+    runUnverifiedCleanup();
+  }, { name: 'unverified-cleanup' }));
+
   logger.info('[SCHEDULER] All scheduled tasks registered (' + scheduledTasks.length + ' jobs)');
-  logger.info('[SCHEDULER] Jobs: trial-expiration (2:00), subscription-downgrade (2:15), expiry-warning (9:00), diary-reminder (10:00), csrf-cleanup (hourly), database-backup (' + backupCron + '), plan-reminders (*/15), dispatch-opt-in-notices (*/10), dispatch-due-reminders (*/5), mark-no-shows (hourly)');
+  logger.info('[SCHEDULER] Jobs: trial-expiration (2:00), subscription-downgrade (2:15), login-codes-cleanup (2:15), expiry-warning (9:00), diary-reminder (10:00), csrf-cleanup (hourly), database-backup (' + backupCron + '), plan-reminders (*/15), dispatch-opt-in-notices (*/10), dispatch-due-reminders (*/5), mark-no-shows (hourly), unverified-cleanup (3:30, ' + unverifiedCleanupDays() + 'd' + (process.env.UNVERIFIED_CLEANUP_DRY_RUN === 'true' ? ', dry-run' : '') + ')');
 }
 
 /**
@@ -613,4 +757,7 @@ module.exports = {
   runDispatchOptInNotices,
   runDispatchDueReminders,
   runMarkNoShows,
+  // Wave 2 (track 2A) jobs
+  runUnverifiedCleanup,
+  runLoginCodesCleanup,
 };

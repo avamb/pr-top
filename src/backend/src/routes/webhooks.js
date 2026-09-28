@@ -19,12 +19,17 @@ const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 router.post('/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
+  // True only when STRIPE_WEBHOOK_SECRET is set and constructEvent accepted
+  // the signature. Effects that grant trust (email verification) must check
+  // this; the pre-existing subscription handling is left as-is.
+  let signatureVerified = false;
 
   try {
     // If webhook secret is configured, verify signature
     if (STRIPE_WEBHOOK_SECRET && STRIPE_WEBHOOK_SECRET !== 'your-stripe-webhook-secret' && isConfigured()) {
       const stripe = getStripeClient();
       event = stripe.webhooks.constructEvent(req.body, sig, STRIPE_WEBHOOK_SECRET);
+      signatureVerified = true;
     } else {
       // In development without webhook secret, parse the body directly
       // This allows testing with simulated webhook events
@@ -73,6 +78,14 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
 
       case 'invoice.payment_failed':
         await handleInvoicePaymentFailed(db, event.data.object);
+        break;
+
+      case 'checkout.session.completed':
+        if (signatureVerified) {
+          await handleCheckoutSessionCompleted(db, event.data.object);
+        } else {
+          logger.warn('[STRIPE] unsigned webhook — skipping email verification effect');
+        }
         break;
 
       default:
@@ -298,6 +311,63 @@ async function handleInvoicePaymentSucceeded(db, invoice) {
 async function handleInvoicePaymentFailed(db, invoice) {
   logger.info(`Invoice payment failed: ${invoice.id}`);
   // Usually handled via payment_intent.payment_failed, but log for completeness
+}
+
+/**
+ * Handle checkout.session.completed event (wave 2, track 2A)
+ * A completed Stripe Checkout proves the person controls the mailbox Stripe
+ * mailed the receipt to, so the account counts as email-verified. Resolved by
+ * client_reference_id (numeric user id) first, then by the checkout email.
+ * Only sets email_verified_at when it is still NULL; the pending verification
+ * token is left in place so a later click on the link lands on
+ * /dashboard?verified=already instead of an error.
+ */
+async function handleCheckoutSessionCompleted(db, session) {
+  const email = String(
+    session.customer_email || (session.customer_details && session.customer_details.email) || ''
+  ).trim().toLowerCase();
+  const ref = session.client_reference_id;
+  logger.info(`Checkout session completed: ${session.id}, customer: ${session.customer || 'n/a'}, ref: ${ref || 'n/a'}`);
+
+  let userId = null;
+
+  if (ref !== undefined && ref !== null && /^\d+$/.test(String(ref))) {
+    const byId = db.exec("SELECT id FROM users WHERE id = ? AND role = 'therapist'", [Number(ref)]);
+    if (byId.length > 0 && byId[0].values.length > 0) {
+      userId = byId[0].values[0][0];
+    }
+  }
+
+  if (!userId && email) {
+    const byEmail = db.exec("SELECT id FROM users WHERE LOWER(email) = ? AND role = 'therapist'", [email]);
+    if (byEmail.length > 0 && byEmail[0].values.length > 0) {
+      userId = byEmail[0].values[0][0];
+    }
+  }
+
+  if (!userId) {
+    logger.warn(`Checkout session ${session.id}: no therapist matched (ref=${ref || 'n/a'}, email=${email ? 'present' : 'absent'})`);
+    return;
+  }
+
+  const before = db.exec('SELECT email_verified_at FROM users WHERE id = ?', [userId]);
+  const wasVerified = before.length > 0 && before[0].values.length > 0 && !!before[0].values[0][0];
+
+  db.run(
+    "UPDATE users SET email_verified_at = COALESCE(email_verified_at, datetime('now')) WHERE id = ?",
+    [userId]
+  );
+
+  if (!wasVerified) {
+    db.run(
+      `INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at)
+       VALUES (?, 'email_verified', 'user', ?, ?, datetime('now'))`,
+      [userId, userId, JSON.stringify({ source: 'stripe_checkout', checkout_session_id: session.id || null })]
+    );
+    logger.info(`Checkout session ${session.id}: marked user id=${userId} as email-verified`);
+  } else {
+    logger.info(`Checkout session ${session.id}: user id=${userId} already email-verified`);
+  }
 }
 
 module.exports = router;
