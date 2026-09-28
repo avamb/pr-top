@@ -8,19 +8,13 @@ const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const emailService = require('../services/emailService');
 const { t } = require('../i18n');
+const { antibot } = require('../middleware/antibot');
+const { getClientIp } = require('../utils/clientIp');
+const { issueSession, SESSION_COOKIE_OPTIONS } = require('../utils/session');
 
 const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-change-in-production';
-
-// Secure cookie configuration
-const SESSION_COOKIE_OPTIONS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'Strict',
-  maxAge: 24 * 60 * 60 * 1000, // 24 hours (matches JWT expiry)
-  path: '/'
-};
 
 // Helper: extract token from Authorization header or session cookie
 function extractToken(req) {
@@ -37,8 +31,13 @@ function extractToken(req) {
 }
 
 // POST /api/auth/register
-router.post('/register', async (req, res) => {
+// antibot: honeypot (fake 201) -> timing (400) -> Turnstile (403).
+router.post('/register', antibot({ turnstile: true, fake: 'register', expectedAction: 'register' }), async (req, res) => {
   try {
+    // Temporary (wave 1): confirm the real IP reaches the backend through
+    // CF -> Traefik -> nginx. Remove in wave 3 once verified on prod.
+    logger.info('[IP] register from ' + getClientIp(req));
+
     const { email, password, role, language, timezone, utm_source, utm_medium, utm_campaign, utm_content, utm_term, intended_plan, name } = req.body;
 
     // Validate required fields individually
@@ -213,12 +212,9 @@ router.post('/register', async (req, res) => {
 
     saveDatabaseAfterWrite();
 
-    // Generate JWT
-    const token = jwt.sign(
-      { userId: userId, email: user[1], role: user[2] },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    );
+    // Sign JWT + set HttpOnly session cookie
+    const session = issueSession(res, { id: userId, email: user[1], role: user[2], timezone: userTimezone });
+    const token = session.token;
 
     logger.info(`User registered successfully: id=${userId}, email=${user[1]}`);
 
@@ -235,17 +231,14 @@ router.post('/register', async (req, res) => {
         logger.error(`Welcome email error for ${user[1]}: ${err.message}`);
       });
 
-    // Set secure HttpOnly session cookie
-    res.cookie('session_token', token, SESSION_COOKIE_OPTIONS);
-
     const responseBody = {
       message: 'User registered successfully',
       user: {
-        id: userId,
-        email: user[1],
-        role: user[2],
+        id: session.user.id,
+        email: session.user.email,
+        role: session.user.role,
         created_at: user[3],
-        timezone: userTimezone
+        timezone: session.user.timezone
       },
       token
     };
@@ -306,26 +299,15 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'Your account has been blocked. Please contact support.' });
     }
 
-    const token = jwt.sign(
-      { userId: user[0], email: user[1], role: user[3] },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    );
+    // Sign JWT + set HttpOnly session cookie
+    const session = issueSession(res, { id: user[0], email: user[1], role: user[3], timezone: user[5] });
 
     logger.info(`User logged in: id=${user[0]}, email=${user[1]}`);
 
-    // Set secure HttpOnly session cookie
-    res.cookie('session_token', token, SESSION_COOKIE_OPTIONS);
-
     res.json({
       message: 'Login successful',
-      user: {
-        id: user[0],
-        email: user[1],
-        role: user[3],
-        timezone: user[5] || 'UTC'
-      },
-      token
+      user: session.user,
+      token: session.token
     });
   } catch (error) {
     logger.error('Login error:', error);
@@ -336,7 +318,7 @@ router.post('/login', async (req, res) => {
 // POST /api/auth/register-viewer
 // Email-only registration from the public chat CTA.
 // Creates a user with role='viewer', links anonymous session, migrates messages, issues JWT.
-router.post('/register-viewer', async (req, res) => {
+router.post('/register-viewer', antibot({ turnstile: true, fake: 'viewer', expectedAction: 'register' }), async (req, res) => {
   try {
     const { email, session_uuid, language } = req.body;
 
@@ -480,7 +462,7 @@ router.post('/register-viewer', async (req, res) => {
 // POST /api/auth/register-lead
 // Creates a lead record (NOT a user) in the leads table, generates verification token, sends verification email.
 // After registration, lead gets +10 messages in the chat. After email verification, +10 more.
-router.post('/register-lead', async (req, res) => {
+router.post('/register-lead', antibot({ turnstile: true, fake: 'lead', expectedAction: 'register_lead' }), async (req, res) => {
   try {
     const { email, session_uuid, language, utm_source, utm_medium, utm_campaign } = req.body;
 
@@ -682,7 +664,7 @@ router.get('/me', (req, res) => {
     logger.info(`Fetching user profile: id=${decoded.userId}`);
 
     const result = db.exec(
-      'SELECT id, email, role, language, timezone, created_at, blocked_at FROM users WHERE id = ?',
+      'SELECT id, email, role, language, timezone, created_at, blocked_at, email_verified_at FROM users WHERE id = ?',
       [decoded.userId]
     );
 
@@ -704,7 +686,8 @@ router.get('/me', (req, res) => {
         role: user[2],
         language: user[3],
         timezone: user[4],
-        created_at: user[5]
+        created_at: user[5],
+        email_verified: !!user[7]
       }
     });
   } catch (error) {
@@ -722,7 +705,7 @@ const FORGOT_PW_RATE_WINDOW = 60 * 60 * 1000; // 1 hour
 const FORGOT_PW_RATE_MAX = 3;
 
 // POST /api/auth/forgot-password
-router.post('/forgot-password', async (req, res) => {
+router.post('/forgot-password', antibot({ turnstile: true, fake: 'forgot', expectedAction: 'forgot_password' }), async (req, res) => {
   try {
     const { email } = req.body;
 

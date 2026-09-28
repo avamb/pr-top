@@ -2110,6 +2110,82 @@ function applySchema(db) {
     logger.warn('T-409: subscriptions rebuild failed (non-fatal): ' + e.message);
   }
 
+  // Anti-bot wave 1 (docs/security/SPEC_ANTIBOT_WAVES.md §2, track 1A):
+  // email verification state on users + login_codes table for email-code login.
+  // Wave 1 only adds the schema and the flag; the verification gate and the
+  // code endpoints arrive in wave 2. Placed after every users-table rebuild
+  // above so the new columns are never dropped by a CREATE/INSERT/RENAME pass.
+  try {
+    db.run('ALTER TABLE users ADD COLUMN email_verified_at TEXT');
+    logger.info('Added email_verified_at column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE users ADD COLUMN verification_token_hash TEXT');
+    logger.info('Added verification_token_hash column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE users ADD COLUMN verification_expires_at TEXT');
+    logger.info('Added verification_expires_at column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE users ADD COLUMN suspicious INTEGER DEFAULT 0');
+    logger.info('Added suspicious column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  // One-time login codes (6 digits) + magic-link tokens. Only hashes are
+  // stored (sha256 + LOGIN_CODE_PEPPER); the plaintext lives in the email.
+  db.run(`CREATE TABLE IF NOT EXISTS login_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    code_hash TEXT NOT NULL,
+    link_token_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    attempts INTEGER DEFAULT 0,
+    used INTEGER DEFAULT 0,
+    ip TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_login_codes_user ON login_codes(user_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_login_codes_link_token ON login_codes(link_token_hash)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_login_codes_expires ON login_codes(expires_at)');
+
+  // One-time backfill: treat existing real therapists/superadmins as verified
+  // so the wave-2 gate never locks out someone who already works in the
+  // product. "Real" = has at least one client, OR has a Stripe customer, OR
+  // registered before the September 2026 bot wave (2026-09-20). Accounts
+  // created after that date with no activity stay unverified on purpose.
+  // Guarded by a platform_settings flag so it runs exactly once and never
+  // re-verifies an account an admin later reset.
+  try {
+    const flagRes = db.exec("SELECT value FROM platform_settings WHERE key = 'migration_email_verified_backfill'");
+    const alreadyRan = flagRes.length > 0 && flagRes[0].values.length > 0 && String(flagRes[0].values[0][0]) === '1';
+    if (!alreadyRan) {
+      db.run(`UPDATE users SET email_verified_at = created_at
+        WHERE role IN ('therapist', 'superadmin')
+          AND email_verified_at IS NULL
+          AND (
+            EXISTS (SELECT 1 FROM users c WHERE c.therapist_id = users.id)
+            OR EXISTS (SELECT 1 FROM subscriptions s WHERE s.therapist_id = users.id AND s.stripe_customer_id IS NOT NULL)
+            OR created_at < '2026-09-20'
+          )`);
+      const backfilled = db.getRowsModified();
+      db.run(
+        "INSERT OR REPLACE INTO platform_settings (key, value, updated_at) VALUES ('migration_email_verified_backfill', '1', datetime('now'))"
+      );
+      logger.info(`Email verification backfill: marked ${backfilled} existing therapist/superadmin accounts as verified`);
+    }
+  } catch (e) {
+    logger.warn('Email verification backfill skipped: ' + e.message);
+  }
+
   // Seed default superadmin account if not exists
   seedSuperadmin(db);
 
@@ -2121,9 +2197,16 @@ function seedSuperadmin(db) {
   const password = process.env.SUPERADMIN_PASSWORD || 'Admin123!';
 
   // Check if superadmin already exists
-  const existing = db.exec("SELECT id FROM users WHERE role = 'superadmin' AND email = ?", [email]);
+  const existing = db.exec("SELECT id, email_verified_at FROM users WHERE role = 'superadmin' AND email = ?", [email]);
   if (existing.length > 0 && existing[0].values.length > 0) {
-    logger.debug('Superadmin account already exists');
+    // The seeded admin has no mailbox flow to verify through — mark it
+    // verified so the wave-2 email gate never locks the platform owner out.
+    if (!existing[0].values[0][1]) {
+      db.run("UPDATE users SET email_verified_at = datetime('now') WHERE id = ?", [existing[0].values[0][0]]);
+      logger.info('Superadmin account marked email-verified');
+    } else {
+      logger.debug('Superadmin account already exists');
+    }
     return;
   }
 
@@ -2131,7 +2214,7 @@ function seedSuperadmin(db) {
   const passwordHash = bcrypt.hashSync(password, 12);
 
   db.run(
-    "INSERT OR IGNORE INTO users (email, password_hash, role, language) VALUES (?, ?, 'superadmin', 'en')",
+    "INSERT OR IGNORE INTO users (email, password_hash, role, language, email_verified_at) VALUES (?, ?, 'superadmin', 'en', datetime('now'))",
     [email, passwordHash]
   );
 

@@ -28,7 +28,7 @@ function authenticate(req, res, next) {
 
     const db = getDatabase();
     const result = db.exec(
-      'SELECT id, email, role, blocked_at FROM users WHERE id = ?',
+      'SELECT id, email, role, blocked_at, email_verified_at FROM users WHERE id = ?',
       [decoded.userId]
     );
 
@@ -46,7 +46,10 @@ function authenticate(req, res, next) {
     req.user = {
       id: user[0],
       email: user[1],
-      role: user[2]
+      role: user[2],
+      // Email verification state (wave 1: informational; wave 2 adds the
+      // requireVerifiedEmail gate on top of this flag).
+      emailVerified: !!user[4]
     };
 
     next();

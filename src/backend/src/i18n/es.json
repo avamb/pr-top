@@ -13,7 +13,10 @@
     "forbidden": "Acceso denegado",
     "tokenExpired": "Sesi\u00f3n expirada. Por favor, inicie sesi\u00f3n de nuevo",
     "tokenInvalid": "Token de autenticaci\u00f3n inv\u00e1lido",
-    "clientAccessDenied": "Acceso denegado. El panel web es solo para terapeutas."
+    "clientAccessDenied": "Acceso denegado. El panel web es solo para terapeutas.",
+    "turnstileFailed": "Verificaci\u00f3n fallida. Por favor, desactive los bloqueadores de anuncios, recargue la p\u00e1gina e intente de nuevo.",
+    "tooManyRegistrations": "Demasiados intentos de registro desde su red. Por favor, intente de nuevo en una hora.",
+    "formTooFast": "Por favor, tómese un momento e intente de nuevo."
   },
   "profile": {
     "updated": "Perfil actualizado exitosamente",

@@ -13,7 +13,10 @@
     "forbidden": "Access denied",
     "tokenExpired": "Session expired. Please log in again",
     "tokenInvalid": "Invalid authentication token",
-    "clientAccessDenied": "Access denied. The web panel is for therapists only."
+    "clientAccessDenied": "Access denied. The web panel is for therapists only.",
+    "turnstileFailed": "Verification failed. Please disable ad blockers, reload the page and try again.",
+    "tooManyRegistrations": "Too many registration attempts from your network. Please try again in an hour.",
+    "formTooFast": "Please take a moment and try again."
   },
   "profile": {
     "updated": "Profile updated successfully",
