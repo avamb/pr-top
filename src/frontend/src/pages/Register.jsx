@@ -1,11 +1,13 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import i18n from '../i18n';
 import { useCsrfToken } from '../hooks/useCsrfToken';
+import { useAntibotFields, waitForTurnstileToken } from '../hooks/useAntibotFields';
 import LoadingSpinner from '../components/LoadingSpinner';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import Seo from '../components/Seo';
+import TurnstileWidget from '../components/TurnstileWidget';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -30,10 +32,14 @@ export default function Register() {
     utm_term: searchParams.get('utm_term') || undefined,
   }), [searchParams]);
   const refCode = useMemo(() => searchParams.get('ref') || undefined, [searchParams]);
-  const [form, setForm] = useState({ email: '', password: '', confirmPassword: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '' });
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
+
+  const { honeypotProps, honeypotValue, setHoneypotValue, hiddenFields } = useAntibotFields();
+  const turnstileRef = useRef(null);
+  const turnstileTokenRef = useRef(undefined);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -108,23 +114,37 @@ export default function Register() {
       if (csrfToken) {
         headers['X-CSRF-Token'] = csrfToken;
       }
+      let turnstileToken = turnstileTokenRef.current;
+      if (turnstileToken === undefined) {
+        turnstileToken = await waitForTurnstileToken(turnstileTokenRef);
+      }
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers,
         body: JSON.stringify({
           email: form.email,
           password: form.password,
+          name: form.name.trim() || undefined,
           role: 'therapist',
           language: i18n.language || 'en',
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
           ref: refCode,
-          ...utmParams
+          ...utmParams,
+          ...hiddenFields,
+          ...(turnstileToken ? { turnstile_token: turnstileToken } : {})
         })
       });
 
       const data = await res.json();
 
       if (!res.ok) {
+        if (data.code === 'TURNSTILE_FAILED') {
+          setError(t('auth.turnstileFailed', 'Verification failed. Please disable ad blockers, reload the page and try again.'));
+          turnstileTokenRef.current = undefined;
+          turnstileRef.current?.reset();
+          setLoading(false);
+          return;
+        }
         setError(data.error || 'Registration failed');
         setLoading(false);
         return;
@@ -170,6 +190,29 @@ export default function Register() {
           )}
 
           <form onSubmit={handleSubmit} noValidate className="space-y-4">
+            <input
+              {...honeypotProps}
+              value={honeypotValue}
+              onChange={(e) => setHoneypotValue(e.target.value)}
+            />
+
+            <div>
+              <label htmlFor="name" className="block text-sm font-medium text-text mb-1">
+                {t('auth.nameOptional', 'Name (optional)')}
+              </label>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                maxLength={100}
+                autoComplete="given-name"
+                value={form.name}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent border-gray-300"
+                placeholder={t('auth.namePlaceholder', 'How should we address you?')}
+              />
+            </div>
+
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-text mb-1">
                 {t('auth.email')} <span className="text-error">*</span>
@@ -238,6 +281,13 @@ export default function Register() {
                 <p id="reg-confirm-error" role="alert" className="mt-1 text-sm text-error">{fieldErrors.confirmPassword}</p>
               )}
             </div>
+
+            <TurnstileWidget
+              ref={turnstileRef}
+              action="register"
+              onToken={(token) => { turnstileTokenRef.current = token; }}
+              onExpire={() => { turnstileTokenRef.current = null; }}
+            />
 
             <button
               type="submit"

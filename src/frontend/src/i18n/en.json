@@ -445,7 +445,10 @@
     "cardIncomplete": "Please complete your card details.",
     "registerSecurityNote": "Application-level encryption. Data stored in the EU.",
     "registerTermsLine1": "By creating an account, you agree to our",
-    "registerTermsLine2": "and"
+    "registerTermsLine2": "and",
+    "turnstileFailed": "Verification failed. Please disable ad blockers, reload the page and try again.",
+    "nameOptional": "Name (optional)",
+    "namePlaceholder": "How should we address you?"
   },
   "dashboard": {
     "title": "PR-TOP Dashboard",

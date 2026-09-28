@@ -445,7 +445,10 @@
     "cardIncomplete": "Пожалуйста, заполните данные карты полностью.",
     "registerSecurityNote": "Шифрование на уровне приложения. Данные хранятся в ЕС.",
     "registerTermsLine1": "Создавая аккаунт, вы соглашаетесь с",
-    "registerTermsLine2": "и"
+    "registerTermsLine2": "и",
+    "turnstileFailed": "Верификация не удалась. Отключите блокировщик объявлений, перезагрузите страницу и повторите попытку.",
+    "nameOptional": "Имя (необязательно)",
+    "namePlaceholder": "Как к вам обращаться?"
   },
   "dashboard": {
     "title": "Панель PR-TOP",

@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { trackUmamiEvent } from '../../utils/umami';
 import LoadingSpinner from '../LoadingSpinner';
 import { useCsrfToken } from '../../hooks/useCsrfToken';
+import { useAntibotFields, waitForTurnstileToken } from '../../hooks/useAntibotFields';
+import TurnstileWidget from '../TurnstileWidget';
 
 /**
  * IANA timezones list (common subset). Full list would need a library.
@@ -106,6 +108,10 @@ export default function ConfirmSignupForm({ formRef, defaultLanguage = 'en' }) {
   const [submitError, setSubmitError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const { honeypotProps, honeypotValue, setHoneypotValue, hiddenFields } = useAntibotFields();
+  const turnstileRef = useRef(null);
+  const turnstileTokenRef = useRef(undefined);
+
   // Sync language if i18n changes
   useEffect(() => {
     setForm(prev => ({ ...prev, language: i18n.language || 'en' }));
@@ -173,6 +179,10 @@ export default function ConfirmSignupForm({ formRef, defaultLanguage = 'en' }) {
       if (csrfToken) {
         registerHeaders['X-CSRF-Token'] = csrfToken;
       }
+      let turnstileToken = turnstileTokenRef.current;
+      if (turnstileToken === undefined) {
+        turnstileToken = await waitForTurnstileToken(turnstileTokenRef);
+      }
       const registerRes = await fetch('/api/auth/register', {
         method: 'POST',
         headers: registerHeaders,
@@ -188,12 +198,21 @@ export default function ConfirmSignupForm({ formRef, defaultLanguage = 'en' }) {
             privacy_terms: consents.privacy,
             session_reminders: consents.reminders,
           },
+          ...hiddenFields,
+          ...(turnstileToken ? { turnstile_token: turnstileToken } : {})
         }),
       });
 
       const registerData = await registerRes.json();
 
       if (!registerRes.ok) {
+        if (registerData.code === 'TURNSTILE_FAILED') {
+          setSubmitError(t('auth.turnstileFailed', 'Verification failed. Please disable ad blockers, reload the page and try again.'));
+          turnstileTokenRef.current = undefined;
+          turnstileRef.current?.reset();
+          setLoading(false);
+          return;
+        }
         setSubmitError(registerData.error || t('landingConfirm.signup.errors.generic'));
         setLoading(false);
         return;
@@ -264,6 +283,12 @@ export default function ConfirmSignupForm({ formRef, defaultLanguage = 'en' }) {
           )}
 
           <form onSubmit={handleSubmit} noValidate className="space-y-4">
+            <input
+              {...honeypotProps}
+              value={honeypotValue}
+              onChange={(e) => setHoneypotValue(e.target.value)}
+            />
+
             {/* Name */}
             <div>
               <label htmlFor="lc-name" className="block text-sm font-medium text-text mb-1">
@@ -412,6 +437,13 @@ export default function ConfirmSignupForm({ formRef, defaultLanguage = 'en' }) {
                 <p role="alert" className="text-xs text-error">{errors.consents}</p>
               )}
             </div>
+
+            <TurnstileWidget
+              ref={turnstileRef}
+              action="register"
+              onToken={(token) => { turnstileTokenRef.current = token; }}
+              onExpire={() => { turnstileTokenRef.current = null; }}
+            />
 
             {/* Submit button */}
             <button

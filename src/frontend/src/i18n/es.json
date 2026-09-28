@@ -445,7 +445,10 @@
     "cardIncomplete": "Por favor, completa los datos de tu tarjeta.",
     "registerSecurityNote": "Cifrado a nivel de aplicación. Datos almacenados en la UE.",
     "registerTermsLine1": "Al crear una cuenta, aceptas nuestros",
-    "registerTermsLine2": "y nuestra"
+    "registerTermsLine2": "y nuestra",
+    "turnstileFailed": "Verificación fallida. Por favor, desactiva los bloqueadores de anuncios, recarga la página e intenta de nuevo.",
+    "nameOptional": "Nombre (opcional)",
+    "namePlaceholder": "¿Cómo deberíamos dirigirnos a ti?"
   },
   "dashboard": {
     "title": "Panel de PR-TOP",

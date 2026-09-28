@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useCsrfToken } from '../hooks/useCsrfToken';
+import { useAntibotFields, waitForTurnstileToken } from '../hooks/useAntibotFields';
 import LoadingSpinner from '../components/LoadingSpinner';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import Seo from '../components/Seo';
+import TurnstileWidget from '../components/TurnstileWidget';
 
 export default function ForgotPassword() {
   const { t } = useTranslation();
@@ -13,6 +15,10 @@ export default function ForgotPassword() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const { honeypotProps, honeypotValue, setHoneypotValue, hiddenFields } = useAntibotFields();
+  const turnstileRef = useRef(null);
+  const turnstileTokenRef = useRef(undefined);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -30,15 +36,30 @@ export default function ForgotPassword() {
       if (csrfToken) {
         headers['X-CSRF-Token'] = csrfToken;
       }
+      let turnstileToken = turnstileTokenRef.current;
+      if (turnstileToken === undefined) {
+        turnstileToken = await waitForTurnstileToken(turnstileTokenRef);
+      }
       const res = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ email: email.trim() })
+        body: JSON.stringify({
+          email: email.trim(),
+          ...hiddenFields,
+          ...(turnstileToken ? { turnstile_token: turnstileToken } : {})
+        })
       });
 
       const data = await res.json();
 
       if (!res.ok) {
+        if (data.code === 'TURNSTILE_FAILED') {
+          setError(t('auth.turnstileFailed', 'Verification failed. Please disable ad blockers, reload the page and try again.'));
+          turnstileTokenRef.current = undefined;
+          turnstileRef.current?.reset();
+          setLoading(false);
+          return;
+        }
         setError(data.error || t('auth.forgotPasswordError', 'Something went wrong. Please try again.'));
         setLoading(false);
         return;
@@ -93,6 +114,12 @@ export default function ForgotPassword() {
               </p>
 
               <form onSubmit={handleSubmit} noValidate className="space-y-4">
+                <input
+                  {...honeypotProps}
+                  value={honeypotValue}
+                  onChange={(e) => setHoneypotValue(e.target.value)}
+                />
+
                 <div>
                   <label htmlFor="email" className="block text-sm font-medium text-text mb-1">
                     {t('auth.email')} <span className="text-error">*</span>
@@ -109,6 +136,13 @@ export default function ForgotPassword() {
                     placeholder={t('auth.emailPlaceholder')}
                   />
                 </div>
+
+                <TurnstileWidget
+                  ref={turnstileRef}
+                  action="forgot_password"
+                  onToken={(token) => { turnstileTokenRef.current = token; }}
+                  onExpire={() => { turnstileTokenRef.current = null; }}
+                />
 
                 <button
                   type="submit"

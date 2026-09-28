@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import usePublicAssistantStore from '../stores/publicAssistantStore';
 import { useCsrfToken } from '../hooks/useCsrfToken';
+import { useAntibotFields, waitForTurnstileToken } from '../hooks/useAntibotFields';
+import TurnstileWidget from './TurnstileWidget';
 
 /**
  * Simple markdown-to-JSX renderer (same as in AssistantChatPanel).
@@ -128,6 +130,10 @@ function ViewerRegistrationCTA({ t, onRegister, csrfToken, sessionUUID, language
   const [error, setError] = React.useState(null);
   const [success, setSuccess] = React.useState(false);
 
+  const { honeypotProps, honeypotValue, setHoneypotValue, hiddenFields } = useAntibotFields();
+  const turnstileRef = React.useRef(null);
+  const turnstileTokenRef = React.useRef(undefined);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const trimmedEmail = email.trim();
@@ -147,6 +153,11 @@ function ViewerRegistrationCTA({ t, onRegister, csrfToken, sessionUUID, language
       const headers = { 'Content-Type': 'application/json' };
       if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
+      let turnstileToken = turnstileTokenRef.current;
+      if (turnstileToken === undefined) {
+        turnstileToken = await waitForTurnstileToken(turnstileTokenRef);
+      }
+
       const res = await fetch('/api/auth/register-lead', {
         method: 'POST',
         headers,
@@ -154,7 +165,9 @@ function ViewerRegistrationCTA({ t, onRegister, csrfToken, sessionUUID, language
         body: JSON.stringify({
           email: trimmedEmail,
           session_uuid: sessionUUID,
-          language: language || 'en'
+          language: language || 'en',
+          ...hiddenFields,
+          ...(turnstileToken ? { turnstile_token: turnstileToken } : {})
         })
       });
 
@@ -168,6 +181,13 @@ function ViewerRegistrationCTA({ t, onRegister, csrfToken, sessionUUID, language
       }
 
       if (!res.ok) {
+        if (data.code === 'TURNSTILE_FAILED') {
+          setError(t('auth.turnstileFailed', 'Verification failed. Please disable ad blockers, reload the page and try again.'));
+          turnstileTokenRef.current = undefined;
+          turnstileRef.current?.reset();
+          setIsSubmitting(false);
+          return;
+        }
         throw new Error(data.error || 'Registration failed');
       }
 
@@ -209,6 +229,12 @@ function ViewerRegistrationCTA({ t, onRegister, csrfToken, sessionUUID, language
         </p>
 
         <form onSubmit={handleSubmit} className="max-w-xs mx-auto">
+          <input
+            {...honeypotProps}
+            value={honeypotValue}
+            onChange={(e) => setHoneypotValue(e.target.value)}
+          />
+
           <div className="flex gap-2">
             <input
               type="email"
@@ -232,6 +258,13 @@ function ViewerRegistrationCTA({ t, onRegister, csrfToken, sessionUUID, language
               ) : t('publicChat.continueBtn', 'Continue')}
             </button>
           </div>
+
+          <TurnstileWidget
+            ref={turnstileRef}
+            action="register_lead"
+            onToken={(token) => { turnstileTokenRef.current = token; }}
+            onExpire={() => { turnstileTokenRef.current = null; }}
+          />
 
           {error && (
             <p className="text-xs text-red-600 mt-2">{error}</p>
