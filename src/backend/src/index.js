@@ -17,6 +17,7 @@ const cookieParser = require('cookie-parser');
 const { csrfProtection, csrfTokenEndpoint } = require('./middleware/csrf');
 const { requireActiveSubscription, authenticate } = require('./middleware/auth');
 const { i18nMiddleware } = require('./middleware/i18n');
+const { getClientIp } = require('./utils/clientIp');
 const { t: translate, SUPPORTED_LANGUAGES } = require('./i18n');
 const assistantKnowledge = require('./services/assistantKnowledge');
 const assistantCache = require('./services/assistantCache');
@@ -53,40 +54,68 @@ app.use(cors({
 }));
 
 // Rate limiting
+// All limiters key on the real visitor IP (CF-Connecting-IP behind Cloudflare,
+// req.ip otherwise; IPv6 collapsed to /64) — see utils/clientIp.js.
+// Shared 429 handler: same JSON shape for every limiter, only the text differs.
+function rateLimitHandler(message) {
+  return (req, res, next, options) => {
+    const retryAfterSeconds = Math.ceil((options.windowMs - (Date.now() % options.windowMs)) / 1000);
+    res.status(429).json({
+      error: message,
+      retryAfter: retryAfterSeconds,
+      retryAfterMs: retryAfterSeconds * 1000
+    });
+  };
+}
+
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: process.env.RATE_LIMIT_MAX ? parseInt(process.env.RATE_LIMIT_MAX) : (process.env.NODE_ENV !== 'production' ? 10000 : 500),
+  keyGenerator: getClientIp,
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: true, // Include `X-RateLimit-*` headers
   message: { error: 'Too many requests, please try again later.', retryAfter: '15 minutes' },
-  handler: (req, res, next, options) => {
-    const retryAfterSeconds = Math.ceil((options.windowMs - (Date.now() % options.windowMs)) / 1000);
-    res.status(429).json({
-      error: 'Too many requests, please try again later.',
-      retryAfter: retryAfterSeconds,
-      retryAfterMs: retryAfterSeconds * 1000
-    });
-  }
+  handler: rateLimitHandler('Too many requests, please try again later.')
 });
 app.use('/api/', limiter);
 
-// Auth-specific rate limiting (stricter for login/register)
+// Auth-specific rate limiting (stricter for login)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: process.env.AUTH_RATE_LIMIT_MAX ? parseInt(process.env.AUTH_RATE_LIMIT_MAX) : (process.env.NODE_ENV !== 'production' ? 1000 : 50),
+  keyGenerator: getClientIp,
   standardHeaders: true,
   legacyHeaders: true,
-  handler: (req, res, next, options) => {
-    const retryAfterSeconds = Math.ceil((options.windowMs - (Date.now() % options.windowMs)) / 1000);
-    res.status(429).json({
-      error: 'Too many authentication attempts, please try again later.',
-      retryAfter: retryAfterSeconds,
-      retryAfterMs: retryAfterSeconds * 1000
-    });
-  }
+  handler: rateLimitHandler('Too many authentication attempts, please try again later.')
 });
 app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/register', authLimiter);
+
+// Registration rate limiting: a few sign-ups per hour per real IP is plenty
+// for humans; the September 2026 bot wave created dozens per minute.
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 60 minutes
+  max: process.env.REGISTER_RATE_LIMIT_MAX ? parseInt(process.env.REGISTER_RATE_LIMIT_MAX) : (process.env.NODE_ENV !== 'production' ? 1000 : 5),
+  keyGenerator: getClientIp,
+  standardHeaders: true,
+  legacyHeaders: true,
+  handler: rateLimitHandler('Too many registration attempts, please try again later.')
+});
+app.use('/api/auth/register', registerLimiter);
+app.use('/api/auth/register-lead', registerLimiter);
+app.use('/api/auth/register-viewer', registerLimiter);
+
+// Email-code login rate limiting. The limiter is mounted now; the
+// /api/auth/login-code router itself arrives in wave 2 (routes/loginCode.js)
+// and must be mounted BEFORE the generic /api/auth router.
+const loginCodeLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 60 minutes
+  max: process.env.LOGIN_CODE_RATE_LIMIT_MAX ? parseInt(process.env.LOGIN_CODE_RATE_LIMIT_MAX) : (process.env.NODE_ENV !== 'production' ? 1000 : 10),
+  keyGenerator: getClientIp,
+  standardHeaders: true,
+  legacyHeaders: true,
+  handler: rateLimitHandler('Too many login code requests, please try again later.')
+});
+app.use('/api/auth/login-code', loginCodeLimiter);
 
 // Webhook routes MUST be mounted before JSON body parser (needs raw body for signature verification)
 app.use('/api/webhooks', webhookRoutes);
@@ -447,6 +476,15 @@ async function start() {
   try {
     await initDatabase();
     logger.info('Database initialized successfully');
+
+    // Rate limiters trust CF-Connecting-IP. That header is only meaningful
+    // when nothing but Cloudflare can reach the origin; otherwise anyone can
+    // spoof it and rotate limiter buckets. ORIGIN_LOCKED=true is the
+    // operator's attestation that the firewall / Authenticated Origin Pulls
+    // are in place (docs/troubleshooting/antibot-runbook.md).
+    if (process.env.NODE_ENV === 'production' && process.env.ORIGIN_LOCKED !== 'true') {
+      logger.warn('CF-Connecting-IP is trusted for rate limiting but ORIGIN_LOCKED is not set — ensure the origin only accepts traffic from Cloudflare (firewall / Authenticated Origin Pulls)');
+    }
 
     // Initialize Stripe SDK
     const stripeReady = initStripe();
