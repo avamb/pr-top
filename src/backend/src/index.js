@@ -240,6 +240,11 @@ app.get('/api/features', (req, res) => {
 });
 
 // Mount route handlers
+// Wave 2 auth extensions (docs/security/SPEC_ANTIBOT_WAVES.md §3):
+// login-by-code router sits on its own prefix (limiter is mounted above),
+// email-verification router shares /api/auth and is mounted before authRoutes.
+app.use('/api/auth/login-code', require('./routes/loginCode'));
+app.use('/api/auth', require('./routes/emailVerification'));
 app.use('/api/auth', authRoutes);
 app.use('/api/assistant', require('./routes/publicAssistant')); // Public chat (no auth, mounted before auth-gated assistant routes)
 app.use('/api/bot', botRoutes);
