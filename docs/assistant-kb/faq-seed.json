@@ -310,5 +310,37 @@
     "question": "Do I need client consent before uploading a session recording?",
     "answer": "Yes. Recording a therapy session without the client's explicit prior written consent may violate GDPR (EU/EEA), professional ethics codes, and national law. Under GDPR Article 9, session recordings are special-category health data requiring explicit consent (Article 9(2)(a)) or a recognized professional-secrecy basis under national law. PR-TOP checks the 'Recording consent granted' flag on the client profile before allowing an upload — if the flag is No, the upload button is disabled. Store the signed consent document in your own secure records (not in PR-TOP). If the client has not consented, use the single-track option to record only your own voice: the client's audio is discarded server-side before any transcript is stored. See the Consent to Record guide in the Therapist Guide (Dashboard → Guide) for ready-to-use wording templates in English, Russian, Spanish, and Ukrainian.",
     "tags": ["consent", "recording", "gdpr", "legal", "upload", "session", "compliance"]
+  },
+  {
+    "id": "email-confirmation-not-arrived",
+    "audience": "public",
+    "locale": "en",
+    "question": "I didn't get the confirmation email after registering",
+    "answer": "First, check your spam and promotions folders — email providers sometimes mark authentication emails as spam. Wait a few minutes and check again; delivery can be slow. If it still hasn't arrived, click the yellow banner on your dashboard that says 'Confirm your email' and use the 'Send again' button to request a fresh confirmation email. You can resend up to 3 times per hour. If you mistyped your email address during registration, use the 'Change email' button on the banner to correct it and a new confirmation will be sent to the correct address. If you still do not receive emails, contact support@pr-top.com and let us know the email address you registered with.",
+    "tags": ["email", "confirmation", "registration", "support"]
+  },
+  {
+    "id": "login-code-not-arrived",
+    "audience": "public",
+    "locale": "en",
+    "question": "I didn't get my sign-in code email",
+    "answer": "Check your spam and promotions folders first — email providers sometimes flag sign-in codes as spam. Wait 30 seconds for the email to arrive; delivery can be slow. If the code still hasn't arrived, click 'Get a code' on the sign-in page again to request a fresh one. You can request up to 3 codes per email per 15 minutes. Make sure the email address is correct; if you mistyped it, the code goes to the wrong inbox. If you still don't receive codes after waiting and re-requesting, contact support@pr-top.com with the email address you are trying to sign in with.",
+    "tags": ["login", "email", "code", "sign-in", "support"]
+  },
+  {
+    "id": "sign-in-without-password",
+    "audience": "public",
+    "locale": "en",
+    "question": "Can I sign in without a password?",
+    "answer": "Yes. On the sign-in page, the default method is 'Get a code' — you request a 6-digit code via email and use that to sign in. No password needed. You can do this every time you sign in, or you can set a password in Settings → Account and use that instead if you prefer. Both methods work on the same account, so you can switch between them.",
+    "tags": ["login", "code", "password", "sign-in"]
+  },
+  {
+    "id": "blocked-from-adding-client",
+    "audience": "public",
+    "locale": "en",
+    "question": "Why can't I add a client? I get an error saying 'confirm your email'",
+    "answer": "Before you can add clients, invite them via invite links, or upload session recordings, you must confirm your email address. This is a security measure to ensure email access. After you register, check your inbox for a confirmation email and click the link inside it. Alternatively, if you use the sign-in code method on the login page, your email is automatically confirmed after you sign in that way. Once confirmed, all gated features become available immediately.",
+    "tags": ["clients", "email", "confirmation", "access", "gate"]
   }
 ]

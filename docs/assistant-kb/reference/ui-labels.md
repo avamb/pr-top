@@ -197,7 +197,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `auth.networkError` — Network error. Please try again.
 - `auth.emailPasswordRequired` — Email and password are required
 - `auth.passwordMinLength` — Password must be at least 6 characters
-- _+ 48 more keys_
+- _+ 63 more keys_
 
 ## brand
 
@@ -335,6 +335,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `common.yes` — Yes
 - `common.no` — No
 - `common.ok` — OK
+- `common.dismiss` — Dismiss
 
 ## dashboard
 
@@ -848,6 +849,30 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `terms.acceptableUse.item3` — Upload malicious code, viruses, or any content designed to disrupt the Service
 - `terms.acceptableUse.item4` — Use the Service to store or process data unrelated to legitimate therapeutic practice
 - _+ 35 more keys_
+
+## verifyEmail
+
+- `verifyEmail.bannerTitle` — Confirm your email
+- `verifyEmail.bannerText` — We sent a confirmation link to {{email}}. Some features stay locked until you confirm.
+- `verifyEmail.resend` — Send again
+- `verifyEmail.changeEmail` — Change email
+- `verifyEmail.sent` — Sent! Check your inbox.
+- `verifyEmail.gateToast` — Confirm your email to use this feature.
+- `verifyEmail.statusExpired` — This confirmation link has expired.
+- `verifyEmail.statusError` — We couldn't confirm your email. Please try again.
+- `verifyEmail.resendIn` — Try again in {{seconds}}s
+- `verifyEmail.changeTitle` — Change email address
+- `verifyEmail.newEmail` — New email
+- `verifyEmail.password` — Password
+- `verifyEmail.changed` — Email updated — check your new inbox.
+- `verifyEmail.title` — Email verification
+- `verifyEmail.currentEmail` — Current: {{email}}
+- `verifyEmail.saving` — Saving…
+- `verifyEmail.statusSuccess` — Email verified! You're all set.
+- `verifyEmail.resendLimitReached` — Too many resend attempts. Please try again later.
+- `verifyEmail.sending` — Sending…
+- `verifyEmail.signInToResend` — Sign in to resend
+- _+ 1 more keys_
 
 ## verifyLead
 

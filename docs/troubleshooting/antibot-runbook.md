@@ -260,3 +260,127 @@ Verify:
    ```
 
 If `req.ip` is always the same (e.g., Traefik's internal IP), the limiter is ineffective against distributed attacks, but you cannot fix it without fixing the IP detection.
+
+---
+
+## Wave 2: email verification & login codes
+
+Wave 2 adds therapist email confirmation and code-based sign-in. Logs and audit events track the new flows; the email verification gate controls access to sensitive operations until confirmation.
+
+### Log prefixes and audit actions
+
+**Backend logs:**
+
+```
+[EMAIL_VERIFY] verified/expired/unknown/resend user=… ip=…
+[LOGIN_CODE] requested/verified/failed user=… ip=…
+[SCHEDULER] unverified-cleanup job …
+```
+
+**Audit log actions** (`actor_id` may be NULL for system actions):
+
+- `email_verified` — therapist confirmed email via link or code login
+- `verification_resent` — fresh confirmation email sent
+- `email_changed_unverified` — unverified user changed email address
+- `login_code_requested` — code requested from `/request` endpoint
+- `login_code_success` — code or link verified, session issued
+- `login_code_failed` — code attempt failed (reason: `expired`, `attempts`, `mismatch`, `blocked`, `link_expired`, `link_used`, etc.)
+- `unverified_user_purged` — account deleted by cleanup job (details: email)
+- `admin_verified_email` — superadmin manually confirmed email via admin UI
+
+### Email verification gate
+
+The gate blocks therapists whose email is unconfirmed from:
+
+- Creating, importing, or linking clients.
+- Regenerating or viewing invite codes.
+- Uploading, transcribing, or summarizing sessions.
+- Using the signed-in AI assistant chat.
+- Exporting client data or analytics.
+
+**To disable the gate temporarily:**
+
+```bash
+# In Dokploy or docker-compose .env:
+EMAIL_VERIFICATION_GATE=false
+```
+
+Restart the backend. Unverified therapists can now call gated endpoints. This does not auto-confirm existing accounts — confirmation links still work, and therapists can still choose to confirm.
+
+### Unverified account cleanup
+
+A scheduled job (`unverified-cleanup`) runs daily at **03:30 UTC** and deletes accounts that:
+
+- Have `email_verified_at IS NULL` (never confirmed).
+- Have `created_at < now - UNVERIFIED_CLEANUP_DAYS` (default 7 days old).
+- Have no clients linked.
+- Have no active Stripe subscription.
+- Have no audit log entries for `login`, `login_code_success`, or other activity.
+
+When a job run deletes users, it logs:
+
+```
+[SCHEDULER] unverified-cleanup: deleted 5 accounts (emails: user1@…, user2@…, …)
+```
+
+Each deletion is recorded in `audit_logs` with `action='unverified_user_purged'`.
+
+### Dry-run mode
+
+By default, the cleanup job runs in **dry-run mode**:
+
+```bash
+UNVERIFIED_CLEANUP_DRY_RUN=true
+```
+
+In dry-run, the job logs which accounts *would* be deleted but doesn't actually delete them. This gives you time to review the logs before real deletions happen. After reviewing the logs and confirming the criteria are reasonable for your deployment:
+
+```bash
+# In Dokploy or docker-compose .env:
+UNVERIFIED_CLEANUP_DRY_RUN=false
+```
+
+Restart the backend. The next scheduled run will delete accounts.
+
+### Manual email verification
+
+**From the admin UI:**
+
+1. Open **Administration** → **Therapists**.
+2. Find the therapist in the list.
+3. Hover over the email status or find the **Verify email** button.
+4. Click it.
+5. The therapist's `email_verified_at` is set to now, the gate is lifted, and an audit log entry is created (`action='admin_verified_email'`).
+
+**Via API (if admin automation is needed):**
+
+```bash
+POST /api/admin/therapists/:id/verify-email
+Authorization: Bearer <superadmin-token>
+```
+
+Returns `200 { email, email_verified_at }` on success.
+
+### Testing Wave 2 features
+
+Set the following in `.env` for local testing:
+
+```bash
+EMAIL_VERIFICATION_GATE=true
+AUTH_DEV_ECHO=true    # allows tests to read dev_verification_token, dev_code from responses
+UNVERIFIED_CLEANUP_DAYS=1  # shorten cleanup window for testing
+UNVERIFIED_CLEANUP_DRY_RUN=true  # prevent accidental deletions during testing
+```
+
+With `AUTH_DEV_ECHO=true`, responses from `/register`, `/resend-verification`, and `/login-code/request` include:
+
+```json
+{
+  "message": "...",
+  "dev_verification_token": "hex64",
+  "dev_code": "123456",
+  "dev_link_token": "hex64"
+}
+```
+
+Use these secrets in automated tests instead of parsing emails.

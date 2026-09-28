@@ -128,6 +128,57 @@ Once you are signed in you can be productive in about an hour.
   desktop and Telegram web sometimes bind to different accounts.
   Confirm the account with the client before they tap Start.
 
+## Confirming your email address
+
+After you register, you receive a confirmation email with a link valid for 48 hours. Click the link to confirm your email and unlock all features.
+
+**What you will see:** After registration, you land on the dashboard. A yellow banner appears:
+
+**"Confirm your email — We sent a verification link to {your-email}. Some features stay locked until you confirm."**
+
+The banner shows two buttons:
+
+- **Send again** (cooldown 60 seconds between clicks; max 3 resends per hour).
+- **Change email** (if you mistyped your address).
+
+**What is locked until confirmation?**
+
+Until your email is confirmed, these actions are blocked:
+
+- Adding a new client (solo create, bulk import, link).
+- Regenerating your invite code or creating a new one.
+- Uploading session recordings.
+- Transcribing or summarizing sessions.
+- Using the in-app AI assistant chat (signed-in only).
+- Exporting client data, analytics, or sessions.
+
+**What still works:**
+
+- Viewing the dashboard and your client list.
+- Viewing existing clients and their history.
+- Viewing existing sessions and notes.
+- Updating your Settings (profile, language, timezone, subscription).
+- Viewing the exercises library and other read-only content.
+
+**Confirming your email:**
+
+Click the **"Verify email"** link in the email sent to your address. The link is a one-time use token and expires after 48 hours. Once you click it:
+
+1. You are logged in automatically (if you weren't already).
+2. The banner disappears.
+3. All gated features become available immediately.
+4. You see a green toast message: **"Email verified! You're all set."**
+
+**If the link expires:** If you don't click the link within 48 hours, it stops working. But you're not locked out — use the yellow banner to click **Send again** and request a fresh confirmation email.
+
+**If you mistyped your email:** Click the **Change email** button on the banner. A modal opens where you can enter a new email address and your password. The new address must be different from the current one, and uniqueness is verified. After you change it, a new confirmation email is sent to the new address.
+
+**After 7 days of inactivity:** If your account is unconfirmed and you haven't signed in or taken any action (created clients, added subscriptions, or accessed audit logs) for 7 days, the account is automatically deleted along with any test data. This prevents abandoned unverified accounts from cluttering the database.
+
+**Signing in by code also confirms:** If you sign in using the email-code method (instead of a password), your email address is automatically confirmed as part of that login. So if you registered with a password and have not confirmed yet, you can simply request a code from the sign-in page — after you use the code, your email is confirmed without needing the separate verification link.
+
+**Stripe checkout also confirms:** If you upgrade to a paid plan through the subscription checkout, Stripe verifies your email as a processing step. This also confirms your email address in PR-TOP, so the banner disappears.
+
 ## Protection against automated sign-ups
 
 The registration form includes invisible verification to block bots and prevent abuse. You won't notice it — there are no CAPTCHAs or puzzles to solve.
@@ -201,3 +252,9 @@ A: No. The name field on the registration form is optional. You can
 leave it blank and register with just email and password. The field
 helps us detect patterns in automated registrations, but it is not
 required for your account to work.
+
+**Q: What happens if I don't confirm my email?**
+A: You can still view your dashboard, clients, and existing sessions. But you cannot add new clients, upload recordings, or use AI features until you confirm. If your account stays unconfirmed and inactive for 7 days, it is automatically deleted. To confirm, click the link in the verification email sent after registration.
+
+**Q: Can I sign in without confirming my email?**
+A: If you registered with a password, yes — you can sign in with your email and password without confirming first. However, gated features (adding clients, uploading sessions, AI chat) remain blocked. You must click the verification link in the email to unlock them. Alternatively, you can request a sign-in code from the login page — using a code also confirms your email automatically.

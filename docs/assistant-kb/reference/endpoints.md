@@ -13,7 +13,8 @@ spec — request bodies and response shapes are documented in `docs/PRD.md`.
 
 Mount prefix: `/api/admin`
 
-- `GET /api/admin/therapists` — GET /api/admin/therapists - List all therapists
+- `GET /api/admin/therapists` — GET /api/admin/therapists?verified=0|1 — verified filter added in wave 2 (track 2A)
+- `POST /api/admin/therapists/:id/verify-email` — email (wave 2, track 2A). Idempotent: sets email_verified_at only if NULL.
 - `PUT /api/admin/therapists/:id/plan` — PUT /api/admin/therapists/:id/plan - Manually assign a plan to a therapist
 - `DELETE /api/admin/therapists/:id/plan-override` — DELETE /api/admin/therapists/:id/plan-override - Remove manual override, revert to trial
 - `PUT /api/admin/therapists/:id/block` — PUT /api/admin/therapists/:id/block - Block a therapist
@@ -81,7 +82,7 @@ Mount prefix: `/api/assignments`
 
 Mount prefix: `/api/assistant`
 
-- `POST /api/assistant/chat` — Supports SSE streaming when stream=true in body or Accept: text/event-stream header
+- `POST /api/assistant/chat` — 403 EMAIL_NOT_VERIFIED; history/conversation reads stay open.
 - `POST /api/assistant/new` — POST /api/assistant/new - Start a new chat
 - `GET /api/assistant/history` — GET /api/assistant/history - Get recent chat history list
 - `GET /api/assistant/history/:id` — GET /api/assistant/history/:id - Get a specific conversation
@@ -214,6 +215,14 @@ Mount prefix: `/api/diary`
 - `GET /api/diary/:id/stream` — GET /api/diary/:id/stream - Stream decrypted audio/video file for a diary entry
 - `POST /api/diary/:id/retranscribe` — POST /api/diary/:id/retranscribe - Retry transcription for a diary entry (therapist/superadmin)
 
+## emailVerification — Router module
+
+Mount prefix: `/api`
+
+- `GET /api/verify-email` — /login?verified=1 (login-CSRF guard)
+- `POST /api/resend-verification` — change-unverified-email). Overwrites the previous token.
+- `POST /api/change-unverified-email` — issues a new token to the new address. Shares the 3/h budget with resend.
+
 ## encryption — Encryption key rotation and self-diagnostics
 
 Mount prefix: `/api/encryption`
@@ -248,7 +257,7 @@ Mount prefix: `/api/export`
 Mount prefix: `/api/invite-code`
 
 - `GET /api/invite-code` — GET /api/invite-code - Get current invite code for the therapist
-- `GET /api/invite-code/link` — GET /api/invite-code/link - Get invite deep link for Telegram bot
+- `GET /api/invite-code/link` — spread; showing the bare code on GET / stays open.
 - `POST /api/invite-code/regenerate` — POST /api/invite-code/regenerate - Generate a new invite code
 
 ## kb — Knowledge-base admin: re-index, stats, diagnostics
@@ -258,6 +267,14 @@ Mount prefix: `/api/kb`
 - `GET /api/kb` — Returns the therapist's KB document list, newest first.
 - `POST /api/kb/upload` — field overrides the original filename (default).
 - `DELETE /api/kb/:id` — Removes the document, its chunks, and its embeddings. Therapist-scoped.
+
+## loginCode — Router module
+
+Mount prefix: `/api`
+
+- `POST /api/request` — the login form has no hidden field and password managers fill it fast).
+- `POST /api/verify` — same timing floor; success mirrors POST /login.
+- `GET /api/link` — SPA; any failure lands on the login page with code_error=expired.
 
 ## publicAssistant — Anonymous landing-page assistant chatbot
 
