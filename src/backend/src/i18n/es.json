@@ -16,7 +16,14 @@
     "clientAccessDenied": "Acceso denegado. El panel web es solo para terapeutas.",
     "turnstileFailed": "Verificaci\u00f3n fallida. Por favor, desactive los bloqueadores de anuncios, recargue la p\u00e1gina e intente de nuevo.",
     "tooManyRegistrations": "Demasiados intentos de registro desde su red. Por favor, intente de nuevo en una hora.",
-    "formTooFast": "Por favor, tómese un momento e intente de nuevo."
+    "formTooFast": "Por favor, tómese un momento e intente de nuevo.",
+    "emailNotVerified": "Por favor, confirma tu dirección de correo para usar esta función.",
+    "codeSentIfExists": "Si ese email está registrado, hemos enviado un código de acceso.",
+    "codeInvalid": "El código es inválido o ha expirado.",
+    "codeLocked": "Demasiados intentos incorrectos. Solicita un nuevo código.",
+    "verificationResent": "Correo de confirmación enviado.",
+    "resendLimit": "Demasiadas solicitudes. Por favor, intenta más tarde.",
+    "emailChangeNeedsPassword": "Introduce tu contraseña para cambiar la dirección de correo."
   },
   "profile": {
     "updated": "Perfil actualizado exitosamente",

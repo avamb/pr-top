@@ -16,7 +16,14 @@
     "clientAccessDenied": "Access denied. The web panel is for therapists only.",
     "turnstileFailed": "Verification failed. Please disable ad blockers, reload the page and try again.",
     "tooManyRegistrations": "Too many registration attempts from your network. Please try again in an hour.",
-    "formTooFast": "Please take a moment and try again."
+    "formTooFast": "Please take a moment and try again.",
+    "emailNotVerified": "Please confirm your email address to use this feature.",
+    "codeSentIfExists": "If that email is registered, we've sent a sign-in code.",
+    "codeInvalid": "The code is invalid or has expired.",
+    "codeLocked": "Too many incorrect attempts. Request a new code.",
+    "verificationResent": "Confirmation email sent.",
+    "resendLimit": "Too many requests. Please try again later.",
+    "emailChangeNeedsPassword": "Enter your password to change the email address."
   },
   "profile": {
     "updated": "Profile updated successfully",

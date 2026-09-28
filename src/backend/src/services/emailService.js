@@ -635,6 +635,153 @@ function leadVerificationTemplate(data, locale) {
 }
 
 /**
+ * Email verification template (therapist registration)
+ */
+function emailVerificationTemplate(data, locale) {
+  const l = locale || 'en';
+  const verifyUrl = data.verifyUrl || '#';
+  const trialDays = data.trialDays || 14;
+
+  const titles = {
+    en: 'Confirm your email — PR-TOP',
+    ru: 'Подтвердите email — PR-TOP',
+    es: 'Confirma tu email — PR-TOP',
+    uk: 'Підтвердіть email — PR-TOP'
+  };
+
+  const bodies = {
+    en: `
+      <h2 style="color:#4f46e5;margin-bottom:16px">Welcome to PR-TOP!</h2>
+      <p>Thank you for registering. Your therapist account is set up and your free ${trialDays}-day trial is now active.</p>
+      <p>To get started, please confirm your email address by clicking the button below:</p>
+      <div style="text-align:center;margin:24px 0">
+        <a href="${escapeHtml(verifyUrl)}" style="display:inline-block;background:#4f46e5;color:white;padding:14px 36px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px">Confirm Email</a>
+      </div>
+      <p style="color:#6b7280;font-size:13px">This link is valid for <strong>48 hours</strong>. If you didn't request this, you can safely ignore this email.</p>
+      <p style="font-size:12px;color:#9ca3af;margin-top:24px">If the button doesn't work, copy and paste this link into your browser:<br>
+      <span style="word-break:break-all;font-family:monospace;font-size:11px">${escapeHtml(verifyUrl)}</span></p>
+    `,
+    ru: `
+      <h2 style="color:#4f46e5;margin-bottom:16px">Добро пожаловать в PR-TOP!</h2>
+      <p>Спасибо за регистрацию. Ваш аккаунт терапевта готов и бесплатный пробный период на ${trialDays} дней активирован.</p>
+      <p>Чтобы начать работу, подтвердите ваш email, нажав кнопку ниже:</p>
+      <div style="text-align:center;margin:24px 0">
+        <a href="${escapeHtml(verifyUrl)}" style="display:inline-block;background:#4f46e5;color:white;padding:14px 36px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px">Подтвердить email</a>
+      </div>
+      <p style="color:#6b7280;font-size:13px">Ссылка действительна <strong>48 часов</strong>. Если вы не запрашивали это, просто проигнорируйте письмо.</p>
+      <p style="font-size:12px;color:#9ca3af;margin-top:24px">Если кнопка не работает, скопируйте и вставьте ссылку в браузер:<br>
+      <span style="word-break:break-all;font-family:monospace;font-size:11px">${escapeHtml(verifyUrl)}</span></p>
+    `,
+    es: `
+      <h2 style="color:#4f46e5;margin-bottom:16px">¡Bienvenido a PR-TOP!</h2>
+      <p>Gracias por tu registro. Tu cuenta de terapeuta está lista y tu prueba gratuita de ${trialDays} días ya está activa.</p>
+      <p>Para comenzar, por favor confirma tu dirección de correo haciendo clic en el botón de abajo:</p>
+      <div style="text-align:center;margin:24px 0">
+        <a href="${escapeHtml(verifyUrl)}" style="display:inline-block;background:#4f46e5;color:white;padding:14px 36px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px">Confirmar Email</a>
+      </div>
+      <p style="color:#6b7280;font-size:13px">Este enlace es válido por <strong>48 horas</strong>. Si no lo solicitaste, puedes ignorar este correo.</p>
+      <p style="font-size:12px;color:#9ca3af;margin-top:24px">Si el botón no funciona, copia y pega este enlace en tu navegador:<br>
+      <span style="word-break:break-all;font-family:monospace;font-size:11px">${escapeHtml(verifyUrl)}</span></p>
+    `,
+    uk: `
+      <h2 style="color:#4f46e5;margin-bottom:16px">Ласкаво просимо до PR-TOP!</h2>
+      <p>Дякуємо за реєстрацію. Ваш акаунт терапевта готовий та безкоштовний пробний період на ${trialDays} днів активований.</p>
+      <p>Щоб розпочати, будь ласка, підтвердіть вашу email-адресу, натиснувши кнопку нижче:</p>
+      <div style="text-align:center;margin:24px 0">
+        <a href="${escapeHtml(verifyUrl)}" style="display:inline-block;background:#4f46e5;color:white;padding:14px 36px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px">Підтвердити Email</a>
+      </div>
+      <p style="color:#6b7280;font-size:13px">Посилання дійсне протягом <strong>48 годин</strong>. Якщо ви не запитували це, просто ігноруйте лист.</p>
+      <p style="font-size:12px;color:#9ca3af;margin-top:24px">Якщо кнопка не працює, скопіюйте та вставте посилання у браузер:<br>
+      <span style="word-break:break-all;font-family:monospace;font-size:11px">${escapeHtml(verifyUrl)}</span></p>
+    `
+  };
+
+  return {
+    subject: titles[l] || titles.en,
+    html: baseLayout(bodies[l] || bodies.en, l)
+  };
+}
+
+/**
+ * Login code email template (code-based authentication)
+ */
+function loginCodeTemplate(data, locale) {
+  const l = locale || 'en';
+  const code = data.code || '000000';
+  const linkUrl = data.linkUrl || '#';
+  const ttlMin = data.ttlMin || 10;
+
+  // The subject is logged by sendRawEmail and shown in mail clients'
+  // notification previews — it must never carry the code itself.
+  const titles = {
+    en: 'Your PR-TOP sign-in code',
+    ru: 'Ваш код входа в PR-TOP',
+    es: 'Tu código de acceso a PR-TOP',
+    uk: 'Ваш код входу до PR-TOP'
+  };
+
+  const bodies = {
+    en: `
+      <h2 style="color:#4f46e5;margin-bottom:16px">Sign in to PR-TOP</h2>
+      <p>Your 6-digit sign-in code:</p>
+      <div style="text-align:center;margin:24px 0">
+        <span style="display:inline-block;background:#f3f4f6;border:2px solid #4f46e5;border-radius:8px;padding:24px 32px;font-size:32px;font-weight:700;font-family:monospace;letter-spacing:8px;color:#4f46e5">${code}</span>
+      </div>
+      <p style="text-align:center;color:#6b7280;margin-top:12px">This code is valid for <strong>${ttlMin} minutes</strong>.</p>
+      <p>Or sign in using this link:</p>
+      <div style="text-align:center;margin:24px 0">
+        <a href="${escapeHtml(linkUrl)}" style="display:inline-block;background:#4f46e5;color:white;padding:14px 36px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px">Sign In</a>
+      </div>
+      <p style="color:#6b7280;font-size:13px">If you didn't request this code, you can safely ignore this email.</p>
+    `,
+    ru: `
+      <h2 style="color:#4f46e5;margin-bottom:16px">Вход в PR-TOP</h2>
+      <p>Ваш 6-значный код входа:</p>
+      <div style="text-align:center;margin:24px 0">
+        <span style="display:inline-block;background:#f3f4f6;border:2px solid #4f46e5;border-radius:8px;padding:24px 32px;font-size:32px;font-weight:700;font-family:monospace;letter-spacing:8px;color:#4f46e5">${code}</span>
+      </div>
+      <p style="text-align:center;color:#6b7280;margin-top:12px">Код действителен <strong>${ttlMin} минут</strong>.</p>
+      <p>Или войдите по ссылке:</p>
+      <div style="text-align:center;margin:24px 0">
+        <a href="${escapeHtml(linkUrl)}" style="display:inline-block;background:#4f46e5;color:white;padding:14px 36px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px">Войти</a>
+      </div>
+      <p style="color:#6b7280;font-size:13px">Если вы не запрашивали этот код, просто проигнорируйте письмо.</p>
+    `,
+    es: `
+      <h2 style="color:#4f46e5;margin-bottom:16px">Acceso a PR-TOP</h2>
+      <p>Tu código de acceso de 6 dígitos:</p>
+      <div style="text-align:center;margin:24px 0">
+        <span style="display:inline-block;background:#f3f4f6;border:2px solid #4f46e5;border-radius:8px;padding:24px 32px;font-size:32px;font-weight:700;font-family:monospace;letter-spacing:8px;color:#4f46e5">${code}</span>
+      </div>
+      <p style="text-align:center;color:#6b7280;margin-top:12px">Este código es válido por <strong>${ttlMin} minutos</strong>.</p>
+      <p>O accede usando este enlace:</p>
+      <div style="text-align:center;margin:24px 0">
+        <a href="${escapeHtml(linkUrl)}" style="display:inline-block;background:#4f46e5;color:white;padding:14px 36px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px">Acceder</a>
+      </div>
+      <p style="color:#6b7280;font-size:13px">Si no solicitaste este código, puedes ignorar este correo.</p>
+    `,
+    uk: `
+      <h2 style="color:#4f46e5;margin-bottom:16px">Вхід до PR-TOP</h2>
+      <p>Ваш 6-значний код входу:</p>
+      <div style="text-align:center;margin:24px 0">
+        <span style="display:inline-block;background:#f3f4f6;border:2px solid #4f46e5;border-radius:8px;padding:24px 32px;font-size:32px;font-weight:700;font-family:monospace;letter-spacing:8px;color:#4f46e5">${code}</span>
+      </div>
+      <p style="text-align:center;color:#6b7280;margin-top:12px">Код дійсний протягом <strong>${ttlMin} хвилин</strong>.</p>
+      <p>Або увійдіть за посиланням:</p>
+      <div style="text-align:center;margin:24px 0">
+        <a href="${escapeHtml(linkUrl)}" style="display:inline-block;background:#4f46e5;color:white;padding:14px 36px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px">Увійти</a>
+      </div>
+      <p style="color:#6b7280;font-size:13px">Якщо ви не запитували цей код, просто ігноруйте лист.</p>
+    `
+  };
+
+  return {
+    subject: titles[l] || titles.en,
+    html: baseLayout(bodies[l] || bodies.en, l)
+  };
+}
+
+/**
  * Session reminder opt-in email template (architecture §7.4 — email
  * counterpart to the bot inline-button opt-in flow). The email invites
  * the client to opt in to (or decline) session reminders. Two CTA
@@ -858,6 +1005,18 @@ function escapeHtml(str) {
  * @param {string} html - HTML email body
  * @returns {Promise<{sent: boolean, messageId?: string, error?: string}>}
  */
+/**
+ * Redact secrets before a string reaches the logs: any run of 4+ digits
+ * (login codes) becomes "••••", any run of 32+ hex chars (verification /
+ * magic-link tokens) becomes "<token>". Used for every logged subject or
+ * URL in this module; HTML bodies are never logged at all.
+ */
+function redactForLog(str) {
+  return String(str == null ? '' : str)
+    .replace(/[0-9a-f]{32,}/gi, '<token>')
+    .replace(/\d{4,}/g, '••••');
+}
+
 async function sendRawEmail(to, subject, html) {
   if (!to) {
     logger.warn('[EMAIL] No recipient address provided, skipping');
@@ -872,7 +1031,7 @@ async function sendRawEmail(to, subject, html) {
 
   if (!isConfigured()) {
     // Graceful fallback: log to console when SMTP not configured
-    logger.info(`[EMAIL] SMTP not configured. Would send to ${to}: "${subject}"`);
+    logger.info(`[EMAIL] SMTP not configured. Would send to ${to}: "${redactForLog(subject)}"`);
     logger.info(`[EMAIL] Email body logged to console (development mode)`);
     return { sent: false, error: 'SMTP not configured', logged: true };
   }
@@ -886,7 +1045,7 @@ async function sendRawEmail(to, subject, html) {
       html
     });
 
-    logger.info(`[EMAIL] Sent to ${to}: "${subject}" (messageId: ${info.messageId})`);
+    logger.info(`[EMAIL] Sent to ${to}: "${redactForLog(subject)}" (messageId: ${info.messageId})`);
     return { sent: true, messageId: info.messageId };
   } catch (error) {
     logger.error(`[EMAIL] Failed to send to ${to}: ${error.message}`);
@@ -935,6 +1094,12 @@ async function sendEmail(to, templateName, templateData, locale) {
       break;
     case 'session_reminder':
       template = sessionReminderTemplate(templateData, l);
+      break;
+    case 'email_verification':
+      template = emailVerificationTemplate(templateData, l);
+      break;
+    case 'login_code':
+      template = loginCodeTemplate(templateData, l);
       break;
     default:
       logger.warn(`[EMAIL] Unknown template: ${templateName}`);
@@ -1038,7 +1203,8 @@ async function sendViewerWelcomeEmail(email, locale) {
 async function sendLeadVerificationEmail(email, verificationToken, locale) {
   const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:3002';
   const verifyUrl = `${appUrl}/verify-lead?token=${encodeURIComponent(verificationToken)}`;
-  logger.info(`[EMAIL] Lead verification link for ${email}: ${verifyUrl}`);
+  // Never log the link: the token inside it is a bearer credential.
+  logger.info(`[EMAIL] Lead verification email queued for ${email}`);
   return sendEmail(email, 'lead_verification', { verifyUrl }, locale);
 }
 
@@ -1082,6 +1248,43 @@ async function sendSessionReminder(toEmail, locale, data) {
   return sendEmail(toEmail, 'session_reminder', data || {}, locale);
 }
 
+/**
+ * Send email verification email (therapist registration, wave 2 track 2C)
+ * @param {string} email - Therapist's email
+ * @param {string} token - Verification token (32 bytes hex)
+ * @param {string} [locale='en'] - Language code
+ * @param {object} [options={}] - { trialDays }
+ * @returns {Promise<{sent: boolean, error?: string}>}
+ */
+async function sendVerificationEmail(email, token, locale, options = {}) {
+  const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:3002';
+  const verifyUrl = `${appUrl}/api/auth/verify-email?token=${encodeURIComponent(token)}`;
+  // Never log the link: GET /verify-email?token= issues a session, so the
+  // token is a bearer credential (same rule as login codes).
+  logger.info(`[EMAIL] Email verification email queued for ${email}`);
+  return sendEmail(email, 'email_verification', {
+    verifyUrl,
+    trialDays: options.trialDays || 14
+  }, locale);
+}
+
+/**
+ * Send login code email (wave 2 track 2C)
+ * @param {string} email - User's email
+ * @param {object} data - { code: '123456', linkUrl, ttlMin }
+ * @param {string} [locale='en'] - Language code
+ * @returns {Promise<{sent: boolean, error?: string}>}
+ */
+async function sendLoginCodeEmail(email, data, locale) {
+  // NEVER log the code or link
+  logger.info(`[LOGIN_CODE] Email sent for ${email} (do not log code)`);
+  return sendEmail(email, 'login_code', {
+    code: data.code || '000000',
+    linkUrl: data.linkUrl || '#',
+    ttlMin: data.ttlMin || 10
+  }, locale);
+}
+
 module.exports = {
   isConfigured,
   sendEmail,
@@ -1094,9 +1297,14 @@ module.exports = {
   sendLeadVerificationEmail,
   sendSessionReminderOptIn,
   sendSessionReminder,
+  sendVerificationEmail,
+  sendLoginCodeEmail,
+  redactForLog,
   // Exposed for unit testing of template rendering.
   _templates: {
     sessionReminderOptInTemplate,
     sessionReminderTemplate,
+    emailVerificationTemplate,
+    loginCodeTemplate,
   },
 };
