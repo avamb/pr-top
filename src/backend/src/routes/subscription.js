@@ -4,7 +4,12 @@
 const express = require('express');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
-const { createCustomer, getCustomer, createCheckoutSession, isConfigured, isStripeTestMode, getStripeClient, PLAN_PRICES } = require('../services/stripe');
+const {
+  createCustomer, getCustomer, createCheckoutSession, isConfigured, isStripeTestMode, getStripeClient, PLAN_PRICES,
+  isRealStripeSubscriptionId, changeSubscriptionPlan, cancelSubscriptionAtPeriodEnd,
+  resumeSubscription, isStripeResourceMissing
+} = require('../services/stripe');
+const { parseSubscriptionDate } = require('../middleware/auth');
 const { getClientLimit, getClientCount, checkClientLimit } = require('../utils/planLimits');
 const jwt = require('jsonwebtoken');
 
@@ -279,10 +284,18 @@ router.get('/payments', requireAuth, (req, res) => {
   }
 });
 
+// True when Stripe runs on placeholder keys in production: billing must not
+// silently fall back to dev-mode behaviour (free upgrades, fake checkouts).
+function isBillingUnavailableInProduction() {
+  return isStripeTestMode() && process.env.NODE_ENV === 'production';
+}
+
 // POST /api/subscription/change-plan
-// Change subscription plan (upgrade or downgrade)
-// Upgrades take effect immediately. Downgrades are scheduled for end of current period.
-router.post('/change-plan', requireAuth, (req, res) => {
+// Subscriptions without a Stripe subscription (trial, admin-granted) get
+// 402 requires_checkout; Stripe-backed upgrades are applied locally only
+// after the prorated Stripe charge succeeds.
+// Upgrades are charged immediately (prorated). Downgrades are scheduled for end of current period.
+router.post('/change-plan', requireAuth, async (req, res) => {
   try {
     const db = getDatabase();
     const userId = req.user.userId;
@@ -297,12 +310,12 @@ router.post('/change-plan', requireAuth, (req, res) => {
     let subResult;
     try {
       subResult = db.exec(
-        'SELECT id, plan, status, current_period_end, pending_plan FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
+        'SELECT id, plan, status, current_period_end, stripe_subscription_id, pending_plan FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
         [userId]
       );
     } catch (e) {
       subResult = db.exec(
-        'SELECT id, plan, status, current_period_end FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
+        'SELECT id, plan, status, current_period_end, stripe_subscription_id FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
         [userId]
       );
     }
@@ -315,6 +328,17 @@ router.post('/change-plan', requireAuth, (req, res) => {
     const currentPlan = subResult[0].values[0][1];
     const currentStatus = subResult[0].values[0][2];
     const currentPeriodEnd = subResult[0].values[0][3];
+    const stripeSubscriptionId = subResult[0].values[0][4];
+
+    // Trialing subscriptions have no paid Stripe subscription yet: any paid
+    // plan has to be bought through checkout.
+    if (currentStatus === 'trialing') {
+      return res.status(402).json({
+        error: 'Please complete checkout to switch to a paid plan.',
+        requires_checkout: true,
+        plan: newPlan
+      });
+    }
 
     if (currentStatus !== 'active') {
       return res.status(400).json({ error: 'Subscription is not active' });
@@ -374,8 +398,14 @@ router.post('/change-plan', requireAuth, (req, res) => {
       }
 
       res.json(response);
-    } else {
-      // Upgrade: takes effect immediately
+    } else if (isStripeTestMode()) {
+      // Dev-mode upgrade (placeholder Stripe keys): never in production
+      if (isBillingUnavailableInProduction()) {
+        logger.error(`Change plan refused for user ${userId}: Stripe is not configured in production`);
+        return res.status(503).json({ error: 'Billing is temporarily unavailable. Please try again later.' });
+      }
+
+      // Upgrade: takes effect immediately, no charge (development only)
       const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
       db.run(
@@ -384,10 +414,11 @@ router.post('/change-plan', requireAuth, (req, res) => {
       );
       saveDatabaseAfterWrite();
 
-      logger.info(`User ${userId} upgraded from ${currentPlan} to ${newPlan} (immediate)`);
+      logger.info(`Dev mode: user ${userId} upgraded from ${currentPlan} to ${newPlan} (immediate, no charge)`);
 
       res.json({
         message: `Upgraded to ${newPlan} successfully! New features are available immediately.`,
+        dev_mode: true,
         subscription: {
           plan: newPlan,
           previous_plan: currentPlan,
@@ -395,6 +426,63 @@ router.post('/change-plan', requireAuth, (req, res) => {
           scheduled: false,
           current_period_start: now.toISOString(),
           current_period_end: periodEnd.toISOString()
+        }
+      });
+    } else if (!isRealStripeSubscriptionId(stripeSubscriptionId)) {
+      // No paid Stripe subscription to change (trial, admin-granted plan):
+      // the client has to start a normal checkout for the new plan.
+      logger.info(`User ${userId} upgrade ${currentPlan} -> ${newPlan} requires checkout (no Stripe subscription)`);
+      return res.status(402).json({
+        error: 'Please complete checkout to upgrade to this plan.',
+        requires_checkout: true,
+        plan: newPlan
+      });
+    } else {
+      // Upgrade: charge the prorated difference in Stripe first, then apply locally
+      let updated;
+      try {
+        updated = await changeSubscriptionPlan(stripeSubscriptionId, newPlan);
+      } catch (stripeError) {
+        logger.error(`Stripe upgrade failed for user ${userId} (${currentPlan} -> ${newPlan}): ${stripeError.message}`);
+        if (isStripeResourceMissing(stripeError)) {
+          // The Stripe subscription no longer exists: buy the plan via checkout
+          return res.status(402).json({
+            error: 'Please complete checkout to upgrade to this plan.',
+            requires_checkout: true,
+            plan: newPlan
+          });
+        }
+        return res.status(402).json({
+          error: 'The upgrade payment could not be completed. Your plan was not changed. Please check your payment method and try again.',
+          code: 'payment_failed'
+        });
+      }
+
+      const periodStart = updated && updated.current_period_start
+        ? new Date(updated.current_period_start * 1000).toISOString() : null;
+      const periodEnd = updated && updated.current_period_end
+        ? new Date(updated.current_period_end * 1000).toISOString() : currentPeriodEnd;
+
+      db.run(
+        `UPDATE subscriptions SET plan = ?, pending_plan = NULL,
+         current_period_start = COALESCE(?, current_period_start), current_period_end = COALESCE(?, current_period_end),
+         updated_at = datetime('now') WHERE id = ?`,
+        [newPlan, periodStart, periodEnd, subId]
+      );
+      saveDatabaseAfterWrite();
+
+      logger.info(`User ${userId} upgraded from ${currentPlan} to ${newPlan} (Stripe ${stripeSubscriptionId}, prorated invoice)`);
+
+      res.json({
+        message: `Upgraded to ${newPlan} successfully! The prorated difference has been charged. New features are available immediately.`,
+        charged: true,
+        subscription: {
+          plan: newPlan,
+          previous_plan: currentPlan,
+          is_downgrade: false,
+          scheduled: false,
+          current_period_start: periodStart,
+          current_period_end: periodEnd
         }
       });
     }
@@ -453,9 +541,15 @@ router.post('/checkout', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Invalid plan. Must be one of: ' + validPlans.join(', ') });
     }
 
+    // Dev-mode checkout auto-grants the plan; never allow that in production
+    if (isBillingUnavailableInProduction()) {
+      logger.error(`Checkout refused for user ${userId}: Stripe is not configured in production`);
+      return res.status(503).json({ error: 'Billing is temporarily unavailable. Please try again later.' });
+    }
+
     // Check current subscription
     const subResult = db.exec(
-      'SELECT id, plan, status, stripe_customer_id FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
+      'SELECT id, plan, status, stripe_customer_id, stripe_subscription_id, current_period_end FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
       [userId]
     );
 
@@ -466,11 +560,36 @@ router.post('/checkout', requireAuth, async (req, res) => {
     const currentPlan = subResult[0].values[0][1];
     const currentStatus = subResult[0].values[0][2];
     let customerId = subResult[0].values[0][3];
+    const existingStripeSubId = subResult[0].values[0][4];
+    const existingPeriodEnd = subResult[0].values[0][5];
+
+    // A live Stripe subscription (active, past_due, trialing, or canceled but
+    // still inside its paid period) must be changed or resumed in place: a
+    // second checkout would create a second, double-billed subscription.
+    if (isRealStripeSubscriptionId(existingStripeSubId) && currentStatus !== 'expired') {
+      const periodEndDate = parseSubscriptionDate(existingPeriodEnd);
+      const canceledInGrace = currentStatus === 'canceled' && periodEndDate && periodEndDate > new Date();
+      if (currentStatus !== 'canceled' || canceledInGrace) {
+        return res.status(409).json({
+          error: currentStatus === 'active'
+            ? 'You already have an active paid subscription. Change your plan instead.'
+            : currentStatus === 'canceled'
+              ? 'Your subscription is still running until the end of the paid period. Resume it instead of starting a new one.'
+              : 'Your subscription has an outstanding payment. Plan changes are available once it is paid.',
+          code: 'subscription_exists',
+          status: currentStatus,
+          use_change_plan: currentStatus === 'active',
+          can_resume: currentStatus === 'canceled',
+          plan
+        });
+      }
+    }
 
     // Block same-plan upgrade only when already fully active (not trialing).
     // Trialing users on the same plan still need to complete Stripe Checkout
-    // to add payment info and activate their subscription.
-    if (currentPlan === plan && currentStatus !== 'trialing') {
+    // to add payment info and activate their subscription; canceled/expired
+    // users may re-subscribe to the plan they had.
+    if (currentPlan === plan && !['trialing', 'canceled', 'expired'].includes(currentStatus)) {
       return res.status(400).json({ error: 'Already on this plan' });
     }
 
@@ -504,7 +623,8 @@ router.post('/checkout', requireAuth, async (req, res) => {
       const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
       db.run(
         `UPDATE subscriptions SET plan = ?, status = 'active', stripe_subscription_id = ?,
-         current_period_start = ?, current_period_end = ?, updated_at = datetime('now')
+         current_period_start = ?, current_period_end = ?,
+         trial_ends_at = NULL, pending_plan = NULL, canceled_at = NULL, updated_at = datetime('now')
          WHERE therapist_id = ?`,
         [plan, session.id, now.toISOString(), periodEnd.toISOString(), userId]
       );
@@ -538,8 +658,9 @@ router.post('/checkout', requireAuth, async (req, res) => {
 });
 
 // POST /api/subscription/cancel
-// Cancel subscription - access continues until end of current billing period
-router.post('/cancel', requireAuth, (req, res) => {
+// Renewal is stopped in Stripe first; access is kept by requireActiveSubscription.
+// Cancel subscription - renewal stops, access continues until end of current billing period
+router.post('/cancel', requireAuth, async (req, res) => {
   try {
     const db = getDatabase();
     const userId = req.user.userId;
@@ -547,12 +668,12 @@ router.post('/cancel', requireAuth, (req, res) => {
     let subResult;
     try {
       subResult = db.exec(
-        'SELECT id, plan, status, current_period_end, pending_plan FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
+        'SELECT id, plan, status, current_period_end, stripe_subscription_id, trial_ends_at, pending_plan FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
         [userId]
       );
     } catch (e) {
       subResult = db.exec(
-        'SELECT id, plan, status, current_period_end FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
+        'SELECT id, plan, status, current_period_end, stripe_subscription_id, trial_ends_at FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
         [userId]
       );
     }
@@ -564,10 +685,50 @@ router.post('/cancel', requireAuth, (req, res) => {
     const subId = subResult[0].values[0][0];
     const currentPlan = subResult[0].values[0][1];
     const currentStatus = subResult[0].values[0][2];
-    const currentPeriodEnd = subResult[0].values[0][3];
+    const trialEndsAt = subResult[0].values[0][5];
+    let currentPeriodEnd = subResult[0].values[0][3];
+    const stripeSubscriptionId = subResult[0].values[0][4];
 
     if (currentStatus === 'canceled') {
       return res.status(400).json({ error: 'Subscription already canceled' });
+    }
+
+    // An expired subscription has nothing left to cancel (and canceling it
+    // would re-open access until the fallback date below).
+    if (currentStatus === 'expired') {
+      return res.status(400).json({ error: 'Subscription is not active' });
+    }
+
+    // A trial without a paid period ends when the trial ends
+    if (currentStatus === 'trialing' && !currentPeriodEnd && trialEndsAt) {
+      currentPeriodEnd = trialEndsAt;
+    }
+
+    // A paid Stripe subscription must stop renewing in Stripe first; if that
+    // fails nothing is changed locally so the user is not billed silently.
+    if (isRealStripeSubscriptionId(stripeSubscriptionId)) {
+      try {
+        const updated = await cancelSubscriptionAtPeriodEnd(stripeSubscriptionId);
+        if (updated && updated.current_period_end) {
+          currentPeriodEnd = new Date(updated.current_period_end * 1000).toISOString();
+        }
+      } catch (stripeError) {
+        if (isStripeResourceMissing(stripeError)) {
+          // Nothing left to stop in Stripe (subscription deleted there): cancel locally
+          logger.warn(`Stripe subscription ${stripeSubscriptionId} not found while canceling for user ${userId}; canceling locally`);
+        } else {
+          logger.error(`Stripe cancel failed for user ${userId} (${stripeSubscriptionId}): ${stripeError.message}`);
+          return res.status(502).json({
+            error: 'We could not reach the payment provider to cancel your subscription. Nothing was changed. Please try again.',
+            code: 'stripe_error'
+          });
+        }
+      }
+    } else if (typeof stripeSubscriptionId === 'string' && stripeSubscriptionId.startsWith('sub_') && isBillingUnavailableInProduction()) {
+      // Stripe-backed row but Stripe is not configured in production: a local
+      // cancel would leave the Stripe subscription renewing.
+      logger.error(`Cancel refused for user ${userId}: Stripe is not configured in production`);
+      return res.status(503).json({ error: 'Billing is temporarily unavailable. Please try again later.' });
     }
 
     const now = new Date();
@@ -581,9 +742,11 @@ router.post('/cancel', requireAuth, (req, res) => {
       // Column already exists, ignore
     }
 
+    // current_period_end is what requireActiveSubscription uses to keep access
+    // until the paid period ends, so persist the fallback date as well.
     db.run(
-      `UPDATE subscriptions SET status = 'canceled', canceled_at = ?, pending_plan = NULL, updated_at = datetime('now') WHERE id = ?`,
-      [now.toISOString(), subId]
+      `UPDATE subscriptions SET status = 'canceled', canceled_at = ?, pending_plan = NULL, current_period_end = ?, updated_at = datetime('now') WHERE id = ?`,
+      [now.toISOString(), accessUntil, subId]
     );
     saveDatabaseAfterWrite();
 
@@ -602,6 +765,96 @@ router.post('/cancel', requireAuth, (req, res) => {
   } catch (error) {
     logger.error('Cancel error: ' + error.message);
     res.status(500).json({ error: 'Failed to cancel subscription' });
+  }
+});
+
+// POST /api/subscription/resume
+// Undo a cancellation while the paid period is still running: renewal is
+// switched back on in Stripe first, then the local row is restored.
+// Resume a canceled subscription before its paid period ends
+router.post('/resume', requireAuth, async (req, res) => {
+  try {
+    const db = getDatabase();
+    const userId = req.user.userId;
+
+    const subResult = db.exec(
+      'SELECT id, plan, status, current_period_end, stripe_subscription_id, trial_ends_at FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
+      [userId]
+    );
+    if (subResult.length === 0 || subResult[0].values.length === 0) {
+      return res.status(404).json({ error: 'No subscription found' });
+    }
+
+    const [subId, plan, status, currentPeriodEnd, stripeSubscriptionId, trialEndsAt] = subResult[0].values[0];
+    if (status !== 'canceled') {
+      return res.status(400).json({ error: 'Subscription is not canceled' });
+    }
+
+    const now = new Date();
+    const periodEnd = parseSubscriptionDate(currentPeriodEnd);
+    if (!periodEnd || periodEnd <= now) {
+      return res.status(409).json({
+        error: 'This subscription has ended and can no longer be resumed. Please choose a plan to subscribe again.',
+        requires_checkout: true,
+        plan
+      });
+    }
+
+    let newStatus = 'active';
+    let newPeriodEnd = currentPeriodEnd;
+    if (isRealStripeSubscriptionId(stripeSubscriptionId)) {
+      try {
+        const updated = await resumeSubscription(stripeSubscriptionId);
+        if (updated && ['past_due', 'trialing'].includes(updated.status)) newStatus = updated.status;
+        if (updated && updated.current_period_end) {
+          newPeriodEnd = new Date(updated.current_period_end * 1000).toISOString();
+        }
+      } catch (stripeError) {
+        if (isStripeResourceMissing(stripeError)) {
+          return res.status(409).json({
+            error: 'This subscription has ended and can no longer be resumed. Please choose a plan to subscribe again.',
+            requires_checkout: true,
+            plan
+          });
+        }
+        logger.error(`Stripe resume failed for user ${userId} (${stripeSubscriptionId}): ${stripeError.message}`);
+        return res.status(502).json({
+          error: 'We could not reach the payment provider to resume your subscription. Nothing was changed. Please try again.',
+          code: 'stripe_error'
+        });
+      }
+    } else if (typeof stripeSubscriptionId === 'string' && stripeSubscriptionId.startsWith('sub_') && isBillingUnavailableInProduction()) {
+      logger.error(`Resume refused for user ${userId}: Stripe is not configured in production`);
+      return res.status(503).json({ error: 'Billing is temporarily unavailable. Please try again later.' });
+    } else {
+      // No paid Stripe subscription: a canceled trial goes back to trialing,
+      // never to a paid 'active' status.
+      const trialEnd = parseSubscriptionDate(trialEndsAt);
+      if ((plan === 'trial' || !stripeSubscriptionId) && trialEnd && trialEnd > now) {
+        newStatus = 'trialing';
+      }
+    }
+
+    db.run(
+      `UPDATE subscriptions SET status = ?, canceled_at = NULL, current_period_end = ?, updated_at = datetime('now') WHERE id = ?`,
+      [newStatus, newPeriodEnd, subId]
+    );
+    saveDatabaseAfterWrite();
+
+    logger.info(`Subscription resumed for user ${userId} (status ${newStatus})`);
+
+    res.json({
+      message: 'Subscription resumed. It will renew at the end of the current period.',
+      subscription: {
+        plan,
+        status: newStatus,
+        canceled_at: null,
+        current_period_end: newPeriodEnd
+      }
+    });
+  } catch (error) {
+    logger.error('Resume error: ' + error.message);
+    res.status(500).json({ error: 'Failed to resume subscription' });
   }
 });
 

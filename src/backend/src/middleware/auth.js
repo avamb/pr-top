@@ -76,6 +76,21 @@ function requireRole(...roles) {
   };
 }
 
+// Parse a subscriptions timestamp. Values are either ISO strings
+// ("2026-11-01T10:00:00.000Z") or SQLite datetime('now') output
+// ("2026-11-01 10:00:00", UTC without a zone marker). Returns null if unparseable.
+function parseSubscriptionDate(value) {
+  if (!value) return null;
+  let str = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(str)) {
+    str = str.replace(' ', 'T') + 'Z';
+  } else if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    str = str + 'T00:00:00Z';
+  }
+  const date = new Date(str);
+  return isNaN(date.getTime()) ? null : date;
+}
+
 // Check if therapist has an active (non-expired) subscription
 // Returns 402 if trial expired or subscription inactive
 // Runs before route-level authenticate, so extracts user from token directly
@@ -104,7 +119,7 @@ function requireActiveSubscription(req, res, next) {
     if (role !== 'therapist') return next();
 
     const subResult = db.exec(
-      'SELECT plan, status, trial_ends_at FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
+      'SELECT id, plan, status, trial_ends_at, current_period_end, stripe_subscription_id FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
       [userId]
     );
 
@@ -116,19 +131,26 @@ function requireActiveSubscription(req, res, next) {
       });
     }
 
-    const [plan, status, trialEndsAt] = subResult[0].values[0];
+    const [subId, plan, status, trialEndsAt, currentPeriodEnd, stripeSubscriptionId] = subResult[0].values[0];
+    const now = new Date();
+    // Rows backed by a Stripe subscription (sub_...) follow Stripe's lifecycle
+    // via webhooks; the local trial clock never expires a paying customer.
+    const hasStripeSubscription = typeof stripeSubscriptionId === 'string' && stripeSubscriptionId.startsWith('sub_');
 
-    // Check if trial has expired
-    if (plan === 'trial' && trialEndsAt) {
-      const expiryDate = new Date(trialEndsAt);
-      if (expiryDate < new Date()) {
-        // Mark as expired in DB
+    // Check if trial has expired. Trials are status 'trialing' (T-28, e.g. the
+    // Confirm landing flow) or legacy plan='trial' rows with status 'active'.
+    if (!hasStripeSubscription && (plan === 'trial' || status === 'trialing') && trialEndsAt) {
+      const expiryDate = parseSubscriptionDate(trialEndsAt);
+      if (expiryDate && expiryDate < now) {
+        // Mark as expired in DB (only rows still counted as a running trial)
         db.run(
-          "UPDATE subscriptions SET status = 'expired', updated_at = datetime('now') WHERE therapist_id = ? AND plan = 'trial' AND status = 'active'",
-          [userId]
+          "UPDATE subscriptions SET status = 'expired', updated_at = datetime('now') WHERE id = ? AND status IN ('active', 'trialing')",
+          [subId]
         );
-        const { saveDatabaseAfterWrite } = require('../db/connection');
-        saveDatabaseAfterWrite();
+        if (db.getRowsModified() > 0) {
+          const { saveDatabaseAfterWrite } = require('../db/connection');
+          saveDatabaseAfterWrite();
+        }
 
         return res.status(402).json({
           error: 'subscription_expired',
@@ -140,7 +162,15 @@ function requireActiveSubscription(req, res, next) {
       }
     }
 
-    // Check if subscription is inactive (canceled, expired)
+    // A canceled subscription keeps access until the end of the paid period
+    // (renewal is stopped, access is not). customer.subscription.deleted sets
+    // status 'expired', which ends access below.
+    if (status === 'canceled') {
+      const accessUntil = parseSubscriptionDate(currentPeriodEnd);
+      if (accessUntil && accessUntil > now) return next();
+    }
+
+    // Check if subscription is inactive (canceled past period end, expired)
     if (status === 'expired' || status === 'canceled') {
       return res.status(402).json({
         error: 'subscription_expired',
@@ -222,4 +252,4 @@ function gateMutations(mw) {
   };
 }
 
-module.exports = { authenticate, requireRole, requireActiveSubscription, requireVerifiedEmail, gateMutations };
+module.exports = { authenticate, requireRole, requireActiveSubscription, requireVerifiedEmail, gateMutations, parseSubscriptionDate };

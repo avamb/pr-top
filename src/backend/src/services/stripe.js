@@ -249,9 +249,19 @@ async function createCheckoutSession({ customerId, plan, userId, successUrl, can
       mode: 'subscription',
       success_url: successUrl + '?session_id={CHECKOUT_SESSION_ID}',
       cancel_url: cancelUrl,
+      client_reference_id: String(userId),
       metadata: {
         prtop_user_id: String(userId),
         plan: plan
+      },
+      // Copied onto the created Stripe subscription so webhooks can resolve
+      // the plan (inline price_data prices carry no lookup_key).
+      subscription_data: {
+        metadata: {
+          prtop_user_id: String(userId),
+          plan: plan,
+          platform: 'prtop'
+        }
       }
     });
 
@@ -261,6 +271,153 @@ async function createCheckoutSession({ customerId, plan, userId, successUrl, can
     logger.error(`Failed to create checkout session for user ${userId}: ${error.message}`);
     throw error;
   }
+}
+
+/**
+ * True when the id looks like a real Stripe subscription (sub_...) and the
+ * service is running against the real Stripe API. Dev-mode rows carry
+ * synthetic ids (cs_dev_...) that must never be sent to Stripe.
+ */
+function isRealStripeSubscriptionId(stripeSubscriptionId) {
+  return !devMode && typeof stripeSubscriptionId === 'string' && stripeSubscriptionId.startsWith('sub_');
+}
+
+// Resolved Stripe price ids per plan (memoized for the process lifetime)
+const planPriceIdCache = {};
+
+/**
+ * Resolve the recurring Stripe Price id for a plan.
+ * Order: STRIPE_PRICE_<PLAN> env var -> existing price with lookup_key
+ * prtop_<plan>_monthly -> create that price (amount/currency from PLAN_PRICES).
+ * Checkout keeps using inline price_data; this is only needed to swap the item
+ * of an existing subscription, which requires a Price id.
+ */
+async function getPlanPriceId(plan) {
+  const planConfig = PLAN_PRICES[plan];
+  if (!planConfig) {
+    throw new Error(`Invalid plan: ${plan}. Must be one of: ${Object.keys(PLAN_PRICES).join(', ')}`);
+  }
+  if (planPriceIdCache[plan]) return planPriceIdCache[plan];
+
+  const envPriceId = process.env['STRIPE_PRICE_' + plan.toUpperCase()];
+  if (envPriceId) {
+    planPriceIdCache[plan] = envPriceId;
+    return envPriceId;
+  }
+
+  const lookupKey = `prtop_${plan}_monthly`;
+  const existing = await stripeClient.prices.list({ lookup_keys: [lookupKey], active: true, limit: 1 });
+  const match = existing && existing.data && existing.data[0];
+  if (match && match.unit_amount === planConfig.amount && match.currency === planConfig.currency) {
+    planPriceIdCache[plan] = match.id;
+    return match.id;
+  }
+
+  const price = await stripeClient.prices.create({
+    currency: planConfig.currency,
+    unit_amount: planConfig.amount,
+    recurring: { interval: planConfig.interval },
+    lookup_key: lookupKey,
+    transfer_lookup_key: true,
+    product_data: { name: planConfig.name },
+    metadata: { plan, platform: 'prtop' }
+  });
+  logger.info(`Stripe price created for plan ${plan}: ${price.id}`);
+  planPriceIdCache[plan] = price.id;
+  return price.id;
+}
+
+/**
+ * Switch an existing Stripe subscription to another plan and charge the
+ * prorated difference immediately. With payment_behavior=error_if_incomplete
+ * Stripe rejects the update (and changes nothing) when the proration invoice
+ * cannot be paid, so the caller only updates the local row on success.
+ * Only valid against the real Stripe API (see isRealStripeSubscriptionId).
+ */
+async function changeSubscriptionPlan(stripeSubscriptionId, plan) {
+  if (!stripeConfigured || devMode) {
+    throw new Error('Stripe is not configured with a real API key.');
+  }
+
+  const priceId = await getPlanPriceId(plan);
+  const current = await stripeClient.subscriptions.retrieve(stripeSubscriptionId);
+  const items = (current && current.items && current.items.data) || [];
+  if (items.length !== 1) {
+    throw new Error(`Subscription ${stripeSubscriptionId} has ${items.length} items; expected exactly 1`);
+  }
+
+  const updated = await stripeClient.subscriptions.update(stripeSubscriptionId, {
+    items: [{ id: items[0].id, price: priceId }],
+    proration_behavior: 'always_invoice',
+    payment_behavior: 'error_if_incomplete',
+    metadata: { plan, platform: 'prtop' }
+  });
+  logger.info(`Stripe subscription ${stripeSubscriptionId} switched to plan ${plan}`);
+  return updated;
+}
+
+/**
+ * Resolve the PR-TOP plan of a Stripe subscription object (webhook payload or
+ * API response). Order: item price lookup_key prtop_<plan>_monthly (the price
+ * actually billed) -> subscription metadata.plan (set by checkout and
+ * changeSubscriptionPlan) -> unique PLAN_PRICES match on the item amount.
+ * Returns a key of PLAN_PRICES, or null when the plan cannot be determined.
+ */
+function resolvePlanFromStripeSubscription(subscription) {
+  if (!subscription) return null;
+  const items = (subscription.items && subscription.items.data) || [];
+  const price = items.length === 1 ? items[0].price : null;
+
+  if (price && typeof price.lookup_key === 'string') {
+    const match = price.lookup_key.match(/^prtop_([a-z]+)_monthly$/);
+    if (match && PLAN_PRICES[match[1]]) return match[1];
+  }
+
+  const metaPlan = subscription.metadata && subscription.metadata.plan;
+  if (typeof metaPlan === 'string' && PLAN_PRICES[metaPlan]) return metaPlan;
+
+  if (price && typeof price.unit_amount === 'number') {
+    const matches = Object.keys(PLAN_PRICES).filter(key =>
+      PLAN_PRICES[key].amount === price.unit_amount &&
+      (!price.currency || PLAN_PRICES[key].currency === price.currency)
+    );
+    if (matches.length === 1) return matches[0];
+  }
+  return null;
+}
+
+/**
+ * Undo a scheduled cancellation (cancel_at_period_end -> false) so the Stripe
+ * subscription renews again. Only valid against the real Stripe API.
+ */
+async function resumeSubscription(stripeSubscriptionId) {
+  if (!stripeConfigured || devMode) {
+    throw new Error('Stripe is not configured with a real API key.');
+  }
+  const updated = await stripeClient.subscriptions.update(stripeSubscriptionId, { cancel_at_period_end: false });
+  logger.info(`Stripe subscription ${stripeSubscriptionId} resumed (cancel_at_period_end=false)`);
+  return updated;
+}
+
+/**
+ * True for Stripe "No such subscription" errors (the subscription no longer
+ * exists in Stripe, e.g. deleted from the dashboard).
+ */
+function isStripeResourceMissing(error) {
+  return !!error && (error.code === 'resource_missing' || (error.raw && error.raw.code === 'resource_missing'));
+}
+
+/**
+ * Stop renewal of a Stripe subscription at the end of the paid period.
+ * Only valid against the real Stripe API (see isRealStripeSubscriptionId).
+ */
+async function cancelSubscriptionAtPeriodEnd(stripeSubscriptionId) {
+  if (!stripeConfigured || devMode) {
+    throw new Error('Stripe is not configured with a real API key.');
+  }
+  const updated = await stripeClient.subscriptions.update(stripeSubscriptionId, { cancel_at_period_end: true });
+  logger.info(`Stripe subscription ${stripeSubscriptionId} set to cancel at period end`);
+  return updated;
 }
 
 /**
@@ -279,5 +436,12 @@ module.exports = {
   createCheckoutSession,
   isConfigured,
   isStripeTestMode,
+  isRealStripeSubscriptionId,
+  getPlanPriceId,
+  changeSubscriptionPlan,
+  cancelSubscriptionAtPeriodEnd,
+  resumeSubscription,
+  resolvePlanFromStripeSubscription,
+  isStripeResourceMissing,
   PLAN_PRICES
 };

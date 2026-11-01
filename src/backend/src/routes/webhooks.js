@@ -4,7 +4,7 @@
 const express = require('express');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
-const { isConfigured, getStripeClient } = require('../services/stripe');
+const { isConfigured, getStripeClient, resolvePlanFromStripeSubscription, PLAN_PRICES } = require('../services/stripe');
 const emailService = require('../services/emailService');
 
 const router = express.Router();
@@ -31,6 +31,12 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
       event = stripe.webhooks.constructEvent(req.body, sig, STRIPE_WEBHOOK_SECRET);
       signatureVerified = true;
     } else {
+      // Fail closed in production: without a webhook secret anyone could post
+      // forged subscription/payment events.
+      if (process.env.NODE_ENV === 'production') {
+        logger.error('Stripe webhook rejected: STRIPE_WEBHOOK_SECRET is not configured in production');
+        return res.status(503).json({ error: 'Webhook endpoint not configured' });
+      }
       // In development without webhook secret, parse the body directly
       // This allows testing with simulated webhook events
       if (typeof req.body === 'string') {
@@ -81,6 +87,10 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
         break;
 
       case 'checkout.session.completed':
+        // Plan activation follows the same trust rules as the other
+        // subscription events (unsigned events only reach here outside
+        // production); the email-verification effect needs a signature.
+        await handleCheckoutSessionPlan(db, event.data.object);
         if (signatureVerified) {
           await handleCheckoutSessionCompleted(db, event.data.object);
         } else {
@@ -138,9 +148,11 @@ async function handlePaymentSucceeded(db, paymentIntent) {
     [subscriptionId, paymentIntent.id, paymentIntent.amount, paymentIntent.currency || 'usd']
   );
 
-  // Update subscription status to active
+  // Update subscription status to active. A canceled (ending) or expired row
+  // is left alone: its lifecycle is driven by customer.subscription.* events.
   db.run(
-    `UPDATE subscriptions SET status = 'active', updated_at = datetime('now') WHERE id = ?`,
+    `UPDATE subscriptions SET status = 'active', updated_at = datetime('now')
+     WHERE id = ? AND status IN ('active', 'trialing', 'past_due')`,
     [subscriptionId]
   );
 
@@ -216,9 +228,11 @@ async function handlePaymentFailed(db, paymentIntent) {
     [subscriptionId, paymentIntent.id, paymentIntent.amount || 0, paymentIntent.currency || 'usd']
   );
 
-  // Update subscription status to past_due
+  // Update subscription status to past_due. past_due keeps access, so only a
+  // running subscription may enter it; expired/canceled rows stay as they are.
   db.run(
-    `UPDATE subscriptions SET status = 'past_due', updated_at = datetime('now') WHERE id = ?`,
+    `UPDATE subscriptions SET status = 'past_due', updated_at = datetime('now')
+     WHERE id = ? AND status IN ('active', 'trialing')`,
     [subscriptionId]
   );
 
@@ -235,6 +249,31 @@ async function handlePaymentFailed(db, paymentIntent) {
 }
 
 /**
+ * Map a Stripe subscription onto the local CHECK-constrained status set.
+ * A subscription set to cancel at period end is stored as 'canceled' but keeps
+ * access until current_period_end (see requireActiveSubscription); access only
+ * ends when Stripe actually ends it. Returns null for states that must not
+ * change the local status (incomplete: first payment still pending).
+ */
+function mapStripeSubscriptionStatus(subscription) {
+  const stripeStatus = subscription.status;
+  if (['canceled', 'incomplete_expired', 'unpaid', 'paused'].includes(stripeStatus)) return 'expired';
+  if (subscription.cancel_at_period_end) return 'canceled';
+  if (stripeStatus === 'active' || stripeStatus === 'trialing') return stripeStatus;
+  if (stripeStatus === 'past_due') return 'past_due';
+  return null;
+}
+
+// True when a Stripe subscription has definitively ended (never revive it).
+function hasStripeSubscriptionEnded(subscription) {
+  return subscription.status === 'canceled' || subscription.status === 'incomplete_expired' || !!subscription.ended_at;
+}
+
+function toIsoFromUnix(seconds) {
+  return seconds ? new Date(seconds * 1000).toISOString() : null;
+}
+
+/**
  * Handle customer.subscription.created event
  */
 async function handleSubscriptionCreated(db, subscription) {
@@ -242,22 +281,40 @@ async function handleSubscriptionCreated(db, subscription) {
 
   const customerId = subscription.customer;
   const subResult = db.exec(
-    'SELECT id FROM subscriptions WHERE stripe_customer_id = ?',
+    'SELECT id, status, stripe_subscription_id FROM subscriptions WHERE stripe_customer_id = ?',
     [customerId]
   );
 
-  if (subResult.length > 0 && subResult[0].values.length > 0) {
-    db.run(
-      `UPDATE subscriptions SET stripe_subscription_id = ?, status = 'active',
-       current_period_start = ?, current_period_end = ?, updated_at = datetime('now')
-       WHERE stripe_customer_id = ?`,
-      [
-        subscription.id,
-        new Date(subscription.current_period_start * 1000).toISOString(),
-        new Date(subscription.current_period_end * 1000).toISOString(),
-        customerId
-      ]
-    );
+  if (subResult.length === 0 || subResult[0].values.length === 0) return;
+
+  const [, localStatus, localStripeSubId] = subResult[0].values[0];
+  if (localStripeSubId === subscription.id && localStatus === 'expired') {
+    logger.info(`Subscription created event for already-ended ${subscription.id} ignored`);
+    return;
+  }
+
+  const status = mapStripeSubscriptionStatus(subscription);
+  const plan = resolvePlanFromStripeSubscription(subscription);
+
+  // A new paid subscription replaces any trial / scheduled downgrade / old
+  // cancellation on the row.
+  db.run(
+    `UPDATE subscriptions SET stripe_subscription_id = ?, status = COALESCE(?, status),
+     plan = COALESCE(?, plan),
+     current_period_start = COALESCE(?, current_period_start), current_period_end = COALESCE(?, current_period_end),
+     trial_ends_at = CASE WHEN COALESCE(?, status) = 'active' THEN NULL ELSE trial_ends_at END,
+     pending_plan = NULL,
+     canceled_at = CASE WHEN COALESCE(?, status) = 'canceled' THEN canceled_at ELSE NULL END,
+     updated_at = datetime('now')
+     WHERE stripe_customer_id = ?`,
+    [
+      subscription.id, status, plan,
+      toIsoFromUnix(subscription.current_period_start), toIsoFromUnix(subscription.current_period_end),
+      status, status, customerId
+    ]
+  );
+  if (!plan) {
+    logger.warn(`Subscription created ${subscription.id}: plan could not be resolved, local plan kept`);
   }
 }
 
@@ -267,19 +324,36 @@ async function handleSubscriptionCreated(db, subscription) {
 async function handleSubscriptionUpdated(db, subscription) {
   logger.info(`Subscription updated: ${subscription.id}`);
 
-  const status = subscription.cancel_at_period_end ? 'canceled' :
-                 subscription.status === 'past_due' ? 'past_due' :
-                 subscription.status === 'active' ? 'active' : subscription.status;
+  // An updated event delivered after customer.subscription.deleted must not
+  // revive the ended subscription.
+  const localResult = db.exec('SELECT status FROM subscriptions WHERE stripe_subscription_id = ?', [subscription.id]);
+  const localStatus = (localResult.length > 0 && localResult[0].values.length > 0) ? localResult[0].values[0][0] : null;
+  if (localStatus === 'expired' && hasStripeSubscriptionEnded(subscription)) {
+    logger.info(`Subscription updated event for ended ${subscription.id} ignored (already expired)`);
+    return;
+  }
 
+  const status = mapStripeSubscriptionStatus(subscription);
+  const plan = resolvePlanFromStripeSubscription(subscription);
+  const canceledAt = status === 'canceled'
+    ? new Date((subscription.canceled_at || Math.floor(Date.now() / 1000)) * 1000).toISOString() : null;
+
+  // plan follows the billed price; a scheduled downgrade is cleared once
+  // Stripe bills the pending plan; resuming (active) clears canceled_at.
   db.run(
-    `UPDATE subscriptions SET status = ?,
-     current_period_start = ?, current_period_end = ?, updated_at = datetime('now')
+    `UPDATE subscriptions SET status = COALESCE(?, status),
+     plan = COALESCE(?, plan),
+     pending_plan = CASE WHEN ? IS NOT NULL AND pending_plan = ? THEN NULL ELSE pending_plan END,
+     current_period_start = COALESCE(?, current_period_start), current_period_end = COALESCE(?, current_period_end),
+     trial_ends_at = CASE WHEN COALESCE(?, status) = 'active' THEN NULL ELSE trial_ends_at END,
+     canceled_at = CASE WHEN ? IS NOT NULL THEN COALESCE(canceled_at, ?)
+                        WHEN COALESCE(?, status) = 'active' THEN NULL ELSE canceled_at END,
+     updated_at = datetime('now')
      WHERE stripe_subscription_id = ?`,
     [
-      status,
-      new Date(subscription.current_period_start * 1000).toISOString(),
-      new Date(subscription.current_period_end * 1000).toISOString(),
-      subscription.id
+      status, plan, plan, plan,
+      toIsoFromUnix(subscription.current_period_start), toIsoFromUnix(subscription.current_period_end),
+      status, canceledAt, canceledAt, status, subscription.id
     ]
   );
 }
@@ -290,6 +364,7 @@ async function handleSubscriptionUpdated(db, subscription) {
 async function handleSubscriptionDeleted(db, subscription) {
   logger.info(`Subscription deleted: ${subscription.id}`);
 
+  // The subscription has ended in Stripe: access ends now.
   db.run(
     `UPDATE subscriptions SET status = 'expired', updated_at = datetime('now')
      WHERE stripe_subscription_id = ?`,
@@ -311,6 +386,54 @@ async function handleInvoicePaymentSucceeded(db, invoice) {
 async function handleInvoicePaymentFailed(db, invoice) {
   logger.info(`Invoice payment failed: ${invoice.id}`);
   // Usually handled via payment_intent.payment_failed, but log for completeness
+}
+
+/**
+ * Handle checkout.session.completed event: activate the purchased plan.
+ * The plan comes from the session metadata set by createCheckoutSession; the
+ * row is found by client_reference_id / metadata.prtop_user_id, then by the
+ * Stripe customer. customer.subscription.created applies the same plan, so
+ * the order in which the two events arrive does not matter.
+ */
+async function handleCheckoutSessionPlan(db, session) {
+  if (session.mode && session.mode !== 'subscription') return;
+  if (session.payment_status && !['paid', 'no_payment_required'].includes(session.payment_status)) {
+    logger.info(`Checkout session ${session.id}: payment_status=${session.payment_status}, plan not activated`);
+    return;
+  }
+
+  const metaPlan = session.metadata && session.metadata.plan;
+  const plan = (typeof metaPlan === 'string' && PLAN_PRICES[metaPlan]) ? metaPlan : null;
+  const stripeSubId = typeof session.subscription === 'string'
+    ? session.subscription
+    : (session.subscription && session.subscription.id) || null;
+  if (!plan && !stripeSubId) return;
+
+  const ref = session.client_reference_id || (session.metadata && session.metadata.prtop_user_id);
+  let rowId = null;
+  if (ref !== undefined && ref !== null && /^\d+$/.test(String(ref))) {
+    const byUser = db.exec('SELECT id FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1', [Number(ref)]);
+    if (byUser.length > 0 && byUser[0].values.length > 0) rowId = byUser[0].values[0][0];
+  }
+  if (!rowId && session.customer) {
+    const byCustomer = db.exec('SELECT id FROM subscriptions WHERE stripe_customer_id = ? ORDER BY created_at DESC LIMIT 1', [session.customer]);
+    if (byCustomer.length > 0 && byCustomer[0].values.length > 0) rowId = byCustomer[0].values[0][0];
+  }
+  if (!rowId) {
+    logger.warn(`Checkout session ${session.id}: no subscription row matched, plan not activated`);
+    return;
+  }
+
+  db.run(
+    `UPDATE subscriptions SET plan = COALESCE(?, plan), status = 'active',
+     stripe_subscription_id = COALESCE(?, stripe_subscription_id),
+     stripe_customer_id = COALESCE(stripe_customer_id, ?),
+     trial_ends_at = NULL, pending_plan = NULL, canceled_at = NULL,
+     updated_at = datetime('now')
+     WHERE id = ?`,
+    [plan, stripeSubId, session.customer || null, rowId]
+  );
+  logger.info(`Checkout session ${session.id}: subscription row ${rowId} activated on plan ${plan || '(unchanged)'}`);
 }
 
 /**

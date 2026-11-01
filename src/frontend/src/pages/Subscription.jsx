@@ -14,6 +14,17 @@ const PLAN_DETAILS = {
 
 const PLAN_ORDER = { trial: 0, confirm: 0.5, basic: 1, pro: 2, premium: 3 };
 
+// Subscription timestamps are ISO strings or SQLite "YYYY-MM-DD HH:MM:SS" (UTC)
+const isFutureDate = (value) => {
+  if (!value) return false;
+  const str = String(value);
+  const date = new Date(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(str) ? str.replace(' ', 'T') + 'Z' : str);
+  return !isNaN(date.getTime()) && date > new Date();
+};
+
+const hasStripeSubscription = (sub) =>
+  typeof sub?.stripe_subscription_id === 'string' && sub.stripe_subscription_id.startsWith('sub_');
+
 export default function Subscription() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -147,7 +158,39 @@ export default function Subscription() {
     return styles[status] || 'bg-stone-100 text-stone-800';
   };
 
-  const handleUpgrade = async (plan) => {
+  const capitalize = (value) => value ? value.charAt(0).toUpperCase() + value.slice(1) : '';
+
+  // Translated message for billing errors (402 payment failed, 502 payment
+  // provider unreachable, 503 billing not configured); falls back to the
+  // server message or the given key.
+  const billingErrorMessage = (res, data, fallbackKey) => {
+    if (res.status === 402 && data?.code === 'payment_failed') return t('subscription.paymentFailed');
+    if (res.status === 502) return t('subscription.billingProviderError');
+    if (res.status === 503) return t('subscription.billingUnavailable');
+    return data?.error || t(fallbackKey);
+  };
+
+  // Paid plans are switched in place (prorated charge). A live Stripe
+  // subscription that is past due or canceled-but-running is never sent to a
+  // second checkout; trial and ended plans go through checkout.
+  const handleUpgrade = (plan) => {
+    if (subscription?.status === 'active' && (subscription?.plan || 'trial') !== 'trial') {
+      return handleChangePlan(plan);
+    }
+    if (hasStripeSubscription(subscription) && subscription.status === 'past_due') {
+      setSuccess('');
+      setError(t('subscription.subscriptionPastDue'));
+      return;
+    }
+    if (hasStripeSubscription(subscription) && subscription.status === 'canceled' && isFutureDate(subscription.current_period_end)) {
+      setSuccess('');
+      setError(t('subscription.resumeFirst'));
+      return;
+    }
+    return startCheckout(plan);
+  };
+
+  const startCheckout = async (plan, { fromChangePlan = false } = {}) => {
     setProcessing(plan);
     setError('');
     setSuccess('');
@@ -160,15 +203,27 @@ export default function Subscription() {
         },
         body: JSON.stringify({ plan })
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 409 && data.use_change_plan && !fromChangePlan) {
+        // Already paying through Stripe: change the existing subscription instead
+        await handleChangePlan(plan, { fromCheckout: true });
+        return;
+      }
+
+      if (res.status === 409 && data.code === 'subscription_exists') {
+        setError(data.can_resume ? t('subscription.resumeFirst') : t('subscription.subscriptionPastDue'));
+        fetchSubscription();
+        return;
+      }
 
       if (!res.ok) {
-        setError(data.error || t('subscription.failedCheckout'));
+        setError(billingErrorMessage(res, data, 'subscription.failedCheckout'));
         return;
       }
 
       if (data.auto_completed) {
-        setSuccess(t('subscription.upgradeSuccess', { plan: plan.charAt(0).toUpperCase() + plan.slice(1) }));
+        setSuccess(t('subscription.upgradeSuccess', { plan: capitalize(plan) }));
         fetchSubscription();
         fetchPayments();
       } else if (data.checkout_url) {
@@ -196,10 +251,10 @@ export default function Subscription() {
           'Authorization': `Bearer ${token}`
         }
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        setError(data.error || t('subscription.failedCancel'));
+        setError(billingErrorMessage(res, data, 'subscription.failedCancel'));
         return;
       }
 
@@ -218,7 +273,44 @@ export default function Subscription() {
     }
   };
 
-  const handleDowngrade = async (plan) => {
+  const handleResume = async () => {
+    setProcessing('resume');
+    setError('');
+    setSuccess('');
+    try {
+      const res = await fetch('/api/subscription/resume', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 409 && data.requires_checkout) {
+        setError(t('subscription.resumeUnavailable'));
+        fetchSubscription();
+        return;
+      }
+
+      if (!res.ok) {
+        setError(billingErrorMessage(res, data, 'subscription.failedResume'));
+        return;
+      }
+
+      setSuccess(t('subscription.resumeSuccess'));
+      fetchSubscription();
+    } catch (err) {
+      setError(t('subscription.networkError'));
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  // Upgrades and downgrades of an existing subscription. Upgrades are charged
+  // (prorated) right away; without a paid Stripe subscription the server
+  // answers 402 requires_checkout and the normal checkout starts instead.
+  const handleChangePlan = async (plan, { fromCheckout = false } = {}) => {
     setProcessing(plan);
     setError('');
     setSuccess('');
@@ -231,16 +323,26 @@ export default function Subscription() {
         },
         body: JSON.stringify({ plan })
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 402 && data.requires_checkout && !fromCheckout) {
+        await startCheckout(data.plan || plan, { fromChangePlan: true });
+        return;
+      }
 
       if (!res.ok) {
-        setError(data.error || t('subscription.failedChange'));
+        setError(billingErrorMessage(res, data, 'subscription.failedChange'));
         return;
       }
 
       if (data.subscription?.scheduled) {
         const effectiveDate = formatUserDateOnly(data.subscription.effective_date);
-        setSuccess(t('subscription.downgradeSuccess', { plan: plan.charAt(0).toUpperCase() + plan.slice(1), date: effectiveDate }));
+        setSuccess(t('subscription.downgradeSuccess', { plan: capitalize(plan), date: effectiveDate }));
+      } else if (data.charged) {
+        setSuccess(t('subscription.upgradeCharged', { plan: capitalize(plan) }));
+        fetchPayments();
+      } else if (data.subscription && !data.subscription.is_downgrade) {
+        setSuccess(t('subscription.upgradeSuccess', { plan: capitalize(plan) }));
       } else {
         setSuccess(data.message);
       }
@@ -377,6 +479,18 @@ export default function Subscription() {
               {subscription?.canceled_at && (
                 <> {t('subscription.canceledOn', { date: formatUserDateOnly(subscription.canceled_at) })}</>
               )}
+              {isFutureDate(subscription?.current_period_end) && (
+                <div className="mt-2">
+                  <button
+                    onClick={handleResume}
+                    disabled={processing === 'resume'}
+                    className="text-sm font-medium text-teal-700 hover:text-teal-800 underline disabled:opacity-50"
+                  >
+                    {processing === 'resume' && <LoadingSpinner size={14} className="mr-1" />}
+                    {processing === 'resume' ? t('subscription.resuming') : t('subscription.resumeSubscription')}
+                  </button>
+                </div>
+              )}
             </div>
           )}
           {/* Cancel button - only for non-manual-override, active paid plans */}
@@ -456,7 +570,7 @@ export default function Subscription() {
                         </button>
                       ) : isDowngrade && planKey !== 'trial' ? (
                         <button
-                          onClick={() => handleDowngrade(planKey)}
+                          onClick={() => handleChangePlan(planKey)}
                           disabled={processing === planKey}
                           className="w-full py-2 px-4 rounded-lg border border-stone-300 text-stone-600 font-medium hover:bg-stone-50 transition-colors disabled:opacity-50"
                         >

@@ -67,10 +67,13 @@ function runTrialExpiration() {
 
     // Find expired trials (plan-agnostic: status='trialing' per T-28 refactor).
     // OR fallback handles any legacy rows not yet backfilled by the migration.
+    // Rows with a real Stripe subscription (sub_...) are paid: Stripe webhooks own
+    // their lifecycle, even if a legacy row still says plan='trial'.
     const expired = db.exec(
       `SELECT s.id, s.therapist_id, s.trial_ends_at
        FROM subscriptions s
        WHERE (s.status = 'trialing' OR (s.plan = 'trial' AND s.status = 'active'))
+       AND (s.stripe_subscription_id IS NULL OR substr(s.stripe_subscription_id, 1, 4) <> 'sub_')
        AND s.trial_ends_at IS NOT NULL AND s.trial_ends_at < ?`,
       [now]
     );

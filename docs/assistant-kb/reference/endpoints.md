@@ -345,11 +345,12 @@ Mount prefix: `/api/subscription`
 - `POST /api/subscription/create-customer` — Create a Stripe customer for the authenticated user
 - `GET /api/subscription/current` — Get current subscription for authenticated user
 - `GET /api/subscription/payments` — Get payment history for authenticated user
-- `POST /api/subscription/change-plan` — Upgrades take effect immediately. Downgrades are scheduled for end of current period.
+- `POST /api/subscription/change-plan` — Upgrades are charged immediately (prorated). Downgrades are scheduled for end of current period.
 - `GET /api/subscription/limits` — Get current plan limits and usage for the authenticated therapist
 - `GET /api/subscription/plans` — Get available plans and pricing
 - `POST /api/subscription/checkout` — Create a Stripe checkout session for plan upgrade
-- `POST /api/subscription/cancel` — Cancel subscription - access continues until end of current billing period
+- `POST /api/subscription/cancel` — Cancel subscription - renewal stops, access continues until end of current billing period
+- `POST /api/subscription/resume` — Resume a canceled subscription before its paid period ends
 - `POST /api/subscription/apply-promo` — POST /api/subscription/apply-promo - Validate and redeem a promo code
 - `GET /api/subscription/my-promos` — GET /api/subscription/my-promos - List therapist's own promo redemptions
 
