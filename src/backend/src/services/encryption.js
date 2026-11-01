@@ -13,14 +13,26 @@ const IV_LENGTH = 12; // GCM recommended IV length
 const AUTH_TAG_LENGTH = 16;
 const MASTER_KEY = process.env.ENCRYPTION_MASTER_KEY || 'dev-master-key-change-in-production';
 
+// Derived keys, cached per key version. PBKDF2 with 100k iterations takes
+// tens of milliseconds and blocks the event loop; running it on every
+// encrypt/decrypt made list endpoints that decrypt hundreds of rows block for
+// seconds. The derivation is deterministic (same master key + version ->
+// same key), so caching changes nothing about which ciphertexts decrypt.
+const derivedKeyCache = new Map();
+
 /**
  * Derive an encryption key from the master key and key version.
  * Each key version produces a different derived key.
  */
 function deriveKey(keyVersion) {
-  // Use PBKDF2 to derive a 256-bit key from master key + version salt
-  const salt = `prtop-key-v${keyVersion}`;
-  return crypto.pbkdf2Sync(MASTER_KEY, salt, 100000, 32, 'sha256');
+  let key = derivedKeyCache.get(keyVersion);
+  if (!key) {
+    // Use PBKDF2 to derive a 256-bit key from master key + version salt
+    const salt = `prtop-key-v${keyVersion}`;
+    key = crypto.pbkdf2Sync(MASTER_KEY, salt, 100000, 32, 'sha256');
+    derivedKeyCache.set(keyVersion, key);
+  }
+  return key;
 }
 
 /**

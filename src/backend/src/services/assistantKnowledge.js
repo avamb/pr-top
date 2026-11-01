@@ -372,8 +372,21 @@ function cosineSimilarity(a, b) {
 
 // --- Table management ---
 
+// ensureTable() is called on every search/stats call (including the
+// anonymous public chat), so it runs its checks once per database connection
+// and only schedules a save when the schema actually changed — a no-op call
+// must not trigger a DB export.
+let _tableEnsuredFor = null;
+
+function getSchemaVersion(db) {
+  const r = db.exec('PRAGMA schema_version');
+  return r.length > 0 && r[0].values.length > 0 ? r[0].values[0][0] : null;
+}
+
 function ensureTable() {
   const db = getDatabase();
+  if (_tableEnsuredFor === db) return;
+  const schemaBefore = getSchemaVersion(db);
   db.run(`CREATE TABLE IF NOT EXISTS assistant_knowledge (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     chunk_text TEXT NOT NULL,
@@ -402,7 +415,8 @@ function ensureTable() {
     // Column already exists, ignore
   }
 
-  saveDatabaseAfterWrite();
+  if (getSchemaVersion(db) !== schemaBefore) saveDatabaseAfterWrite();
+  _tableEnsuredFor = db;
 }
 
 // --- File discovery and chunking ---

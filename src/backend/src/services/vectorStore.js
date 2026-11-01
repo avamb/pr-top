@@ -143,9 +143,22 @@ function deserializeEmbedding(str) {
  * The CHECK constraint on source_type was dropped — the application enforces
  * the enum so adding a new source_type ('kb', future 'exercise', etc.)
  * doesn't require a destructive table rebuild.
+ *
+ * Called on every read (search, stats), so it runs its checks once per
+ * database connection and only schedules a save when the schema actually
+ * changed — a no-op ensureTable() must not trigger a DB export.
  */
+let _tableEnsuredFor = null;
+
+function getSchemaVersion(db) {
+  const r = db.exec('PRAGMA schema_version');
+  return r.length > 0 && r[0].values.length > 0 ? r[0].values[0][0] : null;
+}
+
 function ensureTable() {
   const db = getDatabase();
+  if (_tableEnsuredFor === db) return;
+  const schemaBefore = getSchemaVersion(db);
   db.run(`
     CREATE TABLE IF NOT EXISTS vector_embeddings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -212,7 +225,8 @@ function ensureTable() {
     try { db.run('ROLLBACK'); } catch (_) {}
   }
 
-  saveDatabaseAfterWrite();
+  if (getSchemaVersion(db) !== schemaBefore) saveDatabaseAfterWrite();
+  _tableEnsuredFor = db;
 }
 
 /**

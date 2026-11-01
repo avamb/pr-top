@@ -11,6 +11,34 @@ const bcrypt = require('bcryptjs');
 let db = null;
 let dbPath = null;
 let dbDirty = false;
+let saveTimer = null;
+let saveInterval = null;
+let exitHookInstalled = false;
+// sql.js module (constructor namespace), kept for replaceDatabase().
+let SqlJs = null;
+// Set once db.export() has failed: the WASM handle is no longer trustworthy,
+// so no further save may touch the file while the process winds down.
+let exportFailed = false;
+
+// Writes are coalesced: the first write after a save arms one timer, every
+// write inside the window rides along, so a burst of N writes costs one
+// export + one disk write instead of N.
+const SAVE_DEBOUNCE_MS = 1000;
+const SAVE_INTERVAL_MS = 5000;
+
+// Every SQLite file starts with this 16-byte magic string.
+const SQLITE_HEADER = Buffer.from('SQLite format 3\0', 'latin1');
+
+// Foreign-key enforcement at RUNTIME (boot migrations always run with it ON).
+// sql.js export() closes and reopens the connection, which silently reset
+// foreign_keys to OFF after the very first save — so production has in
+// practice always run with FKs off, and code now depends on that: the
+// actor_id = 0 / therapist_id = 0 "system"/"anonymous" sentinels in
+// audit_logs and assistant_conversations have no users row and would fail
+// with FK enforcement on. Default therefore stays OFF (the behaviour prod
+// has always had); set DB_ENFORCE_FOREIGN_KEYS=true only after those
+// sentinels and pre-existing orphan rows are cleaned up.
+const ENFORCE_FOREIGN_KEYS = process.env.DB_ENFORCE_FOREIGN_KEYS === 'true';
 
 function getDbPath() {
   const dbUrl = process.env.DATABASE_URL || 'sqlite:./data/prtop.db';
@@ -18,68 +46,300 @@ function getDbPath() {
   return path.resolve(__dirname, '../../', relativePath);
 }
 
-// Mark database as having unsaved changes. Call this after any write operation
-// to ensure the next saveDatabase() will VACUUM before export.
+// Mark database as having unsaved changes; the next scheduled, periodic or
+// explicit save will flush them.
 function markDirty() {
   dbDirty = true;
 }
 
-function saveDatabase() {
-  if (db && dbPath) {
-    try {
-      // In sql.js, db.run() modifies SQLite's in-memory page structures, but
-      // db.export() may return the stale original binary representation unless
-      // the database is compacted first. VACUUM forces SQLite to rebuild the
-      // database file from scratch, ensuring db.export() returns all current data.
-      //
-      // IMPORTANT: We must ONLY write to disk when there are actual changes
-      // (dbDirty is true). Without VACUUM, db.export() returns stale data,
-      // so a non-dirty save would overwrite valid data with an older snapshot.
-      if (!dbDirty) {
-        logger.debug('saveDatabase: skipping (no dirty changes)');
-        return; // No changes to save — skip to avoid overwriting with stale export
-      }
-      logger.debug('saveDatabase: dirty flag set, performing VACUUM + save');
-      try {
-        db.run('VACUUM');
-      } catch (e) {
-        // VACUUM may fail if in a transaction; fall back to a checkpoint attempt
-        try { db.run('PRAGMA wal_checkpoint(FULL)'); } catch (e2) { /* ignore */ }
-      }
-      dbDirty = false;
-      let data;
-      try {
-        data = db.export();
-      } catch (exportErr) {
-        // sql.js export() closes and re-opens the WASM SQLite handle. If the
-        // re-open fails (typically WASM heap exhaustion) the handle is left
-        // dangling and every later query misbehaves (seen in production as
-        // "unknown function: datetime()" right before a two-day hang).
-        // Continuing would serve garbage and risk corrupting the file, so
-        // exit and let the container restart from the last good save.
-        logger.error('FATAL: database export failed, restarting process: ' + exportErr.message);
-        setTimeout(() => process.exit(1), 250).unref();
-        return;
-      }
-      const buffer = Buffer.from(data);
-      // Write directly and fsync to ensure data is flushed to disk
-      const fd = fs.openSync(dbPath, 'w');
-      fs.writeSync(fd, buffer, 0, buffer.length);
-      fs.fsyncSync(fd);
-      fs.closeSync(fd);
-      logger.debug('Database saved to disk (' + buffer.length + ' bytes)');
-    } catch (err) {
-      logger.error('Failed to save database: ' + err.message);
-    }
+// Per-connection settings. sql.js export() closes and reopens the SQLite
+// handle, which resets these to compile-time defaults, so they are
+// re-applied after every export.
+function applyConnectionPragmas() {
+  db.run(`PRAGMA foreign_keys = ${ENFORCE_FOREIGN_KEYS ? 'ON' : 'OFF'}`);
+}
+
+// export() closes the connection, which would silently ROLL BACK an open
+// transaction while the caller carries on as if it were still open. All
+// current BEGIN/SAVEPOINT blocks are synchronous (a timer cannot fire inside
+// them), so this only guards against a future transaction spanning an await.
+// sql.js exposes no autocommit getter; a nested BEGIN fails exactly when a
+// transaction or savepoint is open.
+function inOpenTransaction() {
+  try {
+    db.run('BEGIN');
+    db.run('COMMIT');
+    return false;
+  } catch (e) {
+    return true;
   }
 }
 
-// Wrapper that marks the database as dirty before saving.
-// Call this after any write operation (INSERT, UPDATE, DELETE) to ensure
-// the next save includes all changes via VACUUM.
+// Write to <db>.tmp, fsync, then rename over the real file. rename() is
+// atomic on the same filesystem (Linux and Windows), so a kill mid-write
+// leaves the previous good file in place plus a torn .tmp that boot discards.
+function writeFileAtomic(targetPath, data) {
+  const tmpPath = targetPath + '.tmp';
+  const fd = fs.openSync(tmpPath, 'w');
+  try {
+    let offset = 0;
+    while (offset < data.length) {
+      offset += fs.writeSync(fd, data, offset, data.length - offset);
+    }
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  fs.renameSync(tmpPath, targetPath);
+  // Make the rename itself durable. Directories cannot be opened/fsynced on
+  // Windows, where the rename is already journaled by NTFS.
+  if (process.platform !== 'win32') {
+    try {
+      const dirFd = fs.openSync(path.dirname(targetPath), 'r');
+      try { fs.fsyncSync(dirFd); } finally { fs.closeSync(dirFd); }
+    } catch (e) { /* best effort */ }
+  }
+}
+
+// The single place that calls db.export(). Returns the bytes, or null after
+// a fatal export failure. Every export must go through here so connection
+// pragmas are re-applied (export() reopens the handle).
+function exportCurrent() {
+  let data;
+  try {
+    data = db.export();
+  } catch (exportErr) {
+    // sql.js export() closes and re-opens the WASM SQLite handle. If the
+    // re-open fails (typically WASM heap exhaustion) the handle is left
+    // dangling and every later query misbehaves (seen in production as
+    // "unknown function: datetime()" right before a two-day hang).
+    // Continuing would serve garbage and risk corrupting the file, so
+    // exit and let the container restart from the last good save.
+    exportFailed = true;
+    logger.error('FATAL: database export failed, restarting process: ' + exportErr.message);
+    setTimeout(() => process.exit(1), 250).unref();
+    return null;
+  }
+  try {
+    applyConnectionPragmas();
+  } catch (e) {
+    logger.error('Failed to re-apply connection pragmas after export: ' + e.message);
+  }
+  return data;
+}
+
+// Synchronous, immediate flush of the in-memory database to disk. Used for
+// the boot save, graceful shutdown and the memory watchdog; normal writes go
+// through saveDatabaseAfterWrite() and are debounced. Cancels any pending
+// debounced save. Returns true when the file on disk is up to date.
+//
+// db.export() always returns the full current state (verified: inserts,
+// updates, deletes and schema changes all round-trip without a VACUUM), so
+// the old per-save VACUUM — which rebuilt the whole DB and dominated save
+// time — is gone. Saving is skipped only when nothing changed.
+function saveDatabase(options) {
+  const force = options && options.force;
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  if (!db || !dbPath || exportFailed) return false;
+  if (!dbDirty) {
+    logger.debug('saveDatabase: skipping (no dirty changes)');
+    return true;
+  }
+  if (!force && inOpenTransaction()) {
+    logger.warn('saveDatabase: transaction open, deferring save');
+    scheduleSave();
+    return false;
+  }
+  const data = exportCurrent();
+  if (!data) return false;
+  try {
+    writeFileAtomic(dbPath, data);
+    // Only now: if the write failed the DB stays dirty and the next
+    // debounced/periodic save retries.
+    dbDirty = false;
+    logger.debug('Database saved to disk (' + data.length + ' bytes)');
+    return true;
+  } catch (err) {
+    logger.error('Failed to save database: ' + err.message);
+    return false;
+  }
+}
+
+function scheduleSave() {
+  if (saveTimer) return; // already pending — this write coalesces into it
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    saveDatabase();
+  }, SAVE_DEBOUNCE_MS);
+  // Never keep the process alive just for a save: the 'exit' hook flushes.
+  saveTimer.unref();
+}
+
+// Call this after any write operation (INSERT, UPDATE, DELETE, DDL). Marks
+// the DB dirty and schedules a coalesced save ~SAVE_DEBOUNCE_MS later; it
+// does NOT write synchronously. Durability window: a hard kill (SIGKILL/OOM)
+// can lose up to ~1 s of writes; SIGTERM, the watchdog and normal process
+// exit all flush synchronously.
 function saveDatabaseAfterWrite() {
   dbDirty = true;
-  saveDatabase();
+  scheduleSave();
+}
+
+// Export the current database (for backups) and flush that same image to
+// disk, so one export serves both. Throws instead of exporting inside an
+// open transaction, which export() would silently roll back.
+function snapshotDatabase() {
+  if (!db || !dbPath) throw new Error('Database not initialized. Call initDatabase() first.');
+  if (exportFailed) throw new Error('Database export failed earlier; process is restarting');
+  if (inOpenTransaction()) throw new Error('Cannot snapshot the database while a transaction is open');
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  const data = exportCurrent();
+  if (!data) throw new Error('Database export failed');
+  try {
+    writeFileAtomic(dbPath, data);
+    dbDirty = false;
+  } catch (err) {
+    // The backup itself can still proceed; the next save retries the flush.
+    dbDirty = true;
+    logger.error('Failed to save database during snapshot: ' + err.message);
+  }
+  return data;
+}
+
+// Check that a raw SQLite image is usable without touching the live DB.
+// Returns an open sql.js Database on success (caller owns it), throws otherwise.
+function openValidatedImage(buf) {
+  if (!isValidSqliteBuffer(buf)) {
+    throw new Error('not a valid SQLite database image (' + buf.length + ' bytes)');
+  }
+  let candidate = null;
+  try {
+    candidate = new SqlJs.Database(buf);
+    const r = candidate.exec('PRAGMA integrity_check');
+    const verdict = r.length > 0 && r[0].values.length > 0 ? r[0].values[0][0] : null;
+    if (verdict !== 'ok') throw new Error('integrity_check: ' + verdict);
+    return candidate;
+  } catch (e) {
+    if (candidate) { try { candidate.close(); } catch (_) { /* ignore */ } }
+    throw new Error('database image failed validation: ' + e.message);
+  }
+}
+
+// Public check for callers that want to reject a bad image before doing any
+// other work (e.g. restore's safety backup). Throws with the reason.
+function validateDatabaseImage(rawBuffer) {
+  if (!SqlJs) throw new Error('Database not initialized. Call initDatabase() first.');
+  const buf = Buffer.isBuffer(rawBuffer) ? rawBuffer : Buffer.from(rawBuffer);
+  openValidatedImage(buf).close();
+  return true;
+}
+
+// Replace the live database with a raw SQLite image (backup restore).
+// Validates the image first; on any validation or write failure nothing is
+// changed (live DB, pending saves and the file on disk stay as they were).
+// On success the old in-memory DB is closed and discarded together with any
+// unsaved changes, the file on disk is the restored image, and getDatabase()
+// / global.db return the new handle. Code still holding the old handle (an
+// async request in flight) gets "Database closed" errors from then on.
+// Schema migrations are NOT run here; they run on the next boot.
+function replaceDatabase(rawBuffer) {
+  if (!db || !dbPath || !SqlJs) throw new Error('Database not initialized. Call initDatabase() first.');
+  if (exportFailed) throw new Error('Database export failed earlier; process is restarting');
+  const buf = Buffer.isBuffer(rawBuffer) ? rawBuffer : Buffer.from(rawBuffer);
+  const next = openValidatedImage(buf);
+
+  // Persist first: if the write fails, the live DB is untouched.
+  try {
+    writeFileAtomic(dbPath, buf);
+  } catch (err) {
+    try { next.close(); } catch (_) { /* ignore */ }
+    throw new Error('could not write restored database to disk: ' + err.message);
+  }
+
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  const old = db;
+  db = next;
+  global.db = db;
+  dbDirty = false;
+  try { old.close(); } catch (e) { logger.warn('Closing the replaced database failed: ' + e.message); }
+  applyConnectionPragmas();
+  logger.info('Database replaced in memory and on disk (' + buf.length + ' bytes)');
+  return db;
+}
+
+function isValidSqliteBuffer(buf) {
+  // 100 bytes = SQLite file header; anything shorter cannot be a database.
+  return buf.length >= 100 && buf.subarray(0, 16).equals(SQLITE_HEADER);
+}
+
+function describeTmp(tmpPath) {
+  try {
+    const st = fs.statSync(tmpPath);
+    return ` A leftover ${tmpPath} (${st.size} bytes, modified ${st.mtime.toISOString()}) exists — it may be a torn in-flight save; inspect it manually before restoring anything.`;
+  } catch (e) {
+    return '';
+  }
+}
+
+// Load the DB file, refusing to continue if it exists but is unusable.
+// Creating a fresh schema over an empty/truncated file and saving it would
+// silently destroy whatever was recoverable, so that is a hard error instead.
+function loadDatabaseFile(SQL) {
+  const tmpPath = dbPath + '.tmp';
+  if (!fs.existsSync(dbPath)) {
+    if (fs.existsSync(tmpPath)) {
+      const msg = `FATAL: database file ${dbPath} is missing but a save temp file exists.${describeTmp(tmpPath)} Refusing to create a new empty database.`;
+      logger.error(msg);
+      throw new Error(msg);
+    }
+    logger.info('Created new database');
+    return new SQL.Database();
+  }
+
+  const fileBuffer = fs.readFileSync(dbPath);
+  if (!isValidSqliteBuffer(fileBuffer)) {
+    const msg = `FATAL: database file ${dbPath} is ${fileBuffer.length === 0 ? 'empty' : 'not a valid SQLite file'} (${fileBuffer.length} bytes). Refusing to start and overwrite it — restore from backup.${describeTmp(tmpPath)}`;
+    logger.error(msg);
+    throw new Error(msg);
+  }
+  let loaded;
+  try {
+    loaded = new SQL.Database(fileBuffer);
+    loaded.exec('SELECT COUNT(*) FROM sqlite_master');
+    // A file torn by the old non-atomic save can keep page 1 intact and pass
+    // the checks above, then fail on first use of a later page. quick_check
+    // walks every b-tree page (~40 ms for 50 MB in memory), once per boot.
+    // (sql.js throws "malformed" for many corruptions instead of returning rows)
+    let qc;
+    try { qc = loaded.exec('PRAGMA quick_check'); } catch (qcErr) { throw new Error('quick_check failed: ' + qcErr.message); }
+    const verdict = qc.length > 0 && qc[0].values.length > 0 ? qc[0].values.map(r => r[0]).join('; ') : null;
+    if (verdict !== 'ok') throw new Error('quick_check failed: ' + String(verdict).slice(0, 500));
+  } catch (openErr) {
+    if (loaded) { try { loaded.close(); } catch (_) { /* ignore */ } }
+    const msg = `FATAL: database file ${dbPath} could not be opened (${openErr.message}). Refusing to start and overwrite it — restore from backup.${describeTmp(tmpPath)}`;
+    logger.error(msg);
+    throw new Error(msg);
+  }
+  // The main file is good, so any .tmp is a torn write from a killed save.
+  if (fs.existsSync(tmpPath)) {
+    try {
+      fs.unlinkSync(tmpPath);
+      logger.warn('Removed stale database temp file ' + tmpPath);
+    } catch (e) {
+      logger.warn('Could not remove stale database temp file ' + tmpPath + ': ' + e.message);
+    }
+  }
+  logger.info('Loaded existing database from disk');
+  return loaded;
 }
 
 async function initDatabase() {
@@ -94,34 +354,49 @@ async function initDatabase() {
   logger.info(`Connecting to database at: ${dbPath}`);
 
   const SQL = await initSqlJs();
+  SqlJs = SQL;
 
-  // Load existing database or create new one
-  if (fs.existsSync(dbPath)) {
-    const fileBuffer = fs.readFileSync(dbPath);
-    db = new SQL.Database(fileBuffer);
-    logger.info('Loaded existing database from disk');
-  } else {
-    db = new SQL.Database();
-    logger.info('Created new database');
-  }
+  // Load existing database or create new one (throws on an unusable file)
+  db = loadDatabaseFile(SQL);
 
-  // Enable foreign keys
+  // Enable foreign keys for the boot migrations. The first save below
+  // re-applies the runtime setting (see ENFORCE_FOREIGN_KEYS).
   db.run('PRAGMA foreign_keys = ON');
 
   // Run schema migrations (these modify the DB, so mark dirty)
   applySchema(db);
   dbDirty = true;
 
-  // Save after schema setup
+  // Save after schema setup (synchronous), then switch to the runtime
+  // connection settings (the save already re-applied them; this makes it
+  // explicit even if the save failed before exporting).
   saveDatabase();
+  if (!exportFailed) applyConnectionPragmas();
+  if (!ENFORCE_FOREIGN_KEYS) {
+    logger.info('Foreign-key enforcement is OFF at runtime (set DB_ENFORCE_FOREIGN_KEYS=true to enable)');
+  }
 
   // Store db reference globally for health checks
   global.db = db;
 
-  // Set up periodic save (every 5 seconds if there are changes)
-  setInterval(() => {
-    saveDatabase();
-  }, 5000);
+  // Backstop periodic save (every 5 seconds if there are changes) in case a
+  // debounced save was deferred or a write failed.
+  if (!saveInterval) {
+    saveInterval = setInterval(() => {
+      saveDatabase();
+    }, SAVE_INTERVAL_MS);
+    saveInterval.unref();
+  }
+
+  // Flush pending debounced writes on any process.exit() (graceful shutdown,
+  // watchdog, scripts). 'exit' handlers must be synchronous — saveDatabase is.
+  // force: the process is ending, so committed state is what must persist.
+  if (!exitHookInstalled) {
+    exitHookInstalled = true;
+    process.on('exit', () => {
+      if (dbDirty) saveDatabase({ force: true });
+    });
+  }
 
   logger.info('Database connection established');
   return db;
@@ -2245,4 +2520,4 @@ function getDatabase() {
   return db;
 }
 
-module.exports = { initDatabase, getDatabase, saveDatabase, saveDatabaseAfterWrite };
+module.exports = { initDatabase, getDatabase, saveDatabase, saveDatabaseAfterWrite, snapshotDatabase, replaceDatabase, validateDatabaseImage };

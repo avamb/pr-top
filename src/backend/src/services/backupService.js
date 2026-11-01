@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const crypto = require('crypto');
-const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
+const { getDatabase, saveDatabaseAfterWrite, snapshotDatabase, replaceDatabase, validateDatabaseImage } = require('../db/connection');
 const { logger } = require('../utils/logger');
 
 const BACKUP_DIR = process.env.BACKUP_DIR || path.resolve(__dirname, '../../backups');
@@ -36,13 +36,11 @@ function backup() {
   try {
     ensureBackupDir();
 
-    // Save current state to disk first
-    saveDatabaseAfterWrite();
-
-    // Export database to buffer
+    // Export the current state (also flushes it to disk). Goes through the
+    // connection helper so per-connection pragmas survive the export.
+    const data = snapshotDatabase();
     const db = getDatabase();
-    const data = db.export();
-    const rawBuffer = Buffer.from(data);
+    const rawBuffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
 
     // Compress with gzip
     const compressed = zlib.gzipSync(rawBuffer, { level: 9 });
@@ -95,15 +93,16 @@ function backup() {
  */
 function restore(filename) {
   try {
+    // Validate filename to prevent path traversal — before touching the FS
+    if (typeof filename !== 'string' || !filename || filename.includes('..') ||
+        filename.includes('/') || filename.includes('\\') || path.basename(filename) !== filename) {
+      return { success: false, error: 'Invalid filename' };
+    }
+
     const filepath = path.join(BACKUP_DIR, filename);
 
     if (!fs.existsSync(filepath)) {
       return { success: false, error: 'Backup file not found' };
-    }
-
-    // Validate filename to prevent path traversal
-    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
-      return { success: false, error: 'Invalid filename' };
     }
 
     const data = fs.readFileSync(filepath);
@@ -134,26 +133,35 @@ function restore(filename) {
       return { success: false, error: 'Decompression failed - corrupted backup' };
     }
 
-    // Create a safety backup of current database before restoring
-    const safetyResult = backup();
-    if (safetyResult.success) {
-      // Rename the safety backup to indicate it's a pre-restore snapshot
-      const safetyPath = path.join(BACKUP_DIR, safetyResult.filename);
-      const preRestoreName = safetyResult.filename.replace('prtop_backup_', 'pre_restore_');
-      const preRestorePath = path.join(BACKUP_DIR, preRestoreName);
-      try {
-        fs.renameSync(safetyPath, preRestorePath);
-      } catch (renameErr) {
-        // Non-fatal
-      }
+    // Reject a bad image before anything is touched (no safety backup, no swap)
+    try {
+      validateDatabaseImage(rawData);
+    } catch (validateErr) {
+      return { success: false, error: 'Backup is not a usable database - ' + validateErr.message };
     }
 
-    // Write the restored data to the database file
-    const dbUrl = process.env.DATABASE_URL || 'sqlite:./data/prtop.db';
-    const relativePath = dbUrl.replace('sqlite:', '');
-    const dbPath = path.resolve(__dirname, '../../', relativePath);
+    // Create a safety backup of current database before restoring
+    // The restore replaces the live DB for real, so never do it without a
+    // way back: abort (nothing changed) if the safety backup failed.
+    const safetyResult = backup();
+    if (!safetyResult.success) {
+      logger.error(`[BACKUP] Restore aborted: pre-restore safety backup failed: ${safetyResult.error}`);
+      return { success: false, error: 'Pre-restore safety backup failed - restore aborted, nothing changed: ' + safetyResult.error };
+    }
+    // Rename the safety backup to indicate it's a pre-restore snapshot
+    const safetyPath = path.join(BACKUP_DIR, safetyResult.filename);
+    const preRestoreName = safetyResult.filename.replace('prtop_backup_', 'pre_restore_');
+    const preRestorePath = path.join(BACKUP_DIR, preRestoreName);
+    try {
+      fs.renameSync(safetyPath, preRestorePath);
+    } catch (renameErr) {
+      // Non-fatal: the snapshot still exists under its prtop_backup_ name
+    }
 
-    fs.writeFileSync(dbPath, rawData);
+    // Swap the live in-memory DB and write the image to disk atomically.
+    // Writing only the file (as before) was undone by the next save, which
+    // flushed the old in-memory DB straight back over it.
+    replaceDatabase(rawData);
 
     logger.info(`[BACKUP] Database restored from: ${filename} (${formatSize(rawData.length)})`);
 
