@@ -93,13 +93,22 @@ services:
       context: ./src/bot
       dockerfile: Dockerfile
     restart: unless-stopped
-    env_file:
-      - .env
+    # No env_file here on purpose: the bot parses untrusted Telegram input, so
+    # it gets only what it reads (src/bot/src/index.js) — never the encryption
+    # master key, JWT secret, Stripe or SMTP credentials.
     environment:
       - NODE_ENV=production
       - BACKEND_URL=http://backend:3001
+      # Empty values are rejected by the bot itself in production (fail-closed),
+      # without breaking `docker compose up backend` on machines with no bot token.
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - BOT_API_KEY=${BOT_API_KEY:-}
+      - FRONTEND_URL=${FRONTEND_URL:-}
       - BOT_USERNAME=${BOT_USERNAME:-}
     init: true
+    # The bot drains in-flight handlers (e.g. an SOS being sent) for up to ~9 s
+    # after SIGTERM; give it headroom over Docker's 10 s default.
+    stop_grace_period: 15s
     mem_limit: 512m
     memswap_limit: 512m
     depends_on:
