@@ -10,7 +10,104 @@ const { getClientKeyboard, getTherapistKeyboard, getKeyboardForRole, BUTTON_ACTI
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://pr-top.com';
-const BOT_API_KEY = process.env.BOT_API_KEY || 'dev-bot-api-key';
+const DEV_BOT_API_KEY = 'dev-bot-api-key';
+const BOT_API_KEY = process.env.BOT_API_KEY || DEV_BOT_API_KEY;
+
+// Fail closed: never run in production with the well-known development key
+// (it would let anyone who guesses it call the /api/bot/* routes).
+if (process.env.NODE_ENV === 'production' && (!process.env.BOT_API_KEY || process.env.BOT_API_KEY === DEV_BOT_API_KEY)) {
+  console.error('FATAL: BOT_API_KEY is not set (or equals the development default) while NODE_ENV=production. Refusing to start.');
+  process.exit(1);
+}
+
+// === Crash safety helpers (module level) ===
+
+// Remove secrets (bot token, bot API key) from anything we are about to log.
+function redact(value) {
+  let str = String(value === undefined || value === null ? '' : value);
+  if (token) str = str.split(token).join('[REDACTED_TOKEN]');
+  if (BOT_API_KEY) str = str.split(BOT_API_KEY).join('[REDACTED_KEY]');
+  return str.replace(/bot\d{5,}:[A-Za-z0-9_-]{20,}/g, 'bot[REDACTED_TOKEN]');
+}
+
+// Escape user-controlled text for Telegram legacy "Markdown" parse mode.
+// Legacy Markdown only treats _ * ` [ as special; a backslash before them
+// makes them literal. Always apply to names/titles/descriptions that are
+// interpolated into a parse_mode: 'Markdown' message.
+function escapeMd(value) {
+  if (value === undefined || value === null) return '';
+  return String(value).replace(/([_*`\[])/g, '\\$1');
+}
+
+// User text placed INSIDE a Markdown entity (e.g. *bold*). Legacy Markdown does
+// not allow backslash escapes inside entities (Bot API: "Escaping inside
+// entities is not allowed"), so escapeMd() would show literal backslashes
+// there. Swap the four special characters for look-alikes that Telegram does
+// not parse: the entity stays valid and nothing odd is visible.
+function mdInEntity(value) {
+  if (value === undefined || value === null) return '';
+  return String(value)
+    .replace(/_/g, '＿')
+    .replace(/\*/g, '∗')
+    .replace(/`/g, 'ˋ')
+    .replace(/\[/g, '［');
+}
+
+// Plain-text fallback for a Markdown message: drop the markers so the text
+// is readable when Telegram rejects the entities (escaped chars become literal).
+function stripMd(text) {
+  const ESC = { '_': '', '*': '', '`': '', '[': '' };
+  const UNESC = { '': '_', '': '*', '': '`', '': '[' };
+  return String(text === undefined || text === null ? '' : text)
+    .replace(/\\([_*`\[])/g, (m, ch) => ESC[ch])
+    .replace(/[*`]/g, '')
+    .replace(/(^|[\s(])_(?=\S)/g, '$1')
+    .replace(/(\S)_(?=[\s).,!?:;]|$)/g, '$1')
+    .replace(/[-]/g, (ch) => UNESC[ch]);
+}
+
+// Build an anchored regex for a bot command: "/cmd", "/cmd@BotName",
+// "/cmd args..." — and NOT "he said /cmd" (the old unanchored regexes
+// matched anywhere in the text, so a diary line could trigger a real SOS).
+// Capture group 1 = the (possibly empty/undefined) argument string.
+function commandRegex(name) {
+  return new RegExp('^\\/' + name + '(?:@\\w+)?(?:\\s+([\\s\\S]*))?$');
+}
+
+function isTelegramParseError(err) {
+  const desc = (err && err.response && err.response.body && err.response.body.description) || '';
+  return /can't parse entities|can't find end of|unsupported start tag|unclosed/i.test(`${desc} ${err && err.message}`);
+}
+
+function isTelegramRateLimitError(err) {
+  const code = err && ((err.response && err.response.statusCode) || (err.response && err.response.body && err.response.body.error_code));
+  return code === 429 || /ETELEGRAM: 429|Too Many Requests/i.test(String(err && err.message));
+}
+
+function telegramRetryAfterSeconds(err) {
+  const ra = err && err.response && err.response.body && err.response.body.parameters && err.response.body.parameters.retry_after;
+  const n = Number(ra);
+  if (Number.isFinite(n) && n > 0) return n;
+  const m = /retry after (\d+)/i.exec(String(err && err.message));
+  return m ? Number(m[1]) : 1;
+}
+
+function isTelegramBlockedError(err) {
+  const code = err && ((err.response && err.response.statusCode) || (err.response && err.response.body && err.response.body.error_code));
+  return code === 403 || /ETELEGRAM: 403|bot was blocked by the user|user is deactivated/i.test(String(err && err.message));
+}
+
+// Process-level safety nets. A rejected promise (e.g. Telegram 400 on a
+// message nobody awaited) must never take the bot down.
+process.on('unhandledRejection', (reason) => {
+  const msg = reason && reason.message ? reason.message : reason;
+  console.error('[unhandledRejection]', redact(msg));
+});
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException] FATAL:', redact(err && err.stack ? err.stack : err));
+  // State may be inconsistent; exit and let the supervisor (Docker) restart us.
+  process.exit(1);
+});
 
 // Create axios instance for backend API calls
 const api = axios.create({
@@ -157,6 +254,153 @@ if (!token || token === 'your-telegram-bot-token') {
 
   console.log('PR-TOP Telegram Bot starting...');
 
+  // === Safe Telegram wrappers ===
+
+  // Send a message without ever rejecting.
+  //  - 400 "can't parse entities" with parse_mode set: retry once as plain text
+  //    (Markdown markers stripped) so a stray _ or * in user content cannot drop the message.
+  //  - 403 (user blocked the bot / deactivated): log at info level, return null.
+  //  - anything else: log (redacted), return null.
+  // Returns the sent Message (callers use .message_id) or null.
+  // extra.retryOnRateLimit: for critical messages (SOS replies) — on 429 wait
+  // retry_after (capped at 5s) and try once more.
+  async function safeSend(chatId, text, options, extra) {
+    try {
+      return await bot.sendMessage(chatId, text, options);
+    } catch (err) {
+      if (extra && extra.retryOnRateLimit && isTelegramRateLimitError(err)) {
+        const waitMs = Math.min(Math.max(telegramRetryAfterSeconds(err), 1), 5) * 1000;
+        console.warn(`[safeSend] 429 for chat ${chatId}, retrying once in ${waitMs}ms`);
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+        return safeSend(chatId, text, options);
+      }
+      if (isTelegramBlockedError(err)) {
+        console.info(`[safeSend] chat ${chatId} unreachable (blocked/deactivated), message dropped`);
+        return null;
+      }
+      if (options && options.parse_mode && isTelegramParseError(err)) {
+        console.warn(`[safeSend] Markdown parse error for chat ${chatId}, retrying as plain text`);
+        const { parse_mode, ...plainOptions } = options;
+        try {
+          return await bot.sendMessage(chatId, stripMd(text), plainOptions);
+        } catch (err2) {
+          if (isTelegramBlockedError(err2)) {
+            console.info(`[safeSend] chat ${chatId} unreachable (blocked/deactivated), message dropped`);
+          } else {
+            console.error(`[safeSend] plain-text retry failed for chat ${chatId}:`, redact(err2 && err2.message));
+          }
+          return null;
+        }
+      }
+      console.error(`[safeSend] sendMessage failed for chat ${chatId}:`, redact(err && err.message));
+      return null;
+    }
+  }
+
+  // editMessageText with the same fallbacks as safeSend. Never rejects.
+  async function safeEdit(text, options) {
+    try {
+      return await bot.editMessageText(text, options);
+    } catch (err) {
+      if (isTelegramBlockedError(err)) return null;
+      if (options && options.parse_mode && isTelegramParseError(err)) {
+        const { parse_mode, ...plainOptions } = options;
+        try {
+          return await bot.editMessageText(stripMd(text), plainOptions);
+        } catch (err2) {
+          // "message is not modified" etc. — best-effort
+          return null;
+        }
+      }
+      // "message is not modified" / message too old — best-effort
+      return null;
+    }
+  }
+
+  // answerCallbackQuery that cannot reject (expired queries return 400).
+  async function safeAnswer(callbackQueryId, options) {
+    try {
+      await bot.answerCallbackQuery(callbackQueryId, options);
+    } catch (err) {
+      console.warn('[safeAnswer] answerCallbackQuery failed:', redact(err && err.message));
+    }
+  }
+
+  function isPrivateChat(chat) {
+    return !!chat && chat.type === 'private';
+  }
+
+  // In-flight handler tracking so a graceful shutdown (deploy) can let a running
+  // handler — notably an SOS — finish before the process exits.
+  const inFlight = new Set();
+  function track(promise) {
+    inFlight.add(promise);
+    const done = () => inFlight.delete(promise);
+    promise.then(done, done);
+    return promise;
+  }
+
+  // Register a text command handler. Only private chats; errors are logged,
+  // never left as unhandled rejections.
+  function onCmd(regex, handler) {
+    bot.onText(regex, (msg, match) => {
+      if (!msg || !msg.from || !isPrivateChat(msg.chat)) {
+        console.debug(`[bot] ignoring command in non-private chat type=${msg && msg.chat && msg.chat.type}`);
+        return;
+      }
+      track(Promise.resolve()
+        .then(() => handler(msg, match))
+        .catch((err) => console.error('[bot] command handler error:', redact(err && err.message))));
+    });
+  }
+
+  // Register an event handler (message, voice, callback_query, ...). Only
+  // private chats; errors are logged, never left as unhandled rejections.
+  function onEvent(event, handler) {
+    bot.on(event, (payload) => {
+      const chat = payload && (payload.chat || (payload.message && payload.message.chat));
+      if (!payload || !payload.from || (chat && !isPrivateChat(chat))) {
+        console.debug(`[bot] ignoring ${event} in non-private chat type=${chat && chat.type}`);
+        return;
+      }
+      track(Promise.resolve()
+        .then(() => handler(payload))
+        .catch((err) => console.error(`[bot] ${event} handler error:`, redact(err && err.message))));
+    });
+  }
+
+  // === Graceful shutdown ===
+  let shuttingDown = false;
+  // Docker's default stop grace period is 10s (SIGKILL after that), so stay below it.
+  const SHUTDOWN_MAX_WAIT_MS = 9000;
+  async function shutdown(signal) {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    const deadline = Date.now() + SHUTDOWN_MAX_WAIT_MS;
+    console.log(`[bot] ${signal} received, stopping polling...`);
+    try {
+      await Promise.race([
+        bot.stopPolling(),
+        new Promise((resolve) => setTimeout(resolve, 2000))
+      ]);
+    } catch (err) {
+      console.warn('[bot] stopPolling failed:', redact(err && err.message));
+    }
+    // Let handlers that are already running (e.g. an SOS being delivered)
+    // finish; no new updates arrive once polling is stopped.
+    if (inFlight.size > 0) {
+      console.log(`[bot] waiting for ${inFlight.size} in-flight handler(s) to finish...`);
+      await Promise.race([
+        Promise.allSettled([...inFlight]),
+        new Promise((resolve) => setTimeout(resolve, Math.max(deadline - Date.now(), 0)))
+      ]);
+      if (inFlight.size > 0) console.warn(`[bot] exiting with ${inFlight.size} handler(s) still running`);
+    }
+    process.exit(0);
+  }
+  process.on('SIGTERM', () => { shutdown('SIGTERM'); });
+  process.on('SIGINT', () => { shutdown('SIGINT'); });
+
   // Set BotFather About and Description via Telegram API on startup
   async function setBotDescriptions() {
     const languages = ['en', 'ru', 'es', 'uk'];
@@ -213,7 +457,8 @@ if (!token || token === 'your-telegram-bot-token') {
   // T-399: added consentDisclaimerSessionReminders as point 6.
   function buildConsentBodyText(lang, therapistName) {
     const headerFn = t(lang, 'consentDisclaimerHeader');
-    const head = typeof headerFn === 'function' ? headerFn(therapistName, CONSENT_TEXT_VERSION) : headerFn;
+    // therapistName is user-controlled and sits inside a *bold* entity (no escapes allowed there).
+    const head = typeof headerFn === 'function' ? headerFn(mdInEntity(therapistName), CONSENT_TEXT_VERSION) : headerFn;
     const lines = [
       head,
       '',
@@ -275,22 +520,15 @@ if (!token || token === 'your-telegram-bot-token') {
       lang
     };
     if (mode === 'reconsent') {
-      try { await bot.sendMessage(chatId, t(lang, 'consentReprompt'), { parse_mode: 'Markdown' }); } catch { /* ignore */ }
+      try { await safeSend(chatId, t(lang, 'consentReprompt'), { parse_mode: 'Markdown' }); } catch { /* ignore */ }
     }
     const body = buildConsentBodyText(lang, therapistName);
-    let sent;
-    try {
-      sent = await bot.sendMessage(chatId, body, {
-        parse_mode: 'Markdown',
-        reply_markup: buildConsentKeyboard(lang, therapistId, checked)
-      });
-    } catch (err) {
-      // Markdown parse fallback (in case a user-supplied therapist name has
-      // markdown-special characters — unlikely but be safe).
-      sent = await bot.sendMessage(chatId, body, {
-        reply_markup: buildConsentKeyboard(lang, therapistId, checked)
-      });
-    }
+    // safeSend retries as plain text if Telegram rejects the Markdown (e.g. a
+    // therapist display name with special characters).
+    const sent = await safeSend(chatId, body, {
+      parse_mode: 'Markdown',
+      reply_markup: buildConsentKeyboard(lang, therapistId, checked)
+    });
     if (sent && sent.message_id) {
       pendingConsents[telegramId].messageId = sent.message_id;
       pendingConsents[telegramId].chatId = chatId;
@@ -314,7 +552,7 @@ if (!token || token === 'your-telegram-bot-token') {
       // Need re-consent. If a re-consent prompt is already in flight, just
       // remind the user to complete it instead of spamming a new copy.
       if (pendingConsents[telegramId] && pendingConsents[telegramId].mode === 'reconsent') {
-        try { await bot.sendMessage(chatId, t(lang, 'consentBlockedText')); } catch { /* ignore */ }
+        try { await safeSend(chatId, t(lang, 'consentBlockedText')); } catch { /* ignore */ }
         return false;
       }
       // Look up therapist display name for the disclaimer header.
@@ -335,16 +573,16 @@ if (!token || token === 'your-telegram-bot-token') {
     try {
       const user = await checkExistingUser(telegramId);
       if (!user) {
-        bot.sendMessage(chatId, t(lang, 'helpUnregistered'), { parse_mode: 'Markdown' });
+        safeSend(chatId, t(lang, 'helpUnregistered'), { parse_mode: 'Markdown' });
         return;
       }
       if (user.role === 'therapist') {
-        bot.sendMessage(chatId, t(lang, 'helpTherapist'), { parse_mode: 'Markdown' });
+        safeSend(chatId, t(lang, 'helpTherapist'), { parse_mode: 'Markdown' });
       } else {
-        bot.sendMessage(chatId, t(lang, 'helpClient'), { parse_mode: 'Markdown' });
+        safeSend(chatId, t(lang, 'helpClient'), { parse_mode: 'Markdown' });
       }
     } catch (error) {
-      bot.sendMessage(chatId, t(lang, 'helpClient'), { parse_mode: 'Markdown' });
+      safeSend(chatId, t(lang, 'helpClient'), { parse_mode: 'Markdown' });
     }
   }
 
@@ -352,11 +590,12 @@ if (!token || token === 'your-telegram-bot-token') {
     try {
       const user = await checkExistingUser(telegramId);
       if (!user) {
-        bot.sendMessage(chatId, t(lang, 'helpUnregistered'), { parse_mode: 'Markdown' });
+        safeSend(chatId, t(lang, 'helpUnregistered'), { parse_mode: 'Markdown' });
         return;
       }
       const profileText = t(lang, 'profileView');
-      bot.sendMessage(chatId, profileText(user.first_name || '', user.last_name || '', user.phone || '', user.telegram_username || ''), {
+      // Names/usernames are user-controlled (telegram usernames often contain "_").
+      safeSend(chatId, profileText(escapeMd(user.first_name), escapeMd(user.last_name), escapeMd(user.phone), escapeMd(user.telegram_username)), {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
@@ -366,23 +605,40 @@ if (!token || token === 'your-telegram-bot-token') {
         }
       });
     } catch (error) {
-      bot.sendMessage(chatId, `❌ ${t(lang, 'profileFailed')}`);
+      safeSend(chatId, `❌ ${t(lang, 'profileFailed')}`);
     }
   }
 
   async function handleSos(chatId, telegramId, lang, sosMessage) {
+    // SOS must NEVER be gated: a client in crisis must not be bounced to a
+    // consent screen. Send the alert first; only afterwards (if the consent
+    // text version is outdated) show the re-consent prompt.
+    let delivered = true;
     try {
-      // T-18: Re-consent gate. SOS creates new client data and triggers
-      // therapist notifications, so it must respect the latest consent text.
-      if (!(await requireConsentUpToDate(chatId, telegramId, lang))) return;
-      await api.post('/api/bot/sos', {
+      const response = await api.post('/api/bot/sos', {
         telegram_id: String(telegramId),
         message: sosMessage || undefined
       });
-      bot.sendMessage(chatId, t(lang, 'sosConfirmed'));
+      // Backend reports whether any therapist notification actually went out.
+      // Field missing (older backend) is treated as delivered.
+      if (response && response.data && response.data.notification_delivered === false) {
+        delivered = false;
+      }
     } catch (error) {
-      const errorMsg = error.response?.data?.error || t(lang, 'sosFailed');
-      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+      // Never show the raw backend error in a crisis flow — always the fixed
+      // text that carries the emergency numbers.
+      console.error(`[SOS] request failed for telegram_id=${telegramId}: status=${error.response && error.response.status} ${redact(error.message)}`);
+      await safeSend(chatId, `❌ ${t(lang, 'sosFailed')}`, undefined, { retryOnRateLimit: true });
+      return;
+    }
+
+    await safeSend(chatId, t(lang, delivered ? 'sosConfirmed' : 'sosNotDelivered'), { parse_mode: 'Markdown' }, { retryOnRateLimit: true });
+
+    // T-18: re-consent is requested AFTER the SOS went out (never before).
+    try {
+      await requireConsentUpToDate(chatId, telegramId, lang);
+    } catch (err) {
+      console.error('[SOS] post-SOS consent check failed:', redact(err && err.message));
     }
   }
 
@@ -392,7 +648,7 @@ if (!token || token === 'your-telegram-bot-token') {
       const entries = result.data.entries;
 
       if (!entries || entries.length === 0) {
-        bot.sendMessage(chatId, t(lang, 'historyEmpty'));
+        safeSend(chatId, t(lang, 'historyEmpty'));
         return;
       }
 
@@ -428,10 +684,10 @@ if (!token || token === 'your-telegram-bot-token') {
         text += `${i + 1}. ${typeIcon} ${date}\n${preview}\n\n`;
       });
 
-      bot.sendMessage(chatId, text);
+      safeSend(chatId, text);
     } catch (error) {
       const errorMsg = error.response?.data?.error || t(lang, 'historyFailed');
-      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+      safeSend(chatId, `❌ ${errorMsg}`);
     }
   }
 
@@ -442,7 +698,7 @@ if (!token || token === 'your-telegram-bot-token') {
       const sessions = result.data && result.data.sessions ? result.data.sessions : [];
 
       if (!sessions || sessions.length === 0) {
-        bot.sendMessage(chatId, t(lang, 'sessionsEmpty'));
+        safeSend(chatId, t(lang, 'sessionsEmpty'));
         return;
       }
 
@@ -476,15 +732,15 @@ if (!token || token === 'your-telegram-bot-token') {
             dateStr = String(rawDate || '—');
           }
         }
-        const titlePart = s.title ? ` — ${s.title}` : '';
-        const statusPart = s.status ? ` _(${s.status})_` : '';
+        const titlePart = s.title ? ` — ${escapeMd(s.title)}` : '';
+        const statusPart = s.status ? ` (${escapeMd(s.status)})` : '';
         text += `${i + 1}. 🎧 ${dateStr}${titlePart}${statusPart}\n`;
       });
 
-      bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+      safeSend(chatId, text, { parse_mode: 'Markdown' });
     } catch (error) {
       const errorMsg = error.response?.data?.error || t(lang, 'sessionsFailed');
-      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+      safeSend(chatId, `❌ ${errorMsg}`);
     }
   }
 
@@ -494,7 +750,7 @@ if (!token || token === 'your-telegram-bot-token') {
       const exercises = result.data.exercises;
 
       if (!exercises || exercises.length === 0) {
-        bot.sendMessage(chatId, t(lang, 'exercisesEmpty'));
+        safeSend(chatId, t(lang, 'exercisesEmpty'));
         return;
       }
 
@@ -515,7 +771,7 @@ if (!token || token === 'your-telegram-bot-token') {
           statusLabel = t(lang, 'exerciseStatusSent');
         }
 
-        text += `${i + 1}. ${statusLabel} *${title}*\n`;
+        text += `${i + 1}. ${statusLabel} *${mdInEntity(title)}*\n`;
 
         if (ex.status !== 'completed') {
           inlineButtons.push([{
@@ -530,15 +786,15 @@ if (!token || token === 'your-telegram-bot-token') {
         opts.reply_markup = { inline_keyboard: inlineButtons };
       }
 
-      bot.sendMessage(chatId, text, opts);
+      safeSend(chatId, text, opts);
     } catch (error) {
       const errorMsg = error.response?.data?.error || t(lang, 'exercisesFailed');
-      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+      safeSend(chatId, `❌ ${errorMsg}`);
     }
   }
 
   // /start command - role selection or deep link connect
-  bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
+  onCmd(commandRegex('start'), async (msg, match) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const deepLinkCode = match[1] ? match[1].trim() : null;
@@ -587,7 +843,7 @@ if (!token || token === 'your-telegram-bot-token') {
         const { therapist } = connectResult.data;
 
         // Send deep link welcome (no "enter code" — client came via link)
-        await bot.sendMessage(chatId, t(lang, 'deepLinkClientWelcome'));
+        await safeSend(chatId, t(lang, 'deepLinkClientWelcome'));
 
         // T-18: Show extended consent disclaimer + 5-checkbox flow.
         await sendConsentPrompt(chatId, telegramId, lang, therapist.id, therapist.display_name, 'connect');
@@ -598,7 +854,7 @@ if (!token || token === 'your-telegram-bot-token') {
         }
       } catch (error) {
         const errorMsg = error.response?.data?.error || t(lang, 'deepLinkInvalidCode');
-        bot.sendMessage(chatId, `❌ ${errorMsg}\n\n${t(lang, 'deepLinkFallbackHint')}`);
+        safeSend(chatId, `❌ ${errorMsg}\n\n${t(lang, 'deepLinkFallbackHint')}`);
       }
       return;
     }
@@ -611,7 +867,7 @@ if (!token || token === 'your-telegram-bot-token') {
         const lang = existingUser.language || 'en';
         userLangCache[telegramId] = lang;
         const welcomeBack = t(lang, 'welcomeBack');
-        bot.sendMessage(chatId, welcomeBack(existingUser.role), {
+        safeSend(chatId, welcomeBack(existingUser.role), {
           reply_markup: getKeyboardForRole(existingUser.role, lang)
         });
         return;
@@ -628,7 +884,7 @@ if (!token || token === 'your-telegram-bot-token') {
       roleClient: t(lang, 'roleClient')
     };
 
-    bot.sendMessage(chatId, msgs.chooseRoleIntro, {
+    safeSend(chatId, msgs.chooseRoleIntro, {
       reply_markup: {
         inline_keyboard: [
           [
@@ -641,7 +897,7 @@ if (!token || token === 'your-telegram-bot-token') {
   });
 
   // /connect command - client enters invite code to connect with therapist
-  bot.onText(/\/connect\s+(.+)/, async (msg, match) => {
+  onCmd(/^\/connect(?:@\w+)?\s+(\S[\s\S]*)$/, async (msg, match) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const inviteCode = match[1].trim();
@@ -660,21 +916,21 @@ if (!token || token === 'your-telegram-bot-token') {
       await sendConsentPrompt(chatId, telegramId, lang, therapist.id, therapist.display_name, 'connect');
     } catch (error) {
       const errorMsg = error.response?.data?.error || t(lang, 'failedInviteCode');
-      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+      safeSend(chatId, `❌ ${errorMsg}`);
     }
   });
 
   // /connect without code - show usage
-  bot.onText(/^\/connect$/, async (msg) => {
+  onCmd(/^\/connect(?:@\w+)?\s*$/, async (msg) => {
     const lang = await getUserLang(msg.from.id);
-    bot.sendMessage(msg.chat.id,
+    safeSend(msg.chat.id,
       t(lang, 'connectUsage'),
       { parse_mode: 'Markdown' }
     );
   });
 
   // /profile command - view/edit client profile
-  bot.onText(/\/profile/, async (msg) => {
+  onCmd(commandRegex('profile'), async (msg) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
@@ -682,7 +938,7 @@ if (!token || token === 'your-telegram-bot-token') {
   });
 
   // /help command - role-aware command list
-  bot.onText(/\/help/, async (msg) => {
+  onCmd(commandRegex('help'), async (msg) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
@@ -690,7 +946,7 @@ if (!token || token === 'your-telegram-bot-token') {
   });
 
   // /sos command - client emergency alert
-  bot.onText(/\/sos(?:\s+(.*))?/, async (msg, match) => {
+  onCmd(commandRegex('sos'), async (msg, match) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
@@ -699,7 +955,7 @@ if (!token || token === 'your-telegram-bot-token') {
   });
 
   // /history command - show recent diary entries
-  bot.onText(/\/history/, async (msg) => {
+  onCmd(commandRegex('history'), async (msg) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
@@ -710,7 +966,7 @@ if (!token || token === 'your-telegram-bot-token') {
   // Class A material (transcripts/summaries) is intentionally NOT exposed via
   // the bot — only the meeting date, an optional therapist-assigned title,
   // and the processing status are returned.
-  bot.onText(/\/sessions/, async (msg) => {
+  onCmd(commandRegex('sessions'), async (msg) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
@@ -718,7 +974,7 @@ if (!token || token === 'your-telegram-bot-token') {
   });
 
   // /exercises command - client views assigned exercises
-  bot.onText(/\/exercises/, async (msg) => {
+  onCmd(commandRegex('exercises'), async (msg) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
@@ -729,7 +985,7 @@ if (!token || token === 'your-telegram-bot-token') {
   // open an assignment to write a freeform report (text message). Voice/video
   // diary entries are NOT auto-attached as reports here — the client must use
   // a text reply, the same way exercise responses work today.
-  bot.onText(/\/assignments/, async (msg) => {
+  onCmd(commandRegex('assignments'), async (msg) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
@@ -742,7 +998,7 @@ if (!token || token === 'your-telegram-bot-token') {
       const assignments = (result.data && result.data.assignments) || [];
 
       if (assignments.length === 0) {
-        bot.sendMessage(chatId, t(lang, 'assignmentsEmpty'));
+        safeSend(chatId, t(lang, 'assignmentsEmpty'));
         return;
       }
 
@@ -758,7 +1014,7 @@ if (!token || token === 'your-telegram-bot-token') {
           // Prefer therapist-supplied title; fall back to library exercise title.
         const displayTitle = (a.title && a.title.trim()) ? a.title : (exerciseTitle || `Assignment #${a.id}`);
         const freqLabel = t(lang, `assignmentFrequency_${a.report_frequency}`);
-        text += `${i + 1}. *${displayTitle}*\n   ⏱ ${freqLabel}\n`;
+        text += `${i + 1}. *${mdInEntity(displayTitle)}*\n   ⏱ ${freqLabel}\n`;
         inlineButtons.push([{
           text: `${i + 1}. ${displayTitle}`,
           callback_data: `assignment_view_${a.id}`,
@@ -769,11 +1025,11 @@ if (!token || token === 'your-telegram-bot-token') {
       if (inlineButtons.length > 0) {
         opts.reply_markup = { inline_keyboard: inlineButtons };
       }
-      bot.sendMessage(chatId, text, opts);
+      safeSend(chatId, text, opts);
     } catch (error) {
       const errorMsg = (error.response && error.response.data && error.response.data.error)
         || t(lang, 'assignmentsFailed');
-      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+      safeSend(chatId, `❌ ${errorMsg}`);
     }
   }
 
@@ -784,7 +1040,7 @@ if (!token || token === 'your-telegram-bot-token') {
   //   /report                      → list active assignments, each as an
   //                                  inline button that arms the report flow.
   //   /report <assignment_id>      → arm the flow immediately for that id.
-  bot.onText(/^\/report(?:\s+(\S+))?$/, async (msg, match) => {
+  onCmd(/^\/report(?:@\w+)?(?:\s+(\S+))?\s*$/, async (msg, match) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
@@ -795,7 +1051,7 @@ if (!token || token === 'your-telegram-bot-token') {
       const assignments = (result.data && result.data.assignments) || [];
 
       if (assignments.length === 0) {
-        bot.sendMessage(chatId, t(lang, 'reportNoAssignments'));
+        safeSend(chatId, t(lang, 'reportNoAssignments'));
         return;
       }
 
@@ -803,11 +1059,11 @@ if (!token || token === 'your-telegram-bot-token') {
       if (Number.isInteger(explicitId) && explicitId > 0) {
         const target = assignments.find((a) => Number(a.id) === explicitId);
         if (!target) {
-          bot.sendMessage(chatId, t(lang, 'reportAssignmentNotActive'));
+          safeSend(chatId, t(lang, 'reportAssignmentNotActive'));
           return;
         }
         activeReports[telegramId] = explicitId;
-        bot.sendMessage(chatId, t(lang, 'assignmentReportPrompt')(explicitId));
+        safeSend(chatId, t(lang, 'assignmentReportPrompt')(explicitId));
         return;
       }
 
@@ -822,26 +1078,26 @@ if (!token || token === 'your-telegram-bot-token') {
             : a.exercise.title_en)
           : null;
         const displayTitle = (a.title && a.title.trim()) ? a.title : (exerciseTitle || `Assignment #${a.id}`);
-        text += `${i + 1}. *${displayTitle}*\n`;
+        text += `${i + 1}. *${mdInEntity(displayTitle)}*\n`;
         inlineButtons.push([{
           text: `${i + 1}. ${displayTitle}`,
           callback_data: `assignment_report_${a.id}`,
         }]);
       });
 
-      bot.sendMessage(chatId, text, {
+      safeSend(chatId, text, {
         parse_mode: 'Markdown',
         reply_markup: { inline_keyboard: inlineButtons },
       });
     } catch (error) {
       const errorMsg = (error.response && error.response.data && error.response.data.error)
         || t(lang, 'assignmentsFailed');
-      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+      safeSend(chatId, `❌ ${errorMsg}`);
     }
   });
 
   // /timezone command - view and change timezone
-  bot.onText(/\/timezone/, async (msg) => {
+  onCmd(commandRegex('timezone'), async (msg) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
@@ -852,7 +1108,7 @@ if (!token || token === 'your-telegram-bot-token') {
     try {
       const user = await checkExistingUser(telegramId);
       if (!user) {
-        bot.sendMessage(chatId, t(lang, 'helpUnregistered'), { parse_mode: 'Markdown' });
+        safeSend(chatId, t(lang, 'helpUnregistered'), { parse_mode: 'Markdown' });
         return;
       }
       const currentTz = user.timezone || 'UTC';
@@ -864,7 +1120,7 @@ if (!token || token === 'your-telegram-bot-token') {
         localTime = now.toUTCString().slice(17, 22);
       }
       const timezoneMsg = t(lang, 'timezoneCurrentAndChoose');
-      bot.sendMessage(chatId, timezoneMsg(currentTz, localTime), {
+      safeSend(chatId, timezoneMsg(escapeMd(currentTz), localTime), {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
@@ -879,12 +1135,12 @@ if (!token || token === 'your-telegram-bot-token') {
       });
     } catch (error) {
       console.error('Timezone command error:', error.message);
-      bot.sendMessage(chatId, '❌ ' + t(lang, 'timezoneFailed'));
+      safeSend(chatId, '❌ ' + t(lang, 'timezoneFailed'));
     }
   }
 
   // /settings command - therapist settings (voice forwarding, etc.)
-  bot.onText(/\/settings/, async (msg) => {
+  onCmd(commandRegex('settings'), async (msg) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
@@ -895,7 +1151,7 @@ if (!token || token === 'your-telegram-bot-token') {
     try {
       const user = await checkExistingUser(telegramId);
       if (!user || (user.role !== 'therapist' && user.role !== 'superadmin')) {
-        bot.sendMessage(chatId, t(lang, 'settingsTherapistOnly'));
+        safeSend(chatId, t(lang, 'settingsTherapistOnly'));
         return;
       }
 
@@ -920,28 +1176,28 @@ if (!token || token === 'your-telegram-bot-token') {
 
       if (editMessageId) {
         // Edit existing message
-        bot.editMessageText(settingsText, {
+        safeEdit(settingsText, {
           chat_id: chatId,
           message_id: editMessageId,
           parse_mode: 'Markdown',
           reply_markup: keyboard
-        }).catch(() => {});
+        });
       } else {
-        bot.sendMessage(chatId, settingsText, {
+        safeSend(chatId, settingsText, {
           parse_mode: 'Markdown',
           reply_markup: keyboard
         });
       }
     } catch (error) {
       console.error('Settings command error:', error.message);
-      bot.sendMessage(chatId, '❌ Failed to load settings');
+      safeSend(chatId, '❌ Failed to load settings');
     }
   }
 
   // Send timezone confirmation after client registration (shown once)
   function sendTimezoneConfirmation(chatId, lang, tz) {
     const tzMsg = t(lang, 'timezoneDetectedAfterReg');
-    bot.sendMessage(chatId, tzMsg(tz), {
+    safeSend(chatId, tzMsg(escapeMd(tz)), {
       parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [
@@ -1007,13 +1263,13 @@ if (!token || token === 'your-telegram-bot-token') {
   };
 
   // /disconnect command - client revokes therapist access
-  bot.onText(/\/disconnect/, async (msg) => {
+  onCmd(commandRegex('disconnect'), async (msg) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
 
     // Show confirmation prompt
-    bot.sendMessage(chatId, t(lang, 'disconnectConfirm'), {
+    safeSend(chatId, t(lang, 'disconnectConfirm'), {
       parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [
@@ -1026,8 +1282,10 @@ if (!token || token === 'your-telegram-bot-token') {
     });
   });
 
-  // Handle callback queries (role selection + consent + disconnect)
-  bot.on('callback_query', async (callbackQuery) => {
+  // Handle callback queries (role selection + consent + disconnect).
+  // `answer(options)` answers the callback query without ever rejecting;
+  // the onEvent('callback_query') wrapper below answers it if no branch did.
+  async function processCallbackQuery(callbackQuery, answer) {
     const chatId = callbackQuery.message.chat.id;
     const telegramId = callbackQuery.from.id;
     const data = callbackQuery.data;
@@ -1043,12 +1301,12 @@ if (!token || token === 'your-telegram-bot-token') {
         });
         // Refresh the settings message
         await handleBotSettings(chatId, telegramId, lang, callbackQuery.message.message_id);
-        bot.answerCallbackQuery(callbackQuery.id, {
+        answer({
           text: newValue ? t(lang, 'settingsForwardEnabled') : t(lang, 'settingsForwardDisabled')
         });
       } catch (err) {
         console.error('Failed to update forward setting:', err.message);
-        bot.answerCallbackQuery(callbackQuery.id, { text: '❌ Failed to update' });
+        answer({ text: '❌ Failed to update' });
       }
       return;
     }
@@ -1057,7 +1315,7 @@ if (!token || token === 'your-telegram-bot-token') {
     if (data === 'tz_change_after_reg') {
       const lang = await getUserLang(telegramId);
       await handleTimezone(chatId, telegramId, lang);
-      bot.answerCallbackQuery(callbackQuery.id);
+      answer();
       return;
     }
 
@@ -1074,7 +1332,7 @@ if (!token || token === 'your-telegram-bot-token') {
           message_id: callbackQuery.message.message_id
         }).catch(() => {});
       }
-      bot.answerCallbackQuery(callbackQuery.id);
+      answer();
       return;
     }
 
@@ -1093,7 +1351,7 @@ if (!token || token === 'your-telegram-bot-token') {
         chat_id: chatId,
         message_id: callbackQuery.message.message_id
       }).catch(() => {});
-      bot.answerCallbackQuery(callbackQuery.id);
+      answer();
       return;
     }
 
@@ -1111,17 +1369,18 @@ if (!token || token === 'your-telegram-bot-token') {
           localTime = now.toUTCString().slice(17, 22);
         }
         const confirmMsg = t(lang, 'timezoneUpdated');
-        bot.editMessageText(confirmMsg(selectedTz, localTime), {
+        // Timezone ids like America/New_York contain "_" — escape for Markdown.
+        safeEdit(confirmMsg(escapeMd(selectedTz), localTime), {
           chat_id: chatId,
           message_id: callbackQuery.message.message_id,
           parse_mode: 'Markdown'
-        }).catch(() => {});
+        });
         console.log(`[Timezone] User telegram_id=${telegramId} changed timezone to ${selectedTz}`);
       } catch (error) {
         console.error('Timezone update error:', error.message);
-        bot.sendMessage(chatId, '❌ ' + t(lang, 'timezoneFailed'));
+        safeSend(chatId, '❌ ' + t(lang, 'timezoneFailed'));
       }
-      bot.answerCallbackQuery(callbackQuery.id);
+      answer();
       return;
     }
 
@@ -1130,20 +1389,20 @@ if (!token || token === 'your-telegram-bot-token') {
       const lang = await getUserLang(telegramId);
 
       if (data === 'disconnect_no') {
-        bot.sendMessage(chatId, t(lang, 'disconnectCancelled'));
+        safeSend(chatId, t(lang, 'disconnectCancelled'));
       } else {
         try {
           await api.post('/api/bot/revoke-consent', {
             telegram_id: String(telegramId)
           });
-          bot.sendMessage(chatId, t(lang, 'disconnected'));
+          safeSend(chatId, t(lang, 'disconnected'));
         } catch (error) {
           const errorMsg = error.response?.data?.error || t(lang, 'disconnectFailed');
-          bot.sendMessage(chatId, `❌ ${errorMsg}`);
+          safeSend(chatId, `❌ ${errorMsg}`);
         }
       }
 
-      bot.answerCallbackQuery(callbackQuery.id);
+      answer();
       return;
     }
 
@@ -1155,8 +1414,8 @@ if (!token || token === 'your-telegram-bot-token') {
         const result = await api.get(`/api/bot/assignments/${telegramId}`);
         const a = (result.data.assignments || []).find(x => String(x.id) === String(assignmentId));
         if (!a) {
-          bot.sendMessage(chatId, t(lang, 'assignmentNotFound'));
-          bot.answerCallbackQuery(callbackQuery.id);
+          safeSend(chatId, t(lang, 'assignmentNotFound'));
+          answer();
           return;
         }
         const exerciseTitle = a.exercise
@@ -1168,8 +1427,8 @@ if (!token || token === 'your-telegram-bot-token') {
         const displayTitle = (a.title && a.title.trim()) ? a.title : (exerciseTitle || `Assignment #${a.id}`);
         const freqLabel = t(lang, `assignmentFrequency_${a.report_frequency}`);
         const detailFn = t(lang, 'assignmentDetail');
-        const body = detailFn(displayTitle, a.description || '', freqLabel, a.deadline || '');
-        bot.sendMessage(chatId, body, {
+        const body = detailFn(mdInEntity(displayTitle), escapeMd(a.description), freqLabel, escapeMd(a.deadline));
+        safeSend(chatId, body, {
           parse_mode: 'Markdown',
           reply_markup: {
             inline_keyboard: [
@@ -1180,9 +1439,9 @@ if (!token || token === 'your-telegram-bot-token') {
         });
       } catch (error) {
         const errorMsg = (error.response && error.response.data && error.response.data.error) || t(lang, 'assignmentsFailed');
-        bot.sendMessage(chatId, `❌ ${errorMsg}`);
+        safeSend(chatId, `❌ ${errorMsg}`);
       }
-      bot.answerCallbackQuery(callbackQuery.id);
+      answer();
       return;
     }
 
@@ -1196,8 +1455,8 @@ if (!token || token === 'your-telegram-bot-token') {
       if (Number.isInteger(aidInt) && aidInt > 0) {
         activeReports[telegramId] = aidInt;
       }
-      bot.sendMessage(chatId, t(lang, 'assignmentReportPrompt')(assignmentId));
-      bot.answerCallbackQuery(callbackQuery.id);
+      safeSend(chatId, t(lang, 'assignmentReportPrompt')(assignmentId));
+      answer();
       return;
     }
 
@@ -1213,11 +1472,11 @@ if (!token || token === 'your-telegram-bot-token') {
             chat_id: chatId, message_id: callbackQuery.message.message_id,
           });
         } catch (_) { /* keyboard edit is best-effort */ }
-        bot.answerCallbackQuery(callbackQuery.id, { text: t(lang, 'assignmentCompletedToast') });
-        bot.sendMessage(chatId, t(lang, 'assignmentCompletedMsg'));
+        answer({ text: t(lang, 'assignmentCompletedToast') });
+        safeSend(chatId, t(lang, 'assignmentCompletedMsg'));
       } catch (error) {
         const errorMsg = (error.response && error.response.data && error.response.data.error) || t(lang, 'assignmentCompleteFailed');
-        bot.answerCallbackQuery(callbackQuery.id, { text: errorMsg, show_alert: true });
+        answer({ text: errorMsg, show_alert: true });
       }
       return;
     }
@@ -1233,8 +1492,8 @@ if (!token || token === 'your-telegram-bot-token') {
         const exercise = result.data.exercises.find(e => String(e.delivery_id) === deliveryId);
 
         if (!exercise || exercise.status === 'completed') {
-          bot.sendMessage(chatId, t(lang, 'exerciseNotFound'));
-          bot.answerCallbackQuery(callbackQuery.id);
+          safeSend(chatId, t(lang, 'exerciseNotFound'));
+          answer();
           return;
         }
 
@@ -1245,7 +1504,7 @@ if (!token || token === 'your-telegram-bot-token') {
                              (exercise.instructions_en || '');
 
         const detailMsg = t(lang, 'exerciseDetail');
-        bot.sendMessage(chatId, detailMsg(title, exercise.category, instructions), {
+        safeSend(chatId, detailMsg(mdInEntity(title), escapeMd(exercise.category), escapeMd(instructions)), {
           parse_mode: 'Markdown',
           reply_markup: {
             inline_keyboard: [[
@@ -1254,10 +1513,10 @@ if (!token || token === 'your-telegram-bot-token') {
           }
         });
       } catch (error) {
-        bot.sendMessage(chatId, `❌ ${t(lang, 'exercisesFailed')}`);
+        safeSend(chatId, `❌ ${t(lang, 'exercisesFailed')}`);
       }
 
-      bot.answerCallbackQuery(callbackQuery.id);
+      answer();
       return;
     }
 
@@ -1269,7 +1528,7 @@ if (!token || token === 'your-telegram-bot-token') {
       const entryIdStr = data.replace('diary_make_private_', '');
       const entryId = parseInt(entryIdStr, 10);
       if (!Number.isInteger(entryId) || entryId <= 0) {
-        bot.answerCallbackQuery(callbackQuery.id, { text: t(lang, 'commentMakePrivateFailed') });
+        answer({ text: t(lang, 'commentMakePrivateFailed') });
         return;
       }
       try {
@@ -1288,12 +1547,12 @@ if (!token || token === 'your-telegram-bot-token') {
         const wasAlready = !!(r.data && r.data.already_private);
         const toastKey = wasAlready ? 'commentAlreadyPrivate' : 'commentMadePrivate';
         // Toast confirmation on the inline button itself.
-        bot.answerCallbackQuery(callbackQuery.id, { text: t(lang, toastKey), show_alert: false });
+        answer({ text: t(lang, toastKey), show_alert: false });
         // Plus a chat-message confirmation so it's visible after scroll.
-        bot.sendMessage(chatId, t(lang, toastKey));
+        safeSend(chatId, t(lang, toastKey));
       } catch (error) {
         const errorMsg = (error.response && error.response.data && error.response.data.error) || t(lang, 'commentMakePrivateFailed');
-        bot.answerCallbackQuery(callbackQuery.id, { text: errorMsg, show_alert: true });
+        answer({ text: errorMsg, show_alert: true });
       }
       return;
     }
@@ -1311,13 +1570,13 @@ if (!token || token === 'your-telegram-bot-token') {
         // Track active exercise for this user so next text message is captured as response
         activeExercises[telegramId] = deliveryId;
 
-        bot.sendMessage(chatId, t(lang, 'exerciseStarted'));
+        safeSend(chatId, t(lang, 'exerciseStarted'));
       } catch (error) {
         const errorMsg = error.response?.data?.error || t(lang, 'exerciseStartFailed');
-        bot.sendMessage(chatId, `❌ ${errorMsg}`);
+        safeSend(chatId, `❌ ${errorMsg}`);
       }
 
-      bot.answerCallbackQuery(callbackQuery.id);
+      answer();
       return;
     }
 
@@ -1325,15 +1584,15 @@ if (!token || token === 'your-telegram-bot-token') {
     if (data === 'profile_edit_name') {
       const lang = await getUserLang(telegramId);
       activeProfileEdits[telegramId] = 'name';
-      bot.sendMessage(chatId, t(lang, 'profileEnterName'), { parse_mode: 'Markdown' });
-      bot.answerCallbackQuery(callbackQuery.id);
+      safeSend(chatId, t(lang, 'profileEnterName'), { parse_mode: 'Markdown' });
+      answer();
       return;
     }
     if (data === 'profile_edit_phone') {
       const lang = await getUserLang(telegramId);
       activeProfileEdits[telegramId] = 'phone';
-      bot.sendMessage(chatId, t(lang, 'profileEnterPhone'), { parse_mode: 'Markdown' });
-      bot.answerCallbackQuery(callbackQuery.id);
+      safeSend(chatId, t(lang, 'profileEnterPhone'), { parse_mode: 'Markdown' });
+      answer();
       return;
     }
 
@@ -1347,19 +1606,19 @@ if (!token || token === 'your-telegram-bot-token') {
       const rest = data.slice('consent_chk_'.length);
       const lastUnderscore = rest.lastIndexOf('_');
       if (lastUnderscore < 0) {
-        bot.answerCallbackQuery(callbackQuery.id);
+        answer();
         return;
       }
       const therapistId = rest.slice(0, lastUnderscore);
       const point = rest.slice(lastUnderscore + 1);
       if (!CONSENT_POINTS.includes(point)) {
-        bot.answerCallbackQuery(callbackQuery.id);
+        answer();
         return;
       }
       const state = pendingConsents[telegramId];
       if (!state || String(state.therapistId) !== String(therapistId)) {
         // Stale callback from a previous prompt — silently ignore.
-        bot.answerCallbackQuery(callbackQuery.id);
+        answer();
         return;
       }
       state.checked[point] = !state.checked[point];
@@ -1371,7 +1630,7 @@ if (!token || token === 'your-telegram-bot-token') {
       } catch (e) {
         // Telegram returns "message is not modified" if same markup — ignore.
       }
-      bot.answerCallbackQuery(callbackQuery.id);
+      answer();
       return;
     }
 
@@ -1380,12 +1639,12 @@ if (!token || token === 'your-telegram-bot-token') {
       const therapistId = data.slice('consent_continue_'.length);
       const state = pendingConsents[telegramId];
       if (!state || String(state.therapistId) !== String(therapistId)) {
-        bot.answerCallbackQuery(callbackQuery.id);
+        answer();
         return;
       }
       const allChecked = CONSENT_POINTS.every(pt => !!state.checked[pt]);
       if (!allChecked) {
-        bot.answerCallbackQuery(callbackQuery.id, { text: t(lang, 'consentNotAllChecked'), show_alert: true });
+        answer({ text: t(lang, 'consentNotAllChecked'), show_alert: true });
         return;
       }
       const isReconsent = state.mode === 'reconsent';
@@ -1408,22 +1667,22 @@ if (!token || token === 'your-telegram-bot-token') {
           });
         } catch { /* ignore */ }
         if (isReconsent) {
-          bot.sendMessage(chatId, t(lang, 'consentReconfirmed'), {
+          safeSend(chatId, t(lang, 'consentReconfirmed'), {
             reply_markup: getClientKeyboard(lang)
           });
         } else if (result.data && result.data.linked) {
-          bot.sendMessage(chatId, t(lang, 'connected'), {
+          safeSend(chatId, t(lang, 'connected'), {
             reply_markup: getClientKeyboard(lang)
           });
         } else {
-          bot.sendMessage(chatId, t(lang, 'connectionCancelled'));
+          safeSend(chatId, t(lang, 'connectionCancelled'));
         }
       } catch (error) {
         const errorMsg = error.response?.data?.error
           || (isReconsent ? t(lang, 'consentReconsentFailed') : t(lang, 'failedConsent'));
-        bot.sendMessage(chatId, `❌ ${errorMsg}`);
+        safeSend(chatId, `❌ ${errorMsg}`);
       }
-      bot.answerCallbackQuery(callbackQuery.id);
+      answer();
       return;
     }
 
@@ -1447,15 +1706,15 @@ if (!token || token === 'your-telegram-bot-token') {
           chat_id: chatId, message_id: callbackQuery.message.message_id
         });
       } catch { /* ignore */ }
-      bot.sendMessage(chatId, t(lang, 'connectionCancelled'));
+      safeSend(chatId, t(lang, 'connectionCancelled'));
       // For re-consent, the user has effectively refused the new policy.
       // We do NOT auto-disconnect — they can /disconnect manually if they
       // want. But every subsequent action will keep prompting them via the
       // requireConsentUpToDate gate until they agree or disconnect.
       if (isReconsent) {
-        bot.sendMessage(chatId, t(lang, 'consentBlockedText'));
+        safeSend(chatId, t(lang, 'consentBlockedText'));
       }
-      bot.answerCallbackQuery(callbackQuery.id);
+      answer();
       return;
     }
 
@@ -1477,18 +1736,18 @@ if (!token || token === 'your-telegram-bot-token') {
         });
 
         if (consent && result.data.linked) {
-          bot.sendMessage(chatId, t(lang, 'connected'), {
+          safeSend(chatId, t(lang, 'connected'), {
             reply_markup: getClientKeyboard(lang)
           });
         } else {
-          bot.sendMessage(chatId, t(lang, 'connectionCancelled'));
+          safeSend(chatId, t(lang, 'connectionCancelled'));
         }
       } catch (error) {
         const errorMsg = error.response?.data?.error || t(lang, 'failedConsent');
-        bot.sendMessage(chatId, `❌ ${errorMsg}`);
+        safeSend(chatId, `❌ ${errorMsg}`);
       }
 
-      bot.answerCallbackQuery(callbackQuery.id);
+      answer();
       return;
     }
 
@@ -1540,15 +1799,15 @@ if (!token || token === 'your-telegram-bot-token') {
           });
         } catch (editTextErr) {
           // If message can't be edited (e.g. too old), send a new message instead
-          await bot.sendMessage(chatId, footer);
+          await safeSend(chatId, footer);
         }
       } catch (err) {
         console.error(`[SessionReminder] ${action} session_id=${sessionId} failed:`, err.message);
         const errMsg = (err.response && err.response.data && err.response.data.error) || 'Failed to process. Please try again.';
-        bot.sendMessage(chatId, '❌ ' + errMsg);
+        safeSend(chatId, '❌ ' + errMsg);
       }
 
-      bot.answerCallbackQuery(callbackQuery.id);
+      answer();
       return;
     }
 
@@ -1585,15 +1844,15 @@ if (!token || token === 'your-telegram-bot-token') {
           });
         } catch (editTextErr) {
           // Fall back to a fresh message
-          await bot.sendMessage(chatId, footer);
+          await safeSend(chatId, footer);
         }
       } catch (err) {
         console.error(`[SessionReminder] optin ${data} failed:`, err.message);
         const errMsg = (err.response && err.response.data && err.response.data.error) || 'Failed to process. Please try again.';
-        bot.sendMessage(chatId, '❌ ' + errMsg);
+        safeSend(chatId, '❌ ' + errMsg);
       }
 
-      bot.answerCallbackQuery(callbackQuery.id);
+      answer();
       return;
     }
 
@@ -1611,18 +1870,18 @@ if (!token || token === 'your-telegram-bot-token') {
 
         if (result.already_existed) {
           const alreadyRegistered = t(lang, 'alreadyRegistered');
-          bot.sendMessage(chatId, alreadyRegistered(result.user.role), {
+          safeSend(chatId, alreadyRegistered(result.user.role), {
             reply_markup: getKeyboardForRole(result.user.role, lang)
           });
         } else if (role === 'therapist') {
           const welcomeTherapist = t(lang, 'welcomeTherapist');
-          await bot.sendMessage(chatId,
+          await safeSend(chatId,
             welcomeTherapist(result.user.invite_code),
             { parse_mode: 'Markdown' }
           );
           // Prompt therapist to share phone number via contact button
           pendingPhoneShares[telegramId] = lang;
-          bot.sendMessage(chatId, t(lang, 'sharePhonePrompt'), {
+          safeSend(chatId, t(lang, 'sharePhonePrompt'), {
             reply_markup: {
               keyboard: [
                 [{ text: t(lang, 'sharePhoneButton'), request_contact: true }],
@@ -1633,7 +1892,7 @@ if (!token || token === 'your-telegram-bot-token') {
             }
           });
         } else if (role === 'client') {
-          await bot.sendMessage(chatId, t(lang, 'welcomeClient'), {
+          await safeSend(chatId, t(lang, 'welcomeClient'), {
             reply_markup: getClientKeyboard(lang)
           });
           // Show timezone confirmation for newly registered clients
@@ -1641,17 +1900,39 @@ if (!token || token === 'your-telegram-bot-token') {
         }
       } catch (error) {
         console.error('Registration error:', error.message);
-        bot.sendMessage(chatId, t(lang, 'registrationError'));
+        safeSend(chatId, t(lang, 'registrationError'));
       }
 
-      bot.answerCallbackQuery(callbackQuery.id);
+      answer();
+    }
+  }
+
+  // Entry point for every inline-button press. Guards malformed updates,
+  // contains any thrown error, and ALWAYS answers the callback query exactly
+  // once (so the Telegram client never shows a spinner forever).
+  onEvent('callback_query', async (callbackQuery) => {
+    let answered = false;
+    const answer = (options) => {
+      answered = true;
+      return safeAnswer(callbackQuery.id, options);
+    };
+    try {
+      if (!callbackQuery || !callbackQuery.id || typeof callbackQuery.data !== 'string' || !callbackQuery.data) return;
+      if (!callbackQuery.message || !callbackQuery.message.chat || !isPrivateChat(callbackQuery.message.chat)) return;
+      await processCallbackQuery(callbackQuery, answer);
+    } catch (err) {
+      console.error('[callback_query] handler error:', redact(err && err.message));
+    } finally {
+      if (!answered && callbackQuery && callbackQuery.id) {
+        await safeAnswer(callbackQuery.id);
+      }
     }
   });
 
   // Helper: send email prompt during registration
   function sendEmailPrompt(chatId, telegramId, lang) {
     pendingEmailInputs[telegramId] = lang;
-    bot.sendMessage(chatId, t(lang, 'shareEmailPrompt'), {
+    safeSend(chatId, t(lang, 'shareEmailPrompt'), {
       reply_markup: {
         keyboard: [
           [{ text: t(lang, 'shareEmailSkip') }]
@@ -1665,7 +1946,7 @@ if (!token || token === 'your-telegram-bot-token') {
   // Helper: send other info prompt during registration (after email step)
   function sendOtherInfoPrompt(chatId, telegramId, lang) {
     pendingOtherInfoInputs[telegramId] = lang;
-    bot.sendMessage(chatId, t(lang, 'shareOtherInfoPrompt'), {
+    safeSend(chatId, t(lang, 'shareOtherInfoPrompt'), {
       reply_markup: {
         keyboard: [
           [{ text: t(lang, 'shareOtherInfoSkip') }]
@@ -1677,7 +1958,7 @@ if (!token || token === 'your-telegram-bot-token') {
   }
 
   // Handle contact messages - phone sharing during therapist registration
-  bot.on('contact', async (msg) => {
+  onEvent('contact', async (msg) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = pendingPhoneShares[telegramId] || await getUserLang(telegramId);
@@ -1693,13 +1974,13 @@ if (!token || token === 'your-telegram-bot-token') {
       await api.put(`/api/bot/profile/${telegramId}`, { phone: phoneNumber });
       delete pendingPhoneShares[telegramId];
 
-      await bot.sendMessage(chatId, t(lang, 'sharePhoneSaved'));
+      await safeSend(chatId, t(lang, 'sharePhoneSaved'));
       // Proceed to email step
       sendEmailPrompt(chatId, telegramId, lang);
     } catch (error) {
       console.error('Failed to save shared phone:', error.message);
       delete pendingPhoneShares[telegramId];
-      await bot.sendMessage(chatId, t(lang, 'profileSaveFailed'));
+      await safeSend(chatId, t(lang, 'profileSaveFailed'));
       // Still proceed to email step
       sendEmailPrompt(chatId, telegramId, lang);
     }
@@ -1839,7 +2120,7 @@ if (!token || token === 'your-telegram-bot-token') {
   }
 
   // Handle voice messages - save as diary entries (clients only)
-  bot.on('voice', async (msg) => {
+  onEvent('voice', async (msg) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
@@ -1848,7 +2129,7 @@ if (!token || token === 'your-telegram-bot-token') {
       // Check user role - only clients can create diary entries
       const user = await checkExistingUser(telegramId);
       if (user && user.role !== 'client') {
-        bot.sendMessage(chatId, t(lang, 'therapistVoiceText'));
+        safeSend(chatId, t(lang, 'therapistVoiceText'));
         return;
       }
       // T-18: Block diary intake if the client's consent version is outdated.
@@ -1889,11 +2170,11 @@ if (!token || token === 'your-telegram-bot-token') {
             file_data: fileData,
             file_ext: fileExt,
           });
-          bot.sendMessage(chatId, t(lang, 'reportVoiceSaved'));
+          safeSend(chatId, t(lang, 'reportVoiceSaved'));
           return;
         } catch (error) {
           const errorMsg = error.response?.data?.error || t(lang, 'reportFailed');
-          bot.sendMessage(chatId, `❌ ${errorMsg}`);
+          safeSend(chatId, `❌ ${errorMsg}`);
           return;
         }
       }
@@ -1916,7 +2197,7 @@ if (!token || token === 'your-telegram-bot-token') {
       // Notify user that transcription is in progress + offer T-12 "Make private"
       const voiceEntryId = result.data && result.data.entry ? result.data.entry.id : null;
       const voiceKb = makePrivateKeyboard(voiceEntryId, lang);
-      bot.sendMessage(chatId, t(lang, 'voiceSavedTranscribing'), voiceKb ? { reply_markup: voiceKb } : {});
+      safeSend(chatId, t(lang, 'voiceSavedTranscribing'), voiceKb ? { reply_markup: voiceKb } : {});
 
       // Forward voice to therapist if enabled
       if (result.data && result.data.forward_voice) {
@@ -1924,12 +2205,12 @@ if (!token || token === 'your-telegram-bot-token') {
       }
     } catch (error) {
       const errorMsg = error.response?.data?.error || t(lang, 'failedVoiceDiary');
-      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+      safeSend(chatId, `❌ ${errorMsg}`);
     }
   });
 
   // Handle video messages - save as diary entries (clients only)
-  bot.on('video', async (msg) => {
+  onEvent('video', async (msg) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
@@ -1938,7 +2219,7 @@ if (!token || token === 'your-telegram-bot-token') {
       // Check user role - only clients can create diary entries
       const user = await checkExistingUser(telegramId);
       if (user && user.role !== 'client') {
-        bot.sendMessage(chatId, t(lang, 'therapistVideoText'));
+        safeSend(chatId, t(lang, 'therapistVideoText'));
         return;
       }
       // T-18: Re-consent gate.
@@ -1986,7 +2267,7 @@ if (!token || token === 'your-telegram-bot-token') {
       // Notify user that transcription is in progress + offer T-12 "Make private"
       const videoEntryId = result.data && result.data.entry ? result.data.entry.id : null;
       const videoKb = makePrivateKeyboard(videoEntryId, lang);
-      bot.sendMessage(chatId, t(lang, 'videoSavedTranscribing'), videoKb ? { reply_markup: videoKb } : {});
+      safeSend(chatId, t(lang, 'videoSavedTranscribing'), videoKb ? { reply_markup: videoKb } : {});
 
       // Forward video to therapist if enabled
       if (result.data && result.data.forward_voice) {
@@ -1994,12 +2275,12 @@ if (!token || token === 'your-telegram-bot-token') {
       }
     } catch (error) {
       const errorMsg = error.response?.data?.error || t(lang, 'failedVideoDiary');
-      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+      safeSend(chatId, `❌ ${errorMsg}`);
     }
   });
 
   // Handle video note (round video) messages - save as diary entries (clients only)
-  bot.on('video_note', async (msg) => {
+  onEvent('video_note', async (msg) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
@@ -2008,7 +2289,7 @@ if (!token || token === 'your-telegram-bot-token') {
       // Check user role - only clients can create diary entries
       const user = await checkExistingUser(telegramId);
       if (user && user.role !== 'client') {
-        bot.sendMessage(chatId, t(lang, 'therapistVideoText'));
+        safeSend(chatId, t(lang, 'therapistVideoText'));
         return;
       }
       // T-18: Re-consent gate.
@@ -2051,7 +2332,7 @@ if (!token || token === 'your-telegram-bot-token') {
       // Notify user that transcription is in progress + offer T-12 "Make private"
       const noteEntryId = result.data && result.data.entry ? result.data.entry.id : null;
       const noteKb = makePrivateKeyboard(noteEntryId, lang);
-      bot.sendMessage(chatId, t(lang, 'videoSavedTranscribing'), noteKb ? { reply_markup: noteKb } : {});
+      safeSend(chatId, t(lang, 'videoSavedTranscribing'), noteKb ? { reply_markup: noteKb } : {});
 
       // Forward video note to therapist if enabled
       if (result.data && result.data.forward_voice) {
@@ -2059,7 +2340,7 @@ if (!token || token === 'your-telegram-bot-token') {
       }
     } catch (error) {
       const errorMsg = error.response?.data?.error || t(lang, 'failedVideoDiary');
-      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+      safeSend(chatId, `❌ ${errorMsg}`);
     }
   });
 
@@ -2075,7 +2356,7 @@ if (!token || token === 'your-telegram-bot-token') {
   //   3. Posts the encrypted photo bytes via the bot API.
   //
   // Outside of the /report context, we politely tell the client what to do.
-  bot.on('photo', async (msg) => {
+  onEvent('photo', async (msg) => {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
@@ -2083,7 +2364,7 @@ if (!token || token === 'your-telegram-bot-token') {
     try {
       const user = await checkExistingUser(telegramId);
       if (user && user.role !== 'client') {
-        bot.sendMessage(chatId, t(lang, 'reportPhotoTherapist'));
+        safeSend(chatId, t(lang, 'reportPhotoTherapist'));
         return;
       }
       if (!(await requireConsentUpToDate(chatId, telegramId, lang, user))) return;
@@ -2091,14 +2372,14 @@ if (!token || token === 'your-telegram-bot-token') {
       // Only handle photos when the client is in the report flow.
       const armedAssignmentId = activeReports[telegramId];
       if (!armedAssignmentId) {
-        bot.sendMessage(chatId, t(lang, 'reportPhotoIdleHint'));
+        safeSend(chatId, t(lang, 'reportPhotoIdleHint'));
         return;
       }
 
       // Telegram sends an array of photo sizes — pick the largest (last).
       const photos = Array.isArray(msg.photo) ? msg.photo : [];
       if (photos.length === 0) {
-        bot.sendMessage(chatId, t(lang, 'reportPhotoMissing'));
+        safeSend(chatId, t(lang, 'reportPhotoMissing'));
         return;
       }
       const largest = photos[photos.length - 1];
@@ -2112,7 +2393,7 @@ if (!token || token === 'your-telegram-bot-token') {
         console.error('[T-21] Photo download failed:', dlErr.message);
       }
       if (!downloaded || !downloaded.buffer) {
-        bot.sendMessage(chatId, `❌ ${t(lang, 'reportPhotoFailed')}`);
+        safeSend(chatId, `❌ ${t(lang, 'reportPhotoFailed')}`);
         return;
       }
       // Telegram resizes/converts photos to JPEG.
@@ -2160,13 +2441,13 @@ if (!token || token === 'your-telegram-bot-token') {
           reportId = created.data && created.data.report && created.data.report.id;
         } catch (createErr) {
           const errorMsg = createErr.response?.data?.error || t(lang, 'reportPhotoFailed');
-          bot.sendMessage(chatId, `❌ ${errorMsg}`);
+          safeSend(chatId, `❌ ${errorMsg}`);
           return;
         }
       }
 
       if (!reportId) {
-        bot.sendMessage(chatId, `❌ ${t(lang, 'reportPhotoFailed')}`);
+        safeSend(chatId, `❌ ${t(lang, 'reportPhotoFailed')}`);
         return;
       }
 
@@ -2181,19 +2462,19 @@ if (!token || token === 'your-telegram-bot-token') {
             mime_type: mimeType,
           }
         );
-        bot.sendMessage(chatId, t(lang, 'reportPhotoSaved'));
+        safeSend(chatId, t(lang, 'reportPhotoSaved'));
       } catch (uploadErr) {
         const errorMsg = uploadErr.response?.data?.error || t(lang, 'reportPhotoFailed');
-        bot.sendMessage(chatId, `❌ ${errorMsg}`);
+        safeSend(chatId, `❌ ${errorMsg}`);
       }
     } catch (error) {
       console.error('[T-21] Photo handler error:', error.message);
-      bot.sendMessage(chatId, `❌ ${t(lang, 'reportPhotoFailed')}`);
+      safeSend(chatId, `❌ ${t(lang, 'reportPhotoFailed')}`);
     }
   });
 
   // Handle text messages as diary entries, exercise responses, or keyboard button presses
-  bot.on('message', async (msg) => {
+  onEvent('message', async (msg) => {
     // Skip commands and non-text messages
     if (!msg.text || msg.text.startsWith('/') || msg.voice || msg.video || msg.video_note || msg.photo) return;
 
@@ -2201,12 +2482,23 @@ if (!token || token === 'your-telegram-bot-token') {
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
 
+    // SOS keyboard button: handled FIRST, before any backend lookup, exactly
+    // like /sos. If the backend is slow/down the user must still get either
+    // the confirmation or sosFailed (with emergency numbers) — never fall
+    // through to the diary path. handleSos needs no user lookup. The button
+    // label itself tells us the language if the cached/looked-up one is unreliable.
+    if (BUTTON_ACTION_MAP[msg.text] === 'sos') {
+      const labelLang = ['en', 'ru', 'es', 'uk'].find((l) => t(l, 'btnSOS') === msg.text);
+      await handleSos(chatId, telegramId, userLangCache[telegramId] || labelLang || lang, '');
+      return;
+    }
+
     // Check if this is a "Skip" response for phone sharing
     if (pendingPhoneShares[telegramId]) {
       const skipTexts = ['en', 'ru', 'es', 'uk'].map(l => t(l, 'sharePhoneSkip'));
       if (skipTexts.includes(msg.text)) {
         delete pendingPhoneShares[telegramId];
-        await bot.sendMessage(chatId, t(lang, 'sharePhoneSkipped'));
+        await safeSend(chatId, t(lang, 'sharePhoneSkipped'));
         // Proceed to email step
         sendEmailPrompt(chatId, telegramId, lang);
         return;
@@ -2218,7 +2510,7 @@ if (!token || token === 'your-telegram-bot-token') {
       const emailSkipTexts = ['en', 'ru', 'es', 'uk'].map(l => t(l, 'shareEmailSkip'));
       if (emailSkipTexts.includes(msg.text)) {
         delete pendingEmailInputs[telegramId];
-        await bot.sendMessage(chatId, t(lang, 'shareEmailSkipped'));
+        await safeSend(chatId, t(lang, 'shareEmailSkipped'));
         // Proceed to other info step
         sendOtherInfoPrompt(chatId, telegramId, lang);
         return;
@@ -2227,7 +2519,7 @@ if (!token || token === 'your-telegram-bot-token') {
       const emailText = msg.text.trim().toLowerCase();
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(emailText)) {
-        bot.sendMessage(chatId, t(lang, 'shareEmailInvalid'), {
+        safeSend(chatId, t(lang, 'shareEmailInvalid'), {
           reply_markup: {
             keyboard: [[{ text: t(lang, 'shareEmailSkip') }]],
             resize_keyboard: true,
@@ -2240,12 +2532,12 @@ if (!token || token === 'your-telegram-bot-token') {
       try {
         await api.put(`/api/bot/profile/${telegramId}`, { email: emailText });
         delete pendingEmailInputs[telegramId];
-        await bot.sendMessage(chatId, t(lang, 'shareEmailSaved'));
+        await safeSend(chatId, t(lang, 'shareEmailSaved'));
         // Proceed to other info step
         sendOtherInfoPrompt(chatId, telegramId, lang);
       } catch (error) {
         if (error.response && error.response.status === 409) {
-          bot.sendMessage(chatId, t(lang, 'shareEmailTaken'), {
+          safeSend(chatId, t(lang, 'shareEmailTaken'), {
             reply_markup: {
               keyboard: [[{ text: t(lang, 'shareEmailSkip') }]],
               resize_keyboard: true,
@@ -2255,7 +2547,7 @@ if (!token || token === 'your-telegram-bot-token') {
         } else {
           console.error('Failed to save email:', error.message);
           delete pendingEmailInputs[telegramId];
-          await bot.sendMessage(chatId, t(lang, 'profileSaveFailed'));
+          await safeSend(chatId, t(lang, 'profileSaveFailed'));
           // Still proceed to other info step
           sendOtherInfoPrompt(chatId, telegramId, lang);
         }
@@ -2268,7 +2560,7 @@ if (!token || token === 'your-telegram-bot-token') {
       const otherInfoSkipTexts = ['en', 'ru', 'es', 'uk'].map(l => t(l, 'shareOtherInfoSkip'));
       if (otherInfoSkipTexts.includes(msg.text)) {
         delete pendingOtherInfoInputs[telegramId];
-        bot.sendMessage(chatId, t(lang, 'shareOtherInfoSkipped'), {
+        safeSend(chatId, t(lang, 'shareOtherInfoSkipped'), {
           reply_markup: getTherapistKeyboard(lang)
         });
         return;
@@ -2277,7 +2569,7 @@ if (!token || token === 'your-telegram-bot-token') {
       try {
         const otherInfoText = msg.text.trim();
         if (otherInfoText.length > 1000) {
-          bot.sendMessage(chatId, '❌ Text too long (max 1000 characters). Please try again:', {
+          safeSend(chatId, '❌ Text too long (max 1000 characters). Please try again:', {
             reply_markup: {
               keyboard: [[{ text: t(lang, 'shareOtherInfoSkip') }]],
               resize_keyboard: true,
@@ -2288,13 +2580,13 @@ if (!token || token === 'your-telegram-bot-token') {
         }
         await api.put(`/api/bot/profile/${telegramId}`, { other_info: otherInfoText });
         delete pendingOtherInfoInputs[telegramId];
-        bot.sendMessage(chatId, t(lang, 'shareOtherInfoSaved'), {
+        safeSend(chatId, t(lang, 'shareOtherInfoSaved'), {
           reply_markup: getTherapistKeyboard(lang)
         });
       } catch (error) {
         console.error('Failed to save other_info:', error.message);
         delete pendingOtherInfoInputs[telegramId];
-        bot.sendMessage(chatId, t(lang, 'profileSaveFailed'), {
+        safeSend(chatId, t(lang, 'profileSaveFailed'), {
           reply_markup: getTherapistKeyboard(lang)
         });
       }
@@ -2308,7 +2600,7 @@ if (!token || token === 'your-telegram-bot-token') {
         const user = await checkExistingUser(telegramId);
         switch (buttonAction) {
           case 'diary':
-            bot.sendMessage(chatId, t(lang, 'diaryHint'), {
+            safeSend(chatId, t(lang, 'diaryHint'), {
               reply_markup: getKeyboardForRole(user?.role || 'client', lang)
             });
             return;
@@ -2328,7 +2620,7 @@ if (!token || token === 'your-telegram-bot-token') {
             await handleHelp(chatId, telegramId, lang);
             return;
           case 'open_dashboard':
-            bot.sendMessage(chatId, t(lang, 'dashboardLink'), {
+            safeSend(chatId, t(lang, 'dashboardLink'), {
               reply_markup: {
                 inline_keyboard: [[
                   { text: t(lang, 'btnOpenDashboard'), url: `${FRONTEND_URL}/dashboard` }
@@ -2346,7 +2638,7 @@ if (!token || token === 'your-telegram-bot-token') {
       // Check user role - only clients can create diary entries
       const user = await checkExistingUser(telegramId);
       if (user && user.role !== 'client') {
-        bot.sendMessage(chatId, t(lang, 'therapistFreeText'));
+        safeSend(chatId, t(lang, 'therapistFreeText'));
         return;
       }
       // T-18: Re-consent gate. If the client's stored consent_version is
@@ -2367,13 +2659,13 @@ if (!token || token === 'your-telegram-bot-token') {
             const firstName = parts[0] || '';
             const lastName = parts.slice(1).join(' ') || '';
             await api.put(`/api/bot/profile/${telegramId}`, { first_name: firstName, last_name: lastName });
-            bot.sendMessage(chatId, t(lang, 'profileNameSaved'));
+            safeSend(chatId, t(lang, 'profileNameSaved'));
           } else if (editType === 'phone') {
             await api.put(`/api/bot/profile/${telegramId}`, { phone: msg.text.trim() });
-            bot.sendMessage(chatId, t(lang, 'profilePhoneSaved'));
+            safeSend(chatId, t(lang, 'profilePhoneSaved'));
           }
         } catch (error) {
-          bot.sendMessage(chatId, `❌ ${t(lang, 'profileSaveFailed')}`);
+          safeSend(chatId, `❌ ${t(lang, 'profileSaveFailed')}`);
         }
         return;
       }
@@ -2387,12 +2679,12 @@ if (!token || token === 'your-telegram-bot-token') {
             response_text: msg.text
           });
           delete activeExercises[telegramId];
-          bot.sendMessage(chatId, t(lang, 'exerciseCompleted'));
+          safeSend(chatId, t(lang, 'exerciseCompleted'));
           return;
         } catch (error) {
           delete activeExercises[telegramId];
           const errorMsg = error.response?.data?.error || t(lang, 'exerciseCompleteFailed');
-          bot.sendMessage(chatId, `❌ ${errorMsg}`);
+          safeSend(chatId, `❌ ${errorMsg}`);
           return;
         }
       }
@@ -2408,11 +2700,11 @@ if (!token || token === 'your-telegram-bot-token') {
             report_type: 'text',
             content: msg.text,
           });
-          bot.sendMessage(chatId, t(lang, 'reportSaved'));
+          safeSend(chatId, t(lang, 'reportSaved'));
           return;
         } catch (error) {
           const errorMsg = error.response?.data?.error || t(lang, 'reportFailed');
-          bot.sendMessage(chatId, `❌ ${errorMsg}`);
+          safeSend(chatId, `❌ ${errorMsg}`);
           return;
         }
       }
@@ -2427,15 +2719,39 @@ if (!token || token === 'your-telegram-bot-token') {
       // T-12: offer "Make private" inline keyboard right next to "Saved!"
       const textEntryId = diaryResult.data && diaryResult.data.entry ? diaryResult.data.entry.id : null;
       const textKb = makePrivateKeyboard(textEntryId, lang);
-      bot.sendMessage(chatId, t(lang, 'diarySaved'), textKb ? { reply_markup: textKb } : {});
+      safeSend(chatId, t(lang, 'diarySaved'), textKb ? { reply_markup: textKb } : {});
     } catch (error) {
       const errorMsg = error.response?.data?.error || t(lang, 'failedDiary');
-      bot.sendMessage(chatId, `❌ ${errorMsg}`);
+      safeSend(chatId, `❌ ${errorMsg}`);
     }
   });
 
+  // 409 Conflict = another instance is polling with the same token (e.g. an
+  // overlapping deploy or a local dev bot). Retrying immediately just makes
+  // both instances fight in a tight loop, so pause polling and retry later.
+  const POLLING_CONFLICT_BACKOFF_MS = 30000;
+  let pollingConflictBackoff = false;
   bot.on('polling_error', (error) => {
-    console.error('Polling error:', error.code, error.message);
+    const message = redact(error && error.message);
+    const isConflict = /ETELEGRAM: 409/.test(message) || (error && error.response && error.response.statusCode === 409);
+    if (!isConflict) {
+      console.error('Polling error:', error && error.code, message);
+      return;
+    }
+    if (pollingConflictBackoff || shuttingDown) return;
+    pollingConflictBackoff = true;
+    console.warn(`[bot] 409 Conflict: another bot instance is polling with this token. ` +
+      `Pausing polling for ${POLLING_CONFLICT_BACKOFF_MS / 1000}s; make sure only one instance runs.`);
+    Promise.resolve(bot.stopPolling()).catch(() => {}).then(() => {
+      setTimeout(() => {
+        pollingConflictBackoff = false;
+        if (shuttingDown) return;
+        console.log('[bot] Resuming polling after 409 backoff...');
+        Promise.resolve(bot.startPolling()).catch((err) => {
+          console.error('[bot] Failed to resume polling:', redact(err && err.message));
+        });
+      }, POLLING_CONFLICT_BACKOFF_MS);
+    });
   });
 
   console.log('PR-TOP Telegram Bot is running.');
@@ -2474,4 +2790,4 @@ async function checkExistingUser(telegramId) {
 }
 
 // Export for testing
-module.exports = { registerUser, checkExistingUser, api };
+module.exports = { registerUser, checkExistingUser, api, escapeMd, mdInEntity, stripMd, commandRegex, redact };

@@ -38,11 +38,18 @@ resolved. Labels come from the `notifications`, `security`, and
 The client sends `/sos` in Telegram, or taps the pinned SOS button on
 the bot menu. The bot immediately:
 
-1. Confirms the SOS was received.
-2. Sends region-appropriate crisis-line phone numbers based on the
-   client's locale (English defaults if unknown).
-3. Encourages the client to reach out to the therapist directly and
-   to call a crisis line.
+1. Sends the alert without any confirmation or consent screen in
+   front of it. If the client's consent text is out of date, the
+   re-consent prompt is shown only after the SOS has been sent.
+2. Confirms the SOS was received and that the therapist was notified,
+   with region-appropriate crisis-line phone numbers based on the
+   client's language (English defaults if unknown).
+3. If PR-TOP could not confirm that a notification reached you, says
+   so instead: the alert was recorded, the therapist may not have
+   been notified, and the client should contact the therapist
+   directly or call emergency services. If the alert could not be
+   sent at all, the bot shows a failure message with the same
+   numbers and asks the client to try again.
 
 The client's message and the bot's reply are logged as an SOS event.
 

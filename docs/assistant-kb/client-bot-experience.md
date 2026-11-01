@@ -38,7 +38,9 @@ therapist directly but does not contact emergency services.
 - `/exercise` — open the next assigned exercise if one is waiting.
 - `/sos` — trigger a crisis alert as part of the agreed between-session
   protocol (notifies the therapist; does not contact emergency services).
-  See the crisis how-to.
+  It works even when a consent update is pending (the consent prompt
+  appears after the alert is sent) and tells the client if the therapist
+  may not have been notified. See the crisis how-to.
 - `/streak` — show the current diary streak. Streaks are calendar-day
   counters that reset if the client misses a day.
 - `/reminders` — set or clear a nightly diary reminder. Default is a

@@ -14,11 +14,25 @@ lifecycle tracking that keeps you accountable.
 
 The Telegram bot has a persistent **SOS** button. Tapping it:
 
-1. Asks the client to confirm (a mis-tap safety net).
-2. Sends an immediate acknowledgement message with your configured
-   crisis-line contact and, if enabled, national emergency numbers
-   in their locale.
-3. Opens a text field for optional context ("what is happening").
+1. Sends the alert straight away. There is no confirmation step, and
+   the SOS is never held back by a pending consent update: if the
+   consent text changed since the client last agreed, the bot sends
+   the SOS first and only afterwards shows the re-consent prompt.
+2. Replies with a confirmation that the therapist has been notified,
+   plus a helpline number for the client's language (USA 988, Russia
+   8-800-2000-122, Spain 024, Ukraine 7333, and findahelpline.com
+   for other countries).
+3. Accepts optional context typed after the command, for example
+   `/sos I need to talk tonight`. The SOS button sends the alert
+   without a message.
+
+Two less common replies exist. If PR-TOP recorded the alert but could
+not confirm that any notification reached you, the bot tells the
+client that the therapist may not have been notified and asks them to
+contact you directly or call emergency services. If the alert could
+not be sent at all, the bot says so, repeats the same helpline
+numbers, and asks the client to try again or call emergency services.
+The bot never shows the client a raw technical error in this flow.
 
 ## Therapist side
 

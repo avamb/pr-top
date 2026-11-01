@@ -80,7 +80,8 @@ Connect clients with one link — simple and secure.
     helpTherapist: '📋 *Available Commands:*\n\n/start - Check your registration status\n/help - Show this help message\n/timezone - View or change your timezone\n/profile - View your profile\n\n💡 *Tip:* Use the web dashboard at pr-top.com to manage your clients, view diaries, and more.',
     // /sos command
     sosConfirmed: '🆘 *SOS alert sent!*\n\nYour therapist has been notified. If you are in immediate danger, please contact emergency services.\n\n🇺🇸 USA: 988 (Suicide & Crisis Lifeline)\n🌍 International: https://findahelpline.com',
-    sosFailed: 'Failed to send SOS alert. Please try again or contact emergency services directly.',
+    sosFailed: 'Failed to send SOS alert. Please try again or contact emergency services directly.\n\n🇺🇸 USA: 988 (Suicide & Crisis Lifeline)\n🌍 International: https://findahelpline.com',
+    sosNotDelivered: '🆘 *SOS alert recorded, but your therapist may NOT have been notified.*\n\nPlease contact your therapist directly right now. If you are in immediate danger, contact emergency services.\n\n🇺🇸 USA: 988 (Suicide & Crisis Lifeline)\n🌍 International: https://findahelpline.com',
     // /history command
     historyHeader: '📖 *Your Recent Diary Entries:*',
     historyEmpty: '📖 You have no diary entries yet.\n\nSend a text or voice message to start your diary!',
@@ -307,7 +308,8 @@ Connect clients with one link — simple and secure.
     helpTherapist: '📋 *Доступные команды:*\n\n/start - Проверка статуса регистрации\n/help - Показать эту справку\n/timezone - Просмотр или изменение часового пояса\n/profile - Просмотр профиля\n\n💡 *Совет:* Используйте веб-панель на pr-top.com для управления клиентами, просмотра дневников и многого другого.',
     // /sos
     sosConfirmed: '🆘 *SOS-сигнал отправлен!*\n\nВаш терапевт уведомлён. Если вы в непосредственной опасности, обратитесь в службу экстренной помощи.\n\n🇷🇺 Россия: 8-800-2000-122 (телефон доверия)\n🌍 Международный: https://findahelpline.com',
-    sosFailed: 'Не удалось отправить SOS-сигнал. Попробуйте снова или обратитесь в экстренные службы.',
+    sosFailed: 'Не удалось отправить SOS-сигнал. Попробуйте снова или обратитесь в экстренные службы.\n\n🇷🇺 Россия: 8-800-2000-122 (телефон доверия)\n🌍 Международный: https://findahelpline.com',
+    sosNotDelivered: '🆘 *SOS-сигнал записан, но ваш терапевт, возможно, НЕ был уведомлён.*\n\nПожалуйста, свяжитесь с терапевтом напрямую прямо сейчас. Если вы в непосредственной опасности, обратитесь в службу экстренной помощи.\n\n🇷🇺 Россия: 8-800-2000-122 (телефон доверия)\n🌍 Международный: https://findahelpline.com',
     // /history
     historyHeader: '📖 *Ваши последние записи дневника:*',
     historyEmpty: '📖 У вас пока нет записей в дневнике.\n\nОтправьте текстовое или голосовое сообщение, чтобы начать вести дневник!',
@@ -534,7 +536,8 @@ Conecta clientes con un enlace — simple y seguro.
     helpTherapist: '📋 *Comandos disponibles:*\n\n/start - Verificar tu estado de registro\n/help - Mostrar esta ayuda\n/timezone - Ver o cambiar tu zona horaria\n/profile - Ver tu perfil\n\n💡 *Consejo:* Usa el panel web en pr-top.com para gestionar tus clientes, ver diarios y más.',
     // /sos
     sosConfirmed: '🆘 *¡Alerta SOS enviada!*\n\nTu terapeuta ha sido notificado. Si estás en peligro inmediato, contacta a los servicios de emergencia.\n\n🇪🇸 España: 024 (Línea de Atención a la Conducta Suicida)\n🌍 Internacional: https://findahelpline.com',
-    sosFailed: 'No se pudo enviar la alerta SOS. Inténtalo de nuevo o contacta directamente a los servicios de emergencia.',
+    sosFailed: 'No se pudo enviar la alerta SOS. Inténtalo de nuevo o contacta directamente a los servicios de emergencia.\n\n🇪🇸 España: 024 (Línea de Atención a la Conducta Suicida)\n🌍 Internacional: https://findahelpline.com',
+    sosNotDelivered: '🆘 *Alerta SOS registrada, pero es posible que tu terapeuta NO haya sido notificado.*\n\nPor favor, contacta directamente con tu terapeuta ahora mismo. Si estás en peligro inmediato, contacta a los servicios de emergencia.\n\n🇪🇸 España: 024 (Línea de Atención a la Conducta Suicida)\n🌍 Internacional: https://findahelpline.com',
     // /history
     historyHeader: '📖 *Tus entradas recientes del diario:*',
     historyEmpty: '📖 Aún no tienes entradas en el diario.\n\n¡Envía un mensaje de texto o voz para comenzar tu diario!',
@@ -762,7 +765,8 @@ Conecta clientes con un enlace — simple y seguro.
     helpTherapist: '📋 *Доступні команди:*\n\n/start - Перевірка статусу реєстрації\n/help - Показати цю довідку\n/timezone - Переглянути або змінити часовий пояс\n/profile - Переглянути профіль\n\n💡 *Порада:* Використовуйте веб-панель на pr-top.com для керування клієнтами, перегляду щоденників та іншого.',
     // /sos
     sosConfirmed: '🆘 *SOS-сигнал надіслано!*\n\nВашого терапевта сповіщено. Якщо ви в безпосередній небезпеці, зверніться до служби екстреної допомоги.\n\n🇺🇦 Україна: 7333 (гаряча лінія з питань психічного здоров\'я)\n🌍 Міжнародний: https://findahelpline.com',
-    sosFailed: 'Не вдалося надіслати SOS-сигнал. Спробуйте знову або зверніться до екстрених служб.',
+    sosFailed: 'Не вдалося надіслати SOS-сигнал. Спробуйте знову або зверніться до екстрених служб.\n\n🇺🇦 Україна: 7333 (гаряча лінія з питань психічного здоров\'я)\n🌍 Міжнародний: https://findahelpline.com',
+    sosNotDelivered: '🆘 *SOS-сигнал записано, але вашого терапевта, можливо, НЕ було сповіщено.*\n\nБудь ласка, зв\'яжіться з терапевтом напряму просто зараз. Якщо ви в безпосередній небезпеці, зверніться до служби екстреної допомоги.\n\n🇺🇦 Україна: 7333 (гаряча лінія з питань психічного здоров\'я)\n🌍 Міжнародний: https://findahelpline.com',
     // /history
     historyHeader: '📖 *Ваші останні записи щоденника:*',
     historyEmpty: '📖 У вас поки немає записів у щоденнику.\n\nНадішліть текстове або голосове повідомлення, щоб почати вести щоденник!',
