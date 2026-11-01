@@ -40,17 +40,67 @@ const router = express.Router();
 // Bot API key for authenticating bot requests
 const BOT_API_KEY = process.env.BOT_API_KEY || 'dev-bot-api-key';
 
+const BOT_API_KEY_HASH = crypto.createHash('sha256').update(String(BOT_API_KEY)).digest();
+
 // SOS deduplication: track recent SOS triggers per client (in-memory lock)
-const recentSosClients = new Map(); // clientId -> timestamp
+// clientId -> { ts, sosId, createdAt, delivery: Promise<boolean> }
+const recentSosClients = new Map();
 const SOS_DEDUP_WINDOW_MS = 30000; // 30 seconds
+// Upper bound for waiting on SOS notification channels before answering the
+// bot (bot HTTP timeout is 30s; Telegram send has its own 10s timeout).
+const SOS_NOTIFY_TIMEOUT_MS = 12000;
+
+/**
+ * Constant-time check of a presented bot API key. Both sides are hashed with
+ * sha256 first so timingSafeEqual always compares equal-length buffers.
+ * Exported for the bot rate limiter in index.js.
+ */
+function isValidBotApiKey(apiKey) {
+  if (!apiKey || typeof apiKey !== 'string') return false;
+  const presented = crypto.createHash('sha256').update(apiKey).digest();
+  return crypto.timingSafeEqual(presented, BOT_API_KEY_HASH);
+}
 
 // Middleware to verify bot API key
 function botAuth(req, res, next) {
-  const apiKey = req.headers['x-bot-api-key'];
-  if (!apiKey || apiKey !== BOT_API_KEY) {
+  if (!isValidBotApiKey(req.headers['x-bot-api-key'])) {
     return res.status(401).json({ error: 'Invalid bot API key' });
   }
   next();
+}
+
+// File extensions accepted from the bot (client-supplied `file_ext`). Anything
+// else falls back to the call site's default, so a crafted value such as
+// '/../../x' can never become part of a filesystem path.
+const MEDIA_EXT_ALLOWLIST = /^\.(ogg|oga|opus|mp3|m4a|aac|wav|flac|webm|mp4|mov|mkv)$/i;
+const IMAGE_EXT_ALLOWLIST = /^\.(jpg|jpeg|png|webp|gif)$/i;
+
+/**
+ * Normalise a client-supplied extension against an allow-list.
+ * Accepts 'ogg' or '.ogg'; returns the lower-cased '.ext' or defaultExt.
+ */
+function safeFileExt(ext, allowList, defaultExt) {
+  if (!ext || typeof ext !== 'string') return defaultExt;
+  const candidate = (ext.startsWith('.') ? ext : '.' + ext).toLowerCase();
+  return allowList.test(candidate) ? candidate : defaultExt;
+}
+
+/**
+ * Write a client upload to DIARY_FILES_DIR and encrypt it in place. The
+ * plaintext temp file (Class A data) is always removed, also when encryption
+ * fails; a half-written .enc is removed on failure too. Throws on failure.
+ */
+function writeEncryptedDiaryFile(filename, buffer) {
+  const tempPath = path.join(DIARY_FILES_DIR, filename);
+  try {
+    fs.writeFileSync(tempPath, buffer);
+    return encryptDiaryFileOnDisk(tempPath);
+  } catch (err) {
+    try { if (fs.existsSync(tempPath + '.enc')) fs.unlinkSync(tempPath + '.enc'); } catch (_) { /* ignore */ }
+    throw err;
+  } finally {
+    try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (_) { /* ignore */ }
+  }
 }
 
 // POST /api/bot/register - Register or update a Telegram user with role
@@ -701,17 +751,15 @@ router.post('/diary', botAuth, (req, res) => {
     let audioFileRef = null;
     if (file_data) {
       try {
-        const ext = file_ext || '.ogg';
+        const defaultExt = type === 'video' ? '.mp4' : '.ogg';
+        const ext = safeFileExt(file_ext, MEDIA_EXT_ALLOWLIST, defaultExt);
         const opaqueId = crypto.randomUUID();
         const filename = `${opaqueId}${ext}`;
-        const tempPath = path.join(DIARY_FILES_DIR, filename);
 
-        // Write raw binary to temp file
+        // Write raw binary to a temp file and encrypt it (temp is always
+        // removed, .enc is created)
         const buffer = Buffer.from(file_data, 'base64');
-        fs.writeFileSync(tempPath, buffer);
-
-        // Encrypt file on disk (deletes temp, creates .enc)
-        const encResult2 = encryptDiaryFileOnDisk(tempPath);
+        const encResult2 = writeEncryptedDiaryFile(filename, buffer);
         audioFileRef = `${filename}.enc`;
 
         if (!keyId) {
@@ -1046,8 +1094,142 @@ router.get('/sessions/:telegram_id', botAuth, (req, res) => {
   }
 });
 
+/**
+ * Notify the therapist about an SOS event on every enabled channel
+ * (WebSocket, Telegram, email) and record the outcome in audit_logs.
+ * Used for the first attempt and, for the same sosId, for a re-dispatch when a
+ * retry arrives after an attempt that reached nobody.
+ * @returns {Promise<boolean>} true iff at least one channel actually delivered
+ */
+async function dispatchSosNotifications(db, { clientId, therapistId, sosId, telegram_id, message, isRetry }) {
+  // Delivery tracking: true iff at least one channel actually delivered.
+  // WebSocket counts only when it reached an open dashboard connection.
+  let wsDelivered = false;
+  const channelPromises = [];
+  const withTimeout = (promise, label) => Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve({ sent: false, error: `${label} timed out after ${SOS_NOTIFY_TIMEOUT_MS}ms` }), SOS_NOTIFY_TIMEOUT_MS).unref())
+  ]);
+
+  // Push real-time WebSocket notification to therapist
+  try {
+    // Look up client name for display
+    const clientNameResult = db.exec("SELECT email, telegram_id FROM users WHERE id = ?", [clientId]);
+    const clientName = (clientNameResult.length > 0 && clientNameResult[0].values.length > 0)
+      ? (clientNameResult[0].values[0][0] || 'Client #' + clientId)
+      : 'Client #' + clientId;
+    wsDelivered = wsService.emitSosAlert(therapistId, { clientId, clientName, sosId, message: message || null }) === true;
+  } catch (wsErr) {
+    logger.warn(`[WS] Failed to emit SOS alert: ${wsErr.message}`);
+  }
+
+  // Notify therapist based on escalation preferences
+  const therapistResult = db.exec(
+    'SELECT telegram_id, email, escalation_preferences FROM users WHERE id = ?',
+    [therapistId]
+  );
+
+  let notificationSent = false;
+  const therapistInfo = therapistResult.length > 0 && therapistResult[0].values.length > 0
+    ? therapistResult[0].values[0] : null;
+
+  // Parse escalation preferences
+  let escalationPrefs = { sos_telegram: true, sos_email: true, sos_web_push: true, sos_sound_alert: true, quiet_hours_enabled: false, quiet_hours_start: '22:00', quiet_hours_end: '08:00', escalation_delay_minutes: 0 };
+  try {
+    if (therapistInfo && therapistInfo[2]) {
+      escalationPrefs = { ...escalationPrefs, ...JSON.parse(therapistInfo[2]) };
+    }
+  } catch (e) {
+    logger.warn('Failed to parse escalation preferences for therapist ' + therapistId);
+  }
+
+  const clientIdentifier = `Client #${clientId} (Telegram: ${telegram_id})`;
+  logger.info(`SOS escalation preferences for therapist ${therapistId}: ${JSON.stringify(escalationPrefs)}`);
+
+  if (therapistInfo && therapistInfo[0] && escalationPrefs.sos_telegram) {
+    // Therapist has a Telegram ID and Telegram notifications enabled
+    logger.info(`THERAPIST NOTIFICATION: SOS from ${clientIdentifier} → Therapist telegram_id=${therapistInfo[0]}`);
+    // Send real Telegram notification (awaited below with a timeout; a
+    // failure never breaks the SOS record)
+    channelPromises.push(withTimeout(
+      telegramNotify.sendSosAlert(therapistInfo[0], clientIdentifier, message ? message.trim() : null),
+      'Telegram'
+    )
+      .then(result => {
+        if (result && result.sent) {
+          logger.info(`SOS Telegram notification delivered to therapist ${therapistId}`);
+          return true;
+        }
+        logger.warn(`SOS Telegram notification not delivered to therapist ${therapistId}: ${result && result.error}`);
+        return false;
+      })
+      .catch(err => {
+        logger.error(`SOS Telegram notification error for therapist ${therapistId}: ${err.message}`);
+        return false;
+      }));
+    notificationSent = true;
+  } else if (therapistInfo && therapistInfo[0] && !escalationPrefs.sos_telegram) {
+    logger.info(`SOS Telegram notification SKIPPED for therapist ${therapistId} (disabled in preferences)`);
+  }
+
+  if (therapistInfo && therapistInfo[1] && escalationPrefs.sos_email) {
+    // Therapist has an email and email notifications enabled — send SOS email
+    const therapistLang = (() => {
+      try {
+        const lr = db.exec('SELECT language FROM users WHERE id = ?', [therapistId]);
+        return (lr.length > 0 && lr[0].values.length > 0) ? lr[0].values[0][0] : 'en';
+      } catch (_) { return 'en'; }
+    })();
+    channelPromises.push(withTimeout(
+      emailService.sendSosAlert(therapistInfo[1], clientIdentifier, message ? message.trim() : null, therapistLang),
+      'Email'
+    )
+      .then(result => {
+        if (result && result.sent) {
+          logger.info(`SOS email delivered to therapist ${therapistId} (${therapistInfo[1]})`);
+          return true;
+        }
+        logger.info(`[EMAIL] SOS alert for ${therapistInfo[1]}: ${(result && result.error) || 'not sent (SMTP not configured)'}`);
+        return false;
+      })
+      .catch(err => {
+        logger.error(`SOS email error for therapist ${therapistId}: ${err.message}`);
+        return false;
+      }));
+    notificationSent = true;
+  } else if (therapistInfo && therapistInfo[1] && !escalationPrefs.sos_email) {
+    logger.info(`SOS email notification SKIPPED for therapist ${therapistId} (disabled in preferences)`);
+  }
+
+  const channelResults = await Promise.all(channelPromises);
+  const notificationDelivered = wsDelivered || channelResults.some(Boolean);
+  if (!notificationDelivered) {
+    logger.error(`SOS event #${sosId}${isRetry ? ' (retry)' : ''}: NO notification channel delivered to therapist ${therapistId} (ws=${wsDelivered}, channels=${JSON.stringify(channelResults)})`);
+  }
+
+  // Store notification record for web dashboard polling (best-effort)
+  try {
+    db.run(
+      `INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at)
+       VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+      [therapistId, 'sos_notification_sent', 'sos_event', sosId,
+       JSON.stringify({ client_id: clientId, therapist_id: therapistId, notification_sent: notificationSent, notification_delivered: notificationDelivered, retry: !!isRetry, telegram_id: String(telegram_id) })]
+    );
+    saveDatabaseAfterWrite();
+  } catch (auditErr) {
+    logger.error(`SOS notification audit log failed for event #${sosId}: ${auditErr.message}`);
+  }
+
+  return notificationDelivered;
+}
+
 // POST /api/bot/sos - Client triggers SOS alert
-router.post('/sos', botAuth, (req, res) => {
+router.post('/sos', botAuth, async (req, res) => {
+  // Set once this request owns the dedup lock; released again if we fail
+  // before any notification was dispatched, so a retry is not swallowed.
+  let lockedClientId = null;
+  let notificationsDispatched = false;
+  let resolveDelivery = null;
   try {
     const { telegram_id, message } = req.body;
 
@@ -1093,37 +1275,46 @@ router.post('/sos', botAuth, (req, res) => {
 
     // Idempotency: in-memory lock to prevent race conditions with concurrent requests
     const now = Date.now();
-    const lastSosTime = recentSosClients.get(clientId);
-    if (lastSosTime && (now - lastSosTime) < SOS_DEDUP_WINDOW_MS) {
-      // Duplicate rapid click - find the existing SOS event
-      const recentSos = db.exec(
-        `SELECT id, created_at FROM sos_events
-         WHERE client_id = ? AND status = 'triggered'
-         ORDER BY id DESC LIMIT 1`,
-        [clientId]
-      );
-      const existingSosId = recentSos.length > 0 && recentSos[0].values.length > 0 ? recentSos[0].values[0][0] : 0;
-      const existingCreatedAt = recentSos.length > 0 && recentSos[0].values.length > 0 ? recentSos[0].values[0][1] : new Date().toISOString();
-      logger.info(`SOS DEDUPLICATED: Client ${clientId} rapid SOS click ignored, existing event #${existingSosId}`);
+    const recent = recentSosClients.get(clientId);
+    if (recent && (now - recent.ts) < SOS_DEDUP_WINDOW_MS) {
+      // Duplicate rapid click - answer with the event the first request created
+      // and that request's delivery outcome (waits for it if still in flight).
+      const settle = (p) => Promise.resolve(p).then((v) => v !== false, () => false);
+      const seenDelivery = recent.delivery;
+      let delivered = seenDelivery ? await settle(seenDelivery) : true;
+      if (!delivered) {
+        // The earlier attempt reached nobody: re-run the channels for the SAME
+        // event (no duplicate sos_events row). Concurrent duplicates share one
+        // re-dispatch; the window is refreshed so the event stays the anchor.
+        if (recent.delivery === seenDelivery) {
+          logger.warn(`SOS RETRY: Client ${clientId} retried event #${recent.sosId} after undelivered notification; re-dispatching`);
+          recent.ts = Date.now();
+          recent.delivery = dispatchSosNotifications(db, {
+            clientId, therapistId, sosId: recent.sosId, telegram_id,
+            message: recent.message != null ? recent.message : message, isRetry: true
+          });
+        }
+        delivered = await settle(recent.delivery);
+      }
+      logger.info(`SOS DEDUPLICATED: Client ${clientId} rapid SOS click ignored, existing event #${recent.sosId} (delivered=${delivered})`);
       return res.status(200).json({
         message: 'SOS alert already active',
         deduplicated: true,
+        notification_delivered: delivered,
         sos_event: {
-          id: existingSosId,
+          id: recent.sosId,
           client_id: clientId,
           therapist_id: therapistId,
           status: 'triggered',
-          created_at: existingCreatedAt
+          created_at: recent.createdAt
         }
       });
     }
-    // Set the lock immediately to prevent concurrent requests
-    recentSosClients.set(clientId, now);
 
     // Clean up old entries periodically
     if (recentSosClients.size > 100) {
-      for (const [cid, t] of recentSosClients) {
-        if (now - t > SOS_DEDUP_WINDOW_MS) recentSosClients.delete(cid);
+      for (const [cid, entry] of recentSosClients) {
+        if (now - entry.ts > SOS_DEDUP_WINDOW_MS) recentSosClients.delete(cid);
       }
     }
 
@@ -1140,105 +1331,36 @@ router.post('/sos', botAuth, (req, res) => {
     const sosId = lastId.length > 0 ? lastId[0].values[0][0] : 0;
     const createdAt = lastId.length > 0 ? lastId[0].values[0][1] : new Date().toISOString();
 
-    // Record in audit log
-    db.run(
-      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
-      [clientId, 'sos_triggered', 'sos_event', sosId, JSON.stringify({ client_id: clientId, therapist_id: therapistId })]
-    );
-    saveDatabaseAfterWrite();
+    // Take the dedup lock only now that the event row exists (an INSERT
+    // failure must not make the retry return a "deduplicated" id 0). Up to
+    // here the handler is synchronous, so concurrent requests cannot slip in.
+    const deliveryPromise = new Promise((resolve) => { resolveDelivery = resolve; });
+    // message is kept (in memory, for the dedup window only) so a re-dispatch
+    // after an undelivered attempt carries the client's original text.
+    recentSosClients.set(clientId, { ts: now, sosId, createdAt, message: message || null, delivery: deliveryPromise });
+    lockedClientId = clientId;
+
+    // Record in audit log (best-effort: must not abort the alert)
+    try {
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+        [clientId, 'sos_triggered', 'sos_event', sosId, JSON.stringify({ client_id: clientId, therapist_id: therapistId })]
+      );
+      saveDatabaseAfterWrite();
+    } catch (auditErr) {
+      logger.error(`SOS audit log failed for event #${sosId}: ${auditErr.message}`);
+    }
 
     logger.info(`SOS ALERT: Client ${clientId} (telegram_id=${telegram_id}) triggered SOS, therapist ${therapistId}, event #${sosId}`);
 
-    // Push real-time WebSocket notification to therapist
-    try {
-      // Look up client name for display
-      const clientNameResult = db.exec("SELECT email, telegram_id FROM users WHERE id = ?", [clientId]);
-      const clientName = (clientNameResult.length > 0 && clientNameResult[0].values.length > 0)
-        ? (clientNameResult[0].values[0][0] || 'Client #' + clientId)
-        : 'Client #' + clientId;
-      wsService.emitSosAlert(therapistId, { clientId, clientName, sosId, message: message || null });
-    } catch (wsErr) {
-      logger.warn(`[WS] Failed to emit SOS alert: ${wsErr.message}`);
-    }
-
-    // Notify therapist based on escalation preferences
-    const therapistResult = db.exec(
-      'SELECT telegram_id, email, escalation_preferences FROM users WHERE id = ?',
-      [therapistId]
-    );
-
-    let notificationSent = false;
-    const therapistInfo = therapistResult.length > 0 && therapistResult[0].values.length > 0
-      ? therapistResult[0].values[0] : null;
-
-    // Parse escalation preferences
-    let escalationPrefs = { sos_telegram: true, sos_email: true, sos_web_push: true, sos_sound_alert: true, quiet_hours_enabled: false, quiet_hours_start: '22:00', quiet_hours_end: '08:00', escalation_delay_minutes: 0 };
-    try {
-      if (therapistInfo && therapistInfo[2]) {
-        escalationPrefs = { ...escalationPrefs, ...JSON.parse(therapistInfo[2]) };
-      }
-    } catch (e) {
-      logger.warn('Failed to parse escalation preferences for therapist ' + therapistId);
-    }
-
-    const clientIdentifier = `Client #${clientId} (Telegram: ${telegram_id})`;
-    logger.info(`SOS escalation preferences for therapist ${therapistId}: ${JSON.stringify(escalationPrefs)}`);
-
-    if (therapistInfo && therapistInfo[0] && escalationPrefs.sos_telegram) {
-      // Therapist has a Telegram ID and Telegram notifications enabled
-      logger.info(`THERAPIST NOTIFICATION: SOS from ${clientIdentifier} → Therapist telegram_id=${therapistInfo[0]}`);
-      // Send real Telegram notification (non-blocking, failure won't break SOS record)
-      telegramNotify.sendSosAlert(therapistInfo[0], clientIdentifier, message ? message.trim() : null)
-        .then(result => {
-          if (result.sent) {
-            logger.info(`SOS Telegram notification delivered to therapist ${therapistId}`);
-          } else {
-            logger.warn(`SOS Telegram notification not delivered to therapist ${therapistId}: ${result.error}`);
-          }
-        })
-        .catch(err => {
-          logger.error(`SOS Telegram notification error for therapist ${therapistId}: ${err.message}`);
-        });
-      notificationSent = true;
-    } else if (therapistInfo && therapistInfo[0] && !escalationPrefs.sos_telegram) {
-      logger.info(`SOS Telegram notification SKIPPED for therapist ${therapistId} (disabled in preferences)`);
-    }
-
-    if (therapistInfo && therapistInfo[1] && escalationPrefs.sos_email) {
-      // Therapist has an email and email notifications enabled — send SOS email
-      const therapistLang = (() => {
-        try {
-          const lr = db.exec('SELECT language FROM users WHERE id = ?', [therapistId]);
-          return (lr.length > 0 && lr[0].values.length > 0) ? lr[0].values[0][0] : 'en';
-        } catch (_) { return 'en'; }
-      })();
-      emailService.sendSosAlert(therapistInfo[1], clientIdentifier, message ? message.trim() : null, therapistLang)
-        .then(result => {
-          if (result.sent) {
-            logger.info(`SOS email delivered to therapist ${therapistId} (${therapistInfo[1]})`);
-          } else {
-            logger.info(`[EMAIL] SOS alert for ${therapistInfo[1]}: ${result.error || 'not sent (SMTP not configured)'}`);
-          }
-        })
-        .catch(err => {
-          logger.error(`SOS email error for therapist ${therapistId}: ${err.message}`);
-        });
-      notificationSent = true;
-    } else if (therapistInfo && therapistInfo[1] && !escalationPrefs.sos_email) {
-      logger.info(`SOS email notification SKIPPED for therapist ${therapistId} (disabled in preferences)`);
-    }
-
-    // Store notification record for web dashboard polling
-    db.run(
-      `INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at)
-       VALUES (?, ?, ?, ?, ?, datetime('now'))`,
-      [therapistId, 'sos_notification_sent', 'sos_event', sosId,
-       JSON.stringify({ client_id: clientId, therapist_id: therapistId, notification_sent: notificationSent, telegram_id: String(telegram_id) })]
-    );
-    saveDatabaseAfterWrite();
+    // From here on the alert is out; a failure must not release the lock.
+    notificationsDispatched = true;
+    const notificationDelivered = await dispatchSosNotifications(db, { clientId, therapistId, sosId, telegram_id, message });
+    resolveDelivery(notificationDelivered);
 
     res.status(201).json({
       message: 'SOS alert sent successfully',
+      notification_delivered: notificationDelivered,
       sos_event: {
         id: sosId,
         client_id: clientId,
@@ -1250,6 +1372,12 @@ router.post('/sos', botAuth, (req, res) => {
   } catch (error) {
     logger.error('Bot SOS error: ' + error.message);
     logger.error('Stack: ' + error.stack);
+    if (lockedClientId !== null && !notificationsDispatched) {
+      // Nothing was sent yet: release the lock so the bot's retry creates a
+      // fresh alert instead of being answered as a duplicate.
+      recentSosClients.delete(lockedClientId);
+    }
+    if (resolveDelivery) resolveDelivery(false);
     res.status(500).json({ error: 'Failed to send SOS alert: ' + error.message });
   }
 });
@@ -1638,14 +1766,12 @@ router.post('/assignments/:assignment_id/reports', botAuth, (req, res) => {
     let audioFileRef = null;
     if (file_data) {
       try {
-        const ext = file_ext || '.ogg';
+        const ext = safeFileExt(file_ext, MEDIA_EXT_ALLOWLIST, '.ogg');
         const opaqueId = crypto.randomUUID();
         const filename = `${opaqueId}${ext}`;
-        const tempPath = path.join(DIARY_FILES_DIR, filename);
 
         const buffer = Buffer.from(file_data, 'base64');
-        fs.writeFileSync(tempPath, buffer);
-        encryptDiaryFileOnDisk(tempPath);
+        writeEncryptedDiaryFile(filename, buffer);
         audioFileRef = `${filename}.enc`;
         logger.info(`[T-04] Encrypted assignment-report audio: ${audioFileRef} (${buffer.length} bytes)`);
       } catch (fileErr) {
@@ -1795,8 +1921,7 @@ router.post('/assignments/:assignment_id/reports/:report_id/attachments', botAut
     }
 
     // Default mime/ext to jpeg (Telegram photos always come down as .jpg).
-    const ext = (file_ext && typeof file_ext === 'string') ? file_ext : '.jpg';
-    const safeExt = ext.startsWith('.') ? ext : ('.' + ext);
+    const safeExt = safeFileExt(file_ext, IMAGE_EXT_ALLOWLIST, '.jpg');
     const inferredMime = (mime_type && typeof mime_type === 'string')
       ? mime_type.toLowerCase().trim()
       : 'image/jpeg';
@@ -1815,24 +1940,17 @@ router.post('/assignments/:assignment_id/reports/:report_id/attachments', botAut
     // Write encrypted file to disk (same .enc pattern as voice notes).
     const opaqueId = crypto.randomUUID();
     const filename = `${opaqueId}${safeExt}`;
-    const tempPath = path.join(DIARY_FILES_DIR, filename);
     let fileRef = null;
     let keyId = null;
     let keyVersion = 1;
     try {
-      fs.writeFileSync(tempPath, buffer);
-      const encResult = encryptDiaryFileOnDisk(tempPath);
+      // Cleans up the plaintext temp and any half-written .enc on failure.
+      const encResult = writeEncryptedDiaryFile(filename, buffer);
       fileRef = `${filename}.enc`;
       keyId = encResult.keyId;
       keyVersion = encResult.keyVersion;
       logger.info(`[T-21] Encrypted assignment-report photo: ${fileRef} (${buffer.length} bytes)`);
     } catch (fileErr) {
-      // Best-effort cleanup of any half-written files.
-      try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (_) { /* ignore */ }
-      try {
-        const encPath = tempPath + '.enc';
-        if (fs.existsSync(encPath)) fs.unlinkSync(encPath);
-      } catch (_) { /* ignore */ }
       logger.error('[T-21] Failed to encrypt photo attachment: ' + fileErr.message);
       return res.status(500).json({ error: 'Failed to store photo' });
     }
@@ -2271,3 +2389,5 @@ router.post('/session-reminders-optin', botAuth, async (req, res) => {
 });
 
 module.exports = router;
+// Shared with the bot rate limiter in index.js (constant-time key check).
+module.exports.isValidBotApiKey = isValidBotApiKey;

@@ -357,37 +357,22 @@ router.post('/register-viewer', antibot({ turnstile: true, fake: 'viewer', expec
       const existingUser = existing[0].values[0];
       const existingRole = existingUser[1];
 
-      // If they're already a viewer, log them in
+      // Existing viewer: typing an email is no proof of mailbox ownership, so
+      // do NOT issue a session or link the anonymous session to that account.
+      // The caller must sign in (email code / link) to resume.
       if (existingRole === 'viewer') {
-        const token = jwt.sign(
-          { userId: existingUser[0], email: existingUser[2], role: 'viewer' },
-          JWT_SECRET,
-          { expiresIn: '24h' }
-        );
-
-        // Link session if provided
-        if (session_uuid) {
-          try {
-            db.run('UPDATE viewer_sessions SET email = ?, user_id = ? WHERE uuid = ?', [normalizedEmail, existingUser[0], session_uuid]);
-            saveDatabaseAfterWrite();
-          } catch (e) {
-            logger.warn('Could not link viewer session: ' + e.message);
-          }
-        }
-
-        res.cookie('session_token', token, SESSION_COOKIE_OPTIONS);
+        logger.info(`[ViewerReg] Existing viewer id=${existingUser[0]} — login required, no token issued`);
         return res.json({
-          message: 'Welcome back! You are now logged in.',
+          message: 'Welcome back! Please sign in to continue.',
           existing: true,
-          user: { id: existingUser[0], email: existingUser[2], role: 'viewer' },
-          token
+          login_required: true,
+          login_url: '/login'
         });
       }
 
-      // If they're a therapist/admin, tell them to use the login page
+      // Therapist/admin account: tell them to use the login page (role not disclosed)
       return res.status(409).json({
         error: 'An account with this email already exists. Please use the login page.',
-        existing_role: existingRole,
         login_url: '/login'
       });
     }
@@ -504,7 +489,6 @@ router.post('/register-lead', antibot({ turnstile: true, fake: 'lead', expectedA
       if (role !== 'viewer') {
         return res.status(409).json({
           error: 'An account with this email already exists. Please use the login page.',
-          existing_role: role,
           login_url: '/login'
         });
       }
@@ -794,8 +778,11 @@ router.post('/forgot-password', antibot({ turnstile: true, fake: 'forgot', expec
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     const resetUrl = frontendUrl + '/reset-password?token=' + encodeURIComponent(resetToken);
 
-    // Log to console in dev mode (as per EMAIL INTEGRATION instructions)
-    logger.info(`[PASSWORD RESET] Link for ${userEmail}: ${resetUrl}`);
+    // The reset URL carries a live token: log it only under the dev-echo
+    // switch used by the other auth flows (never in production).
+    if (process.env.NODE_ENV !== 'production' && process.env.AUTH_DEV_ECHO === 'true') {
+      logger.info(`[PASSWORD RESET] Link for ${userEmail}: ${resetUrl}`);
+    }
 
     emailService.sendPasswordReset(userEmail, resetToken, userLang)
       .then(result => {

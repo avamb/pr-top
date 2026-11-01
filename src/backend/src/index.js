@@ -2,6 +2,9 @@
 // Entry point for the Express server
 
 require('dotenv').config();
+// Fail closed before anything else loads: in production, refuse to start with
+// missing / short / default JWT_SECRET, ENCRYPTION_MASTER_KEY or BOT_API_KEY.
+require('./utils/secretsGuard').enforceSecrets();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -68,6 +71,33 @@ function rateLimitHandler(message) {
   };
 }
 
+// Path of the request without query string, lower-cased (Express routing is
+// case-insensitive, so '/API/Bot/...' still reaches the bot router).
+function requestPathLower(req) {
+  return String(req.originalUrl || req.url || '').split('?')[0].toLowerCase();
+}
+
+// '/api/bot' or '/api/bot/...', any case — the same set of paths Express
+// routes to the bot router (app.use('/api/bot') is case-insensitive).
+function isBotApiRequest(req) {
+  return /^\/api\/bot(\/|$)/.test(requestPathLower(req));
+}
+
+// Defence in depth: the bot calls backend:3001 directly on the internal
+// Docker network and sends no proxy headers, whereas every request that came
+// through nginx/Cloudflare carries X-Forwarded-For (nginx always sets it, plus
+// X-Real-IP) and usually CF-Connecting-IP. Such a request to the bot API came
+// from the internet — answer 404 as if the route did not exist, before any
+// limiter, body parsing or bot-key check runs.
+const PROXY_HEADERS = ['cf-connecting-ip', 'x-forwarded-for', 'x-real-ip'];
+function rejectProxiedBotRequests(req, res, next) {
+  if (isBotApiRequest(req) && PROXY_HEADERS.some((h) => req.headers[h] !== undefined)) {
+    return res.status(404).json({ error: 'Endpoint not found' });
+  }
+  next();
+}
+app.use(rejectProxiedBotRequests);
+
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: process.env.RATE_LIMIT_MAX ? parseInt(process.env.RATE_LIMIT_MAX) : (process.env.NODE_ENV !== 'production' ? 10000 : 500),
@@ -75,7 +105,10 @@ const limiter = rateLimit({
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: true, // Include `X-RateLimit-*` headers
   message: { error: 'Too many requests, please try again later.', retryAfter: '15 minutes' },
-  handler: rateLimitHandler('Too many requests, please try again later.')
+  handler: rateLimitHandler('Too many requests, please try again later.'),
+  // Bot traffic all comes from the single bot-container IP; it has its own
+  // limiter (botLimiter below) so it cannot exhaust this per-IP bucket.
+  skip: isBotApiRequest
 });
 app.use('/api/', limiter);
 
@@ -239,6 +272,55 @@ app.get('/api/features', (req, res) => {
   });
 });
 
+// Bot API rate limiting. Every bot call originates from the bot container's
+// single IP, so the global per-IP limiter would lock out all clients (incl.
+// SOS) after a few hundred messages. Requests carrying a valid x-bot-api-key
+// are bucketed per Telegram user with a high cap (BOT_RATE_LIMIT_MAX); others
+// stay per-IP at the global cap. Mounted after the body parser so telegram_id
+// in the JSON body is visible. POST /api/bot/sos with a valid key is never
+// limited here.
+const BOT_RATE_LIMIT_MAX = process.env.BOT_RATE_LIMIT_MAX ? parseInt(process.env.BOT_RATE_LIMIT_MAX) : 6000;
+const GLOBAL_RATE_LIMIT_MAX = process.env.RATE_LIMIT_MAX ? parseInt(process.env.RATE_LIMIT_MAX) : (process.env.NODE_ENV !== 'production' ? 10000 : 500);
+// Bot routes that carry the Telegram id as the path parameter (routes/bot.js).
+const BOT_TELEGRAM_ID_PATH = /^\/(?:user|profile|consent-status|diary|sessions|exercises|assignments|settings)\/([^/]+)\/?$/i;
+
+function botTelegramId(req) {
+  const fromBody = req.body && typeof req.body === 'object' ? req.body.telegram_id : undefined;
+  if (fromBody !== undefined && fromBody !== null && fromBody !== '') return String(fromBody);
+  if (req.query && req.query.telegram_id) return String(req.query.telegram_id);
+  if (req.method === 'GET' || req.method === 'PUT') {
+    const m = BOT_TELEGRAM_ID_PATH.exec(req.path || '');
+    if (m) return m[1];
+  }
+  return null;
+}
+
+function hasValidBotKey(req) {
+  return botRoutes.isValidBotApiKey(req.headers['x-bot-api-key']);
+}
+
+function isBotSosRequest(req) {
+  return requestPathLower(req).replace(/\/+$/, '') === '/api/bot/sos';
+}
+
+const botLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: (req) => (hasValidBotKey(req) ? BOT_RATE_LIMIT_MAX : GLOBAL_RATE_LIMIT_MAX),
+  keyGenerator: (req) => {
+    if (hasValidBotKey(req)) {
+      const tgId = botTelegramId(req);
+      return tgId ? 'tg:' + tgId : 'bot-ip:' + getClientIp(req);
+    }
+    return 'ip:' + getClientIp(req);
+  },
+  standardHeaders: true,
+  legacyHeaders: true,
+  handler: rateLimitHandler('Too many requests, please try again later.'),
+  // SOS must never be throttled (only for authenticated bot calls, so the
+  // unauthenticated path cannot be used to brute-force the key unlimited).
+  skip: (req) => isBotSosRequest(req) && hasValidBotKey(req)
+});
+
 // Mount route handlers
 // Wave 2 auth extensions (docs/security/SPEC_ANTIBOT_WAVES.md §3):
 // login-by-code router sits on its own prefix (limiter is mounted above),
@@ -247,7 +329,7 @@ app.use('/api/auth/login-code', require('./routes/loginCode'));
 app.use('/api/auth', require('./routes/emailVerification'));
 app.use('/api/auth', authRoutes);
 app.use('/api/assistant', require('./routes/publicAssistant')); // Public chat (no auth, mounted before auth-gated assistant routes)
-app.use('/api/bot', botRoutes);
+app.use('/api/bot', botLimiter, botRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/dashboard', requireActiveSubscription, dashboardRoutes);
@@ -274,8 +356,17 @@ app.use('/api/assistant', requireActiveSubscription, require('./routes/assistant
 app.use('/api/kb', requireActiveSubscription, require('./routes/kb'));
 app.use('/api/comments', require('./routes/comments'));
 
-// Dev-only seed endpoint for testing with large datasets
-if (process.env.NODE_ENV !== 'production') {
+// Dev-only endpoints (seed data, set-role -> superadmin, raw SELECT, ...).
+// Fail closed: never in production, and outside production only when
+// NODE_ENV is explicitly development/test or ENABLE_DEV_ENDPOINTS=true —
+// an unset/typo'd NODE_ENV (e.g. a staging box) must not expose them.
+const DEV_ENDPOINTS_ENABLED = process.env.NODE_ENV !== 'production' && (
+  process.env.NODE_ENV === 'development' ||
+  process.env.NODE_ENV === 'test' ||
+  process.env.ENABLE_DEV_ENDPOINTS === 'true'
+);
+if (DEV_ENDPOINTS_ENABLED) {
+  logger.warn('[DEV] /api/dev/* endpoints are ENABLED (NODE_ENV=' + (process.env.NODE_ENV || 'unset') + ')');
   const bcrypt = require('bcryptjs');
   app.post('/api/dev/seed-clients', async (req, res) => {
     try {
