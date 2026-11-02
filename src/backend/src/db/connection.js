@@ -247,16 +247,38 @@ function validateDatabaseImage(rawBuffer) {
 // unsaved changes, the file on disk is the restored image, and getDatabase()
 // / global.db return the new handle. Code still holding the old handle (an
 // async request in flight) gets "Database closed" errors from then on.
-// Schema migrations are NOT run here; they run on the next boot.
+//
+// Schema migrations run on the restored image BEFORE the swap (wave 2): a
+// backup taken before a migration (e.g. without users.token_version) would
+// otherwise make every authenticate() call fail until the next restart.
+// applySchema() is the same idempotent routine boot runs on every start
+// against an already-populated database, and it only touches the handle it
+// is given, so running it on the candidate is exactly what the next boot
+// would do. If it fails, the candidate is discarded and nothing changes.
+// Module-level "ensured" caches keyed on the DB handle (vectorStore,
+// assistantKnowledge) see a new handle and re-run their own migrations on
+// first use; vectorStore's is also triggered right after the swap so the
+// restored image's search previews are encrypted immediately.
 function replaceDatabase(rawBuffer) {
   if (!db || !dbPath || !SqlJs) throw new Error('Database not initialized. Call initDatabase() first.');
   if (exportFailed) throw new Error('Database export failed earlier; process is restarting');
   const buf = Buffer.isBuffer(rawBuffer) ? rawBuffer : Buffer.from(rawBuffer);
   const next = openValidatedImage(buf);
 
+  // Bring the restored image up to the current schema (as initDatabase does).
+  let migrated;
+  try {
+    next.run('PRAGMA foreign_keys = ON');
+    applySchema(next);
+    migrated = Buffer.from(next.export());
+  } catch (err) {
+    try { next.close(); } catch (_) { /* ignore */ }
+    throw new Error('restored database failed schema migration: ' + err.message);
+  }
+
   // Persist first: if the write fails, the live DB is untouched.
   try {
-    writeFileAtomic(dbPath, buf);
+    writeFileAtomic(dbPath, migrated);
   } catch (err) {
     try { next.close(); } catch (_) { /* ignore */ }
     throw new Error('could not write restored database to disk: ' + err.message);
@@ -272,7 +294,14 @@ function replaceDatabase(rawBuffer) {
   dbDirty = false;
   try { old.close(); } catch (e) { logger.warn('Closing the replaced database failed: ' + e.message); }
   applyConnectionPragmas();
-  logger.info('Database replaced in memory and on disk (' + buf.length + ' bytes)');
+  logger.info('Database replaced in memory and on disk (' + buf.length + ' bytes, migrated to current schema)');
+
+  // Lazy require: vectorStore depends on this module.
+  try {
+    require('../services/vectorStore').ensureTable();
+  } catch (e) {
+    logger.warn('vectorStore.ensureTable after restore failed (retried on next use): ' + e.message);
+  }
   return db;
 }
 
@@ -2300,14 +2329,19 @@ function applySchema(db) {
         stripe_payment_method_id TEXT,
         canceled_at TEXT,
         is_manual_override INTEGER DEFAULT 0,
-        override_reason TEXT
+        override_reason TEXT,
+        override_expires_at TEXT,
+        override_set_by INTEGER
       )`);
       // Copy all rows; backfill plan='trial' AND status='active' → status='trialing'.
+      // override_expires_at / override_set_by were added by ALTERs above; dropping
+      // them here broke the T-409 rebuild below on every fresh database.
       db.run(`INSERT INTO subscriptions_t28
         (id, therapist_id, stripe_customer_id, stripe_subscription_id,
          plan, status, trial_ends_at, current_period_start, current_period_end,
          created_at, updated_at, pending_plan, stripe_payment_method_id,
-         canceled_at, is_manual_override, override_reason)
+         canceled_at, is_manual_override, override_reason,
+         override_expires_at, override_set_by)
         SELECT
           id, therapist_id, stripe_customer_id, stripe_subscription_id,
           plan,
@@ -2315,7 +2349,8 @@ function applySchema(db) {
           trial_ends_at, current_period_start, current_period_end,
           created_at, updated_at,
           pending_plan, stripe_payment_method_id,
-          canceled_at, is_manual_override, override_reason
+          canceled_at, is_manual_override, override_reason,
+          override_expires_at, override_set_by
         FROM subscriptions`);
       db.run('DROP TABLE subscriptions');
       db.run('ALTER TABLE subscriptions_t28 RENAME TO subscriptions');
@@ -2340,6 +2375,8 @@ function applySchema(db) {
       : '';
     if (!existingSql409.includes("'confirm'")) {
       db.run('PRAGMA foreign_keys = OFF');
+      // A rebuild that failed half-way on an earlier boot leaves this table behind.
+      db.run('DROP TABLE IF EXISTS subscriptions_t409');
       db.run(`CREATE TABLE IF NOT EXISTS subscriptions_t409 (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         therapist_id INTEGER NOT NULL REFERENCES users(id),
@@ -2478,6 +2515,41 @@ function applySchema(db) {
     logger.warn('Email verification enabled-at marker skipped: ' + e.message);
   }
 
+  // Audit wave 2 (H13): per-user token version for JWT revocation. Every JWT
+  // carries `tv`; authenticate rejects a token whose tv differs from this
+  // column. Bumped on password reset and admin block. Existing tokens have no
+  // `tv` and count as 0, so live sessions survive the deploy. Placed after
+  // every users-table rebuild so the column is never dropped.
+  try {
+    db.run('ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0');
+    logger.info('Added token_version column to users');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  // Audit wave 2 (M17): Stripe webhook idempotency. routes/webhooks.js
+  // records event.id here only after the event was processed successfully;
+  // a redelivered event that is already present is acknowledged and skipped.
+  db.run(`CREATE TABLE IF NOT EXISTS stripe_webhook_events (
+    event_id TEXT PRIMARY KEY,
+    type TEXT,
+    received_at TEXT DEFAULT (datetime('now'))
+  )`);
+
+  // Audit wave 2 (track F), all idempotent:
+  // - assistant_conversations.viewer_session_id binds a landing conversation to
+  //   the viewer session that created it, so a client-supplied conversation_id
+  //   can only continue its own conversation (and register-viewer re-parents only
+  //   the visitor's own).
+  try { db.run('ALTER TABLE assistant_conversations ADD COLUMN viewer_session_id INTEGER'); } catch (e) { /* exists */ }
+  db.run('CREATE INDEX IF NOT EXISTS idx_assistant_conversations_viewer_session ON assistant_conversations(viewer_session_id)');
+  // - assistant_cached_answers.source marks curated rows (e.g. 'admin_correction')
+  //   that retention must never expire.
+  try { db.run('ALTER TABLE assistant_cached_answers ADD COLUMN source TEXT'); } catch (e) { /* exists */ }
+  // - session_reminder_dispatches.claimed_at: when dispatchDue claimed a row
+  //   (status 'sending'). Kept out of `error`, which the UI shows as red text.
+  try { db.run('ALTER TABLE session_reminder_dispatches ADD COLUMN claimed_at TEXT'); } catch (e) { /* exists */ }
+
   // Seed default superadmin account if not exists
   seedSuperadmin(db);
 
@@ -2520,4 +2592,4 @@ function getDatabase() {
   return db;
 }
 
-module.exports = { initDatabase, getDatabase, saveDatabase, saveDatabaseAfterWrite, snapshotDatabase, replaceDatabase, validateDatabaseImage };
+module.exports = { initDatabase, getDatabase, saveDatabase, saveDatabaseAfterWrite, snapshotDatabase, replaceDatabase, validateDatabaseImage, inOpenTransaction };
