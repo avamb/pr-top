@@ -656,7 +656,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `reminders.settings.templateKey.opt_in` — Opt-in prompt
 - `reminders.settings.templatePlaceholder` — Leave blank to use default template…
 - `reminders.settings.saving` — Saving…
-- _+ 70 more keys_
+- _+ 73 more keys_
 
 ## roles
 
@@ -800,7 +800,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `subscription.cancelSuccess` — Subscription canceled. Your access continues until {{date}}.
 - `subscription.availablePlans` — Available Plans
 - `subscription.currentPlanBtn` — Current Plan
-- _+ 42 more keys_
+- _+ 46 more keys_
 
 ## supervision
 

@@ -99,7 +99,8 @@ Mount prefix: `/api/auth`
 - `POST /api/auth/register-viewer` — Creates a user with role='viewer', links anonymous session, migrates messages, issues JWT.
 - `POST /api/auth/register-lead` — After registration, lead gets +10 messages in the chat. After email verification, +10 more.
 - `GET /api/auth/verify-lead` — Verifies a lead's email, sets verified=true, adds extra messages
-- `POST /api/auth/logout` — POST /api/auth/logout - Clear session cookie and invalidate token
+- `POST /api/auth/logout` — localStorage copy of the token after this call.
+- `POST /api/auth/logout-all` — devices) by bumping users.token_version, then clear this device's cookie.
 - `GET /api/auth/me` — GET /api/auth/me
 - `POST /api/auth/forgot-password` — POST /api/auth/forgot-password
 - `POST /api/auth/reset-password` — POST /api/auth/reset-password
@@ -195,8 +196,8 @@ Mount prefix: `/api/comments`
 
 - `GET /api/comments` — entity, ordered by created_at ASC.
 - `POST /api/comments` — Default visibility: therapist -> private, client -> shared.
-- `PATCH /api/comments/:id` — may modify a comment.
-- `DELETE /api/comments/:id` — Only the author (or a superadmin) may delete.
+- `PATCH /api/comments/:id` — comment, and only while they still have access to the entity.
+- `DELETE /api/comments/:id` — Only the author may delete.
 
 ## dashboard — Dashboard stats and activity feed
 
@@ -213,7 +214,7 @@ Mount prefix: `/api/dashboard`
 Mount prefix: `/api/diary`
 
 - `GET /api/diary/:id/stream` — GET /api/diary/:id/stream - Stream decrypted audio/video file for a diary entry
-- `POST /api/diary/:id/retranscribe` — POST /api/diary/:id/retranscribe - Retry transcription for a diary entry (therapist/superadmin)
+- `POST /api/diary/:id/retranscribe` — POST /api/diary/:id/retranscribe - Retry transcription for a diary entry (linked therapist only)
 
 ## emailVerification — Router module
 
@@ -229,9 +230,9 @@ Mount prefix: `/api/encryption`
 
 - `GET /api/encryption/keys` — List all encryption key versions
 - `POST /api/encryption/rotate` — Rotate encryption key (create new version)
-- `POST /api/encryption/encrypt` — Encrypt data (for testing/verification) - debug endpoint, dev-only or superadmin
-- `POST /api/encryption/decrypt` — Decrypt data (for testing/verification) - debug endpoint, dev-only or superadmin
-- `GET /api/encryption/active-version` — Get the current active encryption key version - debug endpoint, dev-only or superadmin
+- `POST /api/encryption/encrypt` — Encrypt data (for testing/verification) - debug endpoint: 404 in production, superadmin-only elsewhere
+- `POST /api/encryption/decrypt` — Decrypt data (for testing/verification) - debug endpoint: 404 in production, superadmin-only elsewhere
+- `GET /api/encryption/active-version` — Get the current active encryption key version - debug endpoint: 404 in production, superadmin-only elsewhere
 
 ## exercises — Exercise library (built-in + custom)
 
@@ -286,7 +287,8 @@ Mount prefix: `/api/public/assistant`
 
 Mount prefix: `/api/public/attendance`
 
-- `GET /api/public/attendance/attendance-link`
+- `GET /api/public/attendance/attendance-link` — GET /api/public/attendance-link?token=...&lang=ru Side-effect free: renders a confirmation page whose button POSTs the token.
+- `POST /api/public/attendance/attendance-link` — POST /api/public/attendance-link (form field or JSON key: token; optional lang) Applies the action. Mounted before the CSRF middleware in in
 
 ## query — Natural-language search over client history
 
@@ -345,7 +347,7 @@ Mount prefix: `/api/subscription`
 - `POST /api/subscription/create-customer` — Create a Stripe customer for the authenticated user
 - `GET /api/subscription/current` — Get current subscription for authenticated user
 - `GET /api/subscription/payments` — Get payment history for authenticated user
-- `POST /api/subscription/change-plan` — Upgrades are charged immediately (prorated). Downgrades are scheduled for end of current period.
+- `POST /api/subscription/change-plan` — checked, so a lost response is not mistaken for a failure.
 - `GET /api/subscription/limits` — Get current plan limits and usage for the authenticated therapist
 - `GET /api/subscription/plans` — Get available plans and pricing
 - `POST /api/subscription/checkout` — Create a Stripe checkout session for plan upgrade
