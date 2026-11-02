@@ -322,7 +322,8 @@ function CommentsPanel({ entityType, entityId, userRole, currentUserId, classNam
         <ul className="space-y-3" data-testid="comment-list">
           {visibleComments.map((c) => {
             const mine = Number(c.author_id) === Number(currentUserId);
-            const canEdit = mine || userRole === 'superadmin';
+            // Editing is author-only on the backend (comments carry Class A text).
+            const canEdit = mine;
             const isEditing = editingId === c.id;
             return (
               <li

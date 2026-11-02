@@ -92,8 +92,24 @@
     "audience": "public",
     "locale": "en",
     "question": "Can a supervisor read my client cases?",
-    "answer": "Yes, with your explicit share. PR-TOP supports supervision sharing: you pick a case, choose which materials to share (summary only, or transcripts too), and grant a time-boxed link to the supervisor. Access is revocable and logged.",
+    "answer": "Only through a share link you create. On the client page tap Share for supervision, pick a link lifetime (1 day, 7 days or 30 days) and, optionally, Anonymize client identity. The supervisor opens the read-only link without an account and sees your sessions (summaries and transcripts), the client's non-private diary entries, inquiries and shared notes that existed when you created the link. Private diary entries, your private comments, raw audio/video and SOS details are never shared. You can revoke the link at any time, and every opening is logged.",
     "tags": ["supervision", "sharing"]
+  },
+  {
+    "id": "supervision-link-consent-revoked",
+    "audience": "public",
+    "locale": "en",
+    "question": "What happens to a supervision share link if my client withdraws consent?",
+    "answer": "The link stops working the next time anyone opens it and is marked Revoked in your list of share links. The same happens if the client disconnects from you or moves to another therapist. A revoked link never comes back, even if the client grants consent again; create a new link if sharing is still appropriate.",
+    "tags": ["supervision", "sharing", "consent"]
+  },
+  {
+    "id": "admin-access-clinical-data",
+    "audience": "public",
+    "locale": "en",
+    "question": "Can PR-TOP administrators read my clients' diaries or session transcripts?",
+    "answer": "Not through any special access. Session transcripts, summaries, recordings, diary entries, search previews and comments are returned only to the client's linked therapist while the client's consent is granted, and platform administrator accounts pass the same checks. Administrators work with platform metadata such as account lists and usage statistics.",
+    "tags": ["security", "privacy", "admin"]
   },
   {
     "id": "languages",
@@ -252,8 +268,16 @@
     "audience": "public",
     "locale": "en",
     "question": "How do I reset my password?",
-    "answer": "On the sign-in page click \"Forgot password\", enter your email, and PR-TOP sends a reset link. The link is single-use and expires; you can then set a new password and sign back in. If the email does not arrive, check your spam folder or contact support.",
+    "answer": "On the sign-in page click \"Forgot password\", enter your email, and PR-TOP sends a reset link. The link is single-use and expires after one hour; you can then set a new password and sign back in. Setting a new password also signs you out on every other device and browser. If the email does not arrive, check your spam folder or contact support.",
     "tags": ["account", "password"]
+  },
+  {
+    "id": "sign-out-other-devices",
+    "audience": "public",
+    "locale": "en",
+    "question": "Does signing out log me out on my other devices?",
+    "answer": "No. Signing out from the sidebar ends the session only in the browser where you click it: the session cookie is cleared and the stored sign-in is removed. Your other devices stay signed in until their session expires (at most 24 hours). To end every session at once, for example if you think someone else has access to your account, reset your password with \"Forgot password?\" on the sign-in page; a new password signs you out everywhere.",
+    "tags": ["account", "sign-out", "logout", "security"]
   },
   {
     "id": "data-location",

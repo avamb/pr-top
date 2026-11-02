@@ -2,8 +2,8 @@
 // Provides endpoints for encryption key management and data encryption/decryption
 
 const express = require('express');
-const jwt = require('jsonwebtoken');
 const { logger } = require('../utils/logger');
+const { authenticate, requireRole } = require('../middleware/auth');
 const {
   encrypt,
   decrypt,
@@ -13,49 +13,34 @@ const {
 } = require('../services/encryption');
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-change-in-production';
 
-// Auth middleware
-function requireAuth(req, res, next) {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    return res.status(401).json({ error: 'Invalid or expired token' });
-  }
+// Audit M6: every route authenticates through the shared `authenticate`
+// middleware, which re-reads the user row on each request (role, blocked_at,
+// token_version). A JWT minted before a demotion or block therefore no longer
+// grants access here; the role in the token itself is never trusted.
+const requireSuperadmin = requireRole('superadmin');
+
+// Debug encrypt/decrypt endpoints (audit H5). Fail closed, mirroring the
+// /api/dev/* gate in index.js: available only when NODE_ENV is explicitly
+// development/test (or ENABLE_DEV_ENDPOINTS=true) and never in production.
+// When disabled they answer 404 so their existence isn't advertised.
+// Evaluated per request so the gate follows the live environment.
+function debugEndpointsEnabled() {
+  const env = process.env.NODE_ENV;
+  if (env === 'production') return false;
+  return env === 'development' || env === 'test' || process.env.ENABLE_DEV_ENDPOINTS === 'true';
 }
 
-// Require superadmin for key management
-function requireSuperadmin(req, res, next) {
-  if (req.user.role !== 'superadmin') {
-    return res.status(403).json({ error: 'Superadmin access required' });
+function requireDebugEndpoints(req, res, next) {
+  if (!debugEndpointsEnabled()) {
+    return res.status(404).json({ error: 'Not found' });
   }
   next();
 }
 
-// Require development mode OR superadmin for debug endpoints
-// In production, only superadmins can access encrypt/decrypt test endpoints
-function requireDevOrSuperadmin(req, res, next) {
-  const notInProduction = !process.env.NODE_ENV || process.env.NODE_ENV !== 'production';
-  if (notInProduction) {
-    return next();
-  }
-  // In production, only superadmin can access debug endpoints
-  if (req.user.role === 'superadmin') {
-    return next();
-  }
-  return res.status(403).json({ error: 'Debug endpoints are disabled in production' });
-}
-
 // GET /api/encryption/keys
 // List all encryption key versions
-router.get('/keys', requireAuth, requireSuperadmin, (req, res) => {
+router.get('/keys', authenticate, requireSuperadmin, (req, res) => {
   try {
     const keys = listKeyVersions();
     const activeVersion = getActiveKeyVersion();
@@ -68,7 +53,7 @@ router.get('/keys', requireAuth, requireSuperadmin, (req, res) => {
 
 // POST /api/encryption/rotate
 // Rotate encryption key (create new version)
-router.post('/rotate', requireAuth, requireSuperadmin, (req, res) => {
+router.post('/rotate', authenticate, requireSuperadmin, (req, res) => {
   try {
     const result = rotateKey();
     const keys = listKeyVersions();
@@ -85,8 +70,8 @@ router.post('/rotate', requireAuth, requireSuperadmin, (req, res) => {
 });
 
 // POST /api/encryption/encrypt
-// Encrypt data (for testing/verification) - debug endpoint, dev-only or superadmin
-router.post('/encrypt', requireAuth, requireDevOrSuperadmin, (req, res) => {
+// Encrypt data (for testing/verification) - debug endpoint: 404 in production, superadmin-only elsewhere
+router.post('/encrypt', requireDebugEndpoints, authenticate, requireSuperadmin, (req, res) => {
   try {
     const { plaintext } = req.body;
     if (!plaintext) {
@@ -106,8 +91,8 @@ router.post('/encrypt', requireAuth, requireDevOrSuperadmin, (req, res) => {
 });
 
 // POST /api/encryption/decrypt
-// Decrypt data (for testing/verification) - debug endpoint, dev-only or superadmin
-router.post('/decrypt', requireAuth, requireDevOrSuperadmin, (req, res) => {
+// Decrypt data (for testing/verification) - debug endpoint: 404 in production, superadmin-only elsewhere
+router.post('/decrypt', requireDebugEndpoints, authenticate, requireSuperadmin, (req, res) => {
   try {
     const { encrypted } = req.body;
     if (!encrypted) {
@@ -123,8 +108,8 @@ router.post('/decrypt', requireAuth, requireDevOrSuperadmin, (req, res) => {
 });
 
 // GET /api/encryption/active-version
-// Get the current active encryption key version - debug endpoint, dev-only or superadmin
-router.get('/active-version', requireAuth, requireDevOrSuperadmin, (req, res) => {
+// Get the current active encryption key version - debug endpoint: 404 in production, superadmin-only elsewhere
+router.get('/active-version', requireDebugEndpoints, authenticate, requireSuperadmin, (req, res) => {
   try {
     const version = getActiveKeyVersion();
     res.json({ active_version: version });

@@ -578,6 +578,23 @@ async function start() {
     await initDatabase();
     logger.info('Database initialized successfully');
 
+    // Run the vector-store migrations now (encrypt legacy plaintext search
+    // previews, drop embeddings of private diary entries) instead of on the
+    // first search after a deploy.
+    try {
+      require('./services/vectorStore').ensureTable();
+    } catch (e) {
+      logger.error('Vector store migration failed at startup: ' + e.message);
+    }
+
+    // Older code let /api/clients/link attach clients to the superadmin account,
+    // which would expose their Class A data to the admin. Report (count only).
+    try {
+      require('./utils/consentCheck').warnClientsLinkedToSuperadmin();
+    } catch (e) {
+      logger.error('Superadmin-linked client check failed: ' + e.message);
+    }
+
     // Rate limiters trust CF-Connecting-IP. That header is only meaningful
     // when nothing but Cloudflare can reach the origin; otherwise anyone can
     // spoof it and rotate limiter buckets. ORIGIN_LOCKED=true is the
@@ -590,6 +607,11 @@ async function start() {
     // Initialize Stripe SDK
     const stripeReady = initStripe();
     logger.info(`Stripe initialized: ${stripeReady ? 'configured' : 'not configured (placeholder key)'}`);
+
+    // Downgrades scheduled by older code only set pending_plan locally and never
+    // switched the Stripe price; move those subscriptions onto the lower price
+    // now. Best effort, never throws, skipped in dev mode / without Stripe.
+    require('./services/stripe').reconcilePendingDowngrades().catch(() => {});
 
     // Start scheduled task runner (after DB is ready)
     scheduler.start();

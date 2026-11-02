@@ -1665,8 +1665,22 @@ router.post('/link', requireRole('superadmin'), (req, res) => {
       return res.status(400).json({ error: 'client_id is required' });
     }
 
-    // Superadmin can link to themselves or specify a target therapist
-    const linkToTherapistId = target_therapist_id || therapistId;
+    // The target must be a real, unblocked therapist. Linking a client to the
+    // superadmin's own account would hand the admin the client's Class A data
+    // (diary, transcripts) through the therapist routes, bypassing the
+    // separation between platform admin and clinician.
+    if (!target_therapist_id) {
+      return res.status(400).json({ error: 'target_therapist_id is required' });
+    }
+    const linkToTherapistId = parseInt(target_therapist_id, 10);
+    const targetResult = db.exec(
+      "SELECT id FROM users WHERE id = ? AND role = 'therapist' AND blocked_at IS NULL",
+      [linkToTherapistId]
+    );
+    if (!Number.isInteger(linkToTherapistId) || linkToTherapistId === therapistId
+        || targetResult.length === 0 || targetResult[0].values.length === 0) {
+      return res.status(400).json({ error: 'target_therapist_id must be an active therapist' });
+    }
 
     // Check client limit before linking
     const limitCheck = checkClientLimit(linkToTherapistId);
@@ -1699,11 +1713,23 @@ router.post('/link', requireRole('superadmin'), (req, res) => {
       return res.status(400).json({ error: 'Client is already linked to another therapist' });
     }
 
-    // Superadmin direct link - sets consent since this is an admin override
-    db.run(
-      "UPDATE users SET therapist_id = ?, consent_therapist_access = 1, updated_at = datetime('now') WHERE id = ?",
-      [linkToTherapistId, client_id]
-    );
+    // Superadmin direct link: sets ONLY the therapist link. Consent is never
+    // granted on the client's behalf; the client grants it in the bot. A
+    // client who was not linked to this therapist starts without consent (a
+    // stale flag from an earlier relationship must not carry over), and any
+    // share links from that earlier relationship are revoked.
+    if (client[2] && Number(client[2]) === linkToTherapistId) {
+      db.run(
+        "UPDATE users SET therapist_id = ?, updated_at = datetime('now') WHERE id = ?",
+        [linkToTherapistId, client_id]
+      );
+    } else {
+      db.run(
+        "UPDATE users SET therapist_id = ?, consent_therapist_access = 0, updated_at = datetime('now') WHERE id = ?",
+        [linkToTherapistId, client_id]
+      );
+      supervisionShare.revokeAllForClient(Number(client_id), 'admin_relink', db);
+    }
 
     // Record in audit log
     db.run(
@@ -1715,10 +1741,13 @@ router.post('/link', requireRole('superadmin'), (req, res) => {
 
     logger.info(`Superadmin ${req.user.id} directly linked client ${client_id} to therapist ${linkToTherapistId}`);
 
+    const consentRow = db.exec('SELECT consent_therapist_access FROM users WHERE id = ?', [client_id]);
+    const hasConsent = consentRow.length > 0 && consentRow[0].values.length > 0 && !!consentRow[0].values[0][0];
     res.json({
-      message: 'Client linked successfully (superadmin override)',
+      message: 'Client linked successfully (superadmin override). Consent is granted only by the client in the bot.',
       client_id: parseInt(client_id),
-      therapist_id: linkToTherapistId
+      therapist_id: linkToTherapistId,
+      consent_therapist_access: hasConsent
     });
   } catch (error) {
     logger.error('Link client error: ' + error.message);
@@ -3443,6 +3472,9 @@ router.post('/:id/supervision-share', (req, res) => {
     }
     if (error.code === 'not_found') {
       return res.status(404).json({ error: error.message });
+    }
+    if (error.code === 'consent_required') {
+      return res.status(403).json({ error: error.message });
     }
     logger.error('Create supervision share error: ' + error.message);
     res.status(500).json({ error: 'Failed to create share link' });

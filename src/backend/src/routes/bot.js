@@ -9,7 +9,7 @@ const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { encrypt, decrypt } = require('../services/encryption');
 const { processDiaryTranscription } = require('../services/diaryTranscription');
-const { checkClientLimit } = require('../utils/planLimits');
+const { checkClientLimit, getSubscriptionAccessForTherapist } = require('../utils/planLimits');
 const telegramNotify = require('../utils/telegramNotify');
 const emailService = require('../services/emailService');
 const wsService = require('../services/websocketService');
@@ -529,6 +529,12 @@ router.post('/consent', botAuth, (req, res) => {
       });
     }
 
+    // Audit H4: moving to a different therapist ends every share link the
+    // previous therapist created for this client.
+    if (existingTherapistId && parseInt(existingTherapistId, 10) !== parseInt(therapist_id, 10)) {
+      require('../services/supervisionShare').revokeAllForClient(clientId, 'therapist_changed', db);
+    }
+
     // Link client to therapist with consent (T-18: persist version + hash too)
     db.run(
       "UPDATE users SET therapist_id = ?, consent_therapist_access = 1, consent_version = ?, consent_text_hash = ?, updated_at = datetime('now') WHERE id = ?",
@@ -655,6 +661,10 @@ router.post('/revoke-consent', botAuth, (req, res) => {
       "UPDATE users SET therapist_id = NULL, consent_therapist_access = 0, updated_at = datetime('now') WHERE id = ?",
       [clientId]
     );
+
+    // Audit H4: supervision share links die with the consent they were
+    // created under, so a later re-consent can never revive them.
+    require('../services/supervisionShare').revokeAllForClient(clientId, 'consent_revoked', db);
 
     // Record consent revocation in audit log
     db.run(
@@ -956,6 +966,21 @@ router.post('/diary/:entry_id/make-private', botAuth, (req, res) => {
       logger.info(`Client ${userId} marked diary entry #${entryId} as private (T-12)`);
     } else {
       logger.info(`Client ${userId} re-asked to mark diary entry #${entryId} private (already private)`);
+    }
+
+    // Audit H6: a private entry must not stay searchable. Drop its vector
+    // embedding (and encrypted preview) on every call, so re-asking also
+    // cleans up entries made private before this was in place.
+    try {
+      const vectorStore = require('../services/vectorStore');
+      const del = vectorStore.deleteDiaryEmbeddings(entryId);
+      if (del.deleted > 0) {
+        logger.info(`Removed ${del.deleted} embedding(s) of private diary entry #${entryId}`);
+      }
+    } catch (embErr) {
+      // Search already filters private entries (semanticSearch T-12 guard),
+      // and ensureTable() purges leftovers on the next start.
+      logger.warn(`Failed to remove embedding of private diary entry #${entryId}: ${embErr.message}`);
     }
 
     return res.json({
@@ -2014,24 +2039,22 @@ router.post('/voice-query', botAuth, (req, res) => {
 
     const therapistId = therapistResult[0].values[0][0];
 
-    // Check subscription tier (Pro/Premium only)
-    const subResult = db.exec(
-      "SELECT plan, status FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1",
-      [therapistId]
-    );
+    // Check subscription tier (Pro/Premium only). Same access rules as the
+    // dashboard gates: canceled-in-grace and past_due keep their paid plan.
+    const access = getSubscriptionAccessForTherapist(therapistId);
 
-    if (subResult.length === 0 || subResult[0].values.length === 0) {
+    if (!access.subscription) {
       return res.status(403).json({
         error: 'No active subscription',
         message: 'Voice queries require a Pro or Premium subscription.'
       });
     }
 
-    const [plan, status] = subResult[0].values[0];
-
-    if (status !== 'active') {
+    if (!access.usable) {
       return res.status(403).json({ error: 'Subscription inactive' });
     }
+
+    const plan = access.plan;
 
     if (!['pro', 'premium'].includes(plan)) {
       return res.status(403).json({

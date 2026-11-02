@@ -3,7 +3,7 @@
 //   - GET    /api/comments?entity_type=&entity_id=    list visible comments
 //   - POST   /api/comments                            create a new comment
 //   - PATCH  /api/comments/:id                        update content / visibility
-//   - DELETE /api/comments/:id                        delete a comment (author / superadmin)
+//   - DELETE /api/comments/:id                        delete a comment (author only)
 //
 // The actual visibility / authorization logic lives in services/comments.js.
 
@@ -69,8 +69,8 @@ router.post('/', (req, res) => {
 });
 
 // PATCH /api/comments/:id
-//   Body may contain { content, visibility }. Only the author (or a superadmin)
-//   may modify a comment.
+//   Body may contain { content, visibility }. Only the author may modify a
+//   comment, and only while they still have access to the entity.
 router.patch('/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -89,7 +89,7 @@ router.patch('/:id', (req, res) => {
 });
 
 // DELETE /api/comments/:id
-//   Only the author (or a superadmin) may delete.
+//   Only the author may delete.
 router.delete('/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);

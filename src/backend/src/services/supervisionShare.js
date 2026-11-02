@@ -16,11 +16,28 @@
 //   - real client identity when anonymize=true
 //
 // All access through a share link is recorded in audit_logs.
+//
+// Audit H4: every public access re-validates the link (findActiveLinkByToken):
+//   - not revoked, not expired;
+//   - the client still exists and is still linked to the therapist who
+//     created the link, and consent_therapist_access is still granted
+//     (same check as utils/consentCheck.verifyClientConsent);
+//   - the creating therapist's account still exists and isn't blocked;
+//   - no consent revocation / (re)grant / admin re-link of the client was
+//     audit-logged after the link was created (backstop for revivals).
+// Consent revocation (routes/bot.js) and admin re-linking (routes/clients.js
+// POST /link) also revoke a client's links eagerly via revokeAllForClient.
+// When a client/consent/therapist check fails the link is revoked on the spot
+// (revoked_at set, audit row 'supervision_share_auto_revoke'), so it stays
+// dead even if consent is granted again later. The view is also frozen at the
+// link's creation time: records created after created_at are never included,
+// and client-private diary entries are always excluded.
 
 const crypto = require('crypto');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
+const { verifyClientConsent } = require('../utils/consentCheck');
 
 // Allowed TTL options exposed to the UI. Maps to seconds.
 const TTL_OPTIONS = {
@@ -115,14 +132,16 @@ function createLink({ therapistId, clientId, ttl, anonymize = true, note = '' })
   }
 
   const db = getDatabase();
-  // Confirm client belongs to this therapist
-  const clientCheck = db.exec(
-    "SELECT id FROM users WHERE id = ? AND therapist_id = ? AND role = 'client'",
-    [clientId, therapistId]
-  );
-  if (clientCheck.length === 0 || clientCheck[0].values.length === 0) {
-    const err = new Error('Client not found or not linked to you');
-    err.code = 'not_found';
+  // Confirm client belongs to this therapist and has granted consent (H4:
+  // a share link exposes Class A data, so it needs the same consent gate as
+  // the dashboard routes).
+  const consent = verifyClientConsent(therapistId, clientId, 'create_supervision_share');
+  if (!consent.allowed) {
+    const consentMissing = consent.status === 403 && /consent/i.test(consent.error || '');
+    const err = new Error(consentMissing
+      ? 'Client has not granted consent for data access'
+      : 'Client not found or not linked to you');
+    err.code = consentMissing ? 'consent_required' : 'not_found';
     throw err;
   }
 
@@ -180,7 +199,52 @@ function listLinks(therapistId, clientId = null) {
     params.push(clientId);
   }
   sql += ' ORDER BY created_at DESC';
-  return rowsToObjects(db.exec(sql, params));
+  const rows = rowsToObjects(db.exec(sql, params));
+  // H4: a link whose access conditions no longer hold (consent revoked or
+  // re-granted since, client moved, therapist blocked) is revoked here too,
+  // so the therapist's list shows it as Revoked/inactive even if nobody has
+  // opened it since. Already revoked or expired rows are left untouched.
+  const now = new Date();
+  for (const row of rows) {
+    if (row.revoked_at) continue;
+    if (row.expires_at && new Date(row.expires_at) < now) continue;
+    const problem = linkAccessProblem(db, row);
+    if (problem) {
+      autoRevokeLink(db, row, problem);
+      const r = db.exec('SELECT revoked_at FROM supervision_share_links WHERE id = ?', [row.id]);
+      row.revoked_at = r.length > 0 && r[0].values.length > 0 ? r[0].values[0][0] : new Date().toISOString();
+    }
+  }
+  return rows;
+}
+
+/**
+ * Revoke every still-active share link of a client (H4). Call wherever a
+ * client withdraws consent, is unlinked from or moves away from a therapist,
+ * or is deleted. Returns the number of links revoked. The caller persists the
+ * write with saveDatabaseAfterWrite() together with its own changes.
+ */
+function revokeAllForClient(clientId, reason = 'client_unlinked', db = getDatabase()) {
+  const before = db.exec(
+    'SELECT COUNT(*) FROM supervision_share_links WHERE client_id = ? AND revoked_at IS NULL',
+    [clientId]
+  );
+  const count = before.length > 0 ? Number(before[0].values[0][0]) : 0;
+  if (count === 0) return 0;
+  db.run(
+    "UPDATE supervision_share_links SET revoked_at = datetime('now') WHERE client_id = ? AND revoked_at IS NULL",
+    [clientId]
+  );
+  try {
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (0, 'supervision_share_revoke_all', 'user', ?, ?, datetime('now'))",
+      [clientId, JSON.stringify({ client_id: clientId, reason, count })]
+    );
+  } catch (e) {
+    logger.error(`supervisionShare.revokeAllForClient audit failed: ${e.message}`);
+  }
+  logger.info(`Revoked ${count} supervision share link(s) of client ${clientId} (${reason})`);
+  return count;
 }
 
 /**
@@ -203,8 +267,60 @@ function revokeLink(therapistId, id) {
 }
 
 /**
- * Look up a share link by its public token. Returns null if missing/revoked/expired.
- * Used by the public /share/supervision/:token endpoint.
+ * Check that the parties behind a share link still allow access (H4).
+ * Returns null when everything is fine, otherwise a short reason code.
+ */
+function linkAccessProblem(db, link) {
+  // Client still exists, is still linked to the creating therapist, and
+  // consent is still granted. No auditAction: the denial is audited by
+  // autoRevokeLink with the right actor (the anonymous share link).
+  const consent = verifyClientConsent(link.therapist_id, link.client_id);
+  if (!consent.allowed) {
+    if (consent.status === 404) return 'client_not_found';
+    return /consent/i.test(consent.error || '') ? 'consent_revoked' : 'client_unlinked';
+  }
+  const t = db.exec('SELECT id, blocked_at FROM users WHERE id = ?', [link.therapist_id]);
+  if (t.length === 0 || t[0].values.length === 0) return 'therapist_not_found';
+  if (t[0].values[0][1]) return 'therapist_blocked';
+  // Backstop: there is no consent timestamp column, so use the audit trail.
+  // Any consent revocation, (re)grant or admin re-link recorded after the
+  // link was created means the link belongs to an earlier consent period
+  // and must not come back to life, even though consent is granted now.
+  const cutoff = link.created_at || new Date(0).toISOString();
+  const changed = db.exec(
+    `SELECT 1 FROM audit_logs
+      WHERE datetime(created_at) > datetime(?)
+        AND ((actor_id = ? AND action IN ('consent_granted', 'consent_revoked'))
+          OR (target_id = ? AND action = 'superadmin_direct_link'))
+      LIMIT 1`,
+    [cutoff, link.client_id, link.client_id]
+  );
+  if (changed.length > 0 && changed[0].values.length > 0) return 'consent_changed_since_link';
+  return null;
+}
+
+/**
+ * Revoke a link because its access conditions no longer hold. Idempotent.
+ */
+function autoRevokeLink(db, link, reason) {
+  try {
+    db.run(
+      "UPDATE supervision_share_links SET revoked_at = datetime('now') WHERE id = ? AND revoked_at IS NULL",
+      [link.id]
+    );
+    audit(0, 'supervision_share_auto_revoke', link.id, { client_id: link.client_id, reason });
+    saveDatabaseAfterWrite();
+    logger.info(`Supervision share link ${link.id} auto-revoked (${reason})`);
+  } catch (e) {
+    logger.error(`supervisionShare.autoRevokeLink failed for link ${link.id}: ${e.message}`);
+  }
+}
+
+/**
+ * Look up a share link by its public token. Returns null if missing, revoked,
+ * expired, or no longer allowed (client unlinked / consent revoked / therapist
+ * blocked; such links are revoked on the spot, see linkAccessProblem).
+ * Used by the public /share/supervision/:token endpoint (GET and HEAD).
  */
 function findActiveLinkByToken(token) {
   if (!token || typeof token !== 'string') return null;
@@ -222,6 +338,11 @@ function findActiveLinkByToken(token) {
   const link = rows[0];
   if (link.revoked_at) return null;
   if (link.expires_at && new Date(link.expires_at) < new Date()) return null;
+  const problem = linkAccessProblem(db, link);
+  if (problem) {
+    autoRevokeLink(db, link, problem);
+    return null;
+  }
   return link;
 }
 
@@ -277,6 +398,11 @@ function buildSupervisorView(link) {
   const db = getDatabase();
   const { therapist_id: therapistId, client_id: clientId, anonymize, note } = link;
   const isAnonymized = !!anonymize;
+  // H4: the view is frozen at the moment the link was created. Records
+  // created afterwards are never shared; inquiries and comments edited
+  // afterwards are left out too (sessions show their current summary). datetime() normalises both the
+  // SQLite "YYYY-MM-DD HH:MM:SS" and ISO-8601 forms before comparing.
+  const cutoff = link.created_at || new Date().toISOString();
 
   // Resolve display name
   let displayName = 'Client A';
@@ -314,8 +440,9 @@ function buildSupervisorView(link) {
       db.exec(
         `SELECT id, scheduled_at, status, summary_encrypted, transcript_encrypted, created_at
          FROM sessions WHERE therapist_id = ? AND client_id = ?
+           AND datetime(created_at) <= datetime(?)
          ORDER BY COALESCE(scheduled_at, created_at) DESC LIMIT 200`,
-        [therapistId, clientId]
+        [therapistId, clientId, cutoff]
       )
     );
     for (const r of sRows) {
@@ -349,8 +476,9 @@ function buildSupervisorView(link) {
         // T-12: never share client-private diary entries with supervisors.
         `SELECT id, entry_type, content_encrypted, transcript_encrypted, created_at
          FROM diary_entries WHERE client_id = ? AND (is_private = 0 OR is_private IS NULL)
+           AND datetime(created_at) <= datetime(?)
          ORDER BY created_at DESC LIMIT 200`,
-        [clientId]
+        [clientId, cutoff]
       )
     );
     for (const r of dRows) {
@@ -382,9 +510,11 @@ function buildSupervisorView(link) {
       db.exec(
         `SELECT id, title_encrypted, description_encrypted, status, opened_at, closed_at, created_at, updated_at
          FROM inquiries WHERE therapist_id = ? AND client_id = ?
+           AND datetime(created_at) <= datetime(?)
+           AND datetime(COALESCE(updated_at, created_at)) <= datetime(?)
          ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END,
                   updated_at DESC LIMIT 200`,
-        [therapistId, clientId]
+        [therapistId, clientId, cutoff, cutoff]
       )
     );
     for (const r of iRows) {
@@ -420,8 +550,11 @@ function buildSupervisorView(link) {
          FROM comments
          WHERE entity_type = 'client' AND entity_id = ?
            AND visibility = 'shared'
+           AND author_id IN (?, ?)
+           AND datetime(created_at) <= datetime(?)
+           AND datetime(COALESCE(updated_at, created_at)) <= datetime(?)
          ORDER BY created_at DESC LIMIT 200`,
-        [clientId]
+        [clientId, therapistId, clientId, cutoff, cutoff]
       )
     );
     for (const r of cRows) {
@@ -469,6 +602,8 @@ module.exports = {
   listLinks,
   revokeLink,
   findActiveLinkByToken,
+  linkAccessProblem,
+  revokeAllForClient,
   recordAccess,
   buildSupervisorView,
   anonymizeText,

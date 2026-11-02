@@ -267,13 +267,13 @@ router.get('/:id', authenticate, requireRole('therapist', 'superadmin'), async (
 
     const row = result[0].values[0];
 
-    // Verify therapist owns this session (unless superadmin)
-    if (req.user.role !== 'superadmin' && row[1] !== req.user.id) {
+    // Verify therapist owns this session
+    if (row[1] !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // Verify client consent (unless superadmin)
-    if (req.user.role !== 'superadmin' && row[2]) {
+    // Verify client consent
+    if (row[2]) {
       const consentCheck = verifyClientConsent(req.user.id, row[2], 'session');
       if (!consentCheck.allowed) {
         return res.status(consentCheck.status).json({ error: consentCheck.error });
@@ -406,12 +406,12 @@ router.post('/:id/transcribe', authenticate, requireRole('therapist', 'superadmi
     }
 
     const row = result[0].values[0];
-    if (req.user.role !== 'superadmin' && row[1] !== req.user.id) {
+    if (row[1] !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // Verify client consent (unless superadmin)
-    if (req.user.role !== 'superadmin' && row[4]) {
+    // Verify client consent
+    if (row[4]) {
       const consentCheck = verifyClientConsent(req.user.id, row[4], 'session_transcribe');
       if (!consentCheck.allowed) {
         return res.status(consentCheck.status).json({ error: consentCheck.error });
@@ -451,12 +451,12 @@ router.post('/:id/summarize', authenticate, requireRole('therapist', 'superadmin
     }
 
     const row = result[0].values[0];
-    if (req.user.role !== 'superadmin' && row[1] !== req.user.id) {
+    if (row[1] !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // Verify client consent (unless superadmin)
-    if (req.user.role !== 'superadmin' && row[3]) {
+    // Verify client consent
+    if (row[3]) {
       const consentCheck = verifyClientConsent(req.user.id, row[3], 'session_summarize');
       if (!consentCheck.allowed) {
         return res.status(consentCheck.status).json({ error: consentCheck.error });
@@ -496,12 +496,12 @@ router.get('/:id/summary', authenticate, requireRole('therapist', 'superadmin'),
     }
 
     const row = result[0].values[0];
-    if (req.user.role !== 'superadmin' && row[0] !== req.user.id) {
+    if (row[0] !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // Verify client consent (unless superadmin)
-    if (req.user.role !== 'superadmin' && row[2]) {
+    // Verify client consent
+    if (row[2]) {
       const consentCheck = verifyClientConsent(req.user.id, row[2], 'session_summary');
       if (!consentCheck.allowed) {
         return res.status(consentCheck.status).json({ error: consentCheck.error });
@@ -536,12 +536,12 @@ router.get('/:id/transcript', authenticate, requireRole('therapist', 'superadmin
     }
 
     const row = result[0].values[0];
-    if (req.user.role !== 'superadmin' && row[0] !== req.user.id) {
+    if (row[0] !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // Verify client consent (unless superadmin)
-    if (req.user.role !== 'superadmin' && row[2]) {
+    // Verify client consent
+    if (row[2]) {
       const consentCheck = verifyClientConsent(req.user.id, row[2], 'session_transcript');
       if (!consentCheck.allowed) {
         return res.status(consentCheck.status).json({ error: consentCheck.error });
@@ -579,11 +579,11 @@ router.patch('/:id', authenticate, requireRole('therapist', 'superadmin'), async
     }
     const row = result[0].values[0];
 
-    if (req.user.role !== 'superadmin' && row[1] !== req.user.id) {
+    if (row[1] !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    if (req.user.role !== 'superadmin' && row[2]) {
+    if (row[2]) {
       const consentCheck = verifyClientConsent(req.user.id, row[2], 'session_update');
       if (!consentCheck.allowed) {
         return res.status(consentCheck.status).json({ error: consentCheck.error });
@@ -781,12 +781,12 @@ router.post('/:id/transcribe-voice-note', authenticate, requireRole('therapist',
     }
     const row = result[0].values[0];
 
-    if (req.user.role !== 'superadmin' && row[1] !== req.user.id) {
+    if (row[1] !== req.user.id) {
       try { fs.unlinkSync(req.file.path); } catch (_) {}
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    if (req.user.role !== 'superadmin' && row[2]) {
+    if (row[2]) {
       const consentCheck = verifyClientConsent(req.user.id, row[2], 'session_voice_note');
       if (!consentCheck.allowed) {
         try { fs.unlinkSync(req.file.path); } catch (_) {}
@@ -851,10 +851,10 @@ router.post('/:id/select-speaker', authenticate, requireRole('therapist', 'super
     const row = result[0].values[0];
     const [, therapistId, clientId, status, recordingMode, alreadySelected, segmentsJson] = row;
 
-    if (req.user.role !== 'superadmin' && therapistId !== req.user.id) {
+    if (therapistId !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    if (req.user.role !== 'superadmin' && clientId) {
+    if (clientId) {
       const consentCheck = verifyClientConsent(req.user.id, clientId, 'session_select_speaker');
       if (!consentCheck.allowed) {
         return res.status(consentCheck.status).json({ error: consentCheck.error });
@@ -957,12 +957,12 @@ router.delete('/:id', authenticate, requireRole('therapist', 'superadmin'), asyn
     }
 
     const row = result[0].values[0];
-    if (req.user.role !== 'superadmin' && row[1] !== req.user.id) {
+    if (row[1] !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // Verify client consent (unless superadmin)
-    if (req.user.role !== 'superadmin' && row[2]) {
+    // Verify client consent
+    if (row[2]) {
       const consentCheck = verifyClientConsent(req.user.id, row[2], 'session_delete');
       if (!consentCheck.allowed) {
         return res.status(consentCheck.status).json({ error: consentCheck.error });
@@ -1033,13 +1033,13 @@ router.get('/:id/stream', authenticate, requireRole('therapist', 'superadmin'), 
     const clientId = row[1];
     const audioRef = row[2];
 
-    // Verify therapist owns this session (unless superadmin)
-    if (req.user.role !== 'superadmin' && therapistId !== req.user.id) {
+    // Verify therapist owns this session
+    if (therapistId !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
     // Verify client consent
-    if (req.user.role !== 'superadmin' && clientId) {
+    if (clientId) {
       const consentCheck = verifyClientConsent(req.user.id, clientId, 'session_stream');
       if (!consentCheck.allowed) {
         return res.status(consentCheck.status).json({ error: consentCheck.error });
@@ -1480,13 +1480,13 @@ router.post('/:id/attendance', authenticate, requireRole('therapist', 'superadmi
     }
     const [, therapistId, clientId, prevStatus] = sessRes[0].values[0];
 
-    // Ownership check (superadmin bypasses)
-    if (req.user.role !== 'superadmin' && therapistId !== req.user.id) {
+    // Ownership check (no superadmin bypass: Class A data, audit H5)
+    if (therapistId !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
     // Consent check
-    if (req.user.role !== 'superadmin' && clientId) {
+    if (clientId) {
       const consentCheck = verifyClientConsent(req.user.id, clientId, 'session_attendance_update');
       if (!consentCheck.allowed) {
         return res.status(consentCheck.status).json({ error: consentCheck.error });
@@ -1572,13 +1572,13 @@ router.post('/:id/reschedule', authenticate, requireRole('therapist', 'superadmi
     }
     const [, therapistId, clientId, prevScheduledAt] = sessRes[0].values[0];
 
-    // Ownership check (superadmin bypasses)
-    if (req.user.role !== 'superadmin' && therapistId !== req.user.id) {
+    // Ownership check (no superadmin bypass: Class A data, audit H5)
+    if (therapistId !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
     // Consent check
-    if (req.user.role !== 'superadmin' && clientId) {
+    if (clientId) {
       const consentCheck = verifyClientConsent(req.user.id, clientId, 'session_reschedule');
       if (!consentCheck.allowed) {
         return res.status(consentCheck.status).json({ error: consentCheck.error });

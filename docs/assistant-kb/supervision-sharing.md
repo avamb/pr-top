@@ -1,144 +1,168 @@
 <!-- audience: public -->
 # Supervision sharing
 
-Supervision share lets a therapist grant a supervising colleague
-read-only access to a specific client's record — timeline, diary,
-sessions, transcripts, AI summaries, exercise responses — for the
-purpose of case consultation and supervision. It is available on
-every plan. This how-to explains
-what supervisors see and don't see, how to grant and revoke access,
-and how consent interacts with sharing. Labels come from the
-`supervision` and `supervisionShare` i18n namespaces.
+Supervision sharing lets a therapist show one client's history to a
+supervisor or a consulting colleague without handing over a password.
+You generate a read-only link for that client, send it to the
+supervisor through a channel you trust, and the supervisor opens it in
+any browser. The supervisor does not need a PR-TOP account. Every link
+expires automatically, can be revoked at any time, and stops working on
+its own as soon as the client withdraws consent or is no longer your
+client. This page explains how to create and revoke links, exactly what
+the supervisor sees and does not see, and how the link reacts to
+changes on the client's side. Labels come from the `supervision` i18n
+namespace.
 
 ## Prerequisites
 
-- The supervising colleague does not need a PR-TOP account: the share
-  is an opaque, expiring link, and the supervisor authenticates by
-  possession of that link. Every access is recorded in the audit log.
-- The client's **Supervision share consent** flag must be on. This is
-  a separate consent from diary storage and session recording. The
-  platform enforces it on every share.
+- The client must be linked to you (connected through your invite code
+  or deep link, or added by you) and must currently have **therapist
+  access consent** granted. PR-TOP uses the same consent flag here that
+  protects the rest of the client page: if the client has not granted
+  consent, or has withdrawn it, a link cannot be created and existing
+  links stop working.
+- Your account needs an active subscription or an active trial, like
+  every other action on the client page.
+- The supervisor needs nothing except the link. Treat the link like a
+  password: whoever holds it can open the view until it expires or is
+  revoked.
+
+## Step-by-step: create a share link
+
+1. Open the client page from **Clients**.
+2. In the header, tap **Share for supervision** (next to **Export All
+   Data**). The **Share for supervision** window opens.
+3. Under **Create new share link**, choose the **Link lifetime**:
+   **1 day**, **7 days** (the default) or **30 days**. There is no
+   unlimited option; pick the shortest lifetime that covers your
+   supervision meeting.
+4. Leave **Anonymize client identity** on (the default) if the
+   supervisor should not see who the client is. With anonymization on,
+   the client's name is replaced with "Client A", and email addresses
+   and phone numbers inside the shared text are replaced with
+   "[email redacted]" and "[phone redacted]". Names or other details
+   written in free text are not detected, so review what the sessions
+   and diary contain before sharing.
+5. Optionally fill in **Internal note (optional)**, up to 500
+   characters, for example "Oct supervision with Dr. Ivanov". The note
+   is shown on the supervisor's overview as the therapist's note, so do
+   not put anything there the supervisor should not read.
+6. Tap **Create share link**. The new link appears under **Existing
+   share links**. Tap **Copy** and send the URL to your supervisor.
 
 ## What the supervisor sees
 
-When you grant a share, the supervisor's dashboard grows a new
-sidebar entry: **Supervisees**. Under it, each shared client appears
-as a read-only mirror of your own client page.
+The link opens a read-only page with five tabs:
 
-The supervisor sees:
+- **Overview**: counts of sessions, diary entries, inquiries and shared
+  notes, plus your note if you wrote one.
+- **Sessions**: your sessions with this client, each with its date,
+  status, AI summary and (under "Show transcript") the transcript text.
+- **Diary**: the client's diary entries as text, including the
+  transcripts of voice and video entries.
+- **Inquiries**: the work threads you track for this client, with title,
+  description and status.
+- **Shared notes**: comments on the client marked as shared, written by
+  you or by the client.
 
-- Client display name, timeline, diary entries, session recordings
-  (playback), transcripts, and AI summaries.
-- Exercise assignments and responses.
-- The mood-trend and analytics charts.
-- SOS events (with the resolution status).
+The view is a snapshot in time. It only contains records that already
+existed when you created the link. A session, diary entry, inquiry or
+shared note created after that moment never appears in the link, even
+while the link is still valid. An inquiry or shared note that was edited
+after you created the link is left out of the link as well. If you want
+the supervisor to see newer material, create a new link. (A session that existed when you created
+the link is shown with its current summary and transcript, so a summary
+finished later for that session does appear.)
 
-The supervisor does NOT see:
+## What the supervisor never sees
 
-- Your private notes on the client.
-- Your other clients or any part of your dashboard.
-- The client's Telegram binding tokens or the ability to send
-  messages via the bot.
-- Your Settings, subscription, or invoice history.
+- Diary entries the client marked as private in the bot.
+- Your private comments and private notes.
+- Raw audio or video files: only text is shared.
+- SOS event details.
+- Your other clients, your dashboard, settings or billing.
+- With anonymization on, the client's name.
 
-## Step-by-step: grant a share
+## Step-by-step: revoke a link
 
-1. Open the client page → **Supervision** tab.
-2. Enable **Supervision share consent** if it is not already on. The
-   platform logs the timestamp and shows a small note that this flag
-   was flipped.
-3. Tap **Invite supervisor**. Enter the supervisor's PR-TOP account
-   email.
-4. Choose a **share duration**: 7 days, 30 days, 90 days, or "until
-   revoked".
-5. Optionally add a **share note** (up to 500 characters) that
-   appears on the supervisor's side, e.g. "Please review latest three
-   sessions for transference discussion."
-6. Send. The supervisor receives an email and an in-dashboard
-   notification.
+1. Open the client page and tap **Share for supervision**.
+2. Under **Existing share links**, each link shows its status
+   (**Active**, **Expired** or **Revoked**), when it was created, when
+   it expires, and how many times it was opened (**Accessed**).
+3. Tap **Revoke** on the link and confirm. Anyone holding the URL loses
+   access on their next page load.
+4. Revocation is recorded in the audit log.
 
-## Step-by-step: revoke a share
+## When a link stops working by itself
 
-1. Open the client page → **Supervision** tab.
-2. Every active share is listed with the supervisor's email, share
-   date, and expiry.
-3. Tap **Revoke** on the row. Access is severed immediately; the
-   supervisor's sidebar entry for that client disappears within a
-   minute.
-4. Revocation is audit-logged so you have a record of exactly when it
-   happened.
+Every time the link is opened, PR-TOP checks again that sharing is still
+allowed. The link stops working and is marked **Revoked** in your list
+when any of these happens:
+
+- The client withdraws therapist access consent.
+- The client disconnects from you or moves to another therapist.
+- The client's account no longer exists.
+- Your own account is blocked.
+
+An automatic revocation is written to the audit log with the reason. A
+revoked link stays revoked: if the client grants consent again or
+reconnects, the old link does not come back. Create a new link instead.
+Links also stop working when their lifetime runs out; those show as
+**Expired**.
 
 ## Edge cases
 
-- **Multiple supervisors on one client.** Up to three simultaneous
-  supervisors are allowed per client. Add or revoke them independently.
-- **Supervisor on the same practice.** Nothing prevents sharing with
-  a colleague inside the same clinic; each account is still separate.
-- **Client revokes consent.** Turning the supervision consent flag
-  off automatically revokes all active shares for that client and
-  writes an audit entry. Existing supervisor-side snapshots retained
-  in the supervisor's browser cache clear on next refresh.
-- **Supervisor downgrades to Trial.** They keep read access to shares
-  they already hold, but cannot receive new shares while on Trial.
+- **Several links for one client.** You can create more than one link,
+  for example one per supervisor, each with its own lifetime and note.
+  Revoking one does not affect the others.
+- **Anonymized and named links side by side.** Each link keeps its own
+  anonymization setting; it cannot be changed after creation. Create a
+  new link with the other setting and revoke the old one.
+- **The client marks an entry private after you shared.** Private
+  entries are filtered out every time the link is opened, so the entry
+  disappears from the supervisor's view.
 
 ## Troubleshooting
 
-- **Invite email never arrives.** Confirm the supervisor's PR-TOP
-  account uses the email you typed. A supervisor with no PR-TOP
-  account will receive an invite to sign up first.
-- **Share does not appear on supervisor's dashboard.** They must be
-  signed in to the account matching the invite email. Ask them to
-  refresh the page.
-- **Revoke did not clear immediately.** WebSocket lag can delay the
-  supervisor's sidebar update by up to a minute. A hard refresh on
-  the supervisor's side confirms.
-- **Supervisor cannot open a session recording.** Session recordings
-  stream through a signed-URL flow tied to the supervisor's session.
-  If the URL expired mid-playback, refresh the page.
-- **Share auto-expired unexpectedly.** Check the share duration you
-  set at grant time. "Until revoked" is the only option that never
-  auto-expires.
+- **Supervisor sees "Share link not available".** The link was
+  revoked, expired, or stopped working automatically (see above). Open
+  **Share for supervision** to check its status and create a new link
+  if sharing is still appropriate.
+- **"Client has not granted consent for data access" when creating a
+  link.** The client has not granted, or has withdrawn, therapist access
+  consent. Sharing is not possible until the client grants it again in
+  the bot.
+- **New sessions are missing from the supervisor's view.** The link only
+  contains records created before the link. Create a fresh link.
+- **The diary tab is shorter than your own view.** Private diary entries
+  and entries created after the link are excluded by design.
 
 ## FAQ
 
-**Q: Can the supervisor download the client's data?**
-A: Supervisors have read-only view access. They can view PDF
-summaries produced by you, but bulk export (JSON/CSV) is disabled on
-the supervisor side to reduce data-egress risk.
+**Q: Does the supervisor need a PR-TOP account?**
+A: No. The link itself is the access key. It is a long random token, so
+it cannot be guessed, but anyone you forward it to can open it.
 
-**Q: Are supervisor actions audit-logged?**
-A: Yes. Every open of a diary entry, session, or transcript by a
-supervisor is written to the audit log with the supervisor's account
-id and timestamp. You can view the log from the client page →
-Timeline → filter by "audit".
+**Q: Can I see whether the supervisor opened the link?**
+A: Yes. Each link shows an **Accessed** counter, and every opening is
+written to the audit log.
 
-**Q: Can the supervisor add private notes?**
-A: Supervisors can add notes visible only to themselves. Those notes
-are not surfaced to the sharing therapist and not surfaced to any AI
-context. The sharing therapist cannot see supervisor-authored notes.
+**Q: What happens if my client withdraws consent while a link is
+active?**
+A: The link stops working the next time anyone opens it and is marked
+**Revoked**. Re-granting consent later does not reactivate it.
 
-**Q: Does the client know they are being supervised?**
-A: Yes — the supervision consent flag exists so the client has
-consented in advance. The bot's `/consent` command surfaces the
-current state of all flags for the client at any time.
+**Q: Can the supervisor download or edit anything?**
+A: No. The page is read-only and has no download or export function.
 
-**Q: Can the supervisor become the primary therapist?**
-A: There is no in-platform ownership transfer. If the primary
-therapist is ending the relationship, they should export the client's
-data and the new therapist creates a fresh client record with fresh
-consent.
+**Q: How long can a link live?**
+A: 1 day, 7 days or 30 days, chosen when you create it.
 
-**Q: How many clients can I have shared at once?**
-A: There is no explicit cap; the practical limit is client-consent
-availability and supervisor bandwidth. Very large share counts (over
-30 simultaneous) surface a small warning banner encouraging you to
-audit the list.
+**Q: Does anonymization make the content fully anonymous?**
+A: No. It hides the client's name and redacts email addresses and phone
+numbers. Other identifying details in session or diary text are shown
+as written.
 
-**Q: Do supervisors count against my client seats?**
-A: No. Supervisors have their own accounts and their own seats. A
-share consumes neither party's seats.
-
-**Q: What happens if the supervisor's account is deleted?**
-A: All shares to that account are severed automatically. You will
-see the row disappear from the Supervision tab of every affected
-client.
+**Q: Does sharing cost anything or depend on my plan?**
+A: No extra cost. Supervision sharing is available on every plan,
+including the trial, while your subscription or trial is active.

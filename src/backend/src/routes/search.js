@@ -7,7 +7,11 @@ const { semanticSearch, getEmbedding, getStats } = require('../services/vectorSt
 const { logger } = require('../utils/logger');
 const { verifyClientConsent } = require('../utils/consentCheck');
 
-// All search routes require authentication
+// All search routes require authentication.
+// Audit H5: superadmin keeps the route (it may own clients like a therapist),
+// but there is no superadmin bypass any more: results are always scoped to
+// the caller's own consenting clients. Superadmin is a platform role and must
+// not read client clinical content.
 router.use(authenticate);
 router.use(requireRole('therapist', 'superadmin'));
 
@@ -27,7 +31,7 @@ router.post('/', (req, res) => {
 
     // Build search options
     const options = {
-      therapist_id: req.user.role === 'superadmin' ? undefined : therapistId,
+      therapist_id: therapistId,
       limit: Math.min(limit || 10, 50)
     };
 
@@ -39,7 +43,7 @@ router.post('/', (req, res) => {
         [client_id, therapistId]
       );
 
-      if (req.user.role !== 'superadmin' && (clientCheck.length === 0 || clientCheck[0].values.length === 0)) {
+      if (clientCheck.length === 0 || clientCheck[0].values.length === 0) {
         return res.status(403).json({ error: 'Client not found or not linked to you' });
       }
 
@@ -61,7 +65,7 @@ router.post('/', (req, res) => {
     // was embedded would still appear in results. Remove those rows here so
     // therapists never see data from clients who have revoked or never granted
     // consent. KB chunks (client_id = null) are always kept.
-    if (req.user.role !== 'superadmin' && result.results && result.results.length > 0) {
+    if (result.results && result.results.length > 0) {
       const clientIdsInResults = [...new Set(
         result.results.filter(r => r.client_id != null).map(r => r.client_id)
       )];
@@ -121,40 +125,41 @@ router.get('/embedding/:sourceType/:sourceId', (req, res) => {
     }
 
     // Verify therapist has access
-    if (req.user.role !== 'superadmin' && embedding.therapist_id !== req.user.id) {
+    if (embedding.therapist_id !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
     // Verify client consent based on source type
-    if (req.user.role !== 'superadmin') {
-      const db = getDatabase();
-      let clientId = null;
+    const db = getDatabase();
+    let clientId = null;
 
-      if (sourceType === 'diary_entry') {
-        // T-12: hide client-private diary embeddings from therapist search results
-        // by treating the row as missing.
-        const diaryResult = db.exec(
-          'SELECT client_id FROM diary_entries WHERE id = ? AND (is_private = 0 OR is_private IS NULL)',
-          [parseInt(sourceId)]
-        );
-        if (diaryResult.length > 0 && diaryResult[0].values.length > 0) {
-          clientId = diaryResult[0].values[0][0];
-        } else {
-          // Either no such entry or it is client-private — block access.
-          return res.status(404).json({ error: 'Source not found' });
-        }
-      } else if (sourceType === 'session_transcript' || sourceType === 'session_summary') {
-        const sessionResult = db.exec('SELECT client_id FROM sessions WHERE id = ?', [parseInt(sourceId)]);
-        if (sessionResult.length > 0 && sessionResult[0].values.length > 0) {
-          clientId = sessionResult[0].values[0][0];
-        }
+    if (sourceType === 'diary_entry') {
+      // T-12: hide client-private diary embeddings from therapist search results
+      // by treating the row as missing.
+      const diaryResult = db.exec(
+        'SELECT client_id FROM diary_entries WHERE id = ? AND (is_private = 0 OR is_private IS NULL)',
+        [parseInt(sourceId)]
+      );
+      if (diaryResult.length > 0 && diaryResult[0].values.length > 0) {
+        clientId = diaryResult[0].values[0][0];
+      } else {
+        // Either no such entry or it is client-private — block access.
+        return res.status(404).json({ error: 'Source not found' });
       }
+    } else if (sourceType === 'session_transcript' || sourceType === 'session_summary') {
+      const sessionResult = db.exec('SELECT client_id FROM sessions WHERE id = ?', [parseInt(sourceId)]);
+      if (sessionResult.length > 0 && sessionResult[0].values.length > 0) {
+        clientId = sessionResult[0].values[0][0];
+      } else {
+        // Orphaned embedding (session deleted): never serve its preview.
+        return res.status(404).json({ error: 'Source not found' });
+      }
+    }
 
-      if (clientId) {
-        const consentCheck = verifyClientConsent(req.user.id, clientId, 'embedding_view');
-        if (!consentCheck.allowed) {
-          return res.status(consentCheck.status).json({ error: consentCheck.error });
-        }
+    if (clientId) {
+      const consentCheck = verifyClientConsent(req.user.id, clientId, 'embedding_view');
+      if (!consentCheck.allowed) {
+        return res.status(consentCheck.status).json({ error: consentCheck.error });
       }
     }
 

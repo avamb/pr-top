@@ -3,9 +3,107 @@
 // In dev mode: uses local TF-IDF vectors stored in SQLite.
 // In production: would integrate with a real vector DB (Pinecone, Weaviate, Qdrant, etc.).
 
-const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
-const { decrypt } = require('./encryption');
+const { getDatabase, saveDatabaseAfterWrite, inOpenTransaction } = require('../db/connection');
+const { encrypt, decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
+
+// ---------------------------------------------------------------------------
+// Audit H6: text_preview for client-derived sources is Class A data.
+// ---------------------------------------------------------------------------
+// The first 200 characters of transcripts, summaries and diary entries used to
+// be stored (and returned by search) in plaintext. They are now encrypted with
+// the application-layer encryption service and decrypted only when results go
+// back to the authorized therapist. KB chunk previews ('kb') stay plaintext:
+// they come from the therapist's own uploaded material, whose chunk text is
+// itself stored unencrypted in therapist_knowledge_base_chunks.
+const CLIENT_SOURCE_TYPES = ['session_transcript', 'session_summary', 'diary_entry'];
+
+// Same packed layout services/encryption.js produces and decrypt() parses:
+// "<keyVersion>:<iv b64, 12 bytes>:<authTag b64, 16 bytes>:<ciphertext b64>".
+const ENCRYPTED_PACKED_RE = /^\d+:[A-Za-z0-9+/]{16}:[A-Za-z0-9+/]{22}==:[A-Za-z0-9+/]*={0,2}$/;
+
+function isEncryptedPreview(value) {
+  return typeof value === 'string' && ENCRYPTED_PACKED_RE.test(value);
+}
+
+function encryptPreview(text) {
+  if (text === null || text === undefined || text === '') return null;
+  return encrypt(String(text)).encrypted;
+}
+
+/**
+ * Decrypt a stored preview. Returns null when the value cannot be decrypted
+ * (never leaks ciphertext or an error to the caller). A legacy plaintext value
+ * that the migration hasn't reached yet is returned as-is.
+ */
+function decryptPreview(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (!isEncryptedPreview(value)) return value;
+  try {
+    return decrypt(value);
+  } catch (e) {
+    logger.warn('vectorStore: failed to decrypt text_preview: ' + e.message);
+    return null;
+  }
+}
+
+/**
+ * One-time, idempotent migration: encrypt every plaintext text_preview of a
+ * client-derived embedding. Already-encrypted values are recognised by the
+ * packed-format check above and left untouched, so re-running is a no-op.
+ * Returns the number of rows changed.
+ */
+function encryptLegacyPreviews(db) {
+  const placeholders = CLIENT_SOURCE_TYPES.map(() => '?').join(',');
+  const r = db.exec(
+    `SELECT id, text_preview FROM vector_embeddings
+      WHERE source_type IN (${placeholders}) AND text_preview IS NOT NULL AND text_preview != ''`,
+    CLIENT_SOURCE_TYPES
+  );
+  if (r.length === 0 || r[0].values.length === 0) return 0;
+  const pending = r[0].values.filter((row) => !isEncryptedPreview(row[1]));
+  if (pending.length === 0) return 0;
+  db.run('BEGIN');
+  try {
+    for (const [id, preview] of pending) {
+      db.run('UPDATE vector_embeddings SET text_preview = ? WHERE id = ?', [encryptPreview(preview), id]);
+    }
+    db.run('COMMIT');
+  } catch (e) {
+    try { db.run('ROLLBACK'); } catch (_) {}
+    throw e;
+  }
+  logger.info(`vector_embeddings: encrypted ${pending.length} legacy plaintext text_preview value(s) (audit H6)`);
+  return pending.length;
+}
+
+/**
+ * Idempotent cleanup: drop embeddings of diary entries the client has marked
+ * private (entries made private before make-private started deleting them).
+ * Returns the number of rows deleted.
+ */
+function purgePrivateDiaryEmbeddings(db) {
+  let r;
+  try {
+    r = db.exec(
+      `SELECT ve.id FROM vector_embeddings ve
+         JOIN diary_entries de ON de.id = ve.source_id
+        WHERE ve.source_type = 'diary_entry' AND de.is_private = 1`
+    );
+  } catch (e) {
+    // Older DB without diary_entries.is_private: nothing to purge.
+    return 0;
+  }
+  if (r.length === 0 || r[0].values.length === 0) return 0;
+  const ids = r[0].values.map((row) => row[0]);
+  for (let i = 0; i < ids.length; i += 500) {
+    const batch = ids.slice(i, i + 500);
+    db.run(`DELETE FROM vector_embeddings WHERE id IN (${batch.map(() => '?').join(',')})`, batch);
+  }
+  db.run('UPDATE diary_entries SET embedding_ref = NULL WHERE is_private = 1 AND embedding_ref IS NOT NULL');
+  logger.info(`vector_embeddings: removed ${ids.length} embedding(s) of private diary entries`);
+  return ids.length;
+}
 
 // Vocabulary built from therapy-domain terms for consistent dimensionality
 // Each document's embedding is a sparse vector over this vocabulary
@@ -182,6 +280,7 @@ function ensureTable() {
   // constraint that excluded 'kb'. If we detect that constraint, rebuild the
   // table without it. SQLite has no ALTER for CHECK constraints, so the only
   // path is INSERT…SELECT into a fresh table. This runs at most once per DB.
+  let migrationsOk = true;
   try {
     const sqlRow = db.exec(
       "SELECT sql FROM sqlite_master WHERE type='table' AND name='vector_embeddings'"
@@ -221,12 +320,45 @@ function ensureTable() {
       db.run('COMMIT');
     }
   } catch (e) {
+    migrationsOk = false;
     logger.warn('vector_embeddings T-09 schema migration skipped: ' + e.message);
     try { db.run('ROLLBACK'); } catch (_) {}
   }
 
-  if (getSchemaVersion(db) !== schemaBefore) saveDatabaseAfterWrite();
-  _tableEnsuredFor = db;
+  // Audit H6 data migrations (idempotent; each is a no-op once applied).
+  let dataChanged = 0;
+  try {
+    dataChanged += encryptLegacyPreviews(db);
+  } catch (e) {
+    migrationsOk = false;
+    logger.error('vector_embeddings text_preview encryption migration failed: ' + e.message);
+  }
+  try {
+    dataChanged += purgePrivateDiaryEmbeddings(db);
+  } catch (e) {
+    migrationsOk = false;
+    logger.error('vector_embeddings private-diary purge failed: ' + e.message);
+  }
+
+  if (dataChanged > 0) {
+    // The old plaintext would otherwise survive in free pages of the saved
+    // image. VACUUM cannot run inside a transaction (and must not end a
+    // caller's), so it is skipped then; the next save still drops the rows.
+    if (inOpenTransaction()) {
+      logger.warn('vector_embeddings: transaction open, skipping VACUUM after preview migration');
+    } else {
+      try {
+        db.run('VACUUM');
+      } catch (e) {
+        logger.warn('vector_embeddings: VACUUM after preview migration failed: ' + e.message);
+      }
+    }
+  }
+
+  if (dataChanged > 0 || getSchemaVersion(db) !== schemaBefore) saveDatabaseAfterWrite();
+  // Only a fully successful run is cached; a failed migration retries on the
+  // next call instead of being skipped for the life of this handle.
+  if (migrationsOk) _tableEnsuredFor = db;
 }
 
 /**
@@ -250,7 +382,7 @@ function embedSessionTranscript(sessionId, transcript, clientId, therapistId) {
 
   const serialized = serializeEmbedding(embedding);
   const tokens = tokenize(transcript);
-  const preview = transcript.substring(0, 200);
+  const preview = encryptPreview(transcript.substring(0, 200));
 
   // Upsert: delete old entry if exists, then insert
   db.run(
@@ -290,7 +422,7 @@ function embedSessionSummary(sessionId, summary, clientId, therapistId) {
 
   const serialized = serializeEmbedding(embedding);
   const tokens = tokenize(summary);
-  const preview = summary.substring(0, 200);
+  const preview = encryptPreview(summary.substring(0, 200));
 
   db.run(
     "DELETE FROM vector_embeddings WHERE source_type = 'session_summary' AND source_id = ?",
@@ -402,6 +534,14 @@ function semanticSearch(queryText, options = {}) {
   const limit = options.limit || 10;
   const topResults = filteredScored.slice(0, limit);
 
+  // Audit H6: decrypt previews only for the page actually returned, and only
+  // for a therapist-scoped search. A search without therapist_id (no caller
+  // does that any more) never receives client-derived preview text.
+  for (const r of topResults) {
+    if (!CLIENT_SOURCE_TYPES.includes(r.source_type)) continue;
+    r.text_preview = options.therapist_id ? decryptPreview(r.text_preview) : null;
+  }
+
   return {
     results: topResults,
     query: queryText,
@@ -432,7 +572,9 @@ function getEmbedding(sourceType, sourceId) {
     source_id: row[2],
     client_id: row[3],
     therapist_id: row[4],
-    text_preview: row[5],
+    // Audit H6: decrypted here; routes/search.js checks ownership, consent
+    // and the private flag before returning it.
+    text_preview: CLIENT_SOURCE_TYPES.includes(row[1]) ? decryptPreview(row[5]) : row[5],
     token_count: row[6],
     created_at: row[7]
   };
@@ -475,6 +617,13 @@ function embedDiaryEntry(entryId, content, clientId, therapistId) {
   ensureTable();
   const db = getDatabase();
 
+  // T-12 / audit H6: a private diary entry must never be indexed.
+  const privRes = db.exec('SELECT is_private FROM diary_entries WHERE id = ?', [entryId]);
+  if (privRes.length > 0 && privRes[0].values.length > 0 && Number(privRes[0].values[0][0]) === 1) {
+    deleteDiaryEmbeddings(entryId);
+    return { success: false, error: 'Diary entry is private' };
+  }
+
   const embedding = generateEmbedding(content);
   if (!embedding) {
     logger.warn(`Cannot generate embedding for diary entry ${entryId}: empty text`);
@@ -483,7 +632,7 @@ function embedDiaryEntry(entryId, content, clientId, therapistId) {
 
   const serialized = serializeEmbedding(embedding);
   const tokens = tokenize(content);
-  const preview = content.substring(0, 200);
+  const preview = encryptPreview(content.substring(0, 200));
 
   // Upsert: delete old entry if exists, then insert
   db.run(
@@ -513,6 +662,31 @@ function embedDiaryEntry(entryId, content, clientId, therapistId) {
 
   logger.info(`Embedded diary entry ${entryId}: ${tokens.length} tokens, ref=${embeddingRef}`);
   return { success: true, embedding_id: embeddingId, embedding_ref: embeddingRef, token_count: tokens.length };
+}
+
+/**
+ * Delete the embedding(s) of a diary entry and clear its embedding_ref.
+ * Called when the client marks the entry private (routes/bot.js make-private)
+ * so its content is no longer searchable. Idempotent.
+ */
+function deleteDiaryEmbeddings(entryId) {
+  ensureTable();
+  const db = getDatabase();
+  const before = db.exec(
+    "SELECT COUNT(*) FROM vector_embeddings WHERE source_type = 'diary_entry' AND source_id = ?",
+    [entryId]
+  );
+  const count = before.length > 0 ? Number(before[0].values[0][0]) : 0;
+  const refRes = db.exec('SELECT embedding_ref FROM diary_entries WHERE id = ?', [entryId]);
+  const hasRef = refRes.length > 0 && refRes[0].values.length > 0 && refRes[0].values[0][0] != null;
+  if (count === 0 && !hasRef) return { deleted: 0 };
+  db.run(
+    "DELETE FROM vector_embeddings WHERE source_type = 'diary_entry' AND source_id = ?",
+    [entryId]
+  );
+  db.run('UPDATE diary_entries SET embedding_ref = NULL WHERE id = ?', [entryId]);
+  saveDatabaseAfterWrite();
+  return { deleted: count };
 }
 
 // ---------------------------------------------------------------------------
@@ -647,6 +821,8 @@ module.exports = {
   embedSessionTranscript,
   embedSessionSummary,
   embedDiaryEntry,
+  deleteDiaryEmbeddings,
+  isEncryptedPreview,
   embedKbChunk,
   deleteKbEmbeddings,
   searchKb,

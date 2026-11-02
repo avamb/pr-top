@@ -53,4 +53,31 @@ function verifyClientConsent(therapistId, clientId, auditAction) {
   return { allowed: true, client: { id: row[0], therapist_id: clientTherapistId, consent: hasConsent } };
 }
 
-module.exports = { verifyClientConsent };
+/**
+ * Startup check (audit wave 2): clients whose therapist_id points at a
+ * superadmin account. Before wave 2, POST /api/clients/link let a superadmin
+ * link clients to their own account with consent forced on, which gives the
+ * platform admin the client's Class A data through the therapist routes.
+ * Logs a warning with the count (never ids or emails) and returns it.
+ * Read-only; safe to call right after initDatabase().
+ * @returns {number}
+ */
+function warnClientsLinkedToSuperadmin() {
+  try {
+    const db = getDatabase();
+    const r = db.exec(
+      `SELECT COUNT(*) FROM users c JOIN users a ON a.id = c.therapist_id
+        WHERE c.role = 'client' AND a.role = 'superadmin'`
+    );
+    const count = r.length > 0 && r[0].values.length > 0 ? Number(r[0].values[0][0]) : 0;
+    if (count > 0) {
+      logger.warn(`[Consent] ${count} client(s) are linked to a superadmin account. Superadmin is a platform role and must not hold clients: the client should /disconnect in the bot and reconnect with their therapist's invite code.`);
+    }
+    return count;
+  } catch (e) {
+    logger.warn('[Consent] superadmin-linked client check failed: ' + e.message);
+    return 0;
+  }
+}
+
+module.exports = { verifyClientConsent, warnClientsLinkedToSuperadmin };

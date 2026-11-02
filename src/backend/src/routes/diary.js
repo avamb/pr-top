@@ -35,16 +35,16 @@ router.get('/:id/stream', authenticate, requireRole('therapist', 'superadmin'), 
 
     // T-12: client-private diary entries are invisible to therapists; don't even
     // confirm existence to avoid information leak.
-    if (isPrivate && req.user.role !== 'superadmin') {
+    // Audit H5: no superadmin bypass — superadmin is a platform role and
+    // must not read client clinical content (private entries included).
+    if (isPrivate) {
       return res.status(404).json({ error: 'Diary entry not found' });
     }
 
-    // Verify therapist owns this client (unless superadmin)
-    if (req.user.role !== 'superadmin') {
-      const consentCheck = verifyClientConsent(req.user.id, clientId, 'diary_stream');
-      if (!consentCheck.allowed) {
-        return res.status(consentCheck.status).json({ error: consentCheck.error });
-      }
+    // Verify the caller is the client's linked therapist and consent is granted
+    const consentCheck = verifyClientConsent(req.user.id, clientId, 'diary_stream');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
     if (!audioFileRef) {
@@ -129,7 +129,7 @@ router.get('/:id/stream', authenticate, requireRole('therapist', 'superadmin'), 
   }
 });
 
-// POST /api/diary/:id/retranscribe - Retry transcription for a diary entry (therapist/superadmin)
+// POST /api/diary/:id/retranscribe - Retry transcription for a diary entry (linked therapist only)
 router.post('/:id/retranscribe', authenticate, requireRole('therapist', 'superadmin'), async (req, res) => {
   try {
     const db = getDatabase();
@@ -151,16 +151,16 @@ router.post('/:id/retranscribe', authenticate, requireRole('therapist', 'superad
     const isPrivate = !!row[3];
 
     // T-12: client-private diary entries are invisible to therapists.
-    if (isPrivate && req.user.role !== 'superadmin') {
+    // Audit H5: no superadmin bypass — superadmin is a platform role and
+    // must not read client clinical content (private entries included).
+    if (isPrivate) {
       return res.status(404).json({ error: 'Diary entry not found' });
     }
 
-    // Verify therapist owns this client (unless superadmin)
-    if (req.user.role !== 'superadmin') {
-      const consentCheck = verifyClientConsent(req.user.id, clientId, 'diary_retranscribe');
-      if (!consentCheck.allowed) {
-        return res.status(consentCheck.status).json({ error: consentCheck.error });
-      }
+    // Verify the caller is the client's linked therapist and consent is granted
+    const consentCheck = verifyClientConsent(req.user.id, clientId, 'diary_retranscribe');
+    if (!consentCheck.allowed) {
+      return res.status(consentCheck.status).json({ error: consentCheck.error });
     }
 
     if (entryType !== 'voice' && entryType !== 'video') {
