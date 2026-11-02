@@ -51,8 +51,10 @@ FROM nginx:alpine
 # Remove default nginx config
 RUN rm /etc/nginx/conf.d/default.conf
 
-# Copy custom nginx config
+# Copy custom nginx config + the security-header block it includes per location
+# (nginx add_header is not inherited into locations that set their own).
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY security-headers.conf /etc/nginx/security-headers.conf
 
 # Copy built assets from build stage — this is the ONLY thing that crosses the
 # stage boundary. Chromium, Node, and Playwright stay in the discarded builder.
