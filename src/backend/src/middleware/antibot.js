@@ -76,7 +76,7 @@ function dummyJwt(email, role) {
   const b64 = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url');
   const now = Math.floor(Date.now() / 1000);
   const header = b64({ alg: 'HS256', typ: 'JWT' });
-  const payload = b64({ userId: 0, email, role, iat: now, exp: now + 24 * 60 * 60 });
+  const payload = b64({ userId: 0, email, role, tv: 0, iat: now, exp: now + 24 * 60 * 60 });
   return `${header}.${payload}.${crypto.randomBytes(32).toString('base64url')}`;
 }
 

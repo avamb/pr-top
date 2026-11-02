@@ -17,14 +17,13 @@
 // (NODE_ENV !== 'production' && AUTH_DEV_ECHO=true) /request echoes them in
 // the JSON body for automated tests only.
 const express = require('express');
-const jwt = require('jsonwebtoken');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const emailService = require('../services/emailService');
 const { t, SUPPORTED_LANGUAGES } = require('../i18n');
 const { antibot } = require('../middleware/antibot');
 const { getClientIp } = require('../utils/clientIp');
-const { issueSession, JWT_SECRET } = require('../utils/session');
+const { issueSession, verifySessionToken, isTokenVersionCurrent, getUserTokenVersion } = require('../utils/session');
 const loginCodes = require('../utils/loginCodes');
 
 const router = express.Router();
@@ -160,13 +159,15 @@ function conflictingSessionUserId(req, db, linkUserId) {
   if (!cookieToken || typeof cookieToken !== 'string') return null;
   let decoded;
   try {
-    decoded = jwt.verify(cookieToken, JWT_SECRET);
+    decoded = verifySessionToken(cookieToken);
   } catch (e) {
     return null; // expired/garbage cookie: treat as no session
   }
   const sessionUserId = decoded && Number(decoded.userId);
   if (!Number.isFinite(sessionUserId) || sessionUserId === Number(linkUserId)) return null;
-  return userExists(db, sessionUserId) ? sessionUserId : null;
+  if (!userExists(db, sessionUserId)) return null;
+  // A revoked token (H13) is no session either.
+  return isTokenVersionCurrent(decoded, getUserTokenVersion(sessionUserId, db)) ? sessionUserId : null;
 }
 
 // POST /api/auth/login-code/request

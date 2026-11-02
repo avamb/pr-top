@@ -39,7 +39,10 @@ namespaces.
 ## Sign-in and account issues
 
 - **Wrong password.** Use **Forgot password?**. A reset link is
-  emailed and is valid for one hour.
+  emailed and is valid for one hour. Setting a new password signs you
+  out on every other device and browser too.
+- **Signed out on another device after a password reset.** Expected:
+  a password reset revokes all existing sessions. Sign in again there.
 - **Password reset link never arrives.** Check spam. Reissue. If it
   still fails, use the confirmation-email retry flow, or contact
   support.

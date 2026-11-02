@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { logout } from '../../utils/logout';
 
 const API_URL = '/api';
 
@@ -18,9 +19,8 @@ export default function TherapistGuard({ user, children }) {
 
     // Client role cannot access the web panel
     if (user.role === 'client') {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      navigate('/login', { state: { accessDenied: true } });
+      // Also clears the HttpOnly session cookie server-side.
+      logout().finally(() => navigate('/login', { state: { accessDenied: true } }));
       return;
     }
 

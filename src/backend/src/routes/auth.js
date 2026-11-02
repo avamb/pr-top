@@ -1,7 +1,6 @@
 // Authentication Routes
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
@@ -10,12 +9,11 @@ const emailService = require('../services/emailService');
 const { t } = require('../i18n');
 const { antibot } = require('../middleware/antibot');
 const { getClientIp } = require('../utils/clientIp');
-const { issueSession, SESSION_COOKIE_OPTIONS } = require('../utils/session');
+const { issueSession, verifySessionToken, isTokenVersionCurrent, bumpTokenVersion } = require('../utils/session');
+const { authenticate } = require('../middleware/auth');
 const { createVerificationToken, sendVerificationEmailAsync } = require('./emailVerification');
 
 const router = express.Router();
-
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-change-in-production';
 
 // Helper: extract token from Authorization header or session cookie
 function extractToken(req) {
@@ -404,11 +402,13 @@ router.post('/register-viewer', antibot({ turnstile: true, fake: 'viewer', expec
         const sessionResult = db.exec('SELECT id FROM viewer_sessions WHERE uuid = ?', [session_uuid]);
         if (sessionResult.length > 0 && sessionResult[0].values.length > 0) {
           const viewerSessionId = sessionResult[0].values[0][0];
-          // Update conversations that were created as anonymous (therapist_id=0) for this session's timeframe
-          // We link them by updating therapist_id from 0 to the new viewer userId
+          // Re-parent ONLY the anonymous landing conversations created by this
+          // visitor's own viewer session (assistant_conversations.viewer_session_id),
+          // from therapist_id 0 to the new viewer userId. (This used to pick the
+          // most recent anonymous landing conversation of ANY visitor.)
           db.run(
-            "UPDATE assistant_conversations SET therapist_id = ? WHERE therapist_id = 0 AND page_context = 'landing' AND id IN (SELECT ac.id FROM assistant_conversations ac WHERE ac.therapist_id = 0 AND ac.page_context = 'landing' ORDER BY ac.last_message_at DESC LIMIT 1)",
-            [userId]
+            "UPDATE assistant_conversations SET therapist_id = ? WHERE therapist_id = 0 AND page_context = 'landing' AND viewer_session_id = ?",
+            [userId, viewerSessionId]
           );
         }
 
@@ -419,12 +419,8 @@ router.post('/register-viewer', antibot({ turnstile: true, fake: 'viewer', expec
       }
     }
 
-    // Generate JWT
-    const token = jwt.sign(
-      { userId: userId, email: user[1], role: 'viewer' },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    );
+    // Sign JWT (with token_version) + set HttpOnly session cookie
+    const { token } = issueSession(res, { id: userId, email: user[1], role: 'viewer', token_version: 0 });
 
     logger.info(`[ViewerReg] Viewer registered: id=${userId}, email=${normalizedEmail}`);
 
@@ -440,9 +436,6 @@ router.post('/register-viewer', antibot({ turnstile: true, fake: 'viewer', expec
       .catch(err => {
         logger.error(`[ViewerReg] Welcome email error for ${normalizedEmail}: ${err.message}`);
       });
-
-    // Set secure HttpOnly session cookie
-    res.cookie('session_token', token, SESSION_COOKIE_OPTIONS);
 
     res.status(201).json({
       message: 'Registered successfully! You can continue chatting.',
@@ -635,19 +628,50 @@ router.get('/verify-lead', async (req, res) => {
   }
 });
 
-// POST /api/auth/logout - Clear session cookie and invalidate token
-router.post('/logout', (req, res) => {
-  // Clear the session cookie
+// Clear the HttpOnly session cookie (same attributes it was set with).
+function clearSessionCookie(res) {
   res.clearCookie('session_token', {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'Strict',
     path: '/'
   });
+}
+
+// POST /api/auth/logout - Log out THIS device: clear the session cookie.
+// Deliberately does not bump token_version (that would also log the user out
+// on every other device); use /logout-all for that. The SPA drops its
+// localStorage copy of the token after this call.
+router.post('/logout', (req, res) => {
+  clearSessionCookie(res);
 
   logger.info('User logged out, session cookie cleared');
 
   res.json({ message: 'Logged out successfully' });
+});
+
+// POST /api/auth/logout-all - Revoke every session of the caller (all
+// devices) by bumping users.token_version, then clear this device's cookie.
+router.post('/logout-all', authenticate, (req, res) => {
+  try {
+    const db = getDatabase();
+    bumpTokenVersion(req.user.id, db);
+    try {
+      db.run(
+        "INSERT INTO audit_logs (actor_id, action, target_type, target_id, ip_address, created_at) VALUES (?, 'logout_all', 'user', ?, ?, datetime('now'))",
+        [req.user.id, req.user.id, getClientIp(req)]
+      );
+    } catch (auditError) {
+      logger.warn(`logout-all audit log failed for user id=${req.user.id}: ${auditError.message}`);
+    }
+    saveDatabaseAfterWrite();
+    clearSessionCookie(res);
+    logger.info(`User ${req.user.id} logged out on all devices (token_version bumped)`);
+    res.json({ message: 'Logged out on all devices' });
+  } catch (error) {
+    logger.error('Logout-all error: ' + error.message);
+    res.status(500).json({ error: 'Logout failed' });
+  }
 });
 
 // GET /api/auth/me
@@ -658,14 +682,14 @@ router.get('/me', (req, res) => {
       return res.status(401).json({ error: 'No token provided' });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = verifySessionToken(token);
 
     const db = getDatabase();
 
     logger.info(`Fetching user profile: id=${decoded.userId}`);
 
     const result = db.exec(
-      'SELECT id, email, role, language, timezone, created_at, blocked_at, email_verified_at FROM users WHERE id = ?',
+      'SELECT id, email, role, language, timezone, created_at, blocked_at, email_verified_at, token_version FROM users WHERE id = ?',
       [decoded.userId]
     );
 
@@ -674,6 +698,11 @@ router.get('/me', (req, res) => {
     }
 
     const user = result[0].values[0];
+
+    // H13: revoked token (password reset, admin block, logout-all)
+    if (!isTokenVersionCurrent(decoded, user[8])) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
 
     // Check if user is blocked
     if (user[6]) {
@@ -868,6 +897,9 @@ router.post('/reset-password', async (req, res) => {
 
     // Invalidate all other reset tokens for this user
     db.run('UPDATE password_reset_tokens SET used = 1 WHERE user_id = ? AND used = 0', [userId]);
+
+    // H13: a new password revokes every existing session (all devices).
+    bumpTokenVersion(userId, db);
 
     saveDatabaseAfterWrite();
 

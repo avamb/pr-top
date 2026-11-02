@@ -11,13 +11,12 @@
 const express = require('express');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const emailService = require('../services/emailService');
 const { t } = require('../i18n');
 const { authenticate } = require('../middleware/auth');
-const { issueSession, JWT_SECRET } = require('../utils/session');
+const { issueSession, verifySessionToken, isTokenVersionCurrent, getUserTokenVersion } = require('../utils/session');
 const { getClientIp } = require('../utils/clientIp');
 
 const router = express.Router();
@@ -42,8 +41,10 @@ function cookieSessionUserId(req) {
   const raw = req.cookies && req.cookies.session_token;
   if (!raw) return null;
   try {
-    const decoded = jwt.verify(raw, JWT_SECRET);
-    return decoded && decoded.userId != null ? decoded.userId : null;
+    const decoded = verifySessionToken(raw);
+    if (!decoded || decoded.userId == null) return null;
+    // A revoked cookie (password reset, block) is no session at all.
+    return isTokenVersionCurrent(decoded, getUserTokenVersion(decoded.userId)) ? decoded.userId : null;
   } catch (e) {
     return null;
   }

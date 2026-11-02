@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useUnsavedChanges } from '../contexts/UnsavedChangesContext';
 import LanguageSwitcher from './LanguageSwitcher';
 import { useNotificationCount } from './NotificationToast';
+import { logout } from '../utils/logout';
 
 /* ── SVG Icons ────────────────────────────────────────── */
 const DashboardIcon = () => (
@@ -192,10 +193,11 @@ export default function Sidebar({ user, isOpen, onToggle }) {
     if (onToggle) onToggle(false);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (!confirmNavigation()) return;
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    // Server clears the HttpOnly session cookie; local storage is cleared
+    // even if that request fails.
+    await logout();
     if (onToggle) onToggle(false);
     navigate('/');
   };

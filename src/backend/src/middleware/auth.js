@@ -1,10 +1,9 @@
 // Authentication Middleware
-const jwt = require('jsonwebtoken');
 const { getDatabase } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { t } = require('../i18n');
-
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-change-in-production';
+// HS256-pinned verify + token_version (H13) helpers shared with every JWT path.
+const { verifySessionToken, isTokenVersionCurrent } = require('../utils/session');
 
 // Extract token from Authorization header or session cookie
 function extractToken(req) {
@@ -25,11 +24,11 @@ function authenticate(req, res, next) {
     if (!token) {
       return res.status(401).json({ error: 'No token provided' });
     }
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = verifySessionToken(token);
 
     const db = getDatabase();
     const result = db.exec(
-      'SELECT id, email, role, blocked_at, email_verified_at FROM users WHERE id = ?',
+      'SELECT id, email, role, blocked_at, email_verified_at, token_version FROM users WHERE id = ?',
       [decoded.userId]
     );
 
@@ -38,6 +37,12 @@ function authenticate(req, res, next) {
     }
 
     const user = result[0].values[0];
+
+    // H13: the token was revoked (password reset, admin block, logout-all).
+    // Same 401 as an expired token so the SPA sends the user to /login.
+    if (!isTokenVersionCurrent(decoded, user[5])) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
 
     // Check if user is blocked
     if (user[3]) {
@@ -102,15 +107,17 @@ function requireActiveSubscription(req, res, next) {
 
     let decoded;
     try {
-      decoded = jwt.verify(token, JWT_SECRET);
+      decoded = verifySessionToken(token);
     } catch (e) {
       return next(); // Let authenticate handle invalid tokens
     }
 
     // Look up user role
     const db = getDatabase();
-    const userResult = db.exec('SELECT id, role FROM users WHERE id = ?', [decoded.userId]);
+    const userResult = db.exec('SELECT id, role, token_version FROM users WHERE id = ?', [decoded.userId]);
     if (userResult.length === 0 || userResult[0].values.length === 0) return next();
+    // Revoked token (H13): let the route's authenticate answer 401.
+    if (!isTokenVersionCurrent(decoded, userResult[0].values[0][2])) return next();
 
     const userId = userResult[0].values[0][0];
     const role = userResult[0].values[0][1];
@@ -211,13 +218,15 @@ function requireVerifiedEmail(req, res, next) {
       if (!token) return next();
       let decoded;
       try {
-        decoded = jwt.verify(token, JWT_SECRET);
+        decoded = verifySessionToken(token);
       } catch (e) {
         return next();
       }
       const db = getDatabase();
-      const result = db.exec('SELECT role, email_verified_at FROM users WHERE id = ?', [decoded.userId]);
+      const result = db.exec('SELECT role, email_verified_at, token_version FROM users WHERE id = ?', [decoded.userId]);
       if (result.length === 0 || result[0].values.length === 0) return next();
+      // Revoked token (H13): let the route's authenticate answer 401.
+      if (!isTokenVersionCurrent(decoded, result[0].values[0][2])) return next();
       role = result[0].values[0][0];
       emailVerified = !!result[0].values[0][1];
     }

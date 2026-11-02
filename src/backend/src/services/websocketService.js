@@ -1,11 +1,9 @@
 // WebSocket Service for real-time notifications
 // Provides push notifications to therapist dashboards via ws
 const { WebSocketServer } = require('ws');
-const jwt = require('jsonwebtoken');
 const { getDatabase } = require('../db/connection');
 const { logger } = require('../utils/logger');
-
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-change-in-production';
+const { verifySessionToken, isTokenVersionCurrent } = require('../utils/session');
 
 // Map: therapistId -> Set<WebSocket>
 const therapistConnections = new Map();
@@ -30,13 +28,13 @@ function initWebSocket(httpServer) {
 
     let userId, userRole;
     try {
-      const decoded = jwt.verify(token, JWT_SECRET);
+      const decoded = verifySessionToken(token);
       userId = decoded.userId;
 
       // Verify user exists and is therapist/superadmin
       const db = getDatabase();
       const result = db.exec(
-        'SELECT id, role, blocked_at FROM users WHERE id = ?',
+        'SELECT id, role, blocked_at, token_version FROM users WHERE id = ?',
         [userId]
       );
 
@@ -46,6 +44,11 @@ function initWebSocket(httpServer) {
       }
 
       const user = result[0].values[0];
+      // H13: token revoked (password reset, admin block, logout-all)
+      if (!isTokenVersionCurrent(decoded, user[3])) {
+        ws.close(4001, 'Invalid or expired token');
+        return;
+      }
       if (user[2]) {
         ws.close(4003, 'Account blocked');
         return;
@@ -190,6 +193,25 @@ function emitSessionStatus(therapistId, data) {
 }
 
 /**
+ * Close every open connection of a user (after token revocation or block).
+ * Code 4001 stops the dashboard from reconnecting with the revoked token.
+ */
+function disconnectUser(userId, code = 4001, reason = 'Session revoked') {
+  const conns = therapistConnections.get(Number(userId)) || therapistConnections.get(userId);
+  if (!conns || conns.size === 0) return 0;
+  let closed = 0;
+  for (const ws of Array.from(conns)) {
+    try {
+      ws.close(code, reason);
+      closed++;
+    } catch (err) {
+      logger.warn(`[WS] Failed to close connection for user ${userId}: ${err.message}`);
+    }
+  }
+  return closed;
+}
+
+/**
  * Get connection stats (for health endpoint)
  */
 function getStats() {
@@ -210,5 +232,6 @@ module.exports = {
   emitNewDiaryEntry,
   emitExerciseCompleted,
   emitSessionStatus,
+  disconnectUser,
   getStats
 };
