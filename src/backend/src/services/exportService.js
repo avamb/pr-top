@@ -192,17 +192,32 @@ function exportClientFull(clientId, therapistId) {
 }
 
 /**
- * Convert an array of objects to CSV string
+ * Neutralise spreadsheet formula injection (CSV injection, OWASP).
+ * Excel / LibreOffice / Sheets treat a cell starting with = + - @ (or a tab /
+ * carriage return, which some versions strip before parsing) as a formula.
+ * Client-authored text (diary, notes, names) ends up in these exports, so such
+ * cells get a leading apostrophe; the spreadsheet then shows them as text.
+ * Numbers and booleans are not touched: a legitimate negative number such as
+ * -5 is a JS number here and never starts as an attacker-controlled string.
+ */
+function neutralizeCsvFormula(val) {
+  const str = String(val);
+  if (typeof val === 'number' || typeof val === 'boolean') return str;
+  return /^[=+\-@\t\r]/.test(str) ? "'" + str : str;
+}
+
+/**
+ * Convert an array of objects to CSV string (formula-safe, see above)
  */
 function objectsToCSV(data, columns) {
   if (!data || data.length === 0) return '';
   const cols = columns || Object.keys(data[0]);
-  const header = cols.map(c => `"${c}"`).join(',');
+  const header = cols.map(c => `"${neutralizeCsvFormula(c).replace(/"/g, '""')}"`).join(',');
   const rows = data.map(row =>
     cols.map(c => {
       const val = row[c];
       if (val === null || val === undefined) return '""';
-      const str = String(val).replace(/"/g, '""');
+      const str = neutralizeCsvFormula(val).replace(/"/g, '""');
       return `"${str}"`;
     }).join(',')
   );
@@ -297,5 +312,6 @@ module.exports = {
   exportExercises,
   exportSOSEvents,
   exportAnalyticsCSV,
-  objectsToCSV
+  objectsToCSV,
+  neutralizeCsvFormula
 };

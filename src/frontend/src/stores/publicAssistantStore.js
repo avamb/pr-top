@@ -7,27 +7,21 @@ const MAX_MESSAGES = 5;
 const MAX_MESSAGES_LEAD = 15; // 5 base + 10 after email
 const MAX_MESSAGES_VERIFIED = 25; // 5 base + 10 + 10 after verification
 
-// Generate a UUID v4
-function generateUUID() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
-
-// Get or create session UUID from localStorage
+// The session id is issued by the server (first reply) and only stored here;
+// a client-made id would let anyone reset the per-session message cap.
 function getSessionUUID() {
   try {
-    let uuid = localStorage.getItem(SESSION_UUID_KEY);
-    if (!uuid) {
-      uuid = generateUUID();
-      localStorage.setItem(SESSION_UUID_KEY, uuid);
-    }
-    return uuid;
+    return localStorage.getItem(SESSION_UUID_KEY) || null;
   } catch {
-    return generateUUID();
+    return null;
   }
+}
+
+function storeSessionUUID(uuid) {
+  if (!uuid || typeof uuid !== 'string') return;
+  try {
+    localStorage.setItem(SESSION_UUID_KEY, uuid);
+  } catch {}
 }
 
 /**
@@ -117,6 +111,20 @@ const usePublicAssistantStore = create((set, get) => ({
     }
 
     const { csrfToken, useStreaming = true } = options;
+
+    // Several tabs share localStorage: another tab may have been issued a newer
+    // session id. Prefer the stored one so tabs converge on a single session. A
+    // conversation id belongs to the session that created it, so it is dropped
+    // when the session changes underneath this tab.
+    const storedUUID = getSessionUUID();
+    let activeUUID = state.sessionUUID;
+    let activeConversationId = state.conversationId;
+    if (storedUUID && storedUUID !== state.sessionUUID) {
+      activeUUID = storedUUID;
+      activeConversationId = null;
+      set({ sessionUUID: storedUUID, conversationId: null });
+    }
+
     const userMessage = { role: 'user', content: trimmed, timestamp: new Date().toISOString() };
 
     set(s => ({
@@ -137,10 +145,10 @@ const usePublicAssistantStore = create((set, get) => ({
 
       const body = {
         message: trimmed,
-        session_uuid: state.sessionUUID,
+        session_uuid: activeUUID,
         language: locale || 'en',
         stream: useStreaming,
-        conversation_id: state.conversationId
+        conversation_id: activeConversationId
       };
 
       const res = await fetch('/api/assistant/public-chat', {
@@ -152,6 +160,10 @@ const usePublicAssistantStore = create((set, get) => ({
       // Handle message limit reached
       if (res.status === 403) {
         const errData = await res.json().catch(() => ({}));
+        if (errData.session_uuid) {
+          storeSessionUUID(errData.session_uuid);
+          set({ sessionUUID: errData.session_uuid });
+        }
         if (errData.error === 'message_limit_reached') {
           const isReg = get().isRegistered;
           set(s => ({
@@ -190,6 +202,7 @@ const usePublicAssistantStore = create((set, get) => ({
         let buffer = '';
         let fullText = '';
         let finalConvId = null;
+        let finalSessionUUID = null;
         let messagesRemaining = null;
 
         try {
@@ -212,6 +225,7 @@ const usePublicAssistantStore = create((set, get) => ({
                   set({ streamingText: fullText });
                 } else if (event.type === 'done') {
                   finalConvId = event.conversation_id;
+                  finalSessionUUID = event.session_uuid || null;
                   messagesRemaining = event.messages_remaining;
                 } else if (event.type === 'error') {
                   fullText = event.text || 'An error occurred';
@@ -236,9 +250,11 @@ const usePublicAssistantStore = create((set, get) => ({
         const curMax = get().maxMessages;
         const remaining = messagesRemaining != null ? messagesRemaining : curMax - newUsed;
 
+        storeSessionUUID(finalSessionUUID);
         set(s => ({
           messages: [...s.messages, assistantMessage],
           conversationId: finalConvId || s.conversationId,
+          sessionUUID: finalSessionUUID || s.sessionUUID,
           messagesUsed: newUsed,
           messagesRemaining: remaining,
           isLoading: false,
@@ -260,9 +276,11 @@ const usePublicAssistantStore = create((set, get) => ({
         const curMax = get().maxMessages;
         const remaining = data.messages_remaining != null ? data.messages_remaining : curMax - newUsed;
 
+        storeSessionUUID(data.session_uuid);
         set(s => ({
           messages: [...s.messages, assistantMessage],
           conversationId: data.conversation_id || s.conversationId,
+          sessionUUID: data.session_uuid || s.sessionUUID,
           messagesUsed: newUsed,
           messagesRemaining: remaining,
           isLoading: false,

@@ -10,6 +10,7 @@
 // 6-10. Database backup, reminder-service jobs (see start())
 // 11. Unverified-therapist cleanup (daily at 3:30 AM) — wave 2, track 2A
 // 12. Login-code cleanup (daily at 2:15 AM, same slot as job 2) — wave 2, track 2A
+// 13. Data retention purge (daily at 4:00 AM) — services/retentionService.js
 
 const cron = require('node-cron');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
@@ -41,6 +42,13 @@ try {
   reminderService = require('./reminderService');
 } catch (e) {
   reminderService = null;
+}
+
+let retentionService;
+try {
+  retentionService = require('./retentionService');
+} catch (e) {
+  retentionService = null;
 }
 
 const SCHEDULER_ENABLED = process.env.SCHEDULER_ENABLED !== 'false'; // default true
@@ -653,6 +661,24 @@ function runLoginCodesCleanup() {
   }
 }
 
+/**
+ * Job 13: Data retention purge - daily at 4:00 AM (after the 3:00 backup and the
+ * 3:30 unverified-account cleanup). Windows and RETENTION_DRY_RUN come from env;
+ * see services/retentionService.js and .env.example.
+ */
+async function runRetentionCleanup() {
+  if (!retentionService) {
+    logger.warn('[SCHEDULER] retention: retentionService not loaded, skipping');
+    return { error: 'retentionService_not_loaded' };
+  }
+  try {
+    return await retentionService.runRetention();
+  } catch (error) {
+    logger.error('[SCHEDULER] Retention cleanup error: ' + error.message);
+    return { error: error.message };
+  }
+}
+
 function start() {
   if (!SCHEDULER_ENABLED) {
     logger.info('[SCHEDULER] Scheduler disabled via SCHEDULER_ENABLED=false');
@@ -730,8 +756,14 @@ function start() {
     runUnverifiedCleanup();
   }, { name: 'unverified-cleanup' }));
 
+  // Job 13: Data retention purge - daily at 4:00 AM
+  scheduledTasks.push(cron.schedule('0 4 * * *', function() {
+    logger.info('[SCHEDULER] Running retention cleanup job...');
+    runRetentionCleanup(); // async; never rejects (errors are caught inside)
+  }, { name: 'retention-cleanup' }));
+
   logger.info('[SCHEDULER] All scheduled tasks registered (' + scheduledTasks.length + ' jobs)');
-  logger.info('[SCHEDULER] Jobs: trial-expiration (2:00), subscription-downgrade (2:15), login-codes-cleanup (2:15), expiry-warning (9:00), diary-reminder (10:00), csrf-cleanup (hourly), database-backup (' + backupCron + '), plan-reminders (*/15), dispatch-opt-in-notices (*/10), dispatch-due-reminders (*/5), mark-no-shows (hourly), unverified-cleanup (3:30, ' + unverifiedCleanupDays() + 'd' + (process.env.UNVERIFIED_CLEANUP_DRY_RUN === 'true' ? ', dry-run' : '') + ')');
+  logger.info('[SCHEDULER] Jobs: trial-expiration (2:00), subscription-downgrade (2:15), login-codes-cleanup (2:15), expiry-warning (9:00), diary-reminder (10:00), csrf-cleanup (hourly), database-backup (' + backupCron + '), plan-reminders (*/15), dispatch-opt-in-notices (*/10), dispatch-due-reminders (*/5), mark-no-shows (hourly), unverified-cleanup (3:30, ' + unverifiedCleanupDays() + 'd' + (process.env.UNVERIFIED_CLEANUP_DRY_RUN === 'true' ? ', dry-run' : '') + '), retention-cleanup (4:00' + (process.env.RETENTION_DRY_RUN === 'true' ? ', dry-run' : '') + ')');
 }
 
 /**
@@ -763,4 +795,6 @@ module.exports = {
   // Wave 2 (track 2A) jobs
   runUnverifiedCleanup,
   runLoginCodesCleanup,
+  // Data retention
+  runRetentionCleanup,
 };

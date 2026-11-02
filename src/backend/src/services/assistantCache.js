@@ -207,7 +207,8 @@ async function findCachedAnswer(questionText, audience, locale) {
  * @param {string} questionText - The user's question
  * @param {string} answerText - The AI's answer
  * @param {boolean} hasRagContext - Whether RAG context was available for this answer
- * @param {{audience?: 'public'|'user', locale?: string}} [opts]
+ * @param {{audience?: 'public'|'user', locale?: string, source?: string}} [opts]
+ *   source marks curated rows (e.g. 'admin_correction') that retention never expires.
  * @returns {number|null} The ID of the cached entry, or null on error/skipped
  */
 async function storeCachedAnswer(questionText, answerText, hasRagContext, opts) {
@@ -219,6 +220,7 @@ async function storeCachedAnswer(questionText, answerText, hasRagContext, opts) 
 
   const audience = (opts && opts.audience === 'user') ? 'user' : 'public';
   const locale = (opts && opts.locale) || 'en';
+  const source = (opts && typeof opts.source === 'string' && opts.source) ? opts.source.slice(0, 40) : null;
 
   try {
     // S8: embed with AI when available so future queries hit at the AI
@@ -233,8 +235,8 @@ async function storeCachedAnswer(questionText, answerText, hasRagContext, opts) 
     const db = getDatabase();
 
     db.run(
-      "INSERT INTO assistant_cached_answers (question_embedding, question_text, answer_text, usage_count, has_rag_context, audience, locale, is_seed, embedding_type, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?, ?, 0, ?, datetime('now'), datetime('now'))",
-      [serialized, questionText, answerText, hasRagContext ? 1 : 0, audience, locale, embType]
+      "INSERT INTO assistant_cached_answers (question_embedding, question_text, answer_text, usage_count, has_rag_context, audience, locale, is_seed, embedding_type, source, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?, ?, 0, ?, ?, datetime('now'), datetime('now'))",
+      [serialized, questionText, answerText, hasRagContext ? 1 : 0, audience, locale, embType, source]
     );
 
     const idResult = db.exec('SELECT last_insert_rowid()');
@@ -309,7 +311,7 @@ function updateCachedAnswer(id, answerText) {
   try {
     const db = getDatabase();
     db.run(
-      "UPDATE assistant_cached_answers SET answer_text = ?, updated_at = datetime('now') WHERE id = ?",
+      "UPDATE assistant_cached_answers SET answer_text = ?, source = COALESCE(source, 'admin_edit'), updated_at = datetime('now') WHERE id = ?",
       [answerText, id]
     );
     saveDatabaseAfterWrite();

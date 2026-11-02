@@ -25,6 +25,7 @@
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { canUseSessionReminders } = require('../utils/planLimits');
+const { buildAttendanceUrl } = require('../utils/signedLinks');
 
 let telegramNotify;
 try {
@@ -48,6 +49,7 @@ const OFFSET_LABEL_DAY_OF     = -1;   // synthetic, for "day-of 09:00 or session
 const NO_SHOW_GRACE_MIN       = 30;   // mark no-show after scheduled + duration + 30min
 const DISPATCH_BATCH_LIMIT    = 200;  // bound work per dispatch tick
 const DEFAULT_DURATION_MIN    = 60;
+const SENDING_STALE_MIN       = 30;   // 'sending' rows older than this are reclaimed to 'pending'
 const MORNING_LOCAL_HOUR      = 9;    // fixed at 09:00 client local per architecture §13.1 #9
 const DAY_OF_LEAD_HOURS       = 2;    // reminder ≤ scheduled_at − 2h (architecture §4.1 #2)
 
@@ -500,6 +502,17 @@ function renderReminderMessage(kind, lang, ctx) {
 }
 
 /**
+ * Short localized "tomorrow at 18:00" / "today at 09:30" label for the email
+ * subject/body (the email template wraps it in <strong>).
+ */
+function renderWhenLabel(kind, lang, hhmm) {
+  const tomorrow = { en: 'Tomorrow at', ru: 'Завтра в', es: 'Mañana a las', uk: 'Завтра о' };
+  const today    = { en: 'Today at',    ru: 'Сегодня в', es: 'Hoy a las',    uk: 'Сьогодні о' };
+  const table = kind === 'day_before' ? tomorrow : today;
+  return `${table[lang] || table.en} ${hhmm}`;
+}
+
+/**
  * Check whether `nowDate` falls inside the client's configured quiet hours.
  * escalation_preferences shape: { quiet_hours_enabled, quiet_hours_start, quiet_hours_end }.
  * Returns true if quiet hours are enabled AND nowDate (interpreted in client tz)
@@ -548,6 +561,23 @@ async function dispatchDue() {
   const summary = { sent: 0, failed: 0, skipped: 0, superseded: 0 };
 
   try {
+    // M18: rows left in 'sending' by a crashed/killed run return to 'pending'
+    // after SENDING_STALE_MIN so the reminder is retried on the next tick.
+    // claimed_at (own column, not shown in the UI) records when a row was claimed;
+    // a 'sending' row without claimed_at (legacy / pre-migration) is reclaimed too.
+    db.run(
+      `UPDATE session_reminder_dispatches
+          SET status='pending', claimed_at=NULL, error=NULL
+        WHERE status='sending'
+          AND (claimed_at IS NULL
+               OR claimed_at < datetime('now', '-${SENDING_STALE_MIN} minutes'))`
+    );
+    const reclaimed = db.getRowsModified();
+    if (reclaimed > 0) {
+      logger.warn(`[reminderService] dispatchDue: returned ${reclaimed} stale 'sending' row(s) to pending`);
+      saveDatabaseAfterWrite();
+    }
+
     const dueRes = db.exec(
       `SELECT id, session_id, therapist_id, client_id, offset_minutes, scheduled_send_at, channel
          FROM session_reminder_dispatches
@@ -567,6 +597,22 @@ async function dispatchDue() {
       const [dispatchId, sessionId, therapistId, clientId, offsetLabel, scheduledSendAt, channel] = row;
 
       try {
+        // ── Claim the row (M18) ──
+        // Atomic pending -> sending. A concurrent/overlapping dispatchDue run
+        // (the loop below awaits network sends) that already claimed this id
+        // makes getRowsModified() 0 here, so the row is never sent twice.
+        db.run(
+          `UPDATE session_reminder_dispatches
+              SET status='sending', claimed_at=datetime('now')
+            WHERE id=? AND status='pending'`,
+          [dispatchId]
+        );
+        if (db.getRowsModified() === 0) {
+          logger.debug(`[reminderService] dispatchDue: dispatch ${dispatchId} already claimed, skipping`);
+          continue;
+        }
+        saveDatabaseAfterWrite(); // schedule persisting the claim before the network send
+
         // ── 0. Plan-access gate — skip dispatch if therapist's plan no longer includes reminders ──
         if (!canUseSessionReminders(therapistId)) {
           db.run(
@@ -694,9 +740,14 @@ async function dispatchDue() {
                   callback_data: `release_session_${sessionId}` },
               ]],
             };
+            // telegramNotify.sendMessage retries once WITHOUT parse_mode when
+            // Telegram rejects the Markdown (names containing _ * [ etc.); the
+            // row is marked failed only if that plain-text retry fails too.
+            // `body` carries no intentional Markdown, so it is its own plain text.
             const result = await telegramNotify.sendMessage(clTelegramId, body, {
               parse_mode: 'Markdown',
               reply_markup: replyMarkup,
+              plainText: body,
             });
             if (result && result.sent) {
               sent = true;
@@ -722,7 +773,26 @@ async function dispatchDue() {
             // Real send: future ticket will register the 'session_reminder' template.
             try {
               if (typeof emailService.sendSessionReminder === 'function') {
-                const r = await emailService.sendSessionReminder(clEmail, { body, lang });
+                // Real signature: (toEmail, locale, data). CTA links are signed
+                // attendance links that expire when the session starts.
+                const linkBase = { session_id: sessionId, client_id: clientId, expires_at: sessDate };
+                let emailLinks = {};
+                try {
+                  emailLinks = {
+                    confirm_url:    buildAttendanceUrl({ ...linkBase, action: 'confirm' }),
+                    reschedule_url: buildAttendanceUrl({ ...linkBase, action: 'reschedule' }),
+                    release_url:    buildAttendanceUrl({ ...linkBase, action: 'release' }),
+                  };
+                } catch (linkErr) {
+                  logger.warn(`[reminderService] dispatch ${dispatchId}: attendance link build failed: ${linkErr.message}`);
+                }
+                const r = await emailService.sendSessionReminder(clEmail, lang, {
+                  client_name: clFirstName || '',
+                  therapist_name: therapistName,
+                  session_local_time_string: renderWhenLabel(kind, lang, whenStr),
+                  tone: 'neutral',
+                  ...emailLinks,
+                });
                 if (r && r.sent) { sent = true; messageRef = r.messageId || null; }
                 else { sendErr = (r && r.error) || 'email_send_failed'; }
               } else {
@@ -744,7 +814,7 @@ async function dispatchDue() {
         if (sent) {
           db.run(
             `UPDATE session_reminder_dispatches
-                SET status='sent', sent_at=datetime('now'), message_ref=?
+                SET status='sent', sent_at=datetime('now'), message_ref=?, error=NULL, claimed_at=NULL
               WHERE id=?`,
             [messageRef ? String(messageRef) : null, dispatchId]
           );
@@ -801,15 +871,15 @@ function cancelPendingForSession(sessionId, reason) {
   try {
     const db = getDatabase();
     const before = db.exec(
-      `SELECT COUNT(*) FROM session_reminder_dispatches WHERE session_id=? AND status='pending'`,
+      `SELECT COUNT(*) FROM session_reminder_dispatches WHERE session_id=? AND status IN ('pending', 'sending')`,
       [sessionId]
     );
     const count = (before.length && before[0].values.length) ? before[0].values[0][0] : 0;
     if (count === 0) return { cancelled: 0 };
     db.run(
       `UPDATE session_reminder_dispatches
-          SET status='superseded', error=?
-        WHERE session_id=? AND status='pending'`,
+          SET status='superseded', error=?, claimed_at=NULL
+        WHERE session_id=? AND status IN ('pending', 'sending')`,
       [reason ? String(reason) : 'superseded', sessionId]
     );
     db.run(

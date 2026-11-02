@@ -1,6 +1,7 @@
 // Public Assistant Chat API - No authentication required
 // For anonymous visitors on the landing page (limited to 5 messages per session)
 
+const crypto = require('crypto');
 const express = require('express');
 const router = express.Router();
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
@@ -11,7 +12,39 @@ const assistantCache = require('../services/assistantCache');
 const assistantKnowledge = require('../services/assistantKnowledge');
 const { sanitizeInput, sanitizeOutput, detectInjection, getInjectionRejection, detectLanguage } = require('../services/assistantSanitizer');
 
+const { getClientIp } = require('../utils/clientIp');
+const { checkSpendingLimit, logUsage, calculateCost } = require('../services/aiUsageLogger');
+
 const MAX_MESSAGES_PER_SESSION = 5;
+
+function envPositiveInt(name, fallback) {
+  const n = parseInt(process.env[name] || '', 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+// H9: ids are server-issued, so the per-session cap can only be dodged by starting
+// new sessions. Three independent limits bound that. All are read per request so
+// they can be tuned via env without a code change.
+//  1) Per IP: max NEW sessions created from one IP in the last 24h (only applied
+//     when a new session would be created - never to an existing session, so
+//     CGNAT / office users who already have a session are not locked out).
+//     The IP comes from utils/clientIp (CF-Connecting-IP, else req.ip) - never from
+//     a client-controlled X-Forwarded-For. CF-Connecting-IP is only trustworthy
+//     while the origin is firewalled to Cloudflare, hence (2) and (3).
+//  2) Global, IP-independent: max new sessions / max messages per rolling 24h.
+//  3) Global monthly USD budget for public-chat LLM calls (0 = unlimited), in
+//     addition to the platform-wide checkSpendingLimit().
+const ipDailyMaxNewSessions = () => envPositiveInt('PUBLIC_ASSISTANT_IP_DAILY_MAX', 50);
+const globalDailyMaxSessions = () => envPositiveInt('PUBLIC_ASSISTANT_GLOBAL_DAILY_SESSIONS', 2000);
+const globalDailyMaxMessages = () => envPositiveInt('PUBLIC_ASSISTANT_GLOBAL_DAILY_MESSAGES', 10000);
+const publicMonthlyLimitUsd = () => {
+  const n = parseFloat(process.env.PUBLIC_ASSISTANT_MONTHLY_LIMIT_USD || '0');
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
+const PUBLIC_USAGE_OPERATION = 'public_assistant';
+// ai_usage_log.therapist_id sentinel for anonymous public-chat calls (same
+// convention as audit_logs.actor_id = 0).
+const PUBLIC_USAGE_USER_ID = 0;
 
 // === Rate Limiting for public chat ===
 // Feature #438 (S5) — Public-bot economics guard.
@@ -83,19 +116,26 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-// Helper: get or create viewer session
-function getOrCreateViewerSession(db, uuid, ip, userAgent, language) {
-  const existing = db.exec(
-    'SELECT id, message_count, email, user_id FROM viewer_sessions WHERE uuid = ?',
-    [uuid]
-  );
-
-  if (existing.length > 0 && existing[0].values.length > 0) {
-    const [id, messageCount, email, userId] = existing[0].values[0];
-    return { id, messageCount, isNew: false, email, userId };
+// Helper: look up a viewer session by the id the client presented, or create a
+// new one. Session ids are server-issued (H9): an unknown, malformed or missing id
+// is NOT adopted - a fresh crypto-random uuid is generated and returned to the
+// client, so a client cannot mint ids to reset its message count.
+function findViewerSession(db, claimedUuid) {
+  if (typeof claimedUuid === 'string' && claimedUuid.length >= 10 && claimedUuid.length <= 100) {
+    const existing = db.exec(
+      'SELECT id, message_count, email, user_id FROM viewer_sessions WHERE uuid = ?',
+      [claimedUuid]
+    );
+    if (existing.length > 0 && existing[0].values.length > 0) {
+      const [id, messageCount, email, userId] = existing[0].values[0];
+      return { id, uuid: claimedUuid, messageCount, isNew: false, email, userId };
+    }
   }
+  return null;
+}
 
-  // Create new session
+function createViewerSession(db, ip, userAgent, language) {
+  const uuid = crypto.randomUUID();
   const fingerprint = `${ip}|${(userAgent || '').substring(0, 100)}`;
   db.run(
     "INSERT INTO viewer_sessions (uuid, ip, fingerprint, user_agent, language, created_at, last_active, message_count) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)",
@@ -104,19 +144,101 @@ function getOrCreateViewerSession(db, uuid, ip, userAgent, language) {
   const idResult = db.exec('SELECT last_insert_rowid()');
   const id = idResult[0].values[0][0];
   saveDatabaseAfterWrite();
-  return { id, messageCount: 0, isNew: true };
+  return { id, uuid, messageCount: 0, isNew: true };
 }
+
+function scalar(db, sql, params) {
+  const res = db.exec(sql, params || []);
+  return res.length && res[0].values.length ? Number(res[0].values[0][0]) || 0 : 0;
+}
+
+// Sessions created from this IP in the last 24h.
+function newSessionsFromIp(db, ip) {
+  return scalar(db, "SELECT COUNT(*) FROM viewer_sessions WHERE ip = ? AND created_at >= datetime('now', '-1 day')", [ip]);
+}
+
+// IP-independent global usage over the last 24h.
+function globalNewSessions24h(db) {
+  return scalar(db, "SELECT COUNT(*) FROM viewer_sessions WHERE created_at >= datetime('now', '-1 day')");
+}
+function globalMessages24h(db) {
+  return scalar(db,
+    "SELECT COUNT(*) FROM assistant_messages am JOIN assistant_conversations ac ON ac.id = am.conversation_id " +
+    "WHERE am.role = 'user' AND ac.page_context = 'landing' AND am.created_at >= datetime('now', '-1 day')");
+}
+
+// Public-chat LLM spend this calendar month (USD), from ai_usage_log.
+function publicSpendThisMonth(db) {
+  const now = new Date();
+  const monthStart = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-01';
+  return scalar(db,
+    'SELECT COALESCE(SUM(cost_usd), 0) FROM ai_usage_log WHERE therapist_id = ? AND operation = ? AND timestamp >= ?',
+    [PUBLIC_USAGE_USER_ID, PUBLIC_USAGE_OPERATION, monthStart]);
+}
+
+// Rough token estimate (~4 chars/token) for providers/streams that report none.
+function estimateTokens(text) {
+  return Math.ceil(String(text || '').length / 4);
+}
+
+// Record a public-chat LLM call so checkSpendingLimit() and the admin usage UI
+// account for it. Never throws.
+function recordPublicUsage(provider, model, inTokens, outTokens, estimated) {
+  try {
+    const cost = calculateCost(model, inTokens, outTokens);
+    logUsage(PUBLIC_USAGE_USER_ID, provider || 'unknown', model || 'unknown', PUBLIC_USAGE_OPERATION,
+      inTokens, outTokens, cost, null, { estimated: !!estimated });
+  } catch (e) {
+    logger.warn('[PublicAssistant] usage log failed: ' + e.message);
+  }
+}
+
+const ANON_LIMIT_MESSAGES = {
+  en: 'You have reached the message limit for anonymous chat. Please register for a free trial to continue the conversation!',
+  ru: 'Вы достигли лимита сообщений для анонимного чата. Зарегистрируйтесь для бесплатного пробного периода, чтобы продолжить!',
+  es: 'Has alcanzado el limite de mensajes para el chat anonimo. Registrate para una prueba gratuita para continuar la conversacion!',
+  uk: 'Ви досягли ліміту повідомлень для анонімного чату. Зареєструйтесь для безкоштовного пробного періоду, щоб продовжити!'
+};
+
+// Shown when an IP-independent / IP-new-session cap is hit. Deliberately NOT the
+// registration CTA: registering would not help, and it would funnel capped
+// visitors into the lead form.
+const TRY_LATER_MESSAGES = {
+  en: 'The assistant is very busy right now. Please try again later.',
+  ru: 'Ассистент сейчас сильно загружен. Пожалуйста, попробуйте позже.',
+  es: 'El asistente esta muy ocupado ahora mismo. Intentalo de nuevo mas tarde.',
+  uk: 'Асистент зараз дуже завантажений. Будь ласка, спробуйте пізніше.'
+};
+
+const ASSISTANT_UNAVAILABLE_MESSAGES = {
+  en: 'The assistant is temporarily unavailable. Please try again later.',
+  ru: 'Ассистент временно недоступен. Пожалуйста, попробуйте позже.',
+  es: 'El asistente no esta disponible temporalmente. Intentalo de nuevo mas tarde.',
+  uk: 'Асистент тимчасово недоступний. Будь ласка, спробуйте пізніше.'
+};
 
 // Helper: save public chat exchange to analytics tables
 function savePublicChatExchange(db, viewerSessionId, sanitized, assistantReply, fromCache, language, conversationId) {
   try {
     let convId = conversationId;
 
+    // conversation_id comes from the client: continue it only if it is a landing
+    // conversation that was created by THIS viewer session. (auth.js may later
+    // re-parent it to the registered viewer user; viewer_session_id stays.)
+    if (convId) {
+      const owned = db.exec(
+        "SELECT 1 FROM assistant_conversations WHERE id = ? AND page_context = 'landing' AND viewer_session_id = ?",
+        [Number.isInteger(convId) ? convId : -1, viewerSessionId]
+      );
+      if (!owned.length || !owned[0].values.length) convId = null;
+    }
+
     if (!convId) {
-      // Create a new conversation with therapist_id = 0 (anonymous)
+      // Create a new conversation with therapist_id = 0 (anonymous), bound to
+      // the viewer session that created it.
       db.run(
-        "INSERT INTO assistant_conversations (therapist_id, started_at, last_message_at, page_context, language, message_count) VALUES (0, datetime('now'), datetime('now'), 'landing', ?, 2)",
-        [language]
+        "INSERT INTO assistant_conversations (therapist_id, started_at, last_message_at, page_context, language, message_count, viewer_session_id) VALUES (0, datetime('now'), datetime('now'), 'landing', ?, 2, ?)",
+        [language, viewerSessionId]
       );
       const convIdResult = db.exec('SELECT last_insert_rowid()');
       convId = convIdResult[0].values[0][0];
@@ -137,27 +259,28 @@ function savePublicChatExchange(db, viewerSessionId, sanitized, assistantReply, 
       [convId, assistantReply, fromCache ? 1 : 0]
     );
 
-    // Update viewer session
-    db.run(
-      "UPDATE viewer_sessions SET message_count = message_count + 1, last_active = datetime('now') WHERE id = ?",
-      [viewerSessionId]
-    );
-
+    // viewer_sessions.message_count was already reserved atomically before the
+    // reply was generated (see the handler), so it is not incremented here.
     saveDatabaseAfterWrite();
     return convId;
   } catch (err) {
     logger.warn('[PublicAssistant] Analytics save error: ' + err.message);
-    return conversationId;
+    return null; // never echo a client-supplied conversation_id back
   }
 }
 
 // POST /api/assistant/public-chat
 router.post('/public-chat', async (req, res) => {
+  // Message reserved on viewer_sessions.message_count; given back (outer catch)
+  // if the request dies before any reply was produced.
+  let reservedSessionId = null;
+  let replyProduced = false;
   try {
     const { message, session_uuid, language, stream, conversation_id } = req.body;
     const useSSE = stream === true || req.headers.accept === 'text/event-stream';
     const uiLocale = language || req.headers['x-locale'] || 'en';
-    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || req.socket?.remoteAddress;
+    // H9: trusted client IP (CF-Connecting-IP, else req.ip) - not X-Forwarded-For.
+    const clientIp = getClientIp(req);
     const userAgent = req.headers['user-agent'] || '';
 
     // Validate message
@@ -168,9 +291,10 @@ router.post('/public-chat', async (req, res) => {
       return res.status(400).json({ error: 'Message too long (max 2000 characters)' });
     }
 
-    // Validate session UUID
-    if (!session_uuid || typeof session_uuid !== 'string' || session_uuid.length < 10 || session_uuid.length > 100) {
-      return res.status(400).json({ error: 'Valid session_uuid is required' });
+    // session_uuid is optional and only a lookup hint: ids are issued by the
+    // server (see getOrCreateViewerSession) and returned in every reply.
+    if (session_uuid !== undefined && session_uuid !== null && typeof session_uuid !== 'string') {
+      return res.status(400).json({ error: 'session_uuid must be a string' });
     }
 
     // IP-based rate limiting
@@ -180,16 +304,6 @@ router.post('/public-chat', async (req, res) => {
       return res.status(429).json({
         error: 'Rate limit exceeded. Please wait before sending more messages.',
         retry_after: rateCheck.resetIn
-      });
-    }
-
-    // Feature #438 (S5): per-session guard — closes IP-rotation loophole.
-    const sessionRateCheck = checkPublicSessionRateLimit(session_uuid);
-    if (!sessionRateCheck.allowed) {
-      logger.warn(`[PublicAssistant] Session rate limit exceeded for session ${session_uuid}`);
-      return res.status(429).json({
-        error: 'Rate limit exceeded. Please wait before sending more messages.',
-        retry_after: sessionRateCheck.resetIn
       });
     }
 
@@ -219,8 +333,71 @@ router.post('/public-chat', async (req, res) => {
 
     const db = getDatabase();
 
-    // Get or create viewer session
-    const session = getOrCreateViewerSession(db, session_uuid, clientIp, userAgent, uiLocale);
+    // AI spend limit (H9): the same platform-wide monthly cap the other AI paths
+    // honour. Checked on every message, before anything that can cost tokens
+    // (embedding for the cache/RAG lookup, LLM call).
+    const spend = checkSpendingLimit();
+    if (spend && spend.allowed === false) {
+      logger.warn('[PublicAssistant] AI spending limit reached - refusing public chat message');
+      const unavailableLang = detectLanguage(sanitized, uiLocale);
+      return res.status(503).json({
+        error: ASSISTANT_UNAVAILABLE_MESSAGES[unavailableLang] || ASSISTANT_UNAVAILABLE_MESSAGES.en,
+        code: 'assistant_unavailable'
+      });
+    }
+
+    // Optional global monthly USD budget for the public bot (0 = unlimited).
+    const publicLimit = publicMonthlyLimitUsd();
+    if (publicLimit > 0 && publicSpendThisMonth(db) >= publicLimit) {
+      logger.warn('[PublicAssistant] public-chat monthly budget reached - refusing message');
+      const budgetLang = detectLanguage(sanitized, uiLocale);
+      res.set('Retry-After', '3600');
+      return res.status(503).json({
+        error: ASSISTANT_UNAVAILABLE_MESSAGES[budgetLang] || ASSISTANT_UNAVAILABLE_MESSAGES.en,
+        code: 'assistant_unavailable'
+      });
+    }
+
+    const tryLater = (reason) => {
+      logger.warn(`[PublicAssistant] ${reason} - asking visitor to try later`);
+      const lang = detectLanguage(sanitized, uiLocale);
+      res.set('Retry-After', '3600');
+      return res.status(503).json({
+        error: TRY_LATER_MESSAGES[lang] || TRY_LATER_MESSAGES.en,
+        code: 'public_assistant_busy'
+      });
+    };
+
+    // IP-independent global daily message cap (CF-Connecting-IP spoofing cannot
+    // dodge it).
+    if (globalMessages24h(db) >= globalDailyMaxMessages()) {
+      return tryLater('global daily message cap reached');
+    }
+
+    // Get the viewer session. Only when a NEW session would be created do the
+    // new-session caps apply (global, then per IP); existing sessions - including
+    // leads - are never blocked by them.
+    let session = findViewerSession(db, session_uuid);
+    if (!session) {
+      if (globalNewSessions24h(db) >= globalDailyMaxSessions()) {
+        return tryLater('global daily new-session cap reached');
+      }
+      if (newSessionsFromIp(db, clientIp) >= ipDailyMaxNewSessions()) {
+        return tryLater(`per-IP new-session cap reached for ${clientIp}`);
+      }
+      session = createViewerSession(db, clientIp, userAgent, uiLocale);
+    }
+
+    // Per-session burst guard (Feature #438 S5), keyed by the SERVER-issued id.
+    const sessionRateCheck = checkPublicSessionRateLimit(session.uuid);
+    if (!sessionRateCheck.allowed) {
+      logger.warn(`[PublicAssistant] Session rate limit exceeded for session ${session.uuid}`);
+      return res.status(429).json({
+        error: 'Rate limit exceeded. Please wait before sending more messages.',
+        retry_after: sessionRateCheck.resetIn,
+        session_uuid: session.uuid
+      });
+    }
 
     // Determine effective message limit based on lead status
     let effectiveLimit = MAX_MESSAGES_PER_SESSION; // 5 for anonymous
@@ -257,8 +434,18 @@ router.post('/public-chat', async (req, res) => {
       }
     }
 
-    // Check message limit
-    if (session.messageCount >= effectiveLimit) {
+    // Check the message limit and reserve this message in one synchronous step,
+    // so concurrent requests cannot all pass the check before any of them counts.
+    db.run(
+      "UPDATE viewer_sessions SET message_count = message_count + 1, last_active = datetime('now') WHERE id = ? AND message_count < ?",
+      [session.id, effectiveLimit]
+    );
+    const reserved = db.getRowsModified() > 0;
+    if (reserved) {
+      reservedSessionId = session.id;
+      saveDatabaseAfterWrite();
+    }
+    if (!reserved) {
       const detectedLang = detectLanguage(sanitized, uiLocale);
 
       if (isLead) {
@@ -274,24 +461,20 @@ router.post('/public-chat', async (req, res) => {
           error: 'message_limit_reached',
           message: limitMsg,
           limit: effectiveLimit,
+          session_uuid: session.uuid,
           show_cta: false,
           show_register: true
         });
       }
 
       // Anonymous - show lead capture CTA
-      const limitMessages = {
-        en: 'You have reached the message limit for anonymous chat. Please register for a free trial to continue the conversation!',
-        ru: 'Вы достигли лимита сообщений для анонимного чата. Зарегистрируйтесь для бесплатного пробного периода, чтобы продолжить!',
-        es: 'Has alcanzado el limite de mensajes para el chat anonimo. Registrate para una prueba gratuita para continuar la conversacion!',
-        uk: 'Ви досягли ліміту повідомлень для анонімного чату. Зареєструйтесь для безкоштовного пробного періоду, щоб продовжити!'
-      };
-      const limitMsg = limitMessages[detectedLang] || limitMessages.en;
+      const limitMsg = ANON_LIMIT_MESSAGES[detectedLang] || ANON_LIMIT_MESSAGES.en;
 
       return res.status(403).json({
         error: 'message_limit_reached',
         message: limitMsg,
         limit: MAX_MESSAGES_PER_SESSION,
+        session_uuid: session.uuid,
         show_cta: true
       });
     }
@@ -324,6 +507,7 @@ router.post('/public-chat', async (req, res) => {
       // at store time, but re-sanitize defensively in case older entries slipped
       // through.
       assistantReply = sanitizeOutput(assistantReply);
+      replyProduced = true;
       const convId = savePublicChatExchange(db, session.id, sanitized, assistantReply, true, detectedLanguage, conversation_id || null);
 
       if (useSSE) {
@@ -331,12 +515,13 @@ router.post('/public-chat', async (req, res) => {
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
         res.write(`data: ${JSON.stringify({ type: 'chunk', text: assistantReply })}\n\n`);
-        res.write(`data: ${JSON.stringify({ type: 'done', conversation_id: convId, language: detectedLanguage, cached: true, messages_remaining: effectiveLimit - session.messageCount - 1 })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'done', session_uuid: session.uuid, conversation_id: convId, language: detectedLanguage, cached: true, messages_remaining: effectiveLimit - session.messageCount - 1 })}\n\n`);
         return res.end();
       }
 
       return res.json({
         response: assistantReply,
+        session_uuid: session.uuid,
         conversation_id: convId,
         language: detectedLanguage,
         cached: true,
@@ -433,6 +618,10 @@ router.post('/public-chat', async (req, res) => {
         }
 
         assistantReply = sanitizeOutput(fullText || '');
+        replyProduced = true;
+        // Streams report no usage: log an estimate so the spend limit sees the call.
+        recordPublicUsage(activeAssistant.providerName, activeAssistant.model,
+          estimateTokens(systemPrompt) + estimateTokens(sanitized), estimateTokens(fullText), true);
         // Emit the sanitized reply as a single chunk before the terminal done event.
         res.write(`data: ${JSON.stringify({ type: 'chunk', text: assistantReply })}\n\n`);
         // Feature #438 (S5): pass hasRagContext as the 3rd arg — without it,
@@ -444,7 +633,7 @@ router.post('/public-chat', async (req, res) => {
         const convId = savePublicChatExchange(db, session.id, sanitized, assistantReply, false, detectedLanguage, conversation_id || null);
         const remaining = effectiveLimit - session.messageCount - 1;
 
-        res.write(`data: ${JSON.stringify({ type: 'done', conversation_id: convId, language: detectedLanguage, cached: false, has_rag_context: hasRagContext, messages_remaining: remaining })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'done', session_uuid: session.uuid, conversation_id: convId, language: detectedLanguage, cached: false, has_rag_context: hasRagContext, messages_remaining: remaining })}\n\n`);
         res.end();
       } catch (aiError) {
         logger.error('[PublicAssistant] AI streaming error: ' + aiError.message);
@@ -455,10 +644,11 @@ router.post('/public-chat', async (req, res) => {
         };
         const fallbackMsg = fallbacks[detectedLanguage] || 'Sorry, I cannot respond right now. Please try again later.';
 
+        replyProduced = true; // a fallback notice was delivered (message stays counted, as before)
         const convId = savePublicChatExchange(db, session.id, sanitized, fallbackMsg, false, detectedLanguage, conversation_id || null);
 
         res.write(`data: ${JSON.stringify({ type: 'chunk', text: fallbackMsg })}\n\n`);
-        res.write(`data: ${JSON.stringify({ type: 'done', conversation_id: convId, language: detectedLanguage, cached: false, has_rag_context: hasRagContext, messages_remaining: effectiveLimit - session.messageCount - 1 })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'done', session_uuid: session.uuid, conversation_id: convId, language: detectedLanguage, cached: false, has_rag_context: hasRagContext, messages_remaining: effectiveLimit - session.messageCount - 1 })}\n\n`);
         res.end();
       }
       return;
@@ -476,6 +666,14 @@ router.post('/public-chat', async (req, res) => {
       }, db);
       // Feature #436 output guardrail: sanitize BEFORE both caching and send.
       assistantReply = sanitizeOutput(result.text);
+      replyProduced = true;
+      {
+        const hasUsage = Number.isFinite(result.input_tokens) && Number.isFinite(result.output_tokens) &&
+          (result.input_tokens + result.output_tokens) > 0;
+        recordPublicUsage(result.provider || activeAssistant.providerName, result.model || activeAssistant.model,
+          hasUsage ? result.input_tokens : estimateTokens(systemPrompt) + estimateTokens(sanitized),
+          hasUsage ? result.output_tokens : estimateTokens(result.text), !hasUsage);
+      }
       // Feature #438 (S5): pass hasRagContext as the 3rd arg (previously
       // dropped, which silently disabled cache population entirely).
       await assistantCache.storeCachedAnswer(sanitized, assistantReply, hasRagContext, { audience: 'public', locale: detectedLanguage });
@@ -487,6 +685,7 @@ router.post('/public-chat', async (req, res) => {
         uk: 'Вибачте, зараз я не можу відповісти. Спробуйте пізніше.'
       };
       assistantReply = fallbacks[detectedLanguage] || 'Sorry, I cannot respond right now. Please try again later.';
+      replyProduced = true; // fallback notice delivered (message stays counted, as before)
     }
 
     const convId = savePublicChatExchange(db, session.id, sanitized, assistantReply, false, detectedLanguage, conversation_id || null);
@@ -494,6 +693,7 @@ router.post('/public-chat', async (req, res) => {
 
     res.json({
       response: assistantReply,
+      session_uuid: session.uuid,
       conversation_id: convId,
       language: detectedLanguage,
       cached: false,
@@ -503,7 +703,24 @@ router.post('/public-chat', async (req, res) => {
 
   } catch (error) {
     logger.error('[PublicAssistant] Chat error: ' + error.message);
-    res.status(500).json({ error: 'Failed to process message' });
+    // No reply was produced: give the reserved message back so a server-side
+    // failure does not eat one of the visitor's few free messages.
+    if (reservedSessionId !== null && !replyProduced) {
+      try {
+        getDatabase().run(
+          'UPDATE viewer_sessions SET message_count = MAX(message_count - 1, 0) WHERE id = ?',
+          [reservedSessionId]
+        );
+        saveDatabaseAfterWrite();
+      } catch (refundErr) {
+        logger.warn('[PublicAssistant] message refund failed: ' + refundErr.message);
+      }
+    }
+    if (res.headersSent) {
+      try { res.end(); } catch (_) { /* socket already gone */ }
+    } else {
+      res.status(500).json({ error: 'Failed to process message' });
+    }
   }
 });
 

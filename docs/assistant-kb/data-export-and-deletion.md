@@ -118,6 +118,11 @@ and deleting your entire therapist account. Labels are drawn from the
   event, then re-export.
 - **Restore-from-grace grey button.** The grace has expired. Check
   the archive tab; if the row is gone the record has been purged.
+- **A CSV cell starts with an apostrophe.** Any text cell that would begin
+  with `=`, `+`, `-` or `@` (or a tab / carriage return) is exported with a
+  leading `'`. This stops spreadsheet programs from running it as a formula.
+  The apostrophe is part of the exported value; remove it if you copy the text
+  somewhere else. Numbers are not changed.
 - **Audit log still shows deleted client name.** By design.
   Audit-log entries preserve enough metadata to prove compliance;
   they do not contain diary content.
@@ -139,8 +144,9 @@ signed and short-lived. If you need at-rest encryption of the file,
 encrypt it locally before storing.
 
 **Q: How long is the audit log retained?**
-A: Audit-log entries are retained per the platform's compliance
-policy (see security overview). Content is not part of the audit
+A: Audit-log entries are purged automatically once they are older than
+730 days by default (the operator can change this window; see the security
+overview). Content is not part of the audit
 log; deletion is fully honored for content while metadata proof of
 action is preserved.
 

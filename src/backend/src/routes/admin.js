@@ -3,10 +3,12 @@ const express = require('express');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger, getSystemLogs } = require('../utils/logger');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { bumpTokenVersion } = require('../utils/session');
 const backupService = require('../services/backupService');
 const aiProviders = require('../services/aiProviders');
 const assistantKnowledge = require('../services/assistantKnowledge');
 const assistantCache = require('../services/assistantCache');
+const { neutralizeCsvFormula } = require('../services/exportService');
 
 const router = express.Router();
 
@@ -251,6 +253,9 @@ router.put('/therapists/:id/block', (req, res) => {
       "UPDATE users SET blocked_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
       [id]
     );
+    // H13: revoke every existing session so tokens issued before the block
+    // do not come back to life after an unblock; closes open websockets too.
+    bumpTokenVersion(user[0], db);
     saveDatabaseAfterWrite();
 
     logger.info(`Superadmin ${req.user.id} blocked therapist ${id}`);
@@ -1893,7 +1898,7 @@ router.get('/assistant/export', (req, res) => {
       const csvRows = ['conversation_id,therapist_email,started_at,page_context,language,message_role,message_content,is_cached,tags,created_at'];
       for (const conv of conversations) {
         for (const msg of conv.messages) {
-          const escapeCsv = (s) => s ? '"' + String(s).replace(/"/g, '""') + '"' : '""';
+          const escapeCsv = (s) => s ? '"' + neutralizeCsvFormula(s).replace(/"/g, '""') + '"' : '""';
           csvRows.push([
             conv.id, escapeCsv(conv.email), conv.started_at, escapeCsv(conv.page_context), conv.language,
             msg.role, escapeCsv(msg.content), msg.is_cached ? 1 : 0, msg.tags || '', msg.created_at
@@ -1966,7 +1971,7 @@ router.post('/assistant/messages/:messageId/comments', async (req, res) => {
             // Admin corrections are curated, so we pass hasRagContext=true to
             // bypass the poisoning guard. S8: awaited because embedding is
             // now an async round-trip when AI embeddings are available.
-            await assistantCache.storeCachedAnswer(questionText, correction_text, true, { audience: 'user', locale: 'en' });
+            await assistantCache.storeCachedAnswer(questionText, correction_text, true, { audience: 'user', locale: 'en', source: 'admin_correction' });
             logger.info(`[AdminComments] Stored correction as cached answer for message #${messageId}`);
           }
         }
@@ -2136,7 +2141,7 @@ router.get('/assistant/comments/export', (req, res) => {
     if (format === 'csv') {
       const csvRows = ['id,message_id,admin_email,rating,comment_text,correction_text,message_role,message_content,user_question,page_context,language,created_at'];
       for (const c of comments) {
-        const escapeCsv = (s) => s ? '"' + String(s).replace(/"/g, '""') + '"' : '""';
+        const escapeCsv = (s) => s ? '"' + neutralizeCsvFormula(s).replace(/"/g, '""') + '"' : '""';
         csvRows.push([
           c.id, c.message_id, escapeCsv(c.admin_email), c.rating, escapeCsv(c.comment_text),
           escapeCsv(c.correction_text), c.message_role, escapeCsv(c.message_content),
@@ -2571,7 +2576,7 @@ router.get('/newsletter/export', (req, res) => {
 
     let csv = headers.join(',') + '\n';
     for (const row of rows) {
-      csv += row.map(v => v === null ? '' : `"${String(v).replace(/"/g, '""')}"`).join(',') + '\n';
+      csv += row.map(v => v === null ? '' : `"${neutralizeCsvFormula(v).replace(/"/g, '""')}"`).join(',') + '\n';
     }
 
     res.setHeader('Content-Type', 'text/csv');
@@ -2617,6 +2622,7 @@ router.get('/stats/viewers', (req, res) => {
     // Build date filter
     let dateFilter = '';
     let dateFilterConv = '';
+    let dateParams = [];
     if (range === 'today') {
       dateFilter = "AND vs.created_at >= date('now', 'start of day')";
       dateFilterConv = "AND ac.started_at >= date('now', 'start of day')";
@@ -2627,12 +2633,22 @@ router.get('/stats/viewers', (req, res) => {
       dateFilter = "AND vs.created_at >= date('now', '-30 days')";
       dateFilterConv = "AND ac.started_at >= date('now', '-30 days')";
     } else if (range === 'custom' && start && end) {
-      dateFilter = `AND vs.created_at >= '${start}' AND vs.created_at <= '${end} 23:59:59'`;
-      dateFilterConv = `AND ac.started_at >= '${start}' AND ac.started_at <= '${end} 23:59:59'`;
+      // M9: start/end are user input - validate strictly and bind as parameters.
+      const isIsoDay = function(v) {
+        if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+        const d = new Date(v + 'T00:00:00Z');
+        return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+      };
+      if (!isIsoDay(start) || !isIsoDay(end)) {
+        return res.status(400).json({ error: 'start and end must be valid dates in YYYY-MM-DD format' });
+      }
+      dateFilter = 'AND vs.created_at >= ? AND vs.created_at <= ?';
+      dateFilterConv = 'AND ac.started_at >= ? AND ac.started_at <= ?';
+      dateParams = [start, end + ' 23:59:59'];
     }
 
     // 1. Total anonymous sessions
-    const totalSessionsResult = db.exec(`SELECT COUNT(*) FROM viewer_sessions vs WHERE 1=1 ${dateFilter}`);
+    const totalSessionsResult = db.exec(`SELECT COUNT(*) FROM viewer_sessions vs WHERE 1=1 ${dateFilter}`, dateParams);
     const totalSessions = totalSessionsResult.length > 0 ? totalSessionsResult[0].values[0][0] : 0;
 
     // 2. Total registered viewers
@@ -2642,7 +2658,7 @@ router.get('/stats/viewers', (req, res) => {
     // 3. Viewers registered in range
     let viewersInRange = totalViewers;
     if (dateFilter) {
-      const rangeViewersResult = db.exec(`SELECT COUNT(*) FROM users WHERE role = 'viewer' AND created_at >= (SELECT MIN(vs.created_at) FROM viewer_sessions vs WHERE 1=1 ${dateFilter})`);
+      const rangeViewersResult = db.exec(`SELECT COUNT(*) FROM users WHERE role = 'viewer' AND created_at >= (SELECT MIN(vs.created_at) FROM viewer_sessions vs WHERE 1=1 ${dateFilter})`, dateParams);
       viewersInRange = rangeViewersResult.length > 0 ? rangeViewersResult[0].values[0][0] : 0;
     }
 
@@ -2651,11 +2667,11 @@ router.get('/stats/viewers', (req, res) => {
     const therapistConversions = totalTherapistsFromViewers.length > 0 ? totalTherapistsFromViewers[0].values[0][0] : 0;
 
     // 5. Messages per anonymous session (avg)
-    const avgMsgAnon = db.exec(`SELECT AVG(message_count) FROM viewer_sessions vs WHERE user_id IS NULL ${dateFilter}`);
+    const avgMsgAnon = db.exec(`SELECT AVG(message_count) FROM viewer_sessions vs WHERE user_id IS NULL ${dateFilter}`, dateParams);
     const avgMessagesAnon = avgMsgAnon.length > 0 && avgMsgAnon[0].values[0][0] != null ? Number(avgMsgAnon[0].values[0][0]).toFixed(1) : '0';
 
     // 6. Messages per registered viewer (avg)
-    const avgMsgReg = db.exec(`SELECT AVG(message_count) FROM viewer_sessions vs WHERE user_id IS NOT NULL ${dateFilter}`);
+    const avgMsgReg = db.exec(`SELECT AVG(message_count) FROM viewer_sessions vs WHERE user_id IS NOT NULL ${dateFilter}`, dateParams);
     const avgMessagesRegistered = avgMsgReg.length > 0 && avgMsgReg[0].values[0][0] != null ? Number(avgMsgReg[0].values[0][0]).toFixed(1) : '0';
 
     // 7. Top viewer questions (by tag)
@@ -2667,7 +2683,7 @@ router.get('/stats/viewers', (req, res) => {
       GROUP BY am.content
       ORDER BY cnt DESC
       LIMIT 10
-    `);
+    `, dateParams);
     const topQuestions = topQuestionsResult.length > 0
       ? topQuestionsResult[0].values.map(r => ({ question: r[0], count: r[1] }))
       : [];
@@ -2678,7 +2694,7 @@ router.get('/stats/viewers', (req, res) => {
       FROM viewer_sessions vs WHERE 1=1 ${dateFilter}
       GROUP BY language
       ORDER BY cnt DESC
-    `);
+    `, dateParams);
     const languages = langResult.length > 0
       ? langResult[0].values.map(r => ({ language: r[0] || 'en', count: r[1] }))
       : [];
@@ -2689,7 +2705,7 @@ router.get('/stats/viewers', (req, res) => {
       FROM viewer_sessions vs WHERE user_id IS NULL ${dateFilter}
       GROUP BY message_count
       ORDER BY message_count ASC
-    `);
+    `, dateParams);
     const dropoffPoints = dropoffResult.length > 0
       ? dropoffResult[0].values.map(r => ({ messageNumber: r[0], sessions: r[1] }))
       : [];
@@ -2700,7 +2716,7 @@ router.get('/stats/viewers', (req, res) => {
       FROM assistant_messages am
       JOIN assistant_conversations ac ON am.conversation_id = ac.id
       WHERE ac.therapist_id = 0 ${dateFilterConv}
-    `);
+    `, dateParams);
     const totalTokens = tokenResult.length > 0 ? tokenResult[0].values[0][0] : 0;
     const estimatedCost = (totalTokens / 1000000 * 0.15).toFixed(4); // rough estimate
     const costPerSession = totalSessions > 0 ? (parseFloat(estimatedCost) / totalSessions).toFixed(4) : '0';
@@ -2713,13 +2729,13 @@ router.get('/stats/viewers', (req, res) => {
       WHERE vs.created_at >= date('now', '-30 days') ${dateFilter}
       GROUP BY day
       ORDER BY day ASC
-    `);
+    `, dateParams);
     const dailyStats = dailyResult.length > 0
       ? dailyResult[0].values.map(r => ({ date: r[0], sessions: r[1], registered: r[2] }))
       : [];
 
     // 12. Conversion funnel: anonymous → viewer (email) → therapist (trial)
-    const sessionsWithEmail = db.exec(`SELECT COUNT(DISTINCT email) FROM viewer_sessions vs WHERE email IS NOT NULL ${dateFilter}`);
+    const sessionsWithEmail = db.exec(`SELECT COUNT(DISTINCT email) FROM viewer_sessions vs WHERE email IS NOT NULL ${dateFilter}`, dateParams);
     const emailCount = sessionsWithEmail.length > 0 ? sessionsWithEmail[0].values[0][0] : 0;
 
     const conversionFunnel = {

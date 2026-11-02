@@ -29,6 +29,9 @@ function EventRow({ event, t }) {
       pending: 'bg-amber-100 text-amber-700',
       failed: 'bg-rose-100 text-rose-700',
       cancelled: 'bg-gray-100 text-gray-600',
+      sending: 'bg-blue-100 text-blue-700',
+      skipped: 'bg-gray-100 text-gray-600',
+      superseded: 'bg-gray-100 text-gray-600',
     }[event.status] || 'bg-gray-100 text-gray-600';
 
     return (
