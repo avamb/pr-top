@@ -1096,6 +1096,10 @@
     "processing": "Procesando...",
     "upgradeSuccess": "¡Actualizado correctamente al plan {{plan}}!",
     "downgradeSuccess": "Cambio a {{plan}} programado. Tu acceso actual continúa hasta {{date}}.",
+    "keepCurrentPlan": "Mantener {{plan}}",
+    "downgradeCanceledSuccess": "Se canceló el cambio programado. Sigues en el plan {{plan}}.",
+    "switchedSuccess": "Cambiado al plan {{plan}}.",
+    "billingUnconfirmed": "No pudimos confirmar el cambio con el proveedor de pagos. Vuelve a cargar esta página en un minuto para ver el estado actual.",
     "failedCheckout": "Error al crear la sesión de pago",
     "failedCancel": "Error al cancelar la suscripción",
     "failedChange": "Error al cambiar el plan",
@@ -2321,7 +2325,10 @@
           "sent": "enviado",
           "pending": "pendiente",
           "failed": "error",
-          "cancelled": "cancelado"
+          "cancelled": "cancelado",
+          "sending": "enviándose",
+          "skipped": "omitido",
+          "superseded": "reemplazado"
         },
         "attendanceStatus": {
           "attended": "asistió",

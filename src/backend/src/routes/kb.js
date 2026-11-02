@@ -18,6 +18,7 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { checkSpendingLimit } = require('../services/aiUsageLogger');
+const { getSubscriptionAccessForTherapist } = require('../utils/planLimits');
 const kbIngest = require('../services/kbIngest');
 
 const router = express.Router();
@@ -79,13 +80,9 @@ const upload = multer({
 function requireKbAccess(req, res, next) {
   if (req.user && req.user.role === 'superadmin') return next();
 
-  const db = getDatabase();
-  const subResult = db.exec(
-    `SELECT plan, status FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1`,
-    [req.user.id]
-  );
+  const access = getSubscriptionAccessForTherapist(req.user.id);
 
-  if (subResult.length === 0 || subResult[0].values.length === 0) {
+  if (!access.subscription) {
     return res.status(403).json({
       error: 'No active subscription',
       message: 'The personal knowledge base requires a Pro or Premium subscription.',
@@ -93,8 +90,9 @@ function requireKbAccess(req, res, next) {
     });
   }
 
-  const [plan, status] = subResult[0].values[0];
-  if (status !== 'active') {
+  // Canceled-in-grace and past_due stay usable (see getEffectiveSubscriptionAccess)
+  const { plan, status } = access;
+  if (!access.usable) {
     return res.status(403).json({
       error: 'Subscription inactive',
       message: 'Your subscription is not active. Please renew to use the knowledge base.',

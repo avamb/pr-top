@@ -1106,6 +1106,10 @@
     "processing": "Обробка...",
     "upgradeSuccess": "Успішно підвищено до тарифу {{plan}}!",
     "downgradeSuccess": "Зниження до {{plan}} заплановано. Поточний доступ зберігається до {{date}}.",
+    "keepCurrentPlan": "Залишити {{plan}}",
+    "downgradeCanceledSuccess": "Заплановане зниження скасовано. Ви залишаєтеся на тарифі {{plan}}.",
+    "switchedSuccess": "Тариф змінено на {{plan}}.",
+    "billingUnconfirmed": "Не вдалося підтвердити зміну в платіжній системі. Оновіть сторінку за хвилину, щоб побачити поточний стан.",
     "failedCheckout": "Не вдалося створити сесію оплати",
     "failedCancel": "Не вдалося скасувати підписку",
     "failedChange": "Не вдалося змінити тариф",
@@ -2333,7 +2337,10 @@
           "sent": "надіслано",
           "pending": "очікує",
           "failed": "помилка",
-          "cancelled": "скасовано"
+          "cancelled": "скасовано",
+          "sending": "надсилається",
+          "skipped": "пропущено",
+          "superseded": "замінено"
         },
         "attendanceStatus": {
           "attended": "відвідано",

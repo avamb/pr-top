@@ -4,8 +4,10 @@
 const express = require('express');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
-const { isConfigured, getStripeClient, resolvePlanFromStripeSubscription, PLAN_PRICES } = require('../services/stripe');
+const stripeService = require('../services/stripe');
+const { isConfigured, getStripeClient, resolvePlanFromStripeSubscription, PLAN_PRICES } = stripeService;
 const emailService = require('../services/emailService');
+const { parseSubscriptionDate } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -52,73 +54,194 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
     return res.status(400).json({ error: `Webhook Error: ${err.message}` });
   }
 
+  if (!event || typeof event.type !== 'string' || !event.data || !event.data.object) {
+    logger.warn('Stripe webhook rejected: malformed event payload');
+    return res.status(400).json({ error: 'Malformed event' });
+  }
+
   logger.info(`Stripe webhook received: ${event.type} (${event.id || 'no-id'})`);
 
   const db = getDatabase();
+  const eventId = typeof event.id === 'string' && event.id ? event.id : null;
 
-  try {
-    switch (event.type) {
-      case 'payment_intent.succeeded':
-        await handlePaymentSucceeded(db, event.data.object);
-        break;
+  // Idempotency (M17): Stripe delivers at-least-once and retries on any
+  // non-2xx. An event id is recorded only after its handler succeeded, so a
+  // redelivery of a processed event is acknowledged without side effects,
+  // while a failed one is retried by Stripe. From this check to the insert
+  // below everything is synchronous, so two deliveries of the same event
+  // cannot interleave.
+  if (eventId && isEventProcessed(db, eventId)) {
+    logger.info(`Stripe webhook ${eventId} (${event.type}) already processed, skipping`);
+    return res.json({ received: true, type: event.type, duplicate: true });
+  }
 
-      case 'payment_intent.payment_failed':
-        await handlePaymentFailed(db, event.data.object);
-        break;
-
-      case 'customer.subscription.created':
-        await handleSubscriptionCreated(db, event.data.object);
-        break;
-
-      case 'customer.subscription.updated':
-        await handleSubscriptionUpdated(db, event.data.object);
-        break;
-
-      case 'customer.subscription.deleted':
-        await handleSubscriptionDeleted(db, event.data.object);
-        break;
-
-      case 'invoice.payment_succeeded':
-        await handleInvoicePaymentSucceeded(db, event.data.object);
-        break;
-
-      case 'invoice.payment_failed':
-        await handleInvoicePaymentFailed(db, event.data.object);
-        break;
-
-      case 'checkout.session.completed':
-        // Plan activation follows the same trust rules as the other
-        // subscription events (unsigned events only reach here outside
-        // production); the email-verification effect needs a signature.
-        await handleCheckoutSessionPlan(db, event.data.object);
-        if (signatureVerified) {
-          await handleCheckoutSessionCompleted(db, event.data.object);
-        } else {
-          logger.warn('[STRIPE] unsigned webhook — skipping email verification effect');
-        }
-        break;
-
-      default:
-        logger.info(`Unhandled webhook event type: ${event.type}`);
+  // Subscription events can arrive out of order or be retried days later, so
+  // their snapshot may be stale (e.g. a "downgrade scheduled" event landing
+  // after the "downgrade undone" one). Apply Stripe's live object instead.
+  // This is the only await; it happens before the savepoint.
+  let effectiveEvent = event;
+  if (SUBSCRIPTION_EVENT_TYPES.has(event.type)) {
+    try {
+      effectiveEvent = await resolveLiveSubscriptionEvent(event);
+    } catch (liveError) {
+      logger.error(`Webhook ${event.id || 'no-id'} (${event.type}): could not load live subscription: ${liveError.message}`);
+      return res.status(500).json({ error: 'Webhook handler failed' });
     }
+    // Another delivery of the same event may have finished during the await
+    if (eventId && isEventProcessed(db, eventId)) {
+      logger.info(`Stripe webhook ${eventId} (${event.type}) already processed, skipping`);
+      return res.json({ received: true, type: event.type, duplicate: true });
+    }
+  }
+
+  // Side effects outside the database (emails) run only after the event's
+  // database writes are committed.
+  const afterCommit = [];
+  let savepointOpen = false;
+  try {
+    // All handlers are synchronous, so the savepoint never spans an await:
+    // either every write of this event lands, or none does (and Stripe's
+    // retry starts from a clean state instead of duplicating rows).
+    db.run('SAVEPOINT stripe_webhook');
+    savepointOpen = true;
+
+    dispatchEvent(db, effectiveEvent, { signatureVerified, afterCommit });
+
+    if (eventId) {
+      db.run(
+        "INSERT OR IGNORE INTO stripe_webhook_events (event_id, type, received_at) VALUES (?, ?, datetime('now'))",
+        [eventId, event.type]
+      );
+    }
+    db.run('RELEASE SAVEPOINT stripe_webhook');
+    savepointOpen = false;
 
     saveDatabaseAfterWrite();
+    for (const fn of afterCommit) {
+      try { fn(); } catch (e) { logger.error(`Webhook post-commit action failed: ${e.message}`); }
+    }
     res.json({ received: true, type: event.type });
   } catch (error) {
+    if (savepointOpen) {
+      try {
+        db.run('ROLLBACK TO SAVEPOINT stripe_webhook');
+        db.run('RELEASE SAVEPOINT stripe_webhook');
+      } catch (rollbackError) {
+        logger.error(`Webhook rollback failed: ${rollbackError.message}`);
+      }
+    }
     logger.error(`Webhook handler error for ${event.type}: ${error.message}`);
     res.status(500).json({ error: 'Webhook handler failed' });
   }
 });
 
+const SUBSCRIPTION_EVENT_TYPES = new Set([
+  'customer.subscription.created',
+  'customer.subscription.updated',
+  'customer.subscription.deleted'
+]);
+
+/**
+ * Replace the subscription snapshot of a customer.subscription.* event by the
+ * live Stripe object, when Stripe is configured with a real key and the id is
+ * a real sub_ id (otherwise, e.g. unsigned dev/test events, the snapshot is
+ * used as before). A subscription Stripe no longer knows (resource_missing)
+ * is treated as deleted. Any other Stripe error is thrown, so the caller
+ * answers 500 and Stripe retries the event later.
+ */
+async function resolveLiveSubscriptionEvent(event) {
+  const snapshot = event.data.object;
+  if (!snapshot || !stripeService.isConfigured() || !stripeService.isRealStripeSubscriptionId(snapshot.id)) return event;
+  let live;
+  try {
+    live = await stripeService.retrieveSubscription(snapshot.id);
+  } catch (error) {
+    if (stripeService.isStripeResourceMissing(error)) {
+      logger.info(`Subscription ${snapshot.id} no longer exists in Stripe; handling ${event.type} as deleted`);
+      return { ...event, type: 'customer.subscription.deleted', data: { object: snapshot } };
+    }
+    throw error;
+  }
+  if (!live || live.id !== snapshot.id) throw new Error(`Live retrieve of ${snapshot.id} returned an unexpected object`);
+  // A deleted event stays a deletion; created/updated apply the live state
+  // (which may itself already be ended, mapped to 'expired').
+  return { ...event, data: { object: live } };
+}
+
+function isEventProcessed(db, eventId) {
+  const result = db.exec('SELECT 1 FROM stripe_webhook_events WHERE event_id = ?', [eventId]);
+  return result.length > 0 && result[0].values.length > 0;
+}
+
+function dispatchEvent(db, event, ctx) {
+  const object = event.data.object;
+  switch (event.type) {
+    case 'payment_intent.succeeded':
+      handlePaymentSucceeded(db, object, ctx);
+      break;
+
+    case 'payment_intent.payment_failed':
+      handlePaymentFailed(db, object);
+      break;
+
+    case 'customer.subscription.created':
+      handleSubscriptionCreated(db, object);
+      break;
+
+    case 'customer.subscription.updated':
+      handleSubscriptionUpdated(db, object);
+      break;
+
+    case 'customer.subscription.deleted':
+      handleSubscriptionDeleted(db, object);
+      break;
+
+    case 'invoice.payment_succeeded':
+      handleInvoicePaymentSucceeded(db, object);
+      break;
+
+    case 'invoice.payment_failed':
+      handleInvoicePaymentFailed(db, object);
+      break;
+
+    case 'checkout.session.completed':
+      // Plan activation follows the same trust rules as the other
+      // subscription events (unsigned events only reach here outside
+      // production); the email-verification effect needs a signature.
+      handleCheckoutSessionPlan(db, object);
+      if (ctx.signatureVerified) {
+        handleCheckoutSessionCompleted(db, object);
+      } else {
+        logger.warn('[STRIPE] unsigned webhook — skipping email verification effect');
+      }
+      break;
+
+    default:
+      logger.info(`Unhandled webhook event type: ${event.type}`);
+  }
+}
+
 /**
  * Handle payment_intent.succeeded event
  */
-async function handlePaymentSucceeded(db, paymentIntent) {
+function handlePaymentSucceeded(db, paymentIntent, ctx) {
   logger.info(`Payment succeeded: ${paymentIntent.id}, amount: ${paymentIntent.amount}, customer: ${paymentIntent.customer}`);
 
   const customerId = paymentIntent.customer;
   if (!customerId) {
     logger.warn('Payment succeeded but no customer ID attached');
+    return;
+  }
+
+  // Second line of defence next to the event-id check: one succeeded payment
+  // row (and one receipt) per PaymentIntent, even if Stripe emits the success
+  // under a different event id.
+  const already = db.exec(
+    "SELECT 1 FROM payments WHERE stripe_payment_intent_id = ? AND status = 'succeeded' LIMIT 1",
+    [paymentIntent.id]
+  );
+  if (already.length > 0 && already[0].values.length > 0) {
+    logger.info(`Payment ${paymentIntent.id} already recorded as succeeded, skipping`);
     return;
   }
 
@@ -172,7 +295,8 @@ async function handlePaymentSucceeded(db, paymentIntent) {
 
   logger.info(`Payment recorded for subscription ${subscriptionId}: ${paymentIntent.id}`);
 
-  // Send payment receipt email (non-blocking)
+  // Send payment receipt email (non-blocking), only once the event's writes
+  // are committed (a rolled-back event is retried and must not mail twice).
   if (therapistResult.length > 0 && therapistResult[0].values.length > 0) {
     const therapistId = therapistResult[0].values[0][0];
     const userResult = db.exec('SELECT email, language FROM users WHERE id = ?', [therapistId]);
@@ -182,7 +306,7 @@ async function handlePaymentSucceeded(db, paymentIntent) {
       const subInfo = db.exec('SELECT plan, current_period_end FROM subscriptions WHERE id = ?', [subscriptionId]);
       const plan = (subInfo.length > 0 && subInfo[0].values.length > 0) ? subInfo[0].values[0][0] : 'pro';
       const nextBilling = (subInfo.length > 0 && subInfo[0].values.length > 0) ? subInfo[0].values[0][1] : null;
-      emailService.sendPaymentReceipt(therapistEmail, {
+      const sendReceipt = () => emailService.sendPaymentReceipt(therapistEmail, {
         amount: paymentIntent.amount,
         currency: paymentIntent.currency || 'usd',
         plan,
@@ -191,6 +315,8 @@ async function handlePaymentSucceeded(db, paymentIntent) {
       }, therapistLang).catch(err => {
         logger.error(`Payment receipt email error: ${err.message}`);
       });
+      if (ctx && Array.isArray(ctx.afterCommit)) ctx.afterCommit.push(sendReceipt);
+      else sendReceipt();
     }
   }
 }
@@ -198,7 +324,7 @@ async function handlePaymentSucceeded(db, paymentIntent) {
 /**
  * Handle payment_intent.payment_failed event
  */
-async function handlePaymentFailed(db, paymentIntent) {
+function handlePaymentFailed(db, paymentIntent) {
   logger.info(`Payment failed: ${paymentIntent.id}, customer: ${paymentIntent.customer}`);
 
   const customerId = paymentIntent.customer;
@@ -255,13 +381,17 @@ async function handlePaymentFailed(db, paymentIntent) {
  * ends when Stripe actually ends it. Returns null for states that must not
  * change the local status (incomplete: first payment still pending).
  */
+// Every Stripe subscription status is covered (2023-10-16 .. current API):
+// active, trialing, past_due, unpaid, canceled, incomplete,
+// incomplete_expired, paused. Results are always within the CHECK set
+// ('active', 'trialing', 'canceled', 'past_due', 'expired') or null.
 function mapStripeSubscriptionStatus(subscription) {
   const stripeStatus = subscription.status;
   if (['canceled', 'incomplete_expired', 'unpaid', 'paused'].includes(stripeStatus)) return 'expired';
+  if (!['active', 'trialing', 'past_due'].includes(stripeStatus)) return null; // incomplete / unknown
+  // Only a running subscription can be "canceled, access until period end"
   if (subscription.cancel_at_period_end) return 'canceled';
-  if (stripeStatus === 'active' || stripeStatus === 'trialing') return stripeStatus;
-  if (stripeStatus === 'past_due') return 'past_due';
-  return null;
+  return stripeStatus;
 }
 
 // True when a Stripe subscription has definitively ended (never revive it).
@@ -273,10 +403,48 @@ function toIsoFromUnix(seconds) {
   return seconds ? new Date(seconds * 1000).toISOString() : null;
 }
 
+// Billing period of a Stripe subscription in unix seconds. Newer Stripe API
+// versions (webhook endpoints can be pinned to a newer version than the SDK)
+// carry the period on the subscription item instead of the subscription.
+function getStripePeriod(subscription) {
+  const item = subscription.items && subscription.items.data && subscription.items.data[0];
+  return {
+    start: subscription.current_period_start || (item && item.current_period_start) || null,
+    end: subscription.current_period_end || (item && item.current_period_end) || null
+  };
+}
+
+// Tolerance when comparing Stripe's new period start with the stored end of
+// the previous period (they are normally identical).
+const PERIOD_ROLLOVER_TOLERANCE_MS = 60 * 60 * 1000;
+
+/**
+ * Decide what a subscription event does to the local plan when a downgrade is
+ * scheduled (pending_plan). A scheduled downgrade switches the Stripe price
+ * immediately without proration, so Stripe already reports the lower plan
+ * during the paid period: the local plan must stay on the paid tier until the
+ * period rolls over. Returns { plan, clearPending } where plan null = keep.
+ */
+function resolveLocalPlanChange(local, stripePlan, stripePeriodStart) {
+  if (!local || !local.pendingPlan || !stripePlan) {
+    return { plan: stripePlan, clearPending: false };
+  }
+  if (stripePlan !== local.pendingPlan) {
+    // Stripe bills something else (downgrade undone, or changed in the
+    // Stripe dashboard): follow Stripe and drop the scheduled change.
+    return { plan: stripePlan, clearPending: true };
+  }
+  const localEnd = parseSubscriptionDate(local.currentPeriodEnd);
+  const rolledOver = !!(stripePeriodStart && localEnd &&
+    stripePeriodStart * 1000 >= localEnd.getTime() - PERIOD_ROLLOVER_TOLERANCE_MS);
+  if (rolledOver) return { plan: stripePlan, clearPending: true };
+  return { plan: null, clearPending: false };
+}
+
 /**
  * Handle customer.subscription.created event
  */
-async function handleSubscriptionCreated(db, subscription) {
+function handleSubscriptionCreated(db, subscription) {
   logger.info(`Subscription created: ${subscription.id}, customer: ${subscription.customer}`);
 
   const customerId = subscription.customer;
@@ -295,6 +463,7 @@ async function handleSubscriptionCreated(db, subscription) {
 
   const status = mapStripeSubscriptionStatus(subscription);
   const plan = resolvePlanFromStripeSubscription(subscription);
+  const period = getStripePeriod(subscription);
 
   // A new paid subscription replaces any trial / scheduled downgrade / old
   // cancellation on the row.
@@ -309,7 +478,7 @@ async function handleSubscriptionCreated(db, subscription) {
      WHERE stripe_customer_id = ?`,
     [
       subscription.id, status, plan,
-      toIsoFromUnix(subscription.current_period_start), toIsoFromUnix(subscription.current_period_end),
+      toIsoFromUnix(period.start), toIsoFromUnix(period.end),
       status, status, customerId
     ]
   );
@@ -321,29 +490,42 @@ async function handleSubscriptionCreated(db, subscription) {
 /**
  * Handle customer.subscription.updated event
  */
-async function handleSubscriptionUpdated(db, subscription) {
+function handleSubscriptionUpdated(db, subscription) {
   logger.info(`Subscription updated: ${subscription.id}`);
 
   // An updated event delivered after customer.subscription.deleted must not
   // revive the ended subscription.
-  const localResult = db.exec('SELECT status FROM subscriptions WHERE stripe_subscription_id = ?', [subscription.id]);
-  const localStatus = (localResult.length > 0 && localResult[0].values.length > 0) ? localResult[0].values[0][0] : null;
-  if (localStatus === 'expired' && hasStripeSubscriptionEnded(subscription)) {
+  const localResult = db.exec(
+    'SELECT status, plan, pending_plan, current_period_end FROM subscriptions WHERE stripe_subscription_id = ?',
+    [subscription.id]
+  );
+  const localRow = (localResult.length > 0 && localResult[0].values.length > 0) ? localResult[0].values[0] : null;
+  const local = localRow
+    ? { status: localRow[0], plan: localRow[1], pendingPlan: localRow[2], currentPeriodEnd: localRow[3] }
+    : null;
+  if (local && local.status === 'expired' && hasStripeSubscriptionEnded(subscription)) {
     logger.info(`Subscription updated event for ended ${subscription.id} ignored (already expired)`);
     return;
   }
 
   const status = mapStripeSubscriptionStatus(subscription);
-  const plan = resolvePlanFromStripeSubscription(subscription);
+  const stripePlan = resolvePlanFromStripeSubscription(subscription);
+  const period = getStripePeriod(subscription);
   const canceledAt = status === 'canceled'
     ? new Date((subscription.canceled_at || Math.floor(Date.now() / 1000)) * 1000).toISOString() : null;
 
-  // plan follows the billed price; a scheduled downgrade is cleared once
-  // Stripe bills the pending plan; resuming (active) clears canceled_at.
+  // plan follows the billed price, except that a scheduled downgrade only
+  // takes effect when the billing period rolls over (see
+  // resolveLocalPlanChange); resuming (active) clears canceled_at.
+  const { plan, clearPending } = resolveLocalPlanChange(local, stripePlan, period.start);
+  if (local && local.pendingPlan && clearPending) {
+    logger.info(`Subscription ${subscription.id}: scheduled change to ${local.pendingPlan} resolved, plan now ${plan}`);
+  }
+
   db.run(
     `UPDATE subscriptions SET status = COALESCE(?, status),
      plan = COALESCE(?, plan),
-     pending_plan = CASE WHEN ? IS NOT NULL AND pending_plan = ? THEN NULL ELSE pending_plan END,
+     pending_plan = CASE WHEN ? = 1 THEN NULL ELSE pending_plan END,
      current_period_start = COALESCE(?, current_period_start), current_period_end = COALESCE(?, current_period_end),
      trial_ends_at = CASE WHEN COALESCE(?, status) = 'active' THEN NULL ELSE trial_ends_at END,
      canceled_at = CASE WHEN ? IS NOT NULL THEN COALESCE(canceled_at, ?)
@@ -351,8 +533,8 @@ async function handleSubscriptionUpdated(db, subscription) {
      updated_at = datetime('now')
      WHERE stripe_subscription_id = ?`,
     [
-      status, plan, plan, plan,
-      toIsoFromUnix(subscription.current_period_start), toIsoFromUnix(subscription.current_period_end),
+      status, plan, clearPending ? 1 : 0,
+      toIsoFromUnix(period.start), toIsoFromUnix(period.end),
       status, canceledAt, canceledAt, status, subscription.id
     ]
   );
@@ -361,7 +543,7 @@ async function handleSubscriptionUpdated(db, subscription) {
 /**
  * Handle customer.subscription.deleted event
  */
-async function handleSubscriptionDeleted(db, subscription) {
+function handleSubscriptionDeleted(db, subscription) {
   logger.info(`Subscription deleted: ${subscription.id}`);
 
   // The subscription has ended in Stripe: access ends now.
@@ -375,7 +557,7 @@ async function handleSubscriptionDeleted(db, subscription) {
 /**
  * Handle invoice.payment_succeeded event
  */
-async function handleInvoicePaymentSucceeded(db, invoice) {
+function handleInvoicePaymentSucceeded(db, invoice) {
   logger.info(`Invoice payment succeeded: ${invoice.id}`);
   // Usually handled via payment_intent.succeeded, but log for completeness
 }
@@ -383,7 +565,7 @@ async function handleInvoicePaymentSucceeded(db, invoice) {
 /**
  * Handle invoice.payment_failed event
  */
-async function handleInvoicePaymentFailed(db, invoice) {
+function handleInvoicePaymentFailed(db, invoice) {
   logger.info(`Invoice payment failed: ${invoice.id}`);
   // Usually handled via payment_intent.payment_failed, but log for completeness
 }
@@ -395,7 +577,7 @@ async function handleInvoicePaymentFailed(db, invoice) {
  * Stripe customer. customer.subscription.created applies the same plan, so
  * the order in which the two events arrive does not matter.
  */
-async function handleCheckoutSessionPlan(db, session) {
+function handleCheckoutSessionPlan(db, session) {
   if (session.mode && session.mode !== 'subscription') return;
   if (session.payment_status && !['paid', 'no_payment_required'].includes(session.payment_status)) {
     logger.info(`Checkout session ${session.id}: payment_status=${session.payment_status}, plan not activated`);
@@ -445,7 +627,7 @@ async function handleCheckoutSessionPlan(db, session) {
  * token is left in place so a later click on the link lands on
  * /dashboard?verified=already instead of an error.
  */
-async function handleCheckoutSessionCompleted(db, session) {
+function handleCheckoutSessionCompleted(db, session) {
   const email = String(
     session.customer_email || (session.customer_details && session.customer_details.email) || ''
   ).trim().toLowerCase();

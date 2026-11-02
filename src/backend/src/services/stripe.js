@@ -334,7 +334,34 @@ async function getPlanPriceId(plan) {
  * cannot be paid, so the caller only updates the local row on success.
  * Only valid against the real Stripe API (see isRealStripeSubscriptionId).
  */
-async function changeSubscriptionPlan(stripeSubscriptionId, plan) {
+async function changeSubscriptionPlan(stripeSubscriptionId, plan, opts = {}) {
+  const updated = await swapSubscriptionPrice(stripeSubscriptionId, plan, {
+    proration_behavior: 'always_invoice',
+    payment_behavior: 'error_if_incomplete'
+  }, opts);
+  logger.info(`Stripe subscription ${stripeSubscriptionId} switched to plan ${plan}`);
+  return updated;
+}
+
+/**
+ * Switch the price of an existing Stripe subscription WITHOUT proration: the
+ * current (already paid) period is untouched and Stripe bills the new plan
+ * from the next renewal on. Used for scheduled downgrades, and to undo one
+ * (switching back to the plan being paid for). Nothing is charged or
+ * credited. The local plan is changed by the renewal webhook, not here.
+ * Only valid against the real Stripe API (see isRealStripeSubscriptionId).
+ * opts.idempotencyKey is passed to Stripe so a retried request (e.g. after a
+ * lost response) cannot apply the update twice.
+ */
+async function scheduleSubscriptionPlanChange(stripeSubscriptionId, plan, opts = {}) {
+  const updated = await swapSubscriptionPrice(stripeSubscriptionId, plan, {
+    proration_behavior: 'none'
+  }, opts);
+  logger.info(`Stripe subscription ${stripeSubscriptionId} set to renew on plan ${plan} (no proration)`);
+  return updated;
+}
+
+async function swapSubscriptionPrice(stripeSubscriptionId, plan, params, opts) {
   if (!stripeConfigured || devMode) {
     throw new Error('Stripe is not configured with a real API key.');
   }
@@ -346,14 +373,102 @@ async function changeSubscriptionPlan(stripeSubscriptionId, plan) {
     throw new Error(`Subscription ${stripeSubscriptionId} has ${items.length} items; expected exactly 1`);
   }
 
-  const updated = await stripeClient.subscriptions.update(stripeSubscriptionId, {
+  const requestOptions = opts && opts.idempotencyKey ? { idempotencyKey: opts.idempotencyKey } : undefined;
+  return stripeClient.subscriptions.update(stripeSubscriptionId, {
     items: [{ id: items[0].id, price: priceId }],
-    proration_behavior: 'always_invoice',
-    payment_behavior: 'error_if_incomplete',
+    ...params,
     metadata: { plan, platform: 'prtop' }
-  });
-  logger.info(`Stripe subscription ${stripeSubscriptionId} switched to plan ${plan}`);
-  return updated;
+  }, requestOptions);
+}
+
+/**
+ * Fetch the live Stripe subscription (used to act on Stripe's current state
+ * instead of a possibly stale webhook snapshot or a lost API response).
+ * Throws when Stripe is not configured with a real key; Stripe errors
+ * (including resource_missing, see isStripeResourceMissing) propagate.
+ */
+async function retrieveSubscription(stripeSubscriptionId) {
+  if (!stripeConfigured || devMode) {
+    throw new Error('Stripe is not configured with a real API key.');
+  }
+  return stripeClient.subscriptions.retrieve(stripeSubscriptionId);
+}
+
+/**
+ * True when the (single) item of a Stripe subscription is billed at the
+ * price PR-TOP uses for `plan`: lookup_key prtop_<plan>_monthly (prices
+ * created by getPlanPriceId), the STRIPE_PRICE_<PLAN> override, or the price
+ * id already resolved in this process. Checkout's inline price_data prices
+ * never match, which is intended: such a subscription has not been switched.
+ * Synchronous, no Stripe call.
+ */
+function subscriptionItemIsPlanPrice(subscription, plan) {
+  const items = (subscription && subscription.items && subscription.items.data) || [];
+  if (items.length !== 1 || !items[0].price) return false;
+  const price = items[0].price;
+  if (price.lookup_key === `prtop_${plan}_monthly`) return true;
+  const envPriceId = process.env['STRIPE_PRICE_' + String(plan).toUpperCase()];
+  if (envPriceId && price.id === envPriceId) return true;
+  return !!planPriceIdCache[plan] && price.id === planPriceIdCache[plan];
+}
+
+/**
+ * One-time, idempotent reconciliation of scheduled downgrades made before
+ * audit wave 2. Older code only set subscriptions.pending_plan locally and
+ * never switched the Stripe price, so Stripe kept billing the higher tier and
+ * the new renewal logic (routes/webhooks.js) would drop such a downgrade. For
+ * every live Stripe-backed row with a pending_plan whose Stripe item is not on
+ * that plan's price yet, the price is switched now without proration.
+ * Best effort: logs, never throws. Skipped when Stripe is not configured or in
+ * dev mode. Call once after initStripe() at startup.
+ * @returns {Promise<{ skipped?: boolean, checked: number, switched: number, alreadyOk: number, failed: number }>}
+ */
+async function reconcilePendingDowngrades() {
+  const summary = { checked: 0, switched: 0, alreadyOk: 0, failed: 0 };
+  try {
+    if (!stripeConfigured || devMode) {
+      logger.info('[STRIPE] pending downgrade reconciliation skipped (Stripe not configured or dev mode)');
+      return { skipped: true, ...summary };
+    }
+    const { getDatabase } = require('../db/connection');
+    const db = getDatabase();
+    const result = db.exec(
+      `SELECT id, stripe_subscription_id, plan, pending_plan FROM subscriptions
+        WHERE pending_plan IS NOT NULL AND stripe_subscription_id LIKE 'sub_%'
+          AND status IN ('active', 'trialing', 'past_due', 'canceled')`
+    );
+    const rows = result.length > 0 ? result[0].values : [];
+    for (const [rowId, stripeSubId, plan, pendingPlan] of rows) {
+      summary.checked++;
+      try {
+        if (!PLAN_PRICES[pendingPlan] || pendingPlan === plan) {
+          logger.warn(`[STRIPE] reconcile: row ${rowId} has unusable pending_plan ${pendingPlan}, skipped`);
+          continue;
+        }
+        const live = await stripeClient.subscriptions.retrieve(stripeSubId);
+        if (!live || live.status === 'canceled' || live.status === 'incomplete_expired' || live.ended_at) {
+          logger.info(`[STRIPE] reconcile: ${stripeSubId} (row ${rowId}) has ended, skipped`);
+          continue;
+        }
+        if (subscriptionItemIsPlanPrice(live, pendingPlan)) {
+          summary.alreadyOk++;
+          continue;
+        }
+        await scheduleSubscriptionPlanChange(stripeSubId, pendingPlan, {
+          idempotencyKey: `prtop-reconcile-${rowId}-${pendingPlan}`
+        });
+        summary.switched++;
+        logger.info(`[STRIPE] reconcile: ${stripeSubId} (row ${rowId}) now renews on ${pendingPlan} (was billed as ${plan})`);
+      } catch (rowError) {
+        summary.failed++;
+        logger.error(`[STRIPE] reconcile: ${stripeSubId} (row ${rowId}) failed: ${rowError.message}`);
+      }
+    }
+    logger.info(`[STRIPE] pending downgrade reconciliation: ${JSON.stringify(summary)}`);
+  } catch (error) {
+    logger.error(`[STRIPE] pending downgrade reconciliation aborted: ${error.message}`);
+  }
+  return summary;
 }
 
 /**
@@ -439,6 +554,10 @@ module.exports = {
   isRealStripeSubscriptionId,
   getPlanPriceId,
   changeSubscriptionPlan,
+  scheduleSubscriptionPlanChange,
+  retrieveSubscription,
+  subscriptionItemIsPlanPrice,
+  reconcilePendingDowngrades,
   cancelSubscriptionAtPeriodEnd,
   resumeSubscription,
   resolvePlanFromStripeSubscription,

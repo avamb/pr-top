@@ -38,8 +38,39 @@ already pay through Stripe:
   A canceled plan has to be resumed first (see below); a past-due
   plan can be changed again once the outstanding payment succeeds.
 
+## Downgrading
+
 A downgrade is scheduled for the end of your current billing period,
-and you keep your existing tier until then.
+and you keep your existing tier — with all of its limits and
+features — until then. Click **Downgrade to …** on a lower tier; the
+page confirms "Downgrade to … scheduled. Your current access continues
+until …", the card of the new tier shows **Downgrade Scheduled**, and
+a notice under your plan repeats the date.
+
+- **You pay through Stripe:** PR-TOP tells Stripe right away to renew
+  your subscription on the lower plan. Nothing is charged or credited
+  for the current period — you have already paid for your current
+  tier and keep it. From the next renewal on, Stripe charges the
+  lower price, and PR-TOP switches your plan when Stripe reports the
+  new billing period. If PR-TOP cannot reach Stripe, the downgrade is
+  not scheduled and you see "We could not reach the payment provider
+  to schedule the downgrade. Nothing was changed."
+- **Your plan has no paid Stripe subscription** (for example a plan
+  granted by an administrator): the lower plan applies when the
+  current period ends, or right away if the plan has no period end.
+- **Changing your mind:** the downgrade notice under your plan has a
+  **Keep …** button (for example **Keep Pro**). It cancels the
+  scheduled downgrade: Stripe renews on your current tier again,
+  nothing is charged, and the page confirms "The scheduled downgrade
+  was canceled. You stay on …". Upgrading to a higher tier before the
+  effective date also replaces the scheduled downgrade. Your Stripe
+  subscription is first put back on the tier you are paying for, so
+  the prorated upgrade charge is the difference between that tier and
+  the new one, not between the lower tier and the new one.
+- **"We could not confirm the change with the payment provider."**
+  PR-TOP lost contact with Stripe in the middle of a change and could
+  not check whether Stripe applied it. Reload the page after a minute;
+  it then shows the state Stripe reports.
 
 ## Promo codes
 
@@ -51,8 +82,10 @@ redemption is approved.
 ## Cancellation
 
 You can cancel from the same page with **Cancel subscription**. The
-button is shown for active paid plans (not for the Trial, and not
-while a downgrade is already scheduled). After you confirm:
+button is shown for active paid plans (not for the Trial), also while
+a downgrade is scheduled. A scheduled downgrade stays in place when
+you cancel, so if you resume later, the subscription renews on the
+lower plan. After you confirm:
 
 1. If you pay through Stripe, PR-TOP first tells Stripe to stop
    renewing your subscription at the end of the current period. No
@@ -105,9 +138,14 @@ payment once Stripe confirms it.
   so there is nothing to cancel in Stripe; it simply ends on its
   trial end date.
 - **Card declined at renewal.** Stripe retries the payment. While the
-  subscription is past due you keep access, but plan changes wait
-  until the payment succeeds. If Stripe finally ends the subscription
-  or marks it unpaid, access ends.
+  subscription is past due you keep access, including the features
+  and limits of your tier, but plan changes wait until the payment
+  succeeds. If Stripe finally ends the subscription or marks it
+  unpaid (or paused), access ends.
+- **Canceled plan, paid period still running.** Tier features (for
+  example natural-language queries, the knowledge base and full
+  export on Pro and Premium) and plan limits stay available until the
+  end of the paid period, exactly as before the cancellation.
 - **Downgrade with too many clients.** If you have more clients than
   the target tier allows, your existing client links are preserved,
   but you cannot add new clients until you are within the limit.
@@ -137,8 +175,14 @@ payment once Stripe confirms it.
   10 minutes of payment. Refresh and wait; contact support if it does
   not appear the next day.
 - **Access to Pro features lost mid-cycle.** Confirm the plan status
-  on the Subscription page. A failed renewal or a period that has
-  ended after cancellation is the usual cause.
+  on the Subscription page. A canceled or past-due plan keeps its
+  tier while it is still running, so the usual causes are a period
+  that has ended after cancellation, a subscription Stripe has ended
+  after failed retries, or a scheduled downgrade whose effective date
+  has passed.
+- **"We could not reach the payment provider to schedule the
+  downgrade."** Stripe was not reachable; nothing was scheduled and
+  your plan is unchanged. Try again in a few minutes.
 
 ## FAQ
 
@@ -163,6 +207,16 @@ support with the invoice ID.
 **Q: When does a downgrade actually take effect?**
 A: At the end of the current billing period. You keep the higher
 tier — and everything in it — until then.
+
+**Q: Do I get money back when I downgrade?**
+A: No credit is issued for the current period: you keep the tier you
+paid for until the period ends, and Stripe charges the lower price
+from the next renewal on.
+
+**Q: I scheduled a downgrade but want to stay on my plan. What now?**
+A: Click **Keep …** (for example **Keep Pro**) in the downgrade notice
+on the Subscription page before the effective date. Your current plan
+then simply renews; nothing is charged at that moment.
 
 **Q: Does canceling stop billing right away?**
 A: Canceling stops the next renewal in Stripe, so you are not charged

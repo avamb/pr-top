@@ -16,11 +16,11 @@ namespaces.
 - A valid credit card if you plan to move off Trial. Stripe is the
   payment processor; PR-TOP never sees the full card number.
 - Understanding of the current tier limits:
-  - **Trial** — $0 for 14 days, 3 client seats, 10 sessions/mo.
-  - **Basic** — $19/mo, 15 client seats, 50 sessions/mo.
-  - **Pro** — $49/mo, 60 client seats, 250 sessions/mo, adds vector
-    search, natural-language queries, PDF/JSON/CSV export, custom
-    exercises.
+  - **Trial** — $0 for 14 days, 3 client seats, 5 session uploads/mo.
+  - **Basic** — $19/mo, 10 client seats, 20 session uploads/mo.
+  - **Pro** — $49/mo, 30 client seats, 60 session uploads/mo, adds
+    vector search, natural-language queries, PDF/JSON/CSV export,
+    custom exercises.
   - **Premium** — $99/mo, unlimited clients and sessions, adds
     supervision share and SOS alert channels.
 
@@ -54,23 +54,42 @@ and is regenerated from source at every release.
 
 ## Step-by-step: downgrade
 
-1. Open **Settings → Subscription** and tap **Change plan**.
-2. Pick a lower tier. The confirmation modal shows a summary of what
-   you will lose: higher-tier features (natural-language and voice
-   queries, custom exercises), the reduced client seat cap, and the
-   reduced session quota. SOS alerts and their delivery channels stay
-   available on every plan.
-3. Confirm. The downgrade is scheduled to take effect at the end of
-   the current billing period, so you keep everything until then.
-4. Cancel the pending downgrade any time before the effective date
-   from the same panel.
+1. Open the **Subscription** page from the sidebar.
+2. Under **Available Plans**, click **Downgrade to …** on the lower
+   tier you want. The change is sent right away (there is no separate
+   confirmation step).
+3. The page confirms "Downgrade to … scheduled. Your current access
+   continues until …". The card of the new tier now shows
+   **Downgrade Scheduled**, and a notice under your current plan
+   repeats the effective date. You keep your current tier — its
+   limits and features — until that date.
+4. If you pay through Stripe, PR-TOP switches your Stripe subscription
+   to the lower price for the next renewal. Nothing is charged or
+   credited for the current period. When Stripe starts the new
+   billing period, your plan changes to the lower tier automatically.
+   If Stripe cannot be reached, nothing is scheduled and an error asks
+   you to try again.
+5. A plan without a paid Stripe subscription (for example one granted
+   by an administrator) switches when its current period ends, or
+   immediately if it has no period end.
+6. To undo it, click **Keep …** (for example **Keep Pro**) in the
+   downgrade notice before the effective date. Stripe renews on your
+   current tier again, nothing is charged, and the page confirms "The
+   scheduled downgrade was canceled. You stay on …".
+7. Upgrading to a higher tier before the effective date also replaces
+   the scheduled downgrade; the prorated charge is then calculated
+   from the tier you are actually paying for.
+8. If the page says "We could not confirm the change with the payment
+   provider", the connection to Stripe dropped mid-change. Reload the
+   page after a minute to see the state Stripe reports.
 
 ## Step-by-step: cancel
 
 1. Open the **Subscription** page from the sidebar.
 2. Click **Cancel subscription** under your current plan. The link is
-   shown for active paid plans; it is hidden during the Trial and
-   while a downgrade is already scheduled.
+   shown for active paid plans, also while a downgrade is scheduled;
+   it is hidden during the Trial. A scheduled downgrade stays in place
+   when you cancel, so resuming later renews on the lower plan.
 3. Confirm the browser prompt, which reminds you that access continues
    until the end of the current billing period.
 4. If you pay through Stripe, PR-TOP first tells Stripe to stop
@@ -130,13 +149,16 @@ and is regenerated from source at every release.
   checkouts are blocked until the payment succeeds, so you are never
   billed for two subscriptions at once.
 - **Downgrade below current seat count.** If you have more clients
-  than the target tier allows, the downgrade modal warns you and
-  asks you to archive some clients first. Archived clients do not
-  count against the seat cap.
-- **Downgrade below current-month usage.** If you have already
-  uploaded more sessions this month than the target tier allows, the
-  downgrade still schedules — the new limit only applies to next
-  month.
+  than the target tier allows, the downgrade is still scheduled and a
+  warning explains that your existing client links are preserved, but
+  you cannot add new clients until you are within the new limit.
+- **Downgrade below current-month usage.** Session uploads are counted
+  per calendar month. The downgrade still schedules; once the lower
+  tier takes effect, its monthly upload limit applies to the uploads
+  already made in that calendar month.
+- **Canceled or past-due plan.** While a canceled plan's paid period
+  is still running, or while Stripe retries a failed renewal, your
+  tier's features and limits stay available.
 
 ## Troubleshooting
 
@@ -161,14 +183,15 @@ and is regenerated from source at every release.
   10 minutes of payment. Refresh; if it still doesn't appear after a
   day, contact support.
 - **Access to Pro features lost mid-cycle.** If your card was
-  declined at renewal, Stripe automatically retries three times over
-  the following week. During dunning you keep access; after the
-  final failed attempt the plan reverts to read-only.
+  declined at renewal, Stripe retries the charge automatically and
+  you keep your tier meanwhile. If Stripe finally ends the
+  subscription or marks it unpaid, access ends and you are sent to
+  the Subscription page to choose a plan. A scheduled downgrade whose
+  effective date has passed is the other common cause.
 - **No Cancel subscription link.** The link only appears for an
   active paid plan. It is hidden if the plan is already canceled
   (the card then shows "Your access continues until …"), during the
-  Trial, for a plan granted by an administrator, or while a downgrade
-  is scheduled.
+  Trial, or for a plan granted by an administrator.
 
 ## FAQ
 
@@ -209,13 +232,18 @@ A: You are charged the pro-rated Pro cost for the time you were on
 Pro, and the downgrade schedules for end-of-period as usual.
 
 **Q: Where do I find my past invoices?**
-A: **Settings → Subscription → Invoice history**. Each row shows
-date, amount, and a download link to the Stripe-hosted PDF.
+A: On the **Subscription** page, in the **Payment History** table at
+the bottom. Each row shows the date, amount, status and payment ID;
+Stripe also emails a receipt for every payment.
 
 **Q: Can I move seats between clients?**
-A: Seats are consumed by active clients only. Archive an inactive
-client to free their seat; the seat becomes available immediately
-and can be used for a new client without any transfer step.
+A: Every client linked to your account uses one seat. There is no
+transfer step: a seat frees up when a client is no longer linked to
+you.
+
+**Q: Do I get money back when I downgrade?**
+A: No. You keep the tier you already paid for until the end of the
+period, and Stripe charges the lower price from the next renewal.
 
 **Q: What is the safest way to migrate to a new plan?**
 A: Upgrade first, verify the new features work as expected, then

@@ -6,6 +6,7 @@ const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { executeNLQuery } = require('../services/nlQuery');
+const { getSubscriptionAccessForTherapist } = require('../utils/planLimits');
 
 const router = express.Router();
 
@@ -15,27 +16,24 @@ router.use(requireRole('therapist', 'superadmin'));
 
 // Tier gating: only Pro and Premium can use NL queries
 function requireNLQueryAccess(req, res, next) {
-  const db = getDatabase();
   const userId = req.user.id;
 
   // Superadmin always has access
   if (req.user.role === 'superadmin') return next();
 
-  const subResult = db.exec(
-    `SELECT plan, status FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1`,
-    [userId]
-  );
+  const access = getSubscriptionAccessForTherapist(userId);
 
-  if (subResult.length === 0 || subResult[0].values.length === 0) {
+  if (!access.subscription) {
     return res.status(403).json({
       error: 'No active subscription',
       message: 'Natural language queries require a Pro or Premium subscription.'
     });
   }
 
-  const [plan, status] = subResult[0].values[0];
+  // Canceled-in-grace and past_due stay usable (see getEffectiveSubscriptionAccess)
+  const { plan, status } = access;
 
-  if (status !== 'active') {
+  if (!access.usable) {
     return res.status(403).json({
       error: 'Subscription inactive',
       message: 'Your subscription is not active. Please renew to use NL queries.'

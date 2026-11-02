@@ -9,6 +9,7 @@ const { authenticate, requireVerifiedEmail } = require('../middleware/auth');
 const { logger } = require('../utils/logger');
 const aiProviders = require('../services/aiProviders');
 const { buildAssistantSystemPrompt } = require('../services/assistantPrompt');
+const { getSubscriptionAccessForTherapist } = require('../utils/planLimits');
 const assistantCache = require('../services/assistantCache');
 const assistantKnowledge = require('../services/assistantKnowledge');
 const { sanitizeInput, sanitizeOutput, detectInjection, getInjectionRejection, detectLanguage } = require('../services/assistantSanitizer');
@@ -248,16 +249,11 @@ router.post('/chat', requireVerifiedEmail, async (req, res) => {
 
     const db = getDatabase();
 
-    // Get user's subscription plan for context
+    // Get user's subscription plan for context (canceled-in-grace and
+    // past_due keep their tier; an unusable subscription counts as trial)
     let plan = 'trial';
     try {
-      const subResult = db.exec(
-        "SELECT plan FROM subscriptions WHERE therapist_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1",
-        [req.user.id]
-      );
-      if (subResult.length > 0 && subResult[0].values.length > 0) {
-        plan = subResult[0].values[0][0];
-      }
+      plan = getSubscriptionAccessForTherapist(req.user.id).plan;
     } catch (e) {
       // ignore
     }

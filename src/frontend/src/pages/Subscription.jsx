@@ -165,6 +165,7 @@ export default function Subscription() {
   // server message or the given key.
   const billingErrorMessage = (res, data, fallbackKey) => {
     if (res.status === 402 && data?.code === 'payment_failed') return t('subscription.paymentFailed');
+    if (res.status === 502 && data?.code === 'stripe_unconfirmed') return t('subscription.billingUnconfirmed');
     if (res.status === 502) return t('subscription.billingProviderError');
     if (res.status === 503) return t('subscription.billingUnavailable');
     return data?.error || t(fallbackKey);
@@ -335,7 +336,11 @@ export default function Subscription() {
         return;
       }
 
-      if (data.subscription?.scheduled) {
+      if (data.downgrade_canceled) {
+        setSuccess(t('subscription.downgradeCanceledSuccess', { plan: capitalize(data.plan || plan) }));
+      } else if (data.switched) {
+        setSuccess(t('subscription.switchedSuccess', { plan: capitalize(plan) }));
+      } else if (data.subscription?.scheduled) {
         const effectiveDate = formatUserDateOnly(data.subscription.effective_date);
         setSuccess(t('subscription.downgradeSuccess', { plan: capitalize(plan), date: effectiveDate }));
       } else if (data.charged) {
@@ -468,6 +473,18 @@ export default function Subscription() {
                 date: subscription?.current_period_end ? formatUserDateOnly(subscription.current_period_end) : '',
                 currentPlan: currentPlan
               })}
+              {subscription?.status === 'active' && (
+              <div className="mt-2">
+                <button
+                  onClick={() => handleChangePlan(currentPlan)}
+                  disabled={processing === currentPlan}
+                  className="text-sm font-medium text-teal-700 hover:text-teal-800 underline disabled:opacity-50"
+                >
+                  {processing === currentPlan && <LoadingSpinner size={14} className="mr-1" />}
+                  {processing === currentPlan ? t('subscription.processing') : t('subscription.keepCurrentPlan', { plan: capitalize(currentPlan) })}
+                </button>
+              </div>
+              )}
             </div>
           )}
           {subscription?.status === 'canceled' && !isManualOverride && (
@@ -493,8 +510,9 @@ export default function Subscription() {
               )}
             </div>
           )}
-          {/* Cancel button - only for non-manual-override, active paid plans */}
-          {!isManualOverride && subscription?.status === 'active' && currentPlan !== 'trial' && !pendingPlan && (
+          {/* Cancel button - only for non-manual-override, active paid plans
+              (also while a downgrade is scheduled: the server keeps it) */}
+          {!isManualOverride && subscription?.status === 'active' && currentPlan !== 'trial' && (
             <div className="mt-3">
               <button
                 onClick={handleCancel}

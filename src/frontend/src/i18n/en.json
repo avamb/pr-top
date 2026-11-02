@@ -1096,6 +1096,10 @@
     "processing": "Processing...",
     "upgradeSuccess": "Successfully upgraded to {{plan}} plan!",
     "downgradeSuccess": "Downgrade to {{plan}} scheduled. Your current access continues until {{date}}.",
+    "keepCurrentPlan": "Keep {{plan}}",
+    "downgradeCanceledSuccess": "The scheduled downgrade was canceled. You stay on {{plan}}.",
+    "switchedSuccess": "Switched to {{plan}}.",
+    "billingUnconfirmed": "We could not confirm the change with the payment provider. Please reload this page in a minute to see the current state.",
     "failedCheckout": "Failed to create checkout session",
     "failedCancel": "Failed to cancel subscription",
     "failedChange": "Failed to change plan",
@@ -2321,7 +2325,10 @@
           "sent": "sent",
           "pending": "pending",
           "failed": "failed",
-          "cancelled": "cancelled"
+          "cancelled": "cancelled",
+          "sending": "sending",
+          "skipped": "skipped",
+          "superseded": "superseded"
         },
         "attendanceStatus": {
           "attended": "attended",

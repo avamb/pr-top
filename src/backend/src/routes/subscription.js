@@ -2,34 +2,26 @@
 // Handles customer creation, subscription management, and Stripe webhooks
 
 const express = require('express');
+const crypto = require('crypto');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const {
   createCustomer, getCustomer, createCheckoutSession, isConfigured, isStripeTestMode, getStripeClient, PLAN_PRICES,
-  isRealStripeSubscriptionId, changeSubscriptionPlan, cancelSubscriptionAtPeriodEnd,
-  resumeSubscription, isStripeResourceMissing
+  isRealStripeSubscriptionId, changeSubscriptionPlan, scheduleSubscriptionPlanChange, cancelSubscriptionAtPeriodEnd,
+  resumeSubscription, isStripeResourceMissing, retrieveSubscription, subscriptionItemIsPlanPrice
 } = require('../services/stripe');
-const { parseSubscriptionDate } = require('../middleware/auth');
+const { parseSubscriptionDate, authenticate } = require('../middleware/auth');
 const { getClientLimit, getClientCount, checkClientLimit } = require('../utils/planLimits');
-const jwt = require('jsonwebtoken');
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-change-in-production';
-
-// Auth middleware
+// Shared auth (role, blocked state and token_version re-read from the DB).
+// Routes here historically read req.user.userId (the raw JWT claim); keep it
+// as an alias of the DB-backed id.
 function requireAuth(req, res, next) {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
+  authenticate(req, res, () => {
+    req.user.userId = req.user.id;
     next();
-  } catch (error) {
-    return res.status(401).json({ error: 'Invalid or expired token' });
-  }
+  });
 }
 
 // GET /api/subscription/stripe-status
@@ -218,6 +210,12 @@ router.get('/current', requireAuth, (req, res) => {
       }
     }
 
+    // A scheduled downgrade whose period has ended takes effect now
+    if (sub[9] && applyDuePendingPlan(db, sub[0], sub[9], sub[7], sub[2])) {
+      sub[3] = sub[9];
+      sub[9] = null;
+    }
+
     res.json({
       subscription: {
         id: sub[0],
@@ -290,45 +288,186 @@ function isBillingUnavailableInProduction() {
   return isStripeTestMode() && process.env.NODE_ENV === 'production';
 }
 
+// ── Per-therapist billing lock ────────────────────────────────────────────
+// change-plan / cancel / resume each read the row, call Stripe (await) and
+// write the row. Two overlapping requests of the same therapist (a
+// double-click, two tabs) could both act on the same stale row and charge
+// twice. The backend is a single process, so a chain of promises per
+// therapist serialises them; each handler reads the row only after the lock
+// is held. The lock is released when the response finishes (or the
+// connection closes); a request whose client left while waiting is dropped.
+const billingLocks = new Map(); // therapistId -> tail promise of the chain
+
+function billingLock(req, res, next) {
+  const key = String(req.user.userId);
+  const previous = billingLocks.get(key) || Promise.resolve();
+  let release;
+  const mine = new Promise((resolve) => { release = resolve; });
+  const tail = previous.then(() => mine);
+  billingLocks.set(key, tail);
+
+  let released = false;
+  const done = () => {
+    if (released) return;
+    released = true;
+    release();
+    if (billingLocks.get(key) === tail) billingLocks.delete(key);
+  };
+  res.on('finish', done);
+  res.on('close', done);
+
+  previous.then(() => {
+    if (released) return; // client went away while waiting: do nothing
+    next();
+  });
+}
+
+// Apply a scheduled downgrade whose billing period has ended, on a row
+// without a Stripe subscription (admin-granted, dev mode). Stripe-backed rows
+// change plan only through the renewal webhook, which reads the live Stripe
+// subscription. Returns true when the row was changed.
+function applyDuePendingPlan(db, subId, pendingPlan, currentPeriodEnd, stripeSubscriptionId) {
+  if (!pendingPlan) return false;
+  if (typeof stripeSubscriptionId === 'string' && stripeSubscriptionId.startsWith('sub_')) return false;
+  const periodEnd = parseSubscriptionDate(currentPeriodEnd);
+  if (!periodEnd || periodEnd > new Date()) return false;
+  db.run(
+    `UPDATE subscriptions SET plan = pending_plan, pending_plan = NULL, updated_at = datetime('now')
+     WHERE id = ? AND pending_plan = ?`,
+    [subId, pendingPlan]
+  );
+  if (db.getRowsModified() === 0) return false;
+  saveDatabaseAfterWrite();
+  logger.info(`Subscription ${subId}: scheduled downgrade to ${pendingPlan} applied (period ended ${currentPeriodEnd})`);
+  return true;
+}
+
+function stripePeriodEndIso(stripeSubscription) {
+  if (!stripeSubscription) return null;
+  const item = stripeSubscription.items && stripeSubscription.items.data && stripeSubscription.items.data[0];
+  const end = stripeSubscription.current_period_end || (item && item.current_period_end);
+  return end ? new Date(end * 1000).toISOString() : null;
+}
+
+// Live Stripe subscription, or null when it cannot be loaded.
+async function tryRetrieveSubscription(stripeSubscriptionId) {
+  try {
+    return await retrieveSubscription(stripeSubscriptionId);
+  } catch (error) {
+    logger.warn(`Could not load Stripe subscription ${stripeSubscriptionId}: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Switch the Stripe subscription to renew on `plan` (no proration) and record
+ * pending_plan = plan locally. pending_plan is written BEFORE the Stripe call:
+ * the customer.subscription.updated webhook caused by the switch can arrive
+ * before Stripe's API response, and pending_plan is what keeps the paid tier
+ * until the renewal. When the call fails, the live subscription decides:
+ *   applied - Stripe did switch (the response was lost): keep pending_plan
+ *   failed  - Stripe is not on that price: pending_plan reset to restorePending
+ *   unknown - the live state could not be loaded either: pending_plan kept;
+ *             the next webhook (live state) settles the row
+ */
+async function scheduleDowngradeInStripe(db, subId, stripeSubscriptionId, plan, restorePending, idempotencyKey) {
+  db.run(`UPDATE subscriptions SET pending_plan = ?, updated_at = datetime('now') WHERE id = ?`, [plan, subId]);
+  saveDatabaseAfterWrite();
+  try {
+    const updated = await scheduleSubscriptionPlanChange(stripeSubscriptionId, plan, { idempotencyKey });
+    return { status: 'applied', subscription: updated };
+  } catch (error) {
+    logger.error(`Stripe price switch to ${plan} failed for ${stripeSubscriptionId}: ${error.message}`);
+    const live = await tryRetrieveSubscription(stripeSubscriptionId);
+    if (!live) return { status: 'unknown', error };
+    if (subscriptionItemIsPlanPrice(live, plan)) return { status: 'applied', subscription: live };
+    db.run(
+      `UPDATE subscriptions SET pending_plan = ?, updated_at = datetime('now') WHERE id = ? AND pending_plan = ?`,
+      [restorePending || null, subId, plan]
+    );
+    saveDatabaseAfterWrite();
+    return { status: 'failed', error };
+  }
+}
+
+/**
+ * Undo a scheduled downgrade in Stripe: switch the price back to `currentPlan`
+ * (no proration), but only if the item really is on the pending plan's price
+ * (rows from before wave 2 may never have switched it). Returns
+ * { ok: true, reverted } or { ok: false, error } (nothing changed in Stripe,
+ * as far as can be verified).
+ */
+async function revertPendingPrice(stripeSubscriptionId, currentPlan, pendingPlan, idempotencyKey) {
+  let live;
+  try {
+    live = await retrieveSubscription(stripeSubscriptionId);
+  } catch (error) {
+    return { ok: false, error };
+  }
+  if (!subscriptionItemIsPlanPrice(live, pendingPlan)) return { ok: true, reverted: false };
+  try {
+    await scheduleSubscriptionPlanChange(stripeSubscriptionId, currentPlan, { idempotencyKey });
+    return { ok: true, reverted: true };
+  } catch (error) {
+    const after = await tryRetrieveSubscription(stripeSubscriptionId);
+    if (after && !subscriptionItemIsPlanPrice(after, pendingPlan)) return { ok: true, reverted: true };
+    return { ok: false, error };
+  }
+}
+
+const STRIPE_UNCONFIRMED = {
+  error: 'We could not confirm the change with the payment provider. Please reload this page in a minute to see the current state.',
+  code: 'stripe_unconfirmed'
+};
+
 // POST /api/subscription/change-plan
 // Subscriptions without a Stripe subscription (trial, admin-granted) get
-// 402 requires_checkout; Stripe-backed upgrades are applied locally only
-// after the prorated Stripe charge succeeds.
-// Upgrades are charged immediately (prorated). Downgrades are scheduled for end of current period.
-router.post('/change-plan', requireAuth, async (req, res) => {
+// 402 requires_checkout for upgrades; Stripe-backed upgrades are applied
+// locally only after the prorated Stripe charge succeeds.
+//
+// Downgrades are scheduled for the end of the current paid period:
+// - Stripe-backed: the Stripe price is switched right away WITHOUT proration
+//   (nothing charged or credited), so Stripe bills the lower plan from the
+//   next renewal. pending_plan holds the new plan and the local plan keeps
+//   the paid tier until customer.subscription.updated reports the new period
+//   (routes/webhooks.js resolveLocalPlanChange).
+// - No Stripe subscription: pending_plan is applied once current_period_end
+//   has passed (applyDuePendingPlan; gates see it via
+//   getEffectiveSubscriptionAccess). Without a running period it applies now.
+// Choosing the current plan again while a downgrade is scheduled undoes it
+// ("Keep current plan" on the Subscription page).
+// Every Stripe update carries an idempotency key (therapist + action + target
+// plan + per-request nonce); after a failed call the live subscription is
+// checked, so a lost response is not mistaken for a failure.
+router.post('/change-plan', requireAuth, billingLock, async (req, res) => {
   try {
     const db = getDatabase();
     const userId = req.user.userId;
     const { plan: newPlan } = req.body;
+    const nonce = crypto.randomUUID();
+    const idemKey = (action, plan) => `prtop-${userId}-${action}-${plan}-${nonce}`;
 
     const validPlans = ['confirm', 'basic', 'pro', 'premium'];
     if (!newPlan || !validPlans.includes(newPlan)) {
       return res.status(400).json({ error: 'Invalid plan. Must be one of: ' + validPlans.join(', ') });
     }
 
-    // Get current subscription
-    let subResult;
-    try {
-      subResult = db.exec(
-        'SELECT id, plan, status, current_period_end, stripe_subscription_id, pending_plan FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
-        [userId]
-      );
-    } catch (e) {
-      subResult = db.exec(
-        'SELECT id, plan, status, current_period_end, stripe_subscription_id FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
-        [userId]
-      );
-    }
+    // Get current subscription (read only after the billing lock is held)
+    const subResult = db.exec(
+      'SELECT id, plan, status, current_period_end, stripe_subscription_id, pending_plan FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
+      [userId]
+    );
 
     if (subResult.length === 0 || subResult[0].values.length === 0) {
       return res.status(404).json({ error: 'No subscription found' });
     }
 
     const subId = subResult[0].values[0][0];
-    const currentPlan = subResult[0].values[0][1];
+    let currentPlan = subResult[0].values[0][1];
     const currentStatus = subResult[0].values[0][2];
-    const currentPeriodEnd = subResult[0].values[0][3];
+    let currentPeriodEnd = subResult[0].values[0][3];
     const stripeSubscriptionId = subResult[0].values[0][4];
+    let pendingPlan = subResult[0].values[0][5] || null;
 
     // Trialing subscriptions have no paid Stripe subscription yet: any paid
     // plan has to be bought through checkout.
@@ -344,8 +483,46 @@ router.post('/change-plan', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Subscription is not active' });
     }
 
+    // A downgrade whose period already ended counts as applied (non-Stripe rows)
+    if (applyDuePendingPlan(db, subId, pendingPlan, currentPeriodEnd, stripeSubscriptionId)) {
+      currentPlan = pendingPlan;
+      pendingPlan = null;
+    }
+
+    const hasStripeSubscription = isRealStripeSubscriptionId(stripeSubscriptionId);
+    // Stripe-backed row, but Stripe is not configured in production: a local
+    // change would leave Stripe billing the old price.
+    const stripeUnavailable = typeof stripeSubscriptionId === 'string' &&
+      stripeSubscriptionId.startsWith('sub_') && isBillingUnavailableInProduction();
+
     if (currentPlan === newPlan) {
-      return res.status(400).json({ error: 'Already on this plan' });
+      if (!pendingPlan) {
+        return res.status(400).json({ error: 'Already on this plan' });
+      }
+      // Undo the scheduled downgrade: Stripe renews on the current plan again
+      if (stripeUnavailable) {
+        logger.error(`Change plan refused for user ${userId}: Stripe is not configured in production`);
+        return res.status(503).json({ error: 'Billing is temporarily unavailable. Please try again later.' });
+      }
+      if (hasStripeSubscription) {
+        const revert = await revertPendingPrice(stripeSubscriptionId, currentPlan, pendingPlan, idemKey('undo', currentPlan));
+        if (!revert.ok) {
+          logger.error(`Stripe downgrade undo failed for user ${userId} (${stripeSubscriptionId}): ${revert.error && revert.error.message}`);
+          return res.status(502).json({
+            error: 'We could not reach the payment provider to cancel the scheduled downgrade. Nothing was changed. Please try again.',
+            code: 'stripe_error'
+          });
+        }
+      }
+      db.run(`UPDATE subscriptions SET pending_plan = NULL, updated_at = datetime('now') WHERE id = ?`, [subId]);
+      saveDatabaseAfterWrite();
+      logger.info(`User ${userId} canceled the scheduled downgrade to ${pendingPlan}; stays on ${currentPlan}`);
+      return res.json({
+        message: `The scheduled downgrade to ${pendingPlan} was canceled. You stay on ${currentPlan}.`,
+        downgrade_canceled: true,
+        plan: currentPlan,
+        pending_plan: null
+      });
     }
 
     // Determine if this is an upgrade or downgrade
@@ -355,8 +532,9 @@ router.post('/change-plan', requireAuth, async (req, res) => {
     const now = new Date();
 
     if (isDowngrade) {
-      // Downgrade: schedule for end of current period, keep current access
-      const periodEnd = currentPeriodEnd || new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      if (pendingPlan === newPlan) {
+        return res.status(400).json({ error: 'This downgrade is already scheduled' });
+      }
 
       let downgradeWarning = null;
       const currentClients = getClientCount(userId);
@@ -371,14 +549,72 @@ router.post('/change-plan', requireAuth, async (req, res) => {
         };
       }
 
-      // Schedule the downgrade - current plan stays active until period end
-      db.run(
-        `UPDATE subscriptions SET pending_plan = ?, updated_at = datetime('now') WHERE id = ?`,
-        [newPlan, subId]
-      );
-      saveDatabaseAfterWrite();
+      if (stripeUnavailable) {
+        logger.error(`Change plan refused for user ${userId}: Stripe is not configured in production`);
+        return res.status(503).json({ error: 'Billing is temporarily unavailable. Please try again later.' });
+      }
 
-      logger.info(`User ${userId} scheduled downgrade from ${currentPlan} to ${newPlan}, effective at ${periodEnd}`);
+      const periodEndDate = parseSubscriptionDate(currentPeriodEnd);
+      const periodRunning = !!periodEndDate && periodEndDate > now;
+
+      if (!hasStripeSubscription && !periodRunning) {
+        // No paid period to wait for (no Stripe billing): switch right away.
+        // The client shows its own localized message for `switched: true`.
+        db.run(
+          `UPDATE subscriptions SET plan = ?, pending_plan = NULL, updated_at = datetime('now') WHERE id = ?`,
+          [newPlan, subId]
+        );
+        saveDatabaseAfterWrite();
+        logger.info(`User ${userId} downgraded from ${currentPlan} to ${newPlan} (no running paid period, immediate)`);
+        const immediate = {
+          message: `Switched to ${newPlan}.`,
+          switched: true,
+          subscription: {
+            plan: newPlan,
+            pending_plan: null,
+            previous_plan: currentPlan,
+            is_downgrade: true,
+            scheduled: false
+          }
+        };
+        if (downgradeWarning) immediate.downgrade_warning = downgradeWarning;
+        return res.json(immediate);
+      }
+
+      if (hasStripeSubscription) {
+        const result = await scheduleDowngradeInStripe(
+          db, subId, stripeSubscriptionId, newPlan, pendingPlan, idemKey('downgrade', newPlan)
+        );
+        if (result.status === 'failed') {
+          logger.error(`Stripe downgrade scheduling failed for user ${userId} (${currentPlan} -> ${newPlan})`);
+          return res.status(502).json({
+            error: 'We could not reach the payment provider to schedule the downgrade. Nothing was changed. Please try again.',
+            code: 'stripe_error'
+          });
+        }
+        if (result.status === 'unknown') {
+          logger.error(`Stripe downgrade for user ${userId} (${currentPlan} -> ${newPlan}) unconfirmed; pending_plan kept for the webhook to settle`);
+          return res.status(502).json(STRIPE_UNCONFIRMED);
+        }
+        const stripeEnd = stripePeriodEndIso(result.subscription);
+        if (stripeEnd) {
+          currentPeriodEnd = stripeEnd;
+          db.run(
+            `UPDATE subscriptions SET current_period_end = ?, updated_at = datetime('now') WHERE id = ?`,
+            [stripeEnd, subId]
+          );
+          saveDatabaseAfterWrite();
+        }
+      } else {
+        db.run(
+          `UPDATE subscriptions SET pending_plan = ?, updated_at = datetime('now') WHERE id = ?`,
+          [newPlan, subId]
+        );
+        saveDatabaseAfterWrite();
+      }
+
+      const periodEnd = currentPeriodEnd || new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      logger.info(`User ${userId} scheduled downgrade from ${currentPlan} to ${newPlan}, effective at ${periodEnd}${hasStripeSubscription ? ` (Stripe ${stripeSubscriptionId}, no proration)` : ''}`);
 
       const response = {
         message: `Downgrade to ${newPlan} scheduled. Your ${currentPlan} access continues until ${new Date(periodEnd).toLocaleDateString()}.`,
@@ -428,7 +664,7 @@ router.post('/change-plan', requireAuth, async (req, res) => {
           current_period_end: periodEnd.toISOString()
         }
       });
-    } else if (!isRealStripeSubscriptionId(stripeSubscriptionId)) {
+    } else if (!hasStripeSubscription) {
       // No paid Stripe subscription to change (trial, admin-granted plan):
       // the client has to start a normal checkout for the new plan.
       logger.info(`User ${userId} upgrade ${currentPlan} -> ${newPlan} requires checkout (no Stripe subscription)`);
@@ -438,30 +674,75 @@ router.post('/change-plan', requireAuth, async (req, res) => {
         plan: newPlan
       });
     } else {
+      // A scheduled downgrade already switched the Stripe price to the lower
+      // plan. Switch it back to the plan actually paid for first (only if
+      // Stripe really is on the lower price), so the prorated upgrade charge
+      // is computed from that tier, not the lower one.
+      if (pendingPlan) {
+        const revert = await revertPendingPrice(stripeSubscriptionId, currentPlan, pendingPlan, idemKey('undo', currentPlan));
+        if (!revert.ok) {
+          logger.error(`Stripe downgrade undo before upgrade failed for user ${userId} (${stripeSubscriptionId}): ${revert.error && revert.error.message}`);
+          if (isStripeResourceMissing(revert.error)) {
+            return res.status(402).json({
+              error: 'Please complete checkout to upgrade to this plan.',
+              requires_checkout: true,
+              plan: newPlan
+            });
+          }
+          return res.status(502).json({
+            error: 'We could not reach the payment provider. Your plan was not changed. Please try again.',
+            code: 'stripe_error'
+          });
+        }
+        db.run(`UPDATE subscriptions SET pending_plan = NULL, updated_at = datetime('now') WHERE id = ?`, [subId]);
+        saveDatabaseAfterWrite();
+      }
+
       // Upgrade: charge the prorated difference in Stripe first, then apply locally
       let updated;
       try {
-        updated = await changeSubscriptionPlan(stripeSubscriptionId, newPlan);
+        updated = await changeSubscriptionPlan(stripeSubscriptionId, newPlan, { idempotencyKey: idemKey('upgrade', newPlan) });
       } catch (stripeError) {
         logger.error(`Stripe upgrade failed for user ${userId} (${currentPlan} -> ${newPlan}): ${stripeError.message}`);
-        if (isStripeResourceMissing(stripeError)) {
-          // The Stripe subscription no longer exists: buy the plan via checkout
+        const live = isStripeResourceMissing(stripeError) ? null : await tryRetrieveSubscription(stripeSubscriptionId);
+        if (live && subscriptionItemIsPlanPrice(live, newPlan)) {
+          // Stripe applied (and charged) the upgrade; only the response was lost
+          logger.warn(`Stripe upgrade of ${stripeSubscriptionId} to ${newPlan} was applied despite the error; recording it`);
+          updated = live;
+        } else {
+          if (pendingPlan && live) {
+            // Stripe's state is known and unchanged: put the scheduled
+            // downgrade back (best effort)
+            const restore = await scheduleDowngradeInStripe(
+              db, subId, stripeSubscriptionId, pendingPlan, null, idemKey('restore', pendingPlan)
+            );
+            if (restore.status !== 'applied') {
+              logger.error(`Could not restore scheduled downgrade to ${pendingPlan} for user ${userId} (${restore.status})`);
+            }
+          }
+          if (isStripeResourceMissing(stripeError)) {
+            // The Stripe subscription no longer exists: buy the plan via checkout
+            return res.status(402).json({
+              error: 'Please complete checkout to upgrade to this plan.',
+              requires_checkout: true,
+              plan: newPlan
+            });
+          }
+          if (!live) {
+            // Neither the update nor the check went through: Stripe's state is
+            // unknown; the webhook (live state) will settle the row.
+            return res.status(502).json(STRIPE_UNCONFIRMED);
+          }
           return res.status(402).json({
-            error: 'Please complete checkout to upgrade to this plan.',
-            requires_checkout: true,
-            plan: newPlan
+            error: 'The upgrade payment could not be completed. Your plan was not changed. Please check your payment method and try again.',
+            code: 'payment_failed'
           });
         }
-        return res.status(402).json({
-          error: 'The upgrade payment could not be completed. Your plan was not changed. Please check your payment method and try again.',
-          code: 'payment_failed'
-        });
       }
 
       const periodStart = updated && updated.current_period_start
         ? new Date(updated.current_period_start * 1000).toISOString() : null;
-      const periodEnd = updated && updated.current_period_end
-        ? new Date(updated.current_period_end * 1000).toISOString() : currentPeriodEnd;
+      const periodEnd = stripePeriodEndIso(updated) || currentPeriodEnd;
 
       db.run(
         `UPDATE subscriptions SET plan = ?, pending_plan = NULL,
@@ -660,7 +941,7 @@ router.post('/checkout', requireAuth, async (req, res) => {
 // POST /api/subscription/cancel
 // Renewal is stopped in Stripe first; access is kept by requireActiveSubscription.
 // Cancel subscription - renewal stops, access continues until end of current billing period
-router.post('/cancel', requireAuth, async (req, res) => {
+router.post('/cancel', requireAuth, billingLock, async (req, res) => {
   try {
     const db = getDatabase();
     const userId = req.user.userId;
@@ -744,8 +1025,10 @@ router.post('/cancel', requireAuth, async (req, res) => {
 
     // current_period_end is what requireActiveSubscription uses to keep access
     // until the paid period ends, so persist the fallback date as well.
+    // pending_plan is kept: for a Stripe subscription a scheduled downgrade has
+    // already switched the Stripe price, so a later resume renews on that plan.
     db.run(
-      `UPDATE subscriptions SET status = 'canceled', canceled_at = ?, pending_plan = NULL, current_period_end = ?, updated_at = datetime('now') WHERE id = ?`,
+      `UPDATE subscriptions SET status = 'canceled', canceled_at = ?, current_period_end = ?, updated_at = datetime('now') WHERE id = ?`,
       [now.toISOString(), accessUntil, subId]
     );
     saveDatabaseAfterWrite();
@@ -772,7 +1055,7 @@ router.post('/cancel', requireAuth, async (req, res) => {
 // Undo a cancellation while the paid period is still running: renewal is
 // switched back on in Stripe first, then the local row is restored.
 // Resume a canceled subscription before its paid period ends
-router.post('/resume', requireAuth, async (req, res) => {
+router.post('/resume', requireAuth, billingLock, async (req, res) => {
   try {
     const db = getDatabase();
     const userId = req.user.userId;

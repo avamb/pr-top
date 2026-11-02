@@ -7,6 +7,7 @@ const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { verifyClientConsent } = require('../utils/consentCheck');
+const { getSubscriptionAccessForTherapist } = require('../utils/planLimits');
 const {
   exportClientFull,
   exportDiaryEntries,
@@ -33,20 +34,12 @@ router.use(requireRole('therapist', 'superadmin'));
  * pro/premium: full export (all data types, JSON + CSV)
  */
 function getExportTier(req) {
-  const db = getDatabase();
   const userId = req.user.id;
 
   if (req.user.role === 'superadmin') return 'premium';
 
-  const subResult = db.exec(
-    'SELECT plan, status FROM subscriptions WHERE therapist_id = ? ORDER BY created_at DESC LIMIT 1',
-    [userId]
-  );
-
-  if (subResult.length === 0 || subResult[0].values.length === 0) return 'trial';
-  const [plan, status] = subResult[0].values[0];
-  if (status !== 'active') return 'trial';
-  return plan;
+  // Canceled-in-grace / past_due keep their tier; unusable -> 'trial'
+  return getSubscriptionAccessForTherapist(userId).plan;
 }
 
 function isFullExportAllowed(plan) {
