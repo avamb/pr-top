@@ -29,8 +29,153 @@ function extractToken(req) {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Audit wave 3 (track N): password-login lockout (M4), enumeration (M5)
+// ---------------------------------------------------------------------------
+
+function intEnv(name, fallback) {
+  const n = parseInt(process.env[name], 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+// M4: LOGIN_LOCK_MAX_FAILURES wrong passwords within LOGIN_LOCK_WINDOW_MIN
+// lock PASSWORD login for that account for LOGIN_LOCK_DURATION_MIN. The lock
+// answers exactly like a wrong password (no oracle); login by email code
+// stays available.
+const LOGIN_LOCK_MAX_FAILURES = intEnv('LOGIN_LOCK_MAX_FAILURES', 10);
+const LOGIN_LOCK_WINDOW_MIN = intEnv('LOGIN_LOCK_WINDOW_MIN', 15);
+const LOGIN_LOCK_DURATION_MIN = intEnv('LOGIN_LOCK_DURATION_MIN', 15);
+
+// M5: unknown emails (and accounts without a password) are compared against
+// this hash so every /login costs one bcrypt compare at the same cost (12).
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), 12);
+const BCRYPT_HASH_RE = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/;
+
+const REGISTER_CHECK_EMAIL_MESSAGE = 'Check your email to continue.';
+
+// Code login (routes/loginCode.js) limits, mirrored for the sign-in code sent
+// when someone registers with an existing email.
+const LOGIN_CODE_PER_EMAIL_MAX = 3;
+const LOGIN_CODE_PER_EMAIL_WINDOW_MIN = 15;
+const LOGIN_CODE_LOCK_MAX_FAILURES = 10;
+
+function appUrl() {
+  const raw = process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:3002';
+  return raw.replace(/\/+$/, '');
+}
+
+function scalarValue(db, sql, params) {
+  const r = db.exec(sql, params);
+  return r.length > 0 && r[0].values.length > 0 ? Number(r[0].values[0][0]) || 0 : 0;
+}
+
+/**
+ * Someone tried to register with an email that already has an account. A
+ * therapist/superadmin owner gets a normal sign-in code email (code + magic
+ * link, same limits as POST /api/auth/login-code/request), so a person who
+ * forgot they already registered can get in. Viewers, clients and blocked
+ * accounts get nothing. Never throws; the caller always answers the same.
+ */
+function notifyExistingAccountOwner(db, req, user) {
+  try {
+    const ip = getClientIp(req);
+    if (!['therapist', 'superadmin'].includes(user.role) || user.blockedAt) {
+      logger.info(`[REGISTER] existing account (no code sent) user=${user.id} ip=${ip}`);
+      return;
+    }
+    const loginCodes = require('../utils/loginCodes');
+    const failures = scalarValue(db,
+      "SELECT COUNT(*) FROM audit_logs WHERE actor_id = ? AND action = 'login_code_failed' AND created_at > datetime('now', '-1 hour')",
+      [user.id]);
+    if (failures >= LOGIN_CODE_LOCK_MAX_FAILURES ||
+        loginCodes.countRecent(db, user.id, LOGIN_CODE_PER_EMAIL_WINDOW_MIN) >= LOGIN_CODE_PER_EMAIL_MAX) {
+      logger.info(`[REGISTER] existing account, code limit reached user=${user.id} ip=${ip}`);
+      return;
+    }
+    const issued = loginCodes.createFor(db, user.id, ip, { save: false });
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, ip_address, created_at) VALUES (?, 'login_code_requested', 'user', ?, ?, ?, datetime('now'))",
+      [user.id, user.id, JSON.stringify({ via: 'register_existing_email' }), ip]
+    );
+    saveDatabaseAfterWrite();
+    logger.info(`[REGISTER] existing account, sign-in code sent user=${user.id} ip=${ip}`);
+
+    const linkUrl = `${appUrl()}/api/auth/login-code/link?token=${encodeURIComponent(issued.linkToken)}`;
+    const locale = ['en', 'ru', 'es', 'uk'].includes(user.language) ? user.language : (req.locale || 'en');
+    emailService.sendLoginCodeEmail(user.email, { code: issued.code, linkUrl, ttlMin: loginCodes.TTL_MIN }, locale)
+      .then((result) => {
+        if (!result || !result.sent) {
+          logger.info(`[REGISTER] sign-in code email not sent user=${user.id}: ${(result && result.error) || 'not sent'}`);
+        }
+      })
+      .catch((err) => logger.error(`[REGISTER] sign-in code email error user=${user.id}: ${err.message}`));
+  } catch (e) {
+    logger.warn(`[REGISTER] existing-account notification failed user=${user.id}: ${e.message}`);
+  }
+}
+
+/**
+ * M4: count one failed password for `userId`; lock password login once the
+ * window holds LOGIN_LOCK_MAX_FAILURES failures. Synchronous (no await
+ * between read and write), so concurrent requests cannot lose increments.
+ */
+function recordFailedPassword(db, userId, ip, owner) {
+  const windowMod = `-${LOGIN_LOCK_WINDOW_MIN} minutes`;
+  db.run(
+    `UPDATE users SET
+       failed_login_count = CASE
+         WHEN failed_login_window_start IS NULL OR failed_login_window_start <= datetime('now', ?) THEN 1
+         ELSE failed_login_count + 1 END,
+       failed_login_window_start = CASE
+         WHEN failed_login_window_start IS NULL OR failed_login_window_start <= datetime('now', ?) THEN datetime('now')
+         ELSE failed_login_window_start END
+     WHERE id = ?`,
+    [windowMod, windowMod, userId]
+  );
+  const failures = scalarValue(db, 'SELECT failed_login_count FROM users WHERE id = ?', [userId]);
+  if (failures >= LOGIN_LOCK_MAX_FAILURES) {
+    db.run(
+      "UPDATE users SET password_locked_until = datetime('now', ?), failed_login_count = 0, failed_login_window_start = NULL WHERE id = ?",
+      [`+${LOGIN_LOCK_DURATION_MIN} minutes`, userId]
+    );
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, ip_address, created_at) VALUES (?, 'login_password_locked', 'user', ?, ?, ?, datetime('now'))",
+      [userId, userId, JSON.stringify({ failures, lock_minutes: LOGIN_LOCK_DURATION_MIN }), ip || null]
+    );
+    logger.warn(`[LOGIN] password login locked for ${LOGIN_LOCK_DURATION_MIN} min after ${failures} failures user=${userId} ip=${ip}`);
+    // Tell the owner once per lock (this branch runs exactly once: the
+    // counter is reset and further failures are not counted while locked),
+    // with the sign-in-code and reset hints.
+    if (owner && owner.email) {
+      const locale = ['en', 'ru', 'es', 'uk'].includes(owner.language) ? owner.language : 'en';
+      Promise.resolve()
+        .then(() => emailService.sendPasswordLoginLockedEmail(owner.email, { lockMinutes: LOGIN_LOCK_DURATION_MIN }, locale))
+        .then((result) => {
+          if (!result || !result.sent) logger.info(`[LOGIN] lock notice not sent user=${userId}: ${(result && result.error) || 'not sent'}`);
+        })
+        .catch((err) => logger.error(`[LOGIN] lock notice error user=${userId}: ${err.message}`));
+    }
+  }
+  saveDatabaseAfterWrite();
+}
+
+// M4 anti-DoS: an IP address this account signed in from (password or email
+// code) within the last LOGIN_TRUSTED_IP_DAYS days is 'known'. Wrong passwords
+// from it are not counted and the lock does not apply to it, so an attacker
+// elsewhere cannot lock the owner out of their usual network. Brute force
+// from that network stays bounded by the per-IP auth limiter (index.js).
+const LOGIN_TRUSTED_IP_DAYS = 30;
+function isKnownLoginIp(db, userId, ip) {
+  if (!ip) return false;
+  return scalarValue(db,
+    "SELECT COUNT(*) FROM audit_logs WHERE actor_id = ? AND action IN ('login', 'login_code_success') AND ip_address = ? AND created_at > datetime('now', ?)",
+    [userId, ip, `-${LOGIN_TRUSTED_IP_DAYS} days`]) > 0;
+}
+
 // POST /api/auth/register
 // antibot: honeypot (fake 201) -> timing (400) -> Turnstile (403).
+// An email that already has an account gets 201 { message, check_email: true }
+// (no user, no session cookie) — see notifyExistingAccountOwner.
 router.post('/register', antibot({ turnstile: true, fake: 'register', expectedAction: 'register' }), async (req, res) => {
   try {
     // Temporary (wave 1): confirm the real IP reaches the backend through
@@ -48,6 +193,9 @@ router.post('/register', antibot({ turnstile: true, fake: 'register', expectedAc
         error: 'Missing required fields: ' + missingFields.join(', '),
         missing_fields: missingFields
       });
+    }
+    if (typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
     }
 
     // Normalize email to lowercase for case-insensitive matching
@@ -71,13 +219,8 @@ router.post('/register', antibot({ turnstile: true, fake: 'register', expectedAc
 
     const db = getDatabase();
 
-    // Check if user already exists (case-insensitive via normalized email)
-    const existing = db.exec('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
-    if (existing.length > 0 && existing[0].values.length > 0) {
-      return res.status(409).json({ error: 'User with this email already exists' });
-    }
-
-    // Validate password strength
+    // Validate password strength (before the existence check, so a weak
+    // password gets the same 400 whether or not the email is registered)
     const pwdErrors = [];
     if (password.length < 8) pwdErrors.push('at least 8 characters');
     if (!/[A-Z]/.test(password)) pwdErrors.push('at least one uppercase letter');
@@ -87,8 +230,28 @@ router.post('/register', antibot({ turnstile: true, fake: 'register', expectedAc
       return res.status(400).json({ error: 'Password does not meet requirements: ' + pwdErrors.join(', ') });
     }
 
-    // Hash password
+    // Hash password (also on the existing-email path below, so both take
+    // the same bcrypt time)
     const passwordHash = await bcrypt.hash(password, 12);
+
+    // Audit M5: an existing email must not produce an "already exists" answer
+    // (409 was an enumeration oracle). Reply 201 "check your email" without a
+    // session, and mail the account owner a sign-in code instead.
+    const existing = db.exec('SELECT id, role, language, blocked_at FROM users WHERE email = ?', [normalizedEmail]);
+    if (existing.length > 0 && existing[0].values.length > 0) {
+      const [existingId, existingRole, existingLanguage, existingBlockedAt] = existing[0].values[0];
+      notifyExistingAccountOwner(db, req, {
+        id: existingId,
+        email: normalizedEmail,
+        role: existingRole,
+        language: existingLanguage,
+        blockedAt: existingBlockedAt
+      });
+      return res.status(201).json({
+        message: REGISTER_CHECK_EMAIL_MESSAGE,
+        check_email: true
+      });
+    }
     const inviteCode = uuidv4().slice(0, 8);
 
     logger.info(`Registering new user: ${normalizedEmail} with role: ${userRole}`);
@@ -219,8 +382,8 @@ router.post('/register', antibot({ turnstile: true, fake: 'register', expectedAc
     saveDatabaseAfterWrite();
 
     // Sign JWT + set HttpOnly session cookie
+    // JWT lives only in the HttpOnly cookie; it is not returned in the body.
     const session = issueSession(res, { id: userId, email: user[1], role: user[2], timezone: userTimezone });
-    const token = session.token;
 
     logger.info(`User registered successfully: id=${userId}, email=${user[1]}`);
 
@@ -236,8 +399,7 @@ router.post('/register', antibot({ turnstile: true, fake: 'register', expectedAc
         role: session.user.role,
         created_at: user[3],
         timezone: session.user.timezone
-      },
-      token
+      }
     };
     if (nextAction) {
       responseBody.next_action = nextAction;
@@ -270,28 +432,55 @@ router.post('/login', async (req, res) => {
         missing_fields: missingFields
       });
     }
+    if (typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(401).json({ error: t('auth.invalidCredentials', req.locale) });
+    }
 
     // Normalize email to lowercase for case-insensitive matching
     const normalizedEmail = email.trim().toLowerCase();
 
     const db = getDatabase();
+    const ip = getClientIp(req);
 
     logger.info(`Login attempt for: ${normalizedEmail}`);
 
     const result = db.exec(
-      'SELECT id, email, password_hash, role, blocked_at, timezone FROM users WHERE email = ?',
+      `SELECT id, email, password_hash, role, blocked_at, timezone,
+              CASE WHEN password_locked_until IS NOT NULL AND password_locked_until > datetime('now') THEN 1 ELSE 0 END,
+              failed_login_count, failed_login_window_start, language
+         FROM users WHERE email = ?`,
       [normalizedEmail]
     );
+    const user = (result.length > 0 && result[0].values.length > 0) ? result[0].values[0] : null;
 
-    if (result.length === 0 || result[0].values.length === 0) {
-      return res.status(401).json({ error: t('auth.invalidCredentials', req.locale) });
+    // M5: always exactly one bcrypt compare — against the dummy hash for an
+    // unknown email or an account without a password (viewer / bot-only).
+    const hasPassword = !!user && typeof user[2] === 'string' && BCRYPT_HASH_RE.test(user[2]);
+    const passwordMatches = await bcrypt.compare(password, hasPassword ? user[2] : DUMMY_PASSWORD_HASH);
+    const invalidCredentials = () => res.status(401).json({ error: t('auth.invalidCredentials', req.locale) });
+
+    if (!user) {
+      return invalidCredentials();
     }
 
-    const user = result[0].values[0];
-    const isValid = await bcrypt.compare(password, user[2]);
+    // M4: while locked, password login fails like a wrong password (even with
+    // the right one); failures are not counted during the lock. Exception: an
+    // IP this account signed in from in the last 30 days (isKnownLoginIp) is
+    // neither locked out nor counted.
+    const knownIp = isKnownLoginIp(db, user[0], ip);
+    if (user[6] && !knownIp) {
+      logger.warn(`[LOGIN] password login refused (locked) user=${user[0]} ip=${ip}`);
+      return invalidCredentials();
+    }
 
-    if (!isValid) {
-      return res.status(401).json({ error: t('auth.invalidCredentials', req.locale) });
+    if (!hasPassword || !passwordMatches) {
+      if (hasPassword && !knownIp) recordFailedPassword(db, user[0], ip, { email: user[1], language: user[9] });
+      return invalidCredentials();
+    }
+
+    // Correct password: clear the failure window.
+    if (Number(user[7]) > 0 || user[8]) {
+      db.run('UPDATE users SET failed_login_count = 0, failed_login_window_start = NULL WHERE id = ?', [user[0]]);
     }
 
     // Check if user is blocked
@@ -321,8 +510,7 @@ router.post('/login', async (req, res) => {
 
     res.json({
       message: 'Login successful',
-      user: session.user,
-      token: session.token
+      user: session.user
     });
   } catch (error) {
     logger.error('Login error:', error);
@@ -355,22 +543,16 @@ router.post('/register-viewer', antibot({ turnstile: true, fake: 'viewer', expec
       const existingUser = existing[0].values[0];
       const existingRole = existingUser[1];
 
-      // Existing viewer: typing an email is no proof of mailbox ownership, so
-      // do NOT issue a session or link the anonymous session to that account.
-      // The caller must sign in (email code / link) to resume.
-      if (existingRole === 'viewer') {
-        logger.info(`[ViewerReg] Existing viewer id=${existingUser[0]} — login required, no token issued`);
-        return res.json({
-          message: 'Welcome back! Please sign in to continue.',
-          existing: true,
-          login_required: true,
-          login_url: '/login'
-        });
-      }
-
-      // Therapist/admin account: tell them to use the login page (role not disclosed)
-      return res.status(409).json({
-        error: 'An account with this email already exists. Please use the login page.',
+      // Existing account of ANY role: typing an email is no proof of mailbox
+      // ownership, so do NOT issue a session or link the anonymous session.
+      // The caller must sign in (email code / link) to resume. Audit M5: the
+      // same answer for every role (the old 409 for therapist/admin emails
+      // told viewers apart from therapists).
+      logger.info(`[ViewerReg] Existing account id=${existingUser[0]} role=${existingRole} — login required, no token issued`);
+      return res.json({
+        message: 'Welcome back! Please sign in to continue.',
+        existing: true,
+        login_required: true,
         login_url: '/login'
       });
     }
@@ -420,7 +602,7 @@ router.post('/register-viewer', antibot({ turnstile: true, fake: 'viewer', expec
     }
 
     // Sign JWT (with token_version) + set HttpOnly session cookie
-    const { token } = issueSession(res, { id: userId, email: user[1], role: 'viewer', token_version: 0 });
+    issueSession(res, { id: userId, email: user[1], role: 'viewer', token_version: 0 });
 
     logger.info(`[ViewerReg] Viewer registered: id=${userId}, email=${normalizedEmail}`);
 
@@ -444,8 +626,7 @@ router.post('/register-viewer', antibot({ turnstile: true, fake: 'viewer', expec
         email: user[1],
         role: 'viewer',
         created_at: user[3]
-      },
-      token
+      }
     });
   } catch (error) {
     logger.error('[ViewerReg] Registration error: ' + error.message);
@@ -475,17 +656,10 @@ router.post('/register-lead', antibot({ turnstile: true, fake: 'lead', expectedA
     const supportedLanguages = ['en', 'ru', 'es', 'uk'];
     const leadLanguage = supportedLanguages.includes(language) ? language : 'en';
 
-    // Check if this email is already a therapist/admin user
-    const existingUser = db.exec('SELECT id, role FROM users WHERE email = ?', [normalizedEmail]);
-    if (existingUser.length > 0 && existingUser[0].values.length > 0) {
-      const role = existingUser[0].values[0][1];
-      if (role !== 'viewer') {
-        return res.status(409).json({
-          error: 'An account with this email already exists. Please use the login page.',
-          login_url: '/login'
-        });
-      }
-    }
+    // Audit M5: the users table is deliberately NOT consulted here. The old
+    // 409 for therapist/admin emails told anyone which addresses have an
+    // account; a lead row (chat quota only, no login) is created and answered
+    // the same way for every email.
 
     // Check if lead already exists
     const existingLead = db.exec('SELECT id, verified, extra_messages_limit, message_count FROM leads WHERE email = ?', [normalizedEmail]);
@@ -729,17 +903,56 @@ router.get('/me', (req, res) => {
   }
 });
 
-// Forgot password rate limiting (in-memory, per email)
-const forgotPasswordRates = new Map(); // email -> { count, windowStart }
+// Forgot password rate limiting (in-memory, per email). Keyed by
+// sha256(email) so the map holds no addresses; expired windows are swept
+// every 10 minutes and the map is capped (oldest entries dropped first).
+const forgotPasswordRates = new Map(); // sha256(email) -> { count, windowStart }
 const FORGOT_PW_RATE_WINDOW = 60 * 60 * 1000; // 1 hour
 const FORGOT_PW_RATE_MAX = 3;
+const FORGOT_PW_RATE_MAX_KEYS = 10000;
+
+function sweepForgotPasswordRates(now) {
+  const t0 = now || Date.now();
+  for (const [key, entry] of forgotPasswordRates) {
+    if (t0 - entry.windowStart >= FORGOT_PW_RATE_WINDOW) forgotPasswordRates.delete(key);
+  }
+}
+setInterval(() => sweepForgotPasswordRates(), 10 * 60 * 1000).unref();
+
+// Returns true when this email has used up its hourly budget.
+function forgotPasswordRateLimited(normalizedEmail) {
+  const key = crypto.createHash('sha256').update(normalizedEmail).digest('hex');
+  const now = Date.now();
+  const rateEntry = forgotPasswordRates.get(key);
+  if (rateEntry && (now - rateEntry.windowStart) < FORGOT_PW_RATE_WINDOW) {
+    if (rateEntry.count >= FORGOT_PW_RATE_MAX) return true;
+    rateEntry.count++;
+    return false;
+  }
+  forgotPasswordRates.delete(key);
+  if (forgotPasswordRates.size >= FORGOT_PW_RATE_MAX_KEYS) {
+    sweepForgotPasswordRates(now);
+    // Still full: drop the oldest insertions (Map keeps insertion order).
+    while (forgotPasswordRates.size >= FORGOT_PW_RATE_MAX_KEYS) {
+      forgotPasswordRates.delete(forgotPasswordRates.keys().next().value);
+    }
+  }
+  forgotPasswordRates.set(key, { count: 1, windowStart: now });
+  return false;
+}
+
+// Reset tokens are stored as sha256(token) hex; the plaintext only leaves by email.
+function hashResetToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
 
 // POST /api/auth/forgot-password
+// Logs carry user ids, never email addresses.
 router.post('/forgot-password', antibot({ turnstile: true, fake: 'forgot', expectedAction: 'forgot_password' }), async (req, res) => {
   try {
     const { email } = req.body;
 
-    if (!email) {
+    if (!email || typeof email !== 'string') {
       return res.status(400).json({ error: 'Email is required' });
     }
 
@@ -750,16 +963,9 @@ router.post('/forgot-password', antibot({ turnstile: true, fake: 'forgot', expec
     const successMessage = 'If an account with that email exists, a password reset link has been sent.';
 
     // Rate limiting per email
-    const now = Date.now();
-    const rateEntry = forgotPasswordRates.get(normalizedEmail);
-    if (rateEntry && (now - rateEntry.windowStart) < FORGOT_PW_RATE_WINDOW) {
-      if (rateEntry.count >= FORGOT_PW_RATE_MAX) {
-        logger.warn(`Forgot password rate limited for email: ${normalizedEmail}`);
-        return res.json({ message: successMessage }); // Don't reveal rate limit
-      }
-      rateEntry.count++;
-    } else {
-      forgotPasswordRates.set(normalizedEmail, { count: 1, windowStart: now });
+    if (forgotPasswordRateLimited(normalizedEmail)) {
+      logger.warn('Forgot password rate limited (per-email budget)');
+      return res.json({ message: successMessage }); // Don't reveal rate limit
     }
 
     const db = getDatabase();
@@ -771,7 +977,7 @@ router.post('/forgot-password', antibot({ turnstile: true, fake: 'forgot', expec
     );
 
     if (userResult.length === 0 || userResult[0].values.length === 0) {
-      logger.info(`Forgot password: no therapist/superadmin found for email ${normalizedEmail}`);
+      logger.info('Forgot password: no therapist/superadmin account for the given email');
       return res.json({ message: successMessage });
     }
 
@@ -796,10 +1002,10 @@ router.post('/forgot-password', antibot({ turnstile: true, fake: 'forgot', expec
       [userId]
     );
 
-    // Insert new token
+    // Insert new token (only its sha256 is stored)
     db.run(
       'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)',
-      [userId, resetToken, expiresAt]
+      [userId, hashResetToken(resetToken), expiresAt]
     );
     saveDatabaseAfterWrite();
 
@@ -810,19 +1016,19 @@ router.post('/forgot-password', antibot({ turnstile: true, fake: 'forgot', expec
     // The reset URL carries a live token: log it only under the dev-echo
     // switch used by the other auth flows (never in production).
     if (process.env.NODE_ENV !== 'production' && process.env.AUTH_DEV_ECHO === 'true') {
-      logger.info(`[PASSWORD RESET] Link for ${userEmail}: ${resetUrl}`);
+      logger.info(`[PASSWORD RESET] Link for user ${userId}: ${resetUrl}`);
     }
 
     emailService.sendPasswordReset(userEmail, resetToken, userLang)
       .then(result => {
         if (result.sent) {
-          logger.info(`Password reset email sent to ${userEmail}`);
+          logger.info(`Password reset email sent to user ${userId}`);
         } else {
-          logger.info(`[EMAIL] Password reset for ${userEmail}: ${result.error || 'not sent'}`);
+          logger.info(`[EMAIL] Password reset for user ${userId}: ${result.error || 'not sent'}`);
         }
       })
       .catch(err => {
-        logger.error(`Password reset email error for ${userEmail}: ${err.message}`);
+        logger.error(`Password reset email error for user ${userId}: ${err.message}`);
       });
 
     // Audit log
@@ -844,16 +1050,16 @@ router.post('/reset-password', async (req, res) => {
   try {
     const { token, password } = req.body;
 
-    if (!token || !password) {
+    if (!token || !password || typeof token !== 'string' || typeof password !== 'string') {
       return res.status(400).json({ error: 'Token and new password are required' });
     }
 
     const db = getDatabase();
 
-    // Find the token
+    // Find the token (stored as sha256)
     const tokenResult = db.exec(
       'SELECT id, user_id, expires_at, used FROM password_reset_tokens WHERE token = ?',
-      [token]
+      [hashResetToken(token)]
     );
 
     if (tokenResult.length === 0 || tokenResult[0].values.length === 0) {
@@ -886,14 +1092,23 @@ router.post('/reset-password', async (req, res) => {
       return res.status(400).json({ error: 'Password does not meet requirements: ' + pwdErrors.join(', ') });
     }
 
+    // Claim the token BEFORE the (async) hash: two concurrent requests with the
+    // same link can no longer both pass the "unused" check above and both set
+    // a password. Only the request whose UPDATE flips used 0 -> 1 continues.
+    db.run('UPDATE password_reset_tokens SET used = 1 WHERE id = ? AND used = 0', [tokenId]);
+    if (db.getRowsModified() !== 1) {
+      return res.status(400).json({ error: 'This reset link has already been used. Please request a new one.' });
+    }
+    saveDatabaseAfterWrite();
+
     // Hash new password
     const passwordHash = await bcrypt.hash(password, 12);
 
-    // Update user's password
-    db.run('UPDATE users SET password_hash = ?, updated_at = datetime(\'now\') WHERE id = ?', [passwordHash, userId]);
-
-    // Mark token as used
-    db.run('UPDATE password_reset_tokens SET used = 1 WHERE id = ?', [tokenId]);
+    // Update user's password; a reset also lifts a password-login lock (M4)
+    db.run(
+      "UPDATE users SET password_hash = ?, failed_login_count = 0, failed_login_window_start = NULL, password_locked_until = NULL, updated_at = datetime('now') WHERE id = ?",
+      [passwordHash, userId]
+    );
 
     // Invalidate all other reset tokens for this user
     db.run('UPDATE password_reset_tokens SET used = 1 WHERE user_id = ? AND used = 0', [userId]);

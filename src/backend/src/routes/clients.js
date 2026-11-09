@@ -1582,10 +1582,12 @@ router.post('/:id/exercises', (req, res) => {
     );
     const clientTelegramId = (clientTgResult.length > 0 && clientTgResult[0].values.length > 0) ? clientTgResult[0].values[0][0] : null;
 
-    // Verify exercise exists
+    // Verify exercise exists and is visible to this therapist: a library
+    // exercise or one of their own custom exercises (another therapist's
+    // custom exercise is reported as not found).
     const exerciseResult = db.exec(
-      "SELECT id, title_en, title_ru, category, description_en FROM exercises WHERE id = ?",
-      [exercise_id]
+      "SELECT id, title_en, title_ru, category, description_en FROM exercises WHERE id = ? AND (COALESCE(is_custom, 0) = 0 OR therapist_id = ?)",
+      [exercise_id, therapistId]
     );
 
     if (exerciseResult.length === 0 || exerciseResult[0].values.length === 0) {
@@ -3223,7 +3225,7 @@ router.get('/:id/assignments/:aid/reports/:rid/attachments', (req, res) => {
 // touching the file. We deliberately don't expose the opaque .enc
 // filename to the client; the only way to fetch the bytes is through
 // this verified route.
-router.get('/:id/assignments/:aid/reports/:rid/attachments/:attId/stream', (req, res) => {
+router.get('/:id/assignments/:aid/reports/:rid/attachments/:attId/stream', async (req, res) => {
   try {
     const therapistId = req.user.id;
     const clientId = parseInt(req.params.id, 10);
@@ -3252,13 +3254,17 @@ router.get('/:id/assignments/:aid/reports/:rid/attachments/:attId/stream', (req,
       return res.status(404).json({ error: 'Photo file not found on disk' });
     }
 
+    // Chunked format (wave 3) or the legacy base64 format; legacy files are
+    // upgraded in place on first read. Photos are capped at 10 MB on upload.
     let imageBuffer;
     try {
-      const encryptedContent = fs.readFileSync(filePath, 'utf8');
-      const decryptedBase64 = decrypt(encryptedContent);
-      imageBuffer = Buffer.from(decryptedBase64, 'base64');
+      const fileCrypto = require('../services/fileCrypto');
+      ({ buffer: imageBuffer } = await fileCrypto.readFileToBuffer(filePath, {
+        maxBytes: 16 * 1024 * 1024,
+        contentTypeHint: att.mime_type || undefined,
+      }));
     } catch (e) {
-      logger.error(`[T-21] Failed to decrypt attachment ${attachmentId}: ${e.message}`);
+      logger.error(`[T-21] Failed to decrypt attachment ${attachmentId}: ${e.code || ''} ${e.message}`);
       return res.status(500).json({ error: 'Failed to decrypt photo' });
     }
 
@@ -3279,7 +3285,9 @@ router.get('/:id/assignments/:aid/reports/:rid/attachments/:attId/stream', (req,
     res.set({
       'Content-Type': att.mime_type || 'application/octet-stream',
       'Content-Length': imageBuffer.length,
-      'Cache-Control': 'no-store',
+      'Cache-Control': 'private, no-store',
+      // Decrypted Class A content: nginx must not spool it to proxy_temp.
+      'X-Accel-Buffering': 'no',
       // Prevent any inline-script execution from a malicious image.
       'X-Content-Type-Options': 'nosniff',
     });

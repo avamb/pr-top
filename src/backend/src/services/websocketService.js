@@ -10,6 +10,37 @@ const therapistConnections = new Map();
 
 let wss = null;
 
+// Read one cookie from the raw Cookie header of the upgrade request
+// (cookie-parser does not run for websocket upgrades).
+function readCookie(req, name) {
+  const header = req.headers && req.headers.cookie;
+  if (!header) return null;
+  for (const part of header.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx < 0) continue;
+    if (part.slice(0, idx).trim() === name) {
+      try { return decodeURIComponent(part.slice(idx + 1).trim()); } catch (e) { return null; }
+    }
+  }
+  return null;
+}
+
+// Cookie-authenticated upgrades must come from our own origin (blocks
+// cross-site websocket hijacking). A missing Origin (non-browser client) passes.
+function originMatchesHost(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  try {
+    // Compare hostnames only: the reverse proxy may drop the port from Host.
+    const hostHeader = String(req.headers.host || '').toLowerCase();
+    const hostname = hostHeader.startsWith('[') ? hostHeader.slice(0, hostHeader.indexOf(']') + 1) : hostHeader.split(':')[0];
+    const originHost = new URL(origin).hostname.toLowerCase();
+    return originHost === hostname || `[${originHost}]` === hostname;
+  } catch (e) {
+    return false;
+  }
+}
+
 /**
  * Initialize WebSocket server attached to existing HTTP server
  */
@@ -17,9 +48,21 @@ function initWebSocket(httpServer) {
   wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
   wss.on('connection', (ws, req) => {
-    // Extract token from query string: ws://host/ws?token=JWT
+    // Preferred: the HttpOnly session_token cookie sent with the same-origin upgrade.
+    // Deprecated fallback: ws://host/ws?token=JWT (non-browser clients).
     const url = new URL(req.url, 'http://localhost');
-    const token = url.searchParams.get('token');
+    let token = readCookie(req, 'session_token');
+    if (token) {
+      if (!originMatchesHost(req)) {
+        ws.close(4003, 'Origin not allowed');
+        return;
+      }
+    } else {
+      token = url.searchParams.get('token');
+      if (token) {
+        logger.warn('[WS] Deprecated ?token= websocket authentication used; use the session cookie');
+      }
+    }
 
     if (!token) {
       ws.close(4001, 'Missing authentication token');

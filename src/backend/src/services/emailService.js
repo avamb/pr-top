@@ -782,6 +782,117 @@ function loginCodeTemplate(data, locale) {
 }
 
 /**
+ * Audit wave 3 (track N): confirmation code for an email address typed into
+ * the PR-TOP Telegram bot profile (routes/bot.js PUT /profile). The code is
+ * typed back into the bot; there is deliberately no link.
+ * data: { code, ttlMin }
+ */
+function botEmailConfirmTemplate(data, locale) {
+  const l = locale || 'en';
+  const code = escapeHtml(data.code || '000000');
+  const ttlMin = Number(data.ttlMin) || 15;
+  const codeBox = `<div style="text-align:center;margin:24px 0"><span style="display:inline-block;background:#f3f4f6;border:2px solid #4f46e5;border-radius:8px;padding:24px 32px;font-size:32px;font-weight:700;font-family:monospace;letter-spacing:8px;color:#4f46e5">${code}</span></div>`;
+
+  // The subject is logged by sendRawEmail: it must never carry the code.
+  const titles = {
+    en: 'Confirm your email for PR-TOP in Telegram',
+    ru: 'Подтвердите email для PR-TOP в Telegram',
+    es: 'Confirma tu email para PR-TOP en Telegram',
+    uk: 'Підтвердіть email для PR-TOP у Telegram'
+  };
+
+  const bodies = {
+    en: `
+      <h2 style="color:#4f46e5;margin-bottom:16px">Confirm your email</h2>
+      <p>Someone entered this email address in their PR-TOP Telegram bot profile. To confirm it, type this code into the bot:</p>
+      ${codeBox}
+      <p style="text-align:center;color:#6b7280;margin-top:12px">The code is valid for <strong>${ttlMin} minutes</strong>.</p>
+      <p style="color:#6b7280;font-size:13px">If this wasn't you, ignore this email — the address is not added to any account without this code.</p>
+    `,
+    ru: `
+      <h2 style="color:#4f46e5;margin-bottom:16px">Подтвердите email</h2>
+      <p>Этот адрес был указан в профиле бота PR-TOP в Telegram. Чтобы подтвердить его, введите в боте этот код:</p>
+      ${codeBox}
+      <p style="text-align:center;color:#6b7280;margin-top:12px">Код действителен <strong>${ttlMin} минут</strong>.</p>
+      <p style="color:#6b7280;font-size:13px">Если это были не вы, просто проигнорируйте письмо — без этого кода адрес не будет добавлен ни к одному аккаунту.</p>
+    `,
+    es: `
+      <h2 style="color:#4f46e5;margin-bottom:16px">Confirma tu email</h2>
+      <p>Alguien introdujo esta dirección en su perfil del bot de PR-TOP en Telegram. Para confirmarla, escribe este código en el bot:</p>
+      ${codeBox}
+      <p style="text-align:center;color:#6b7280;margin-top:12px">El código es válido durante <strong>${ttlMin} minutos</strong>.</p>
+      <p style="color:#6b7280;font-size:13px">Si no fuiste tú, ignora este correo: la dirección no se añade a ninguna cuenta sin este código.</p>
+    `,
+    uk: `
+      <h2 style="color:#4f46e5;margin-bottom:16px">Підтвердіть email</h2>
+      <p>Цю адресу було вказано в профілі бота PR-TOP у Telegram. Щоб підтвердити її, введіть у боті цей код:</p>
+      ${codeBox}
+      <p style="text-align:center;color:#6b7280;margin-top:12px">Код дійсний протягом <strong>${ttlMin} хвилин</strong>.</p>
+      <p style="color:#6b7280;font-size:13px">Якщо це були не ви, просто проігноруйте лист — без цього коду адресу не буде додано до жодного акаунта.</p>
+    `
+  };
+
+  return {
+    subject: titles[l] || titles.en,
+    html: baseLayout(bodies[l] || bodies.en, l)
+  };
+}
+
+/**
+ * Audit wave 3 (track N, M4): password sign-in was paused after repeated
+ * wrong passwords. Sent once per lock. data: { loginUrl, forgotUrl, lockMinutes }
+ */
+function passwordLoginLockedTemplate(data, locale) {
+  const l = locale || 'en';
+  const loginUrl = data.loginUrl || '#';
+  const forgotUrl = data.forgotUrl || '#';
+  const lockMinutes = Number(data.lockMinutes) || 15;
+
+  const titles = {
+    en: 'PR-TOP: password sign-in paused',
+    ru: 'PR-TOP: вход по паролю приостановлен',
+    es: 'PR-TOP: acceso con contraseña en pausa',
+    uk: 'PR-TOP: вхід за паролем призупинено'
+  };
+
+  const bodies = {
+    en: `
+      <h2>Password sign-in paused</h2>
+      <p>There were too many wrong password attempts for your PR-TOP account, so password sign-in is paused for <strong>${lockMinutes} minutes</strong>.</p>
+      <p>You can still sign in right away with a one-time code sent to this email:</p>
+      <a href="${escapeHtml(loginUrl)}" class="btn">Sign in with an email code</a>
+      <p>If you did not make these attempts, someone may be guessing your password. Consider setting a new one: <a href="${escapeHtml(forgotUrl)}">reset your password</a>. A reset also ends the pause immediately.</p>
+    `,
+    ru: `
+      <h2>Вход по паролю приостановлен</h2>
+      <p>Для вашего аккаунта PR-TOP было слишком много попыток с неверным паролем, поэтому вход по паролю приостановлен на <strong>${lockMinutes} минут</strong>.</p>
+      <p>Вы можете войти прямо сейчас с одноразовым кодом, который придёт на этот email:</p>
+      <a href="${escapeHtml(loginUrl)}" class="btn">Войти по коду из письма</a>
+      <p>Если это были не вы, возможно, кто-то подбирает ваш пароль. Рекомендуем задать новый: <a href="${escapeHtml(forgotUrl)}">сбросить пароль</a>. Сброс также сразу снимает паузу.</p>
+    `,
+    es: `
+      <h2>Acceso con contraseña en pausa</h2>
+      <p>Hubo demasiados intentos con una contraseña incorrecta en tu cuenta de PR-TOP, así que el acceso con contraseña está en pausa durante <strong>${lockMinutes} minutos</strong>.</p>
+      <p>Puedes acceder ahora mismo con un código de un solo uso enviado a este email:</p>
+      <a href="${escapeHtml(loginUrl)}" class="btn">Acceder con un código por email</a>
+      <p>Si no hiciste estos intentos, puede que alguien esté intentando adivinar tu contraseña. Te recomendamos crear una nueva: <a href="${escapeHtml(forgotUrl)}">restablecer la contraseña</a>. Restablecerla también termina la pausa de inmediato.</p>
+    `,
+    uk: `
+      <h2>Вхід за паролем призупинено</h2>
+      <p>Для вашого акаунта PR-TOP було забагато спроб із неправильним паролем, тому вхід за паролем призупинено на <strong>${lockMinutes} хвилин</strong>.</p>
+      <p>Ви можете увійти просто зараз з одноразовим кодом, який надійде на цей email:</p>
+      <a href="${escapeHtml(loginUrl)}" class="btn">Увійти за кодом із листа</a>
+      <p>Якщо це були не ви, можливо, хтось підбирає ваш пароль. Рекомендуємо встановити новий: <a href="${escapeHtml(forgotUrl)}">скинути пароль</a>. Скидання також одразу знімає паузу.</p>
+    `
+  };
+
+  return {
+    subject: titles[l] || titles.en,
+    html: baseLayout(bodies[l] || bodies.en, l)
+  };
+}
+
+/**
  * Session reminder opt-in email template (architecture §7.4 — email
  * counterpart to the bot inline-button opt-in flow). The email invites
  * the client to opt in to (or decline) session reminders. Two CTA
@@ -1101,6 +1212,12 @@ async function sendEmail(to, templateName, templateData, locale) {
     case 'login_code':
       template = loginCodeTemplate(templateData, l);
       break;
+    case 'bot_email_confirm':
+      template = botEmailConfirmTemplate(templateData, l);
+      break;
+    case 'password_login_locked':
+      template = passwordLoginLockedTemplate(templateData, l);
+      break;
     default:
       logger.warn(`[EMAIL] Unknown template: ${templateName}`);
       return { sent: false, error: `Unknown template: ${templateName}` };
@@ -1285,6 +1402,28 @@ async function sendLoginCodeEmail(email, data, locale) {
   }, locale);
 }
 
+/**
+ * Confirmation code for an email typed into the Telegram bot profile.
+ * @param {string} email - the PENDING address
+ * @param {{code: string, ttlMin: number}} data
+ */
+async function sendBotEmailConfirmEmail(email, data, locale) {
+  // NEVER log the code
+  return sendEmail(email, 'bot_email_confirm', { code: data.code, ttlMin: data.ttlMin }, locale);
+}
+
+/**
+ * Password sign-in paused after repeated wrong passwords (once per lock).
+ */
+async function sendPasswordLoginLockedEmail(email, data, locale) {
+  const base = (process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/+$/, '');
+  return sendEmail(email, 'password_login_locked', {
+    loginUrl: base + '/login',
+    forgotUrl: base + '/forgot-password',
+    lockMinutes: data && data.lockMinutes
+  }, locale);
+}
+
 module.exports = {
   isConfigured,
   sendEmail,
@@ -1299,6 +1438,8 @@ module.exports = {
   sendSessionReminder,
   sendVerificationEmail,
   sendLoginCodeEmail,
+  sendBotEmailConfirmEmail,
+  sendPasswordLoginLockedEmail,
   redactForLog,
   // Exposed for unit testing of template rendering.
   _templates: {
@@ -1306,5 +1447,7 @@ module.exports = {
     sessionReminderTemplate,
     emailVerificationTemplate,
     loginCodeTemplate,
+    botEmailConfirmTemplate,
+    passwordLoginLockedTemplate,
   },
 };

@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate, requireRole } = require('../middleware/auth');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
-const { semanticSearch, getEmbedding, getStats } = require('../services/vectorStore');
+const { semanticSearch, getEmbedding, ensureTable } = require('../services/vectorStore');
 const { logger } = require('../utils/logger');
 const { verifyClientConsent } = require('../utils/consentCheck');
 
@@ -170,10 +170,25 @@ router.get('/embedding/:sourceType/:sourceId', (req, res) => {
   }
 });
 
-// GET /api/search/stats - Get vector store statistics
+// GET /api/search/stats - Vector store statistics for the CALLER's own
+// embeddings only (it used to return platform-wide counts to any therapist).
+// Same shape as vectorStore.getStats(): { total, by_type: { type: { count, total_tokens } } }.
 router.get('/stats', (req, res) => {
   try {
-    const stats = getStats();
+    ensureTable();
+    const db = getDatabase();
+    const result = db.exec(
+      `SELECT source_type, COUNT(*), COALESCE(SUM(token_count), 0)
+         FROM vector_embeddings WHERE therapist_id = ? GROUP BY source_type`,
+      [req.user.id]
+    );
+    const stats = { total: 0, by_type: {} };
+    if (result.length > 0) {
+      for (const row of result[0].values) {
+        stats.by_type[row[0]] = { count: row[1], total_tokens: row[2] };
+        stats.total += row[1];
+      }
+    }
     res.json({ success: true, ...stats });
   } catch (error) {
     logger.error('Vector stats error: ' + error.message);

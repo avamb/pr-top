@@ -13,6 +13,33 @@ const { getSubscriptionAccessForTherapist } = require('../utils/planLimits');
 const assistantCache = require('../services/assistantCache');
 const assistantKnowledge = require('../services/assistantKnowledge');
 const { sanitizeInput, sanitizeOutput, detectInjection, getInjectionRejection, detectLanguage } = require('../services/assistantSanitizer');
+const { checkSpendingLimit, logUsage, calculateCost } = require('../services/aiUsageLogger');
+
+// Audit M19: shown when the platform-wide monthly AI spend cap is reached.
+const ASSISTANT_UNAVAILABLE_MESSAGES = {
+  en: 'The assistant is temporarily unavailable. Please try again later.',
+  ru: 'Ассистент временно недоступен. Пожалуйста, попробуйте позже.',
+  es: 'El asistente no está disponible temporalmente. Inténtalo más tarde.',
+  uk: 'Асистент тимчасово недоступний. Будь ласка, спробуйте пізніше.'
+};
+
+// Rough token estimate (~4 chars/token) for streams that report no usage.
+function estimateTokens(text) {
+  return Math.ceil(String(text || '').length / 4);
+}
+
+// Audit M19: record a therapist-assistant LLM call in ai_usage_log so the
+// spend cap and the admin usage UI see it. Never throws.
+function recordAssistantUsage(therapistId, provider, model, inputTokens, outputTokens, estimated) {
+  try {
+    const inTok = Number(inputTokens) || 0;
+    const outTok = Number(outputTokens) || 0;
+    logUsage(therapistId, provider || 'unknown', model || 'unknown', 'assistant_chat',
+      inTok, outTok, calculateCost(model, inTok, outTok), null, { estimated: !!estimated });
+  } catch (e) {
+    logger.warn('[Assistant] usage log failed: ' + e.message);
+  }
+}
 
 // === Auto-generate conversation title from first user message ===
 function generateTitle(firstMessage) {
@@ -249,6 +276,19 @@ router.post('/chat', requireVerifiedEmail, async (req, res) => {
 
     const db = getDatabase();
 
+    // Audit M19: the platform-wide monthly AI spend cap (same check as the
+    // public chat), before anything that can cost tokens (cache/RAG
+    // embedding, LLM call).
+    const spend = checkSpendingLimit();
+    if (spend && spend.allowed === false) {
+      logger.warn(`[Assistant] AI spending limit reached - refusing message from therapist ${req.user.id}`);
+      const unavailableLang = detectLanguage(sanitized, uiLocale);
+      return res.status(503).json({
+        error: ASSISTANT_UNAVAILABLE_MESSAGES[unavailableLang] || ASSISTANT_UNAVAILABLE_MESSAGES.en,
+        code: 'assistant_unavailable'
+      });
+    }
+
     // Get user's subscription plan for context (canceled-in-grace and
     // past_due keep their tier; an unusable subscription counts as trial)
     let plan = 'trial';
@@ -477,6 +517,9 @@ router.post('/chat', requireVerifiedEmail, async (req, res) => {
         }
 
         assistantReply = sanitizeOutput(fullText || '');
+        // Streams report no usage: log an estimate so the spend cap sees the call (M19).
+        recordAssistantUsage(req.user.id, activeAssistant.providerName, activeAssistant.model,
+          aiMessages.reduce((n, m) => n + estimateTokens(m.content), 0), estimateTokens(fullText), true);
         // Emit the sanitized reply as a single chunk before the terminal done event.
         res.write(`data: ${JSON.stringify({ type: 'chunk', text: assistantReply })}\n\n`);
 
@@ -532,6 +575,12 @@ router.post('/chat', requireVerifiedEmail, async (req, res) => {
         provider: activeAssistant.providerName,
         model: activeAssistant.model
       }, db);
+      // M19: log the call (provider-reported tokens when present, else an estimate).
+      const reportedUsage = result && (Number(result.input_tokens) > 0 || Number(result.output_tokens) > 0);
+      recordAssistantUsage(req.user.id, result.provider || activeAssistant.providerName, result.model || activeAssistant.model,
+        reportedUsage ? result.input_tokens : aiMessages.reduce((n, m) => n + estimateTokens(m.content), 0),
+        reportedUsage ? result.output_tokens : estimateTokens(result.text),
+        !reportedUsage);
       // Feature #436 output guardrail: sanitize BEFORE both caching and send.
       assistantReply = sanitizeOutput(result.text);
 

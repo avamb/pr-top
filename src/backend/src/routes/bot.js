@@ -8,6 +8,8 @@ const crypto = require('crypto');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { logger } = require('../utils/logger');
 const { encrypt, decrypt } = require('../services/encryption');
+const fileCrypto = require('../services/fileCrypto');
+const { sniffMedia } = require('../utils/mediaSniff');
 const { processDiaryTranscription } = require('../services/diaryTranscription');
 const { checkClientLimit, getSubscriptionAccessForTherapist } = require('../utils/planLimits');
 const telegramNotify = require('../utils/telegramNotify');
@@ -22,17 +24,44 @@ if (!fs.existsSync(DIARY_FILES_DIR)) {
   fs.mkdirSync(DIARY_FILES_DIR, { recursive: true });
 }
 
+// Media sent by the bot (audit M24). Telegram's Bot API only lets bots
+// download files up to 20 MB, so a larger payload can never be legitimate.
+// Rejections carry a machine-readable `code` the bot maps to a message:
+//   413 MEDIA_TOO_LARGE        payload over the limit (body has max_bytes)
+//   415 UNSUPPORTED_MEDIA_TYPE bytes are not a supported audio/video (or image) format
+//   400 INVALID_MEDIA          file_data is not a non-empty base64 string
+//   500 MEDIA_STORE_FAILED     could not encrypt/store the file (entry NOT created)
+const MAX_BOT_MEDIA_BYTES = 20 * 1024 * 1024;
+
+class BotMediaError extends Error {
+  constructor(status, code, message, extra) {
+    super(message);
+    this.status = status;
+    this.code = code;
+    this.extra = extra || {};
+  }
+}
+
+function sendBotMediaError(res, err) {
+  return res.status(err.status).json({ error: err.message, code: err.code, ...err.extra });
+}
+
 /**
- * Encrypt a file on disk (mirrors sessions.js pattern).
- * Reads file bytes, encodes to base64, encrypts, writes .enc file, deletes original.
+ * Decode base64 media from the bot, refusing oversized payloads before the
+ * decoded copy is allocated.
  */
-function encryptDiaryFileOnDisk(filePath) {
-  const fileData = fs.readFileSync(filePath);
-  const { encrypted, keyVersion, keyId } = encrypt(fileData.toString('base64'));
-  fs.writeFileSync(filePath + '.enc', encrypted);
-  // Remove the original unencrypted file
-  fs.unlinkSync(filePath);
-  return { encryptedPath: filePath + '.enc', keyVersion, keyId };
+function decodeBotMedia(fileData, maxBytes = MAX_BOT_MEDIA_BYTES) {
+  if (typeof fileData !== 'string' || fileData.length === 0) {
+    throw new BotMediaError(400, 'INVALID_MEDIA', 'file_data must be a non-empty base64 string');
+  }
+  const tooLarge = () => new BotMediaError(413, 'MEDIA_TOO_LARGE',
+    `Media file too large (max ${Math.round(maxBytes / (1024 * 1024))} MB)`, { max_bytes: maxBytes });
+  // Upper bound of the decoded size (padding / whitespace only shrink it).
+  if (Math.floor((fileData.length * 3) / 4) - 2 > maxBytes) throw tooLarge();
+  const buffer = Buffer.from(fileData, 'base64');
+  if (buffer.length === 0) throw new BotMediaError(400, 'INVALID_MEDIA', 'file_data is empty or not valid base64');
+  if (buffer.length > maxBytes) throw tooLarge();
+  return buffer;
 }
 
 const router = express.Router();
@@ -86,21 +115,27 @@ function safeFileExt(ext, allowList, defaultExt) {
 }
 
 /**
- * Write a client upload to DIARY_FILES_DIR and encrypt it in place. The
- * plaintext temp file (Class A data) is always removed, also when encryption
- * fails; a half-written .enc is removed on failure too. Throws on failure.
+ * Encrypt a client upload into DIARY_FILES_DIR/<filename>.enc (chunked
+ * AES-256-GCM, services/fileCrypto.js). No plaintext is written to disk; a
+ * half-written file is removed on failure. The real type is detected from the
+ * bytes (audit M12) and stored in the encrypted header:
+ *   kind 'media' accepts audio/video containers, kind 'image' accepts images;
+ *   anything else throws BotMediaError 415 UNSUPPORTED_MEDIA_TYPE.
+ * `hints` (entry type, claimed extension) only choose audio vs video inside
+ * an ambiguous container such as MP4.
  */
-function writeEncryptedDiaryFile(filename, buffer) {
-  const tempPath = path.join(DIARY_FILES_DIR, filename);
-  try {
-    fs.writeFileSync(tempPath, buffer);
-    return encryptDiaryFileOnDisk(tempPath);
-  } catch (err) {
-    try { if (fs.existsSync(tempPath + '.enc')) fs.unlinkSync(tempPath + '.enc'); } catch (_) { /* ignore */ }
-    throw err;
-  } finally {
-    try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (_) { /* ignore */ }
+function writeEncryptedDiaryFile(filename, buffer, { kind = 'media', hints = [] } = {}) {
+  const detected = sniffMedia(buffer.subarray(0, 4096), { hints: [filename].concat(hints) });
+  const accepted = !!detected && (kind === 'image'
+    ? detected.kind === 'image'
+    : (detected.kind === 'audio' || detected.kind === 'video'));
+  if (!accepted) {
+    throw new BotMediaError(415, 'UNSUPPORTED_MEDIA_TYPE',
+      kind === 'image' ? 'File content is not a supported image format' : 'File content is not a supported audio/video format');
   }
+  const encryptedPath = path.join(DIARY_FILES_DIR, `${filename}.enc`);
+  const r = fileCrypto.encryptBufferToFileSync(buffer, encryptedPath, { contentType: detected.mime });
+  return { encryptedPath, keyVersion: r.keyVersion, keyId: r.keyId, contentType: detected.mime };
 }
 
 // POST /api/bot/register - Register or update a Telegram user with role
@@ -260,91 +295,235 @@ router.get('/user/:telegram_id', botAuth, (req, res) => {
   }
 });
 
-// PUT /api/bot/profile/:telegram_id - Update user profile fields from bot
+// Audit M8: field limits for PUT /api/bot/profile. Every field must be a
+// string (a non-string used to crash on .trim() with a 500).
+const BOT_PROFILE_MAX_LENGTH = { first_name: 100, last_name: 100, phone: 32, other_info: 1000, timezone: 100 };
+const BOT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// An email typed into the bot is only PENDING until the 6-digit code mailed
+// to it is typed back (POST /profile/:telegram_id/confirm-email).
+const BOT_EMAIL_CODE_TTL_MIN = 15;
+const BOT_EMAIL_CODE_MAX_ATTEMPTS = 5;
+const BOT_EMAIL_CODES_PER_HOUR = 3;
+// Per TARGET address, across all Telegram accounts: a bot cannot be used to
+// flood one mailbox with confirmation codes.
+const BOT_EMAIL_CODES_PER_TARGET_PER_DAY = 5;
+
+// Audit details for bot_email_code_sent: only a hash of the target address.
+function botEmailTargetKey(email) {
+  return JSON.stringify({ email_sha256: crypto.createHash('sha256').update(email).digest('hex') });
+}
+
+function clearPendingEmail(db, userId) {
+  db.run(
+    'UPDATE users SET pending_email = NULL, pending_email_code_hash = NULL, pending_email_expires_at = NULL, pending_email_attempts = 0 WHERE id = ?',
+    [userId]
+  );
+}
+
+// PUT /api/bot/profile/:telegram_id - Update user profile fields from bot.
+// `email` is NOT written to users.email: it becomes pending_email and a code
+// is mailed to it (202 { email_pending: true, ttl_min }). Other fields are
+// saved immediately (200 { message }).
 router.put('/profile/:telegram_id', botAuth, (req, res) => {
   try {
     const { telegram_id } = req.params;
-    const { first_name, last_name, phone, email, other_info, timezone } = req.body;
+    const body = (req.body && typeof req.body === 'object') ? req.body : {};
+    const { email } = body;
     const db = getDatabase();
 
     // Verify user exists
-    const existing = db.exec('SELECT id FROM users WHERE telegram_id = ?', [String(telegram_id)]);
+    const existing = db.exec('SELECT id, language FROM users WHERE telegram_id = ?', [String(telegram_id)]);
     if (existing.length === 0 || existing[0].values.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
+    const [userId, userLanguage] = existing[0].values[0];
 
     const updates = [];
     const params = [];
 
-    if (first_name !== undefined) {
-      updates.push('first_name = ?');
-      params.push(first_name.trim());
-    }
-    if (last_name !== undefined) {
-      updates.push('last_name = ?');
-      params.push(last_name.trim());
-    }
-    if (phone !== undefined) {
-      updates.push('phone = ?');
-      params.push(phone.trim());
-    }
-    if (email !== undefined) {
-      const trimmedEmail = email.trim().toLowerCase();
-      // Validate email format
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(trimmedEmail)) {
-        return res.status(400).json({ error: 'Invalid email format' });
+    for (const field of ['first_name', 'last_name', 'phone', 'other_info', 'timezone']) {
+      if (body[field] === undefined) continue;
+      const value = body[field];
+      if (typeof value !== 'string') {
+        return res.status(400).json({ error: `${field} must be a string`, code: 'INVALID_FIELD', field });
       }
-      // Check uniqueness
-      try {
-        const emailExists = db.exec(
-          'SELECT id FROM users WHERE email = ? AND telegram_id != ?',
-          [trimmedEmail, String(telegram_id)]
-        );
-        if (emailExists.length > 0 && emailExists[0].values.length > 0) {
-          return res.status(409).json({ error: 'Email already in use' });
+      const trimmed = value.trim();
+      if (trimmed.length > BOT_PROFILE_MAX_LENGTH[field]) {
+        return res.status(400).json({
+          error: `${field} too long (max ${BOT_PROFILE_MAX_LENGTH[field]} characters)`,
+          code: 'FIELD_TOO_LONG',
+          field
+        });
+      }
+      if (field === 'timezone') {
+        try {
+          new Intl.DateTimeFormat('en-US', { timeZone: trimmed });
+        } catch (tzErr) {
+          return res.status(400).json({ error: 'Invalid timezone format', code: 'INVALID_FIELD', field });
         }
-      } catch (checkErr) {
-        logger.error('Email uniqueness check error: ' + checkErr.message);
-        return res.status(409).json({ error: 'Email already in use' });
+        logger.info(`[Timezone] Bot profile update: telegram_id=${telegram_id}, timezone=${trimmed}`);
       }
-      updates.push('email = ?');
-      params.push(trimmedEmail);
-    }
-    if (other_info !== undefined) {
-      if (typeof other_info === 'string' && other_info.length > 1000) {
-        return res.status(400).json({ error: 'Other info too long (max 1000 characters)' });
-      }
-      updates.push('other_info = ?');
-      params.push(typeof other_info === 'string' ? other_info.trim() : '');
-    }
-    if (timezone !== undefined) {
-      if (typeof timezone !== 'string' || timezone.length > 100) {
-        return res.status(400).json({ error: 'Invalid timezone format' });
-      }
-      updates.push('timezone = ?');
-      params.push(timezone.trim());
-      logger.info(`[Timezone] Bot profile update: telegram_id=${telegram_id}, timezone=${timezone}`);
+      updates.push(`${field} = ?`);
+      params.push(trimmed);
     }
 
-    if (updates.length === 0) {
+    let pendingEmail = null;
+    if (email !== undefined) {
+      if (typeof email !== 'string') {
+        return res.status(400).json({ error: 'Invalid email format', code: 'INVALID_FIELD', field: 'email' });
+      }
+      pendingEmail = email.trim().toLowerCase();
+      if (pendingEmail.length > 254 || !BOT_EMAIL_RE.test(pendingEmail)) {
+        return res.status(400).json({ error: 'Invalid email format', code: 'INVALID_FIELD', field: 'email' });
+      }
+      const recentCodes = db.exec(
+        "SELECT COUNT(*) FROM audit_logs WHERE actor_id = ? AND action = 'bot_email_code_sent' AND created_at > datetime('now', '-1 hour')",
+        [userId]
+      );
+      const sentLastHour = recentCodes.length > 0 && recentCodes[0].values.length > 0 ? Number(recentCodes[0].values[0][0]) || 0 : 0;
+      if (sentLastHour >= BOT_EMAIL_CODES_PER_HOUR) {
+        return res.status(429).json({ error: 'Too many confirmation codes requested. Please try again later.', code: 'RATE_LIMITED' });
+      }
+      const toTarget = db.exec(
+        "SELECT COUNT(*) FROM audit_logs WHERE action = 'bot_email_code_sent' AND details_encrypted = ? AND created_at > datetime('now', '-1 day')",
+        [botEmailTargetKey(pendingEmail)]
+      );
+      const sentToTarget = toTarget.length > 0 && toTarget[0].values.length > 0 ? Number(toTarget[0].values[0][0]) || 0 : 0;
+      if (sentToTarget >= BOT_EMAIL_CODES_PER_TARGET_PER_DAY) {
+        logger.warn(`Bot profile: per-address confirmation code cap reached (user ${userId})`);
+        return res.status(429).json({ error: 'Too many confirmation codes requested. Please try again later.', code: 'RATE_LIMITED' });
+      }
+    }
+
+    if (updates.length === 0 && pendingEmail === null) {
       return res.status(400).json({ error: 'No fields to update' });
     }
 
-    updates.push("updated_at = datetime('now')");
-    params.push(String(telegram_id));
+    if (updates.length > 0) {
+      updates.push("updated_at = datetime('now')");
+      params.push(userId);
+      db.run(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);
+    }
 
-    db.run(`UPDATE users SET ${updates.join(', ')} WHERE telegram_id = ?`, params);
+    if (pendingEmail === null) {
+      saveDatabaseAfterWrite();
+      logger.info(`Bot profile updated for telegram_id=${telegram_id}`);
+      return res.json({ message: 'Profile updated' });
+    }
+
+    // Pending email: uniqueness is checked only at confirmation, after the
+    // mailbox is proven — checking here would let anyone with Telegram probe
+    // which addresses have an account.
+    const loginCodes = require('../utils/loginCodes');
+    const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+    const expiresAt = new Date(Date.now() + BOT_EMAIL_CODE_TTL_MIN * 60 * 1000).toISOString();
+    db.run(
+      'UPDATE users SET pending_email = ?, pending_email_code_hash = ?, pending_email_expires_at = ?, pending_email_attempts = 0 WHERE id = ?',
+      [pendingEmail, loginCodes.hash(code), expiresAt, userId]
+    );
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'bot_email_code_sent', 'user', ?, ?, datetime('now'))",
+      [userId, userId, botEmailTargetKey(pendingEmail)]
+    );
     saveDatabaseAfterWrite();
+    logger.info(`Bot profile: email confirmation code issued for user ${userId}`);
 
-    logger.info(`Bot profile updated for telegram_id=${telegram_id}`);
-    res.json({ message: 'Profile updated' });
+    // Dedicated template ("confirm this email for your PR-TOP Telegram
+    // profile; if this wasn't you, ignore it"); the code is typed into the bot.
+    const locale = ['en', 'ru', 'es', 'uk'].includes(userLanguage) ? userLanguage : 'en';
+    emailService.sendBotEmailConfirmEmail(pendingEmail, { code, ttlMin: BOT_EMAIL_CODE_TTL_MIN }, locale)
+      .then((result) => {
+        if (!result || !result.sent) {
+          logger.info(`[EMAIL] Bot email confirmation code for user ${userId}: ${(result && result.error) || 'not sent'}`);
+        }
+      })
+      .catch((err) => logger.error(`Bot email confirmation code error for user ${userId}: ${err.message}`));
+
+    const responseBody = { message: 'Confirmation code sent', email_pending: true, ttl_min: BOT_EMAIL_CODE_TTL_MIN };
+    if (process.env.NODE_ENV !== 'production' && process.env.AUTH_DEV_ECHO === 'true') {
+      responseBody.dev_code = code;
+    }
+    return res.status(202).json(responseBody);
   } catch (error) {
     logger.error('Bot profile update error: ' + error.message);
-    if (error.message && error.message.includes('UNIQUE')) {
-      return res.status(409).json({ error: 'Email already in use' });
-    }
     res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+// POST /api/bot/profile/:telegram_id/confirm-email  { telegram_id, code }
+// Promotes pending_email to users.email (verified) when the code matches.
+// Errors: 400 CODE_INVALID (attempts_left) | CODE_EXPIRED | CODE_ATTEMPTS_EXCEEDED,
+// 409 EMAIL_TAKEN (another account already uses the address).
+router.post('/profile/:telegram_id/confirm-email', botAuth, (req, res) => {
+  try {
+    const { telegram_id } = req.params;
+    const code = req.body && typeof req.body.code === 'string' ? req.body.code.trim() : '';
+    const db = getDatabase();
+
+    const r = db.exec(
+      'SELECT id, pending_email, pending_email_code_hash, pending_email_expires_at, pending_email_attempts FROM users WHERE telegram_id = ?',
+      [String(telegram_id)]
+    );
+    if (r.length === 0 || r[0].values.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const [userId, pendingEmail, codeHash, expiresAt, attempts] = r[0].values[0];
+
+    if (!pendingEmail || !codeHash || !expiresAt || Date.parse(expiresAt) <= Date.now()) {
+      if (pendingEmail) { clearPendingEmail(db, userId); saveDatabaseAfterWrite(); }
+      return res.status(400).json({ error: 'The confirmation code has expired. Please enter your email again.', code: 'CODE_EXPIRED' });
+    }
+    if ((Number(attempts) || 0) >= BOT_EMAIL_CODE_MAX_ATTEMPTS) {
+      clearPendingEmail(db, userId);
+      saveDatabaseAfterWrite();
+      return res.status(400).json({ error: 'Too many wrong codes. Please enter your email again.', code: 'CODE_ATTEMPTS_EXCEEDED' });
+    }
+
+    const loginCodes = require('../utils/loginCodes');
+    const presented = /^\d{6}$/.test(code) ? loginCodes.hash(code) : '';
+    const matches = presented.length === String(codeHash).length &&
+      crypto.timingSafeEqual(Buffer.from(presented), Buffer.from(String(codeHash)));
+    if (!matches) {
+      const used = (Number(attempts) || 0) + 1;
+      if (used >= BOT_EMAIL_CODE_MAX_ATTEMPTS) {
+        clearPendingEmail(db, userId);
+      } else {
+        db.run('UPDATE users SET pending_email_attempts = ? WHERE id = ?', [used, userId]);
+      }
+      saveDatabaseAfterWrite();
+      if (used >= BOT_EMAIL_CODE_MAX_ATTEMPTS) {
+        return res.status(400).json({ error: 'Too many wrong codes. Please enter your email again.', code: 'CODE_ATTEMPTS_EXCEEDED' });
+      }
+      return res.status(400).json({ error: 'Invalid confirmation code', code: 'CODE_INVALID', attempts_left: BOT_EMAIL_CODE_MAX_ATTEMPTS - used });
+    }
+
+    const taken = db.exec('SELECT id FROM users WHERE email = ? AND id != ?', [pendingEmail, userId]);
+    if (taken.length > 0 && taken[0].values.length > 0) {
+      clearPendingEmail(db, userId);
+      saveDatabaseAfterWrite();
+      return res.status(409).json({ error: 'Email already in use', code: 'EMAIL_TAKEN' });
+    }
+
+    db.run(
+      `UPDATE users SET email = ?, email_verified_at = datetime('now'),
+         pending_email = NULL, pending_email_code_hash = NULL, pending_email_expires_at = NULL, pending_email_attempts = 0,
+         updated_at = datetime('now')
+       WHERE id = ?`,
+      [pendingEmail, userId]
+    );
+    db.run(
+      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, created_at) VALUES (?, 'bot_email_confirmed', 'user', ?, datetime('now'))",
+      [userId, userId]
+    );
+    saveDatabaseAfterWrite();
+    logger.info(`Bot profile: email confirmed for user ${userId}`);
+    res.json({ message: 'Email confirmed', email: pendingEmail });
+  } catch (error) {
+    logger.error('Bot confirm-email error: ' + error.message);
+    if (error.message && error.message.includes('UNIQUE')) {
+      return res.status(409).json({ error: 'Email already in use', code: 'EMAIL_TAKEN' });
+    }
+    res.status(500).json({ error: 'Failed to confirm email' });
   }
 });
 
@@ -356,7 +535,7 @@ router.post('/connect', botAuth, (req, res) => {
     if (!telegram_id) {
       return res.status(400).json({ error: 'telegram_id is required' });
     }
-    if (!invite_code) {
+    if (!invite_code || typeof invite_code !== 'string') {
       return res.status(400).json({ error: 'invite_code is required' });
     }
 
@@ -408,6 +587,14 @@ router.post('/connect', botAuth, (req, res) => {
 
     logger.info(`Client ${clientId} (telegram_id=${telegram_id}) found therapist ${therapistId} via invite code`);
 
+    // Audit M7: remember which therapist this client looked up, so
+    // POST /consent can only link to it (not to any id the caller sends).
+    db.run(
+      "UPDATE users SET pending_connect_therapist_id = ?, pending_connect_at = datetime('now') WHERE id = ?",
+      [therapistId, clientId]
+    );
+    saveDatabaseAfterWrite();
+
     // Return therapist info for consent flow - do NOT link yet (consent required)
     res.json({
       message: 'Therapist found. Consent is required before linking.',
@@ -425,17 +612,30 @@ router.post('/connect', botAuth, (req, res) => {
   }
 });
 
+// Audit M7: how long the therapist looked up by /connect stays eligible for
+// POST /consent.
+const PENDING_CONNECT_TTL_HOURS = 24;
+
 // POST /api/bot/consent - Client gives consent and links to therapist.
 // T-18: optional consent_version + consent_text_hash are persisted so the bot
 // can detect when an existing client is on an older consent version and force
 // a re-consent prompt. Existing flow (no version) still works for backward
 // compatibility — defaults to version=0 / hash=null.
+// Audit M7: consent=true links only to (a) the therapist from this client's
+// own /connect within PENDING_CONNECT_TTL_HOURS, or (b) the therapist the
+// client is already linked to (re-consent, or an admin link still waiting
+// for consent). The target must be an active, unblocked therapist. Anything
+// else: 403 { code: 'CONSENT_NOT_PENDING' | 'THERAPIST_UNAVAILABLE' }.
 router.post('/consent', botAuth, (req, res) => {
   try {
     const { telegram_id, therapist_id, consent, consent_version, consent_text_hash, mode } = req.body;
 
     if (!telegram_id || !therapist_id) {
       return res.status(400).json({ error: 'telegram_id and therapist_id are required' });
+    }
+    const requestedTherapistId = parseInt(therapist_id, 10);
+    if (!Number.isInteger(requestedTherapistId) || requestedTherapistId <= 0) {
+      return res.status(400).json({ error: 'therapist_id must be a positive integer' });
     }
 
     const db = getDatabase();
@@ -444,8 +644,10 @@ router.post('/consent', botAuth, (req, res) => {
     // so re-consent (mode='reconsent') updates only the consent_version without
     // re-running the client-limit check or audit-log churn).
     const clientResult = db.exec(
-      'SELECT id, role, therapist_id, consent_therapist_access FROM users WHERE telegram_id = ?',
-      [String(telegram_id)]
+      `SELECT id, role, therapist_id, consent_therapist_access, pending_connect_therapist_id,
+              CASE WHEN pending_connect_at IS NOT NULL AND pending_connect_at > datetime('now', ?) THEN 1 ELSE 0 END
+         FROM users WHERE telegram_id = ?`,
+      [`-${PENDING_CONNECT_TTL_HOURS} hours`, String(telegram_id)]
     );
 
     if (clientResult.length === 0 || clientResult[0].values.length === 0) {
@@ -459,6 +661,9 @@ router.post('/consent', botAuth, (req, res) => {
     if (client[1] !== 'client') {
       return res.status(400).json({ error: 'Only clients can give consent' });
     }
+    const pendingMatches = client[5] === 1 && Number(client[4]) === requestedTherapistId;
+    const linkedMatches = existingTherapistId !== null && existingTherapistId !== undefined &&
+      Number(existingTherapistId) === requestedTherapistId;
 
     // T-18: Sanitize optional version + hash inputs. Version must be a
     // non-negative integer; default 0 if not provided. Hash must be a
@@ -475,14 +680,26 @@ router.post('/consent', botAuth, (req, res) => {
     }
 
     if (consent === false) {
-      // Record consent decline in audit log
+      // Record consent decline in audit log (a decline grants nothing, so it
+      // needs no pending check); the pending /connect lookup is used up.
+      if (pendingMatches) {
+        db.run('UPDATE users SET pending_connect_therapist_id = NULL, pending_connect_at = NULL WHERE id = ?', [clientId]);
+      }
       db.run(
         "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
-        [clientId, 'consent_declined', 'user', therapist_id, JSON.stringify({ client_id: clientId, therapist_id: parseInt(therapist_id), telegram_id: String(telegram_id), consent_version: versionNum })]
+        [clientId, 'consent_declined', 'user', requestedTherapistId, JSON.stringify({ client_id: clientId, therapist_id: requestedTherapistId, telegram_id: String(telegram_id), consent_version: versionNum })]
       );
       saveDatabaseAfterWrite();
-      logger.info(`Client ${clientId} declined consent for therapist ${therapist_id} (v${versionNum})`);
+      logger.info(`Client ${clientId} declined consent for therapist ${requestedTherapistId} (v${versionNum})`);
       return res.json({ message: 'Consent declined. No connection was made.', linked: false });
+    }
+
+    if (!pendingMatches && !linkedMatches) {
+      logger.warn(`[M7] Client ${clientId} sent consent for therapist ${requestedTherapistId} without a matching /connect or link`);
+      return res.status(403).json({
+        error: 'No pending connection to this therapist. Please send the invite code again.',
+        code: 'CONSENT_NOT_PENDING'
+      });
     }
 
     // T-18: Re-consent path — client is already linked to the same therapist
@@ -516,46 +733,58 @@ router.post('/consent', botAuth, (req, res) => {
       });
     }
 
-    // Check client limit before linking
-    const limitCheck = checkClientLimit(parseInt(therapist_id));
-    if (!limitCheck.allowed) {
-      logger.warn(`Client limit reached for therapist ${therapist_id}: ${limitCheck.message}`);
-      return res.status(403).json({
-        error: 'Client limit reached',
-        message: limitCheck.message,
-        current: limitCheck.current,
-        limit: limitCheck.limit,
-        plan: limitCheck.plan
-      });
+    // M7: only an active, unblocked therapist account can receive a new link.
+    const targetResult = db.exec(
+      "SELECT id FROM users WHERE id = ? AND role = 'therapist' AND blocked_at IS NULL",
+      [requestedTherapistId]
+    );
+    if (targetResult.length === 0 || targetResult[0].values.length === 0) {
+      return res.status(403).json({ error: 'This therapist account is currently unavailable.', code: 'THERAPIST_UNAVAILABLE' });
+    }
+
+    // Check client limit before linking. A client an admin already linked to
+    // this therapist is already counted, so the limit does not apply again.
+    if (!linkedMatches) {
+      const limitCheck = checkClientLimit(requestedTherapistId);
+      if (!limitCheck.allowed) {
+        logger.warn(`Client limit reached for therapist ${requestedTherapistId}: ${limitCheck.message}`);
+        return res.status(403).json({
+          error: 'Client limit reached',
+          message: limitCheck.message,
+          current: limitCheck.current,
+          limit: limitCheck.limit,
+          plan: limitCheck.plan
+        });
+      }
     }
 
     // Audit H4: moving to a different therapist ends every share link the
     // previous therapist created for this client.
-    if (existingTherapistId && parseInt(existingTherapistId, 10) !== parseInt(therapist_id, 10)) {
+    if (existingTherapistId && parseInt(existingTherapistId, 10) !== requestedTherapistId) {
       require('../services/supervisionShare').revokeAllForClient(clientId, 'therapist_changed', db);
     }
 
     // Link client to therapist with consent (T-18: persist version + hash too)
     db.run(
-      "UPDATE users SET therapist_id = ?, consent_therapist_access = 1, consent_version = ?, consent_text_hash = ?, updated_at = datetime('now') WHERE id = ?",
-      [therapist_id, versionNum, textHash, clientId]
+      "UPDATE users SET therapist_id = ?, consent_therapist_access = 1, consent_version = ?, consent_text_hash = ?, pending_connect_therapist_id = NULL, pending_connect_at = NULL, updated_at = datetime('now') WHERE id = ?",
+      [requestedTherapistId, versionNum, textHash, clientId]
     );
 
     // Record consent grant in audit log
     db.run(
       "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
-      [clientId, 'consent_granted', 'user', therapist_id, JSON.stringify({ client_id: clientId, therapist_id: parseInt(therapist_id), telegram_id: String(telegram_id), consent_version: versionNum })]
+      [clientId, 'consent_granted', 'user', requestedTherapistId, JSON.stringify({ client_id: clientId, therapist_id: requestedTherapistId, telegram_id: String(telegram_id), consent_version: versionNum, via: pendingMatches ? 'connect' : 'existing_link' })]
     );
 
     saveDatabaseAfterWrite();
 
-    logger.info(`Client ${clientId} consented and linked to therapist ${therapist_id} (v${versionNum})`);
+    logger.info(`Client ${clientId} consented and linked to therapist ${requestedTherapistId} (v${versionNum})`);
 
     res.json({
       message: 'Successfully connected to therapist',
       linked: true,
       client_id: clientId,
-      therapist_id: parseInt(therapist_id),
+      therapist_id: requestedTherapistId,
       consent_version: versionNum
     });
   } catch (error) {
@@ -574,12 +803,14 @@ router.get('/therapist-display/:id', botAuth, (req, res) => {
       return res.status(400).json({ error: 'invalid id' });
     }
     const db = getDatabase();
-    const r = db.exec("SELECT id, email FROM users WHERE id = ? AND role = 'therapist'", [id]);
+    const r = db.exec("SELECT id, email, blocked_at FROM users WHERE id = ? AND role = 'therapist'", [id]);
     if (r.length === 0 || r[0].values.length === 0) {
       return res.status(404).json({ error: 'Therapist not found' });
     }
     const row = r[0].values[0];
-    res.json({ id: row[0], display_name: row[1] || `Therapist #${row[0]}` });
+    // available=false: blocked account — a NEW consent to it is refused
+    // (THERAPIST_UNAVAILABLE), so the bot offers a disconnect instead.
+    res.json({ id: row[0], display_name: row[1] || `Therapist #${row[0]}`, available: !row[2] });
   } catch (error) {
     logger.error('Bot therapist-display error: ' + error.message);
     res.status(500).json({ error: 'Failed: ' + error.message });
@@ -757,19 +988,19 @@ router.post('/diary', botAuth, (req, res) => {
       }
     }
 
-    // If file_data (base64 audio/video bytes) provided, encrypt and store on disk
+    // If file_data (base64 audio/video bytes) provided, encrypt and store on
+    // disk. Audit M24: a rejected or failed media file is reported to the bot
+    // (and no entry is created) instead of silently saving an entry without
+    // its recording.
     let audioFileRef = null;
     if (file_data) {
+      const defaultExt = type === 'video' ? '.mp4' : '.ogg';
+      const ext = safeFileExt(file_ext, MEDIA_EXT_ALLOWLIST, defaultExt);
+      const opaqueId = crypto.randomUUID();
+      const filename = `${opaqueId}${ext}`;
       try {
-        const defaultExt = type === 'video' ? '.mp4' : '.ogg';
-        const ext = safeFileExt(file_ext, MEDIA_EXT_ALLOWLIST, defaultExt);
-        const opaqueId = crypto.randomUUID();
-        const filename = `${opaqueId}${ext}`;
-
-        // Write raw binary to a temp file and encrypt it (temp is always
-        // removed, .enc is created)
-        const buffer = Buffer.from(file_data, 'base64');
-        const encResult2 = writeEncryptedDiaryFile(filename, buffer);
+        const buffer = decodeBotMedia(file_data);
+        const encResult2 = writeEncryptedDiaryFile(filename, buffer, { kind: 'media', hints: [type === 'video' ? 'video' : 'audio'] });
         audioFileRef = `${filename}.enc`;
 
         if (!keyId) {
@@ -777,10 +1008,14 @@ router.post('/diary', botAuth, (req, res) => {
           keyVersion = encResult2.keyVersion;
         }
 
-        logger.info(`Encrypted diary audio file: ${audioFileRef} (${buffer.length} bytes)`);
+        logger.info(`Encrypted diary audio file: ${audioFileRef} (${buffer.length} bytes, ${encResult2.contentType})`);
       } catch (fileErr) {
+        if (fileErr instanceof BotMediaError) {
+          logger.warn(`Diary media rejected for client ${clientId}: ${fileErr.code}`);
+          return sendBotMediaError(res, fileErr);
+        }
         logger.error(`Failed to encrypt diary audio file: ${fileErr.message}`);
-        // Non-fatal: diary entry is saved without the audio file
+        return res.status(500).json({ error: 'Failed to store the media file', code: 'MEDIA_STORE_FAILED' });
       }
     }
 
@@ -1430,7 +1665,8 @@ router.get('/exercises/:telegram_id', botAuth, (req, res) => {
       `SELECT ed.id, ed.exercise_id, ed.status, ed.sent_at, ed.completed_at,
               e.title_en, e.title_ru, e.title_es, e.title_uk, e.category,
               e.description_en, e.description_ru, e.description_uk,
-              e.instructions_en, e.instructions_ru, e.instructions_uk
+              e.instructions_en, e.instructions_ru, e.instructions_uk,
+              e.description_es, e.instructions_es
        FROM exercise_deliveries ed
        LEFT JOIN exercises e ON ed.exercise_id = e.id
        WHERE ed.client_id = ?
@@ -1455,7 +1691,9 @@ router.get('/exercises/:telegram_id', botAuth, (req, res) => {
         description_uk: row[12],
         instructions_en: row[13],
         instructions_ru: row[14],
-        instructions_uk: row[15]
+        instructions_uk: row[15],
+        description_es: row[16],
+        instructions_es: row[17]
       };
     });
 
@@ -1536,14 +1774,14 @@ router.post('/exercises/:delivery_id/respond', botAuth, (req, res) => {
       return res.status(400).json({ error: 'telegram_id is required' });
     }
 
-    if (!response_text || !response_text.trim()) {
+    if (!response_text || typeof response_text !== 'string' || !response_text.trim()) {
       return res.status(400).json({ error: 'response_text is required' });
     }
 
     // Find client by telegram_id
     const userResult = db.exec(
-      "SELECT id FROM users WHERE telegram_id = ? AND role = 'client'",
-      [telegram_id]
+      "SELECT id, therapist_id, consent_therapist_access FROM users WHERE telegram_id = ? AND role = 'client'",
+      [String(telegram_id)]
     );
 
     if (userResult.length === 0 || userResult[0].values.length === 0) {
@@ -1551,6 +1789,8 @@ router.post('/exercises/:delivery_id/respond', botAuth, (req, res) => {
     }
 
     const clientId = userResult[0].values[0][0];
+    const currentTherapistId = userResult[0].values[0][1];
+    const currentConsent = !!userResult[0].values[0][2];
 
     // Verify delivery belongs to this client
     const deliveryResult = db.exec(
@@ -1563,6 +1803,18 @@ router.post('/exercises/:delivery_id/respond', botAuth, (req, res) => {
     }
 
     const therapistId = deliveryResult[0].values[0][2];
+
+    // Audit M23: after the client revoked consent (or moved to another
+    // therapist) the response must not reach — or be stored for — the
+    // therapist who sent the exercise. Nothing is saved, nobody is notified.
+    if (!currentConsent || currentTherapistId === null || currentTherapistId === undefined ||
+        Number(currentTherapistId) !== Number(therapistId)) {
+      logger.info(`[M23] Exercise response for delivery ${deliveryId} refused: client ${clientId} no longer shares data with therapist ${therapistId}`);
+      return res.status(403).json({
+        error: 'You are no longer connected to the therapist who sent this exercise.',
+        code: 'CONSENT_REVOKED'
+      });
+    }
 
     // Encrypt the response (Class A sensitive data)
     const encrypted = encrypt(response_text.trim());
@@ -1790,19 +2042,24 @@ router.post('/assignments/:assignment_id/reports', botAuth, (req, res) => {
     // diary path), then create the report row referencing the .enc filename.
     let audioFileRef = null;
     if (file_data) {
+      // Audit M24: rejected / failed media is reported to the bot (no report
+      // row is created) instead of a silent report without its audio.
       try {
         const ext = safeFileExt(file_ext, MEDIA_EXT_ALLOWLIST, '.ogg');
         const opaqueId = crypto.randomUUID();
         const filename = `${opaqueId}${ext}`;
 
-        const buffer = Buffer.from(file_data, 'base64');
-        writeEncryptedDiaryFile(filename, buffer);
+        const buffer = decodeBotMedia(file_data);
+        writeEncryptedDiaryFile(filename, buffer, { kind: 'media', hints: ['audio'] });
         audioFileRef = `${filename}.enc`;
         logger.info(`[T-04] Encrypted assignment-report audio: ${audioFileRef} (${buffer.length} bytes)`);
       } catch (fileErr) {
+        if (fileErr instanceof BotMediaError) {
+          logger.warn(`[T-04] Voice report media rejected: ${fileErr.code}`);
+          return sendBotMediaError(res, fileErr);
+        }
         logger.error('[T-04] Failed to encrypt voice report audio: ' + fileErr.message);
-        // Fall through — report is still created (without audio) so the bot
-        // doesn't hard-fail. transcription_status will reflect the issue.
+        return res.status(500).json({ error: 'Failed to store the media file', code: 'MEDIA_STORE_FAILED' });
       }
     }
 
@@ -1882,7 +2139,7 @@ router.get('/assignments/:assignment_id/reports', botAuth, (req, res) => {
 // Body:
 //   { telegram_id, file_data (base64), file_ext?, mime_type? }
 //
-// Storage path mirrors voice notes (encryptDiaryFileOnDisk → data/diary_files).
+// Storage path mirrors voice notes (writeEncryptedDiaryFile → data/diary_files).
 // Enforces: report belongs to this client, max 5 attachments per report,
 // max 10MB per file, mime type must be a supported image type.
 router.post('/assignments/:assignment_id/reports/:report_id/attachments', botAuth, (req, res) => {
@@ -1962,22 +2219,31 @@ router.post('/assignments/:assignment_id/reports/:report_id/attachments', botAut
       });
     }
 
-    // Write encrypted file to disk (same .enc pattern as voice notes).
+    // Audit M12: the bytes must really be an image; the detected type (not
+    // the claimed one) is what gets stored and later served.
+    const sniffed = sniffMedia(buffer.subarray(0, 4096));
+    if (!sniffed || sniffed.kind !== 'image' || !assignmentReports.ALLOWED_ATTACHMENT_MIMES.has(sniffed.mime)) {
+      return res.status(415).json({ error: 'File content is not a supported image format', code: 'UNSUPPORTED_MEDIA_TYPE' });
+    }
+    const storedMime = sniffed.mime;
+
+    // Write encrypted file to disk (chunked format, no plaintext on disk).
     const opaqueId = crypto.randomUUID();
     const filename = `${opaqueId}${safeExt}`;
     let fileRef = null;
     let keyId = null;
     let keyVersion = 1;
     try {
-      // Cleans up the plaintext temp and any half-written .enc on failure.
-      const encResult = writeEncryptedDiaryFile(filename, buffer);
+      // Removes any half-written file on failure.
+      const encResult = writeEncryptedDiaryFile(filename, buffer, { kind: 'image' });
       fileRef = `${filename}.enc`;
       keyId = encResult.keyId;
       keyVersion = encResult.keyVersion;
       logger.info(`[T-21] Encrypted assignment-report photo: ${fileRef} (${buffer.length} bytes)`);
     } catch (fileErr) {
+      if (fileErr instanceof BotMediaError) return sendBotMediaError(res, fileErr);
       logger.error('[T-21] Failed to encrypt photo attachment: ' + fileErr.message);
-      return res.status(500).json({ error: 'Failed to store photo' });
+      return res.status(500).json({ error: 'Failed to store photo', code: 'MEDIA_STORE_FAILED' });
     }
 
     let attachment;
@@ -1985,7 +2251,7 @@ router.post('/assignments/:assignment_id/reports/:report_id/attachments', botAut
       attachment = assignmentReports.insertAttachment({
         reportId,
         fileRef,
-        mimeType: inferredMime,
+        mimeType: storedMime,
         sizeBytes: buffer.length,
         actorId: client.id,
         keyId,
@@ -2111,7 +2377,8 @@ router.post('/voice-query', botAuth, (req, res) => {
       logger.warn('Failed to audit log voice query: ' + auditErr.message);
     }
 
-    logger.info('Voice NL query by therapist ' + therapistId + ' for client ' + client_id + ': "' + queryText.substring(0, 50) + '..."');
+    // Clinical content: log the length only, never the query text.
+    logger.info('Voice NL query by therapist ' + therapistId + ' for client ' + client_id + ' (' + queryText.length + ' chars)');
 
     res.json({
       success: true,

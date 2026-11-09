@@ -67,16 +67,25 @@ namespaces.
   be logged into different accounts.
 - **Bot replies but does not save entries.** Diary storage consent
   may be off. Turn it on from the client page's Consent tab.
-- **`/switch` command missing.** The client is only bound to one
-  therapist. `/switch` shows only when multiple bindings exist.
-- **Bot language wrong.** The client can set `/lang <en|ru|es|uk>` in
-  Telegram. The therapist's UI language does not affect the bot's
-  language.
+- **`/switch` command missing.** There is no `/switch` command: a
+  client is linked to one therapist at a time and moves with
+  `/disconnect` followed by `/connect`.
+- **Bot language wrong.** The bot has no language command; it uses the
+  client's Telegram app language from registration. The therapist's UI
+  language does not affect the bot's language.
 
 ## Session upload and transcription issues
 
-- **"File too large".** Files must be under 100 MB and in mp3, m4a,
-  wav, mp4, or webm. Trim or re-encode locally.
+- **"File too large".** Files must be under 100 MB and in a supported
+  audio or video format (MP3, M4A, MP4, MOV, OGG/Opus, WebM, WAV, FLAC,
+  AAC). Trim or re-encode locally.
+- **"Unsupported file type".** PR-TOP checks the file content, not the
+  name. A renamed document or a damaged file is refused; re-export it
+  from your recorder app.
+- **Status "transcription_too_long".** The transcription service takes
+  about 24 MB per request. MP3 and WAV files are split automatically;
+  other formats above that size get this status. Upload an MP3 export
+  or shorter parts.
 - **Transcription never finishes.** Open the session page — a failed
   job shows a **Retry** button. Repeated failures on the same file
   usually indicate corrupted audio; try re-exporting the file.

@@ -113,10 +113,15 @@ Once you are signed in you can be productive in about an hour.
 - **Confirmation email never arrives.** Check spam. Wait ten minutes.
   Resend from the sign-up form or from the "resend confirmation" link
   after signing in. If it still fails, try a different email address.
-- **"Email already registered" error.** You may have signed up
-  previously with a different case (email is case-insensitive) or
-  registered on an old marketing beta. Use **Forgot password?** to
-  reclaim the account.
+- **I registered but was asked to check my email instead of landing
+  on the dashboard.** This happens when the address already has a
+  PR-TOP account (emails are case-insensitive, so an old sign-up with
+  different capitalisation counts too). For privacy the form never says
+  "this email is already registered"; instead no new account is
+  created, and the existing account's owner receives a normal sign-in
+  email with a 6-digit code and a one-click sign-in link (subject to
+  the usual code limits). Open that email to sign in to your existing
+  account, or use **Forgot password?** on the sign-in page.
 - **Trial ended sooner than expected.** Trials count calendar days
   from account creation timestamp. If the account's time zone was set
   to something unusual, the trial may end earlier than a 24-hour cycle
@@ -258,3 +263,9 @@ A: You can still view your dashboard, clients, and existing sessions. But you ca
 
 **Q: Can I sign in without confirming my email?**
 A: If you registered with a password, yes — you can sign in with your email and password without confirming first. However, gated features (adding clients, uploading sessions, AI chat) remain blocked. You must click the verification link in the email to unlock them. Alternatively, you can request a sign-in code from the login page — using a code also confirms your email automatically.
+
+**Q: I tried to register and got "check your email" instead of my dashboard. Why?**
+A: That email address already has a PR-TOP account. To protect your privacy, the registration form never confirms whether an address is registered. No second account is created; if the existing account is a therapist account, its owner receives a sign-in email with a 6-digit code and a one-click sign-in link. Use that email (or **Forgot password?**) to get into the account you already have.
+
+**Q: I am a therapist registering through the Telegram bot. Why does the bot ask me for a code after I enter my email?**
+A: When you register as a therapist inside the PR-TOP bot, the bot asks for your phone number (optional), then your email, then optional information about yourself. The email you type is not saved straight away: PR-TOP sends a 6-digit code to that address in an email titled "Confirm your email for PR-TOP in Telegram" (it says to ignore the email if it wasn't you), and you type the code back into the bot. Only then is the address saved to your account and marked as confirmed, and you can use it to sign in to the web dashboard by email code. The code is valid for 15 minutes and allows 5 attempts; at most 3 codes can be requested per hour, and one email address receives at most 5 such codes per day across all Telegram accounts. You can press **Skip** at any point (the bot's /profile menu edits only your name and phone, not the email). If the address already belongs to another PR-TOP account, the bot tells you after you enter the code and asks for a different address.

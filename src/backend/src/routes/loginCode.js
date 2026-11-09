@@ -3,7 +3,7 @@
 // Spec: docs/security/SPEC_ANTIBOT_WAVES.md §0 (A7, A8, A12) and §3 "Трек 2B",
 // hardened per the wave-2 security review:
 //   POST /request  { email }        -> always 200 { message }, >= MIN_RESPONSE_MS
-//   POST /verify   { email, code }  -> 200 { message, user, token } (same shape as /login);
+//   POST /verify   { email, code }  -> 200 { message, user } (same shape as /login; JWT only in the session cookie);
 //                                      EVERY failure is 401 CODE_INVALID after the
 //                                      same timing floor (no locked/unknown oracle)
 //   GET  /link?token=<hex64>        -> 302 to ${APP_URL}/dashboard or /login?code_error=expired
@@ -296,8 +296,7 @@ router.post('/verify', async (req, res) => {
     return respondAfterFloor(startedAt, () =>
       res.json({
         message: 'Login successful',
-        user: session.user,
-        token: session.token
+        user: session.user
       })
     );
   } catch (error) {

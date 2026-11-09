@@ -61,7 +61,10 @@ they need.
 - All traffic is served over TLS via an nginx reverse proxy with
   Let's Encrypt certificates.
 - Authentication uses short-lived JWTs delivered in an HttpOnly,
-  Secure cookie, plus a CSRF token bound to the session.
+  Secure cookie. The web app never stores or reads the token itself
+  (it is not kept in browser storage and is not returned in login
+  responses), and every state-changing request must also carry a CSRF
+  token.
 - Passwords are stored as bcrypt hashes; login is rate-limited.
 - A sign-in session lasts at most 24 hours. Every session token carries
   a per-account version number, so sessions can be revoked server-side
@@ -74,7 +77,7 @@ they need.
     not come back; the therapist simply signs in again.
   - **Signing out from the sidebar** ends the session in that browser
     only (the session cookie is cleared server-side and the browser's
-    stored copy is removed). Sessions on your other devices stay signed
+    cached profile is removed). Sessions on your other devices stay signed
     in until they expire or you reset your password.
 - Every access to a client record is written to an append-only
   audit log that the therapist can review from the dashboard.

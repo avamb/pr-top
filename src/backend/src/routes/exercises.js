@@ -256,7 +256,9 @@ router.get('/categories', requireAuth, (req, res) => {
 router.get('/:id', requireAuth, (req, res) => {
   try {
     const db = getDatabase();
-    const results = db.exec("SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, ai_generated, ai_sources_json FROM exercises WHERE id = ?", [req.params.id]);
+    // A library exercise or the caller's own custom exercise; another
+    // therapist's custom exercise is "not found" (no existence oracle).
+    const results = db.exec("SELECT id, category, title_ru, title_en, title_es, title_uk, description_ru, description_en, description_es, description_uk, instructions_ru, instructions_en, instructions_es, instructions_uk, is_custom, is_template, therapist_id, created_at, ai_generated, ai_sources_json FROM exercises WHERE id = ? AND (COALESCE(is_custom, 0) = 0 OR therapist_id = ?)", [req.params.id, req.user.id]);
 
     if (!results.length || !results[0].values.length) {
       return res.status(404).json({ error: 'Exercise not found' });

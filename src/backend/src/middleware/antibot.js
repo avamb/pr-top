@@ -92,17 +92,15 @@ const FAKE_RESPONSES = {
     res.cookie('session_token', dummyJwt(email, 'therapist'), SESSION_COOKIE_OPTIONS);
     return res.status(201).json({
       message: 'User registered successfully',
-      user: { id: 0, email, role: 'therapist', created_at: sqliteNow(), timezone: 'UTC' },
-      token: dummyJwt(email, 'therapist')
+      user: { id: 0, email, role: 'therapist', created_at: sqliteNow(), timezone: 'UTC' }
     });
   },
   viewer(res, email) {
-    const token = dummyJwt(email, 'viewer');
-    res.cookie('session_token', token, SESSION_COOKIE_OPTIONS);
+    // Real responses no longer carry the JWT in the body (cookie only).
+    res.cookie('session_token', dummyJwt(email, 'viewer'), SESSION_COOKIE_OPTIONS);
     return res.status(201).json({
       message: 'Registered successfully! You can continue chatting.',
-      user: { id: 0, email, role: 'viewer', created_at: sqliteNow() },
-      token
+      user: { id: 0, email, role: 'viewer', created_at: sqliteNow() }
     });
   },
   lead(res, email) {

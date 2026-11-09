@@ -2,155 +2,206 @@
 # Client-side bot commands and experience
 
 This how-to describes what the client sees inside the PR-TOP Telegram
-bot: which commands are available, how streaks and reminders behave,
-how to read message-delivery status, and what the client can and
-cannot do without the therapist's help. It is written for the
-therapist so you can coach a new client through their first week and
-troubleshoot when they say "the bot isn't working". Labels come from
-the `client`, `diary`, `reminders`, and `exercise` i18n namespaces.
+bot: which commands and buttons exist, how diary entries, exercises,
+assignments and SOS behave, how session reminders look, and what the
+client can and cannot do without the therapist's help. It is written
+for the therapist so you can coach a new client through their first
+week and troubleshoot when they say "the bot isn't working". Every
+command and message described here exists in the bot today; anything
+not listed (for example mood scores, streak counters or an in-bot
+language switch) is not a feature of the bot.
 
 ## Prerequisites
 
-- A connected client (invite redeemed, binding complete).
+- A connected client: the invite link or code has been used and the
+  client has ticked the consent checkboxes (see the diary how-to for
+  the consent flow).
 - Familiarity with your own dashboard so you can cross-reference what
-  the client is seeing to what actually landed on the platform.
-- The client has Telegram installed, notifications enabled for the
-  PR-TOP bot chat, and the language set to one of EN/RU/ES/UK.
+  the client sees with what actually landed on the platform.
+- The client has Telegram installed and notifications enabled for the
+  PR-TOP bot chat.
 
 ## What the client sees on first open
 
-After the client taps **Start** on the invite link, the bot introduces
-itself in the client's Telegram language, confirms the therapist name
-they are connected to, and shows a persistent menu of commands. The
-introduction states that the therapist has read-access to diary
-entries and reminds the client that the SOS command is available at any time
-as part of the agreed between-session protocol — it notifies the
-therapist directly but does not contact emergency services.
+When the client taps **Start** on your invite link, the bot registers
+them as a client, greets them in their language, and connects them to
+you after the consent step. The bot picks its language from the
+language set in the client's Telegram app at the moment of
+registration: Russian, Ukrainian and Spanish are supported, and every
+other Telegram language falls back to English. The bot has no command
+for switching language afterwards.
+
+The welcome message explains the three things the bot is for: the
+thought diary (text, voice or video at any time), exercises from the
+therapist, and the SOS button for urgent contact, and states that
+data is encrypted. After connecting, the client gets a persistent
+keyboard with six buttons: **Diary**, **Exercises**, **History**,
+**SOS**, **Profile** and **Help**. The same actions are available as
+slash commands.
 
 ## Commands the client can use
 
-- `/diary` — start a new diary entry. Follow-up prompt accepts text,
-  voice memo, or a short video message. Attachments are limited to
-  20 MB per single item.
-- `/mood <0–10>` — record an explicit mood rating. Accepts numeric
-  scores, "meh"/"okay"/"good" words (mapped to 3/5/7), and multiple
-  languages.
-- `/exercise` — open the next assigned exercise if one is waiting.
-- `/sos` — trigger a crisis alert as part of the agreed between-session
-  protocol (notifies the therapist; does not contact emergency services).
-  It works even when a consent update is pending (the consent prompt
-  appears after the alert is sent) and tells the client if the therapist
-  may not have been notified. See the crisis how-to.
-- `/streak` — show the current diary streak. Streaks are calendar-day
-  counters that reset if the client misses a day.
-- `/reminders` — set or clear a nightly diary reminder. Default is a
-  soft nudge at 21:00 in the client's Telegram time zone.
-- `/consent` — read the current consent-flag state and open a link
-  back to the therapist for changes.
-- `/lang <en|ru|es|uk>` — switch the bot's language.
-- `/switch` — for clients working with multiple PR-TOP therapists,
-  flip between binding targets.
-- `/help` — show the full command list plus a link to a short client
-  FAQ.
+The "≡" menu in the chat lists these commands, with descriptions
+translated into English, Russian, Spanish and Ukrainian:
 
-The commands are also available via a persistent menu button in the
-chat, so the client rarely has to type them.
+- `/assignments` - list the homework you have set. Opening an
+  assignment shows its description, report frequency and deadline, and
+  offers **Write report** and **Mark complete** buttons.
+- `/report` - start a progress report. With no argument the bot shows
+  a picker of active assignments; `/report 12` arms the report for
+  assignment 12 directly. The next text message or voice message is
+  saved as the report. A photo sent right after you pick an assignment
+  is attached to the report.
+- `/exercises` - list exercises you have sent. Each one is labelled
+  **New**, **In Progress** or **Completed**. Opening one shows the
+  title, category and instructions with a **Start Exercise** button;
+  after tapping it the client types the answer as a normal text
+  message.
+- `/sessions` - the last five sessions with the meeting date, an
+  optional title you set and the processing status. Transcripts and
+  summaries are never shown in the bot.
+- `/history` - the client's last ten diary entries, with type icon,
+  date in the client's own time zone, and the first 100 characters of
+  the text or transcript.
+- `/sos` - send a crisis alert (see below). The client can add a
+  message after the command, for example `/sos I need to talk now`.
+- `/profile` - shows name, phone and Telegram username, with **Edit
+  Name** and **Edit Phone** buttons.
+- `/timezone` - shows the current time zone and time; the client picks
+  a region (Europe, Asia, Americas, Africa, Pacific/Oceania, or UTC)
+  and then a time zone. Session reminders use this time zone.
+- `/help` - the command list for the client's role.
+- `/disconnect` - asks for confirmation, then revokes your access to
+  the client's data and removes the link. The client can reconnect
+  later with a new invite code.
 
-## Streaks and reminders
+Two more commands exist outside the menu: `/start` (register, check
+status, or open an invite deep link) and `/connect CODE` (connect with
+a therapist's invite code). The bot's own `/help` text for clients
+lists start, help, profile, connect, exercises, sos, history, timezone
+and disconnect.
 
-- A **streak** is the number of consecutive calendar days on which
-  the client sent at least one diary entry or completed at least one
-  exercise. Streaks are stored per-client and displayed with a small
-  celebration message on multiples of 7 days.
-- **Reminders** default to a single nightly nudge. The client can
-  change the time under `/reminders`, or turn them off entirely.
-  Quiet hours defined by the therapist override reminders (nothing
-  fires during quiet hours).
-- Missed days do not reset the streak until midnight in the client's
-  time zone. If the client sends an entry across midnight, the entry
-  is credited to the day the message left their phone.
+## How diary entries work
+
+There is no `/diary` command to type. Any plain text message that is
+not a command and not an answer to an open exercise or report is saved
+as a diary entry, and the bot replies **Diary entry saved!** The
+**Diary** keyboard button only shows a hint explaining this.
+
+- **Text:** saved as typed.
+- **Voice messages, video messages and round video notes:** saved with
+  the audio or video file, and the bot replies that the entry is saved
+  and transcription is in progress. Transcription runs on the server;
+  in `/history` an entry still waiting shows "[Transcribing...]", and
+  once the text exists it is shown as a preview. If a transcription
+  fails you can retry it from the diary entry on your dashboard.
+- **Size limit:** Telegram lets bots download files of up to 20 MB.
+  Bigger recordings are refused before download with a "file is too
+  large" message asking for a shorter one.
+- **Make private:** every saved entry comes with a **Make private**
+  button. Pressing it hides that entry from you; the bot confirms
+  that the therapist will not see it.
+- **No editing in the bot:** the bot has no edit or delete option for
+  entries once they are saved.
+
+If the client has an exercise open, or has armed a report, the next
+message goes to that exercise or report instead of the diary.
+
+## SOS
+
+`/sos`, or the **SOS** keyboard button, notifies you as part of the
+agreed between-session protocol. It does not contact emergency
+services, and the confirmation says so, listing the US 988 line and
+findahelpline.com for immediate danger. SOS is never blocked by the
+consent screen: the alert goes out first, and a pending consent update
+is shown afterwards. If the platform could not reach you, the bot says
+the alert was recorded but you may not have been notified and tells
+the client to contact you directly. If the request itself fails, the
+client gets a fixed message with the emergency numbers.
+
+## Session reminders
+
+If you enabled session reminders for a client, the bot can send
+reminder messages with buttons: **Confirm**, **Reschedule** and
+**Cancel slot**. The bot tells the client you have been informed.
+Clients who have not yet answered the opt-in question are asked
+**Yes, remind me** or **No thanks**.
 
 ## Step-by-step: coaching a new client's first week
 
-1. On day one, send them the invite link and a short "here is what
-   the bot will ask" message with the diary and exercise commands.
-2. Ask them to try `/diary` right away with one sentence — this
-   confirms the binding is working correctly.
-3. Turn on `/reminders` (either you show them or ask them to turn it
-   on themselves). A gentle nightly nudge dramatically improves
-   between-session engagement.
-4. Later that week assign a short grounding or values exercise; watch
-   for the completion in your dashboard.
-5. On the first full session after connecting, review the streak and
-   celebrate progress with the client. This normalizes the tool as
-   part of the therapy, not a chore.
+1. Send the invite link from your dashboard (or the invite code, which
+   the client enters as `/connect CODE`).
+2. Ask the client to tick all six consent boxes and press **I agree
+   and connect**.
+3. Ask them to send one sentence as a diary entry. When the bot answers
+   "Diary entry saved!", the binding works and you can see the entry
+   in the client's diary.
+4. Show them the **Make private** button so they know they control
+   what you see.
+5. Send a short exercise or assignment and ask them to try
+   `/exercises` or `/assignments`.
+6. Ask them to open `/timezone` once so reminders arrive at the right
+   local time.
 
 ## Edge cases
 
-- **Client has muted the Telegram bot.** Streaks continue to count,
-  but the client will not see reminders. The dashboard cannot detect
-  a mute — ask the client if their engagement drops off suddenly.
-- **Client switches phone or Telegram number.** The Telegram user ID
-  is the binding key. A phone-number change alone does not affect
-  binding; a new Telegram account does — regenerate the invite.
-- **Very long voice memo.** Voice memos are transcribed only in
-  session uploads, not in diary entries. Long diary voice notes are
-  stored as-is and shown to the therapist as an audio player.
-- **Client using the same Telegram in multiple therapies.** `/switch`
-  presents a picker; the client's diary is scoped per binding, so
-  entries never cross-contaminate.
+- **The client writes a message while an exercise is open.** The
+  message is taken as the exercise answer, not a diary entry. Open
+  `/exercises` again to see what is open.
+- **Photos outside a report.** If a client sends a photo without
+  choosing an assignment first, the bot explains that photos can only
+  be attached to a progress report and asks them to use `/report`.
+- **Therapist accounts.** If you write to the bot from your therapist
+  account, it reminds you to use the web dashboard. Therapists have a
+  two-button keyboard (**Open dashboard** and **Help**) and can use
+  `/settings` to turn forwarding of client voice and video diary
+  messages to their own Telegram chat on or off.
+- **Expired or old buttons.** Consent buttons last 30 minutes and do
+  not survive a bot restart; the bot then asks the client to send
+  `/start` again.
+- **Consent revoked.** After a disconnect, an exercise answer typed
+  later is not sent to you.
 
 ## Troubleshooting
 
-- **Client says "the bot doesn't respond".** Confirm the bot binding
-  is active on your dashboard. If it is, ask the client to tap the
-  bot's profile → **Restart** to re-enable a muted chat.
-- **Streak reset unexpectedly.** Check the client's Telegram time
-  zone. A daylight-saving transition can nudge the midnight boundary.
-- **Wrong language in bot replies.** The bot picks the language from
-  the Telegram-language field at first-connect; the client can
-  override with `/lang`. Language changes take effect on the next
-  message.
-- **Client says exercises never arrive.** Assignments are held during
-  the client's quiet hours; they fire at the next allowed time. If
-  the client turned off reminders, exercises still fire but without
-  a nightly nudge to remind them to open the app.
-- **`/consent` shows the wrong state.** Consent flags are managed on
-  the therapist side. Update the flag on the dashboard client page
-  and the bot will report the new state on the next `/consent`.
+- **Client says "the bot doesn't respond".** Check on your dashboard
+  that the client is connected. Ask them to send `/start` or `/help`.
+  If they muted the chat, they must unmute it in Telegram.
+- **Diary entry not visible to you.** The client may have pressed
+  **Make private**, or the client is not connected or has paused
+  consent after an updated consent text.
+- **Voice note shows no text yet.** Transcription is asynchronous;
+  check again shortly or use the retry on the dashboard entry.
+- **Wrong language in bot replies.** The language is fixed at
+  registration from the Telegram app language and cannot be changed
+  from inside the bot; contact support if it is wrong.
+- **Exercises or reminders at odd hours.** Ask the client to check
+  `/timezone`.
+- **Recording rejected as too large.** Ask for a shorter recording
+  (under 20 MB).
 
 ## FAQ
 
 **Q: Can the client type without using a command?**
-A: Yes. Free-form messages are treated as diary text by default. The
-bot occasionally asks a clarifying question ("Save this as diary or
-just chat?") so the client stays in control.
+A: Yes. Plain text is saved as a diary entry, unless an exercise or
+report is waiting for an answer.
 
-**Q: Does the bot reply with AI-generated content to diary entries?**
-A: The bot sends a short acknowledgement and, on Pro/Premium, an
-optional reflection prompt. It never provides diagnostic or clinical
-content — the therapist remains the source of therapeutic input.
+**Q: Does the bot track streaks or mood scores?**
+A: No. The bot has no streak, mood or progress commands. You see the
+entries themselves on the dashboard.
 
-**Q: Can the client edit or delete a diary entry?**
-A: Yes. Every diary entry has an inline edit and delete affordance
-in the bot for 24 hours after sending. After that, deletion requires
-asking the therapist to purge the entry on the dashboard.
-
-**Q: Can the client see analytics about themselves?**
-A: `/progress` in the bot shows a simplified view: streak, mood trend
-sparkline, and completed-exercise count. Detailed analytics stay on
-the therapist side.
+**Q: Can the client edit or delete a diary entry in the bot?**
+A: No. The client can only mark an entry private right after saving
+it.
 
 **Q: Are diary voice memos transcribed?**
-A: Not automatically for diary entries — the raw audio is stored so
-the therapist hears the client's voice. Session recordings uploaded
-through the dashboard are transcribed (Basic and above).
+A: Yes. Voice and video diary entries are sent for transcription
+automatically after saving; you hear the original audio too.
 
-**Q: How much history can the client access via the bot?**
-A: The bot shows the last 30 days of the client's own entries via
-`/history`. Beyond that, the therapist is the interface — the client
-can request a data export through the therapist.
+**Q: How much history can the client open in the bot?**
+A: `/history` shows the last ten diary entries and `/sessions` the last
+five sessions.
 
 **Q: Does the bot work in group chats?**
-A: The bot is designed for one-to-one direct-message chats. Adding
-it to a group chat is not supported and may fail silently.
+A: The bot is designed for one-to-one chats; group use is not
+supported.

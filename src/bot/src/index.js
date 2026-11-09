@@ -121,8 +121,143 @@ const api = axios.create({
   maxBodyLength: 50 * 1024 * 1024
 });
 
-// Cache for user language preferences
-const userLangCache = {};
+// === Bounded in-memory state (audit M22) ===
+// Every per-user state map below expires entries after a TTL and holds at
+// most `maxEntries` keys (oldest dropped first); a periodic sweep removes
+// expired entries. The returned Proxy keeps plain-object syntax working
+// (state[id] = v, state[id], delete state[id]); keys are strings, like on a
+// plain object. Values are returned as stored (mutating a stored object does
+// not refresh its TTL; assigning does). With { touchOnRead: true } every read
+// of a live entry also extends it (sliding expiry while the user is active).
+const STATE_REGISTRY = [];
+const STATE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const STATE_MAX_ENTRIES = 10000;
+
+function createTtlState(name, opts) {
+  const ttlMs = (opts && opts.ttlMs) || STATE_TTL_MS;
+  const maxEntries = (opts && opts.maxEntries) || STATE_MAX_ENTRIES;
+  const touchOnRead = !!(opts && opts.touchOnRead);
+  const store = new Map(); // key -> { value, expiresAt }
+
+  function read(key) {
+    const entry = store.get(key);
+    if (!entry) return undefined;
+    if (entry.expiresAt <= Date.now()) {
+      store.delete(key);
+      return undefined;
+    }
+    if (touchOnRead) entry.expiresAt = Date.now() + ttlMs;
+    return entry.value;
+  }
+
+  const proxy = new Proxy({}, {
+    get(target, prop) {
+      if (typeof prop === 'symbol') return undefined;
+      return read(prop);
+    },
+    set(target, prop, value) {
+      if (typeof prop === 'symbol') return false;
+      store.delete(prop); // re-insert so Map order = age order
+      store.set(prop, { value, expiresAt: Date.now() + ttlMs });
+      while (store.size > maxEntries) store.delete(store.keys().next().value);
+      return true;
+    },
+    deleteProperty(target, prop) {
+      if (typeof prop !== 'symbol') store.delete(prop);
+      return true;
+    },
+    has(target, prop) {
+      return typeof prop !== 'symbol' && read(prop) !== undefined;
+    }
+  });
+
+  STATE_REGISTRY.push({
+    name,
+    size: () => store.size,
+    sweep: (now) => {
+      const t0 = now || Date.now();
+      let removed = 0;
+      for (const [key, entry] of store) {
+        if (entry.expiresAt <= t0) { store.delete(key); removed++; }
+      }
+      return removed;
+    }
+  });
+  return proxy;
+}
+
+function sweepAllStates(now) {
+  let removed = 0;
+  for (const state of STATE_REGISTRY) removed += state.sweep(now);
+  return removed;
+}
+setInterval(() => { sweepAllStates(); }, 5 * 60 * 1000).unref();
+
+// Cache for user language preferences (L: TTL so a language change made
+// elsewhere is picked up within 10 minutes)
+const userLangCache = createTtlState('userLangCache', { ttlMs: 10 * 60 * 1000 });
+
+// === Media limits (audit M24) ===
+// Telegram's Bot API only lets bots download files up to 20 MB.
+const MAX_TELEGRAM_DOWNLOAD_BYTES = 20 * 1024 * 1024;
+const MAX_CONCURRENT_MEDIA = 2;
+
+function isFileTooLarge(fileSize) {
+  const n = Number(fileSize);
+  return Number.isFinite(n) && n > MAX_TELEGRAM_DOWNLOAD_BYTES;
+}
+
+// Backend size rejection: 413 (body over BOT_JSON_BODY_LIMIT) or any error
+// code containing TOO_LARGE (e.g. PAYLOAD_TOO_LARGE / FILE_TOO_LARGE).
+function isPayloadTooLargeError(err) {
+  const res = err && err.response;
+  if (!res) return false;
+  if (res.status === 413) return true;
+  const code = res.data && res.data.code;
+  return typeof code === 'string' && /TOO_LARGE/i.test(code);
+}
+
+// Tiny semaphore: at most `limit` media downloads/uploads in flight, so a
+// burst of 20 MB files cannot hold many base64 copies in memory at once.
+function createSemaphore(limit) {
+  let active = 0;
+  const queue = [];
+  const next = () => {
+    if (active >= limit || queue.length === 0) return;
+    active++;
+    const { fn, resolve, reject } = queue.shift();
+    Promise.resolve().then(fn).then(resolve, reject).finally(() => { active--; next(); });
+  };
+  return {
+    run(fn) {
+      return new Promise((resolve, reject) => { queue.push({ fn, resolve, reject }); next(); });
+    },
+    get active() { return active; },
+    get queued() { return queue.length; }
+  };
+}
+
+// Localized exercise field with English fallback (title/description/instructions).
+function localizedField(obj, base, lang) {
+  if (!obj) return '';
+  return obj[`${base}_${lang}`] || obj[`${base}_en`] || '';
+}
+
+// Bot menu commands (≡ button), localized per Telegram language_code.
+const MENU_COMMANDS = ['assignments', 'report', 'exercises', 'sessions', 'history', 'sos', 'profile', 'timezone', 'help', 'disconnect'];
+function buildMenuCommands(lang) {
+  return MENU_COMMANDS.map((command) => ({
+    command,
+    description: t(lang, 'cmd' + command.charAt(0).toUpperCase() + command.slice(1))
+  }));
+}
+
+// Liveness file for the container healthcheck: touched every 30 s while
+// Telegram polling is healthy (see startHeartbeat in the bot block below).
+const HEARTBEAT_FILE = process.env.BOT_HEARTBEAT_FILE || '/tmp/bot-heartbeat';
+function writeHeartbeat(file) {
+  require('fs').writeFileSync(file || HEARTBEAT_FILE, String(Date.now()));
+}
 
 // T-18: Extended consent disclaimer.
 // Bump CONSENT_TEXT_VERSION any time the disclaimer text changes — existing
@@ -140,34 +275,43 @@ const CONSENT_POINTS = ['storage', 'ai', 'supervision', 'revoke', 'encryption', 
 const CONSENT_POINTS_PRECHECKED = new Set(['sessionReminders']);
 
 // In-memory state for the multi-checkbox consent flow.
-// Keyed by telegramId. Cleared on completion / cancel / timeout.
-//   { therapistId, therapistName, checked: { storage, ai, ... }, mode: 'connect' | 'reconsent', messageId }
-const pendingConsents = {};
+// Keyed by telegramId. Cleared on completion / cancel / timeout (30 min TTL).
+//   { therapistId, therapistName, checked: { storage, ai, ... }, mode: 'connect' | 'reconsent' | 'linked', messageId }
+// After a restart (or the TTL) the state is gone; a press on an old consent
+// button then answers "please send /start again" (consentStale).
+const pendingConsents = createTtlState('pendingConsents');
 
 // Track active exercise sessions (telegramId -> deliveryId)
-const activeExercises = {};
+// 3 h sliding TTL: answering an exercise can take a while (wave 3 review).
+const activeExercises = createTtlState('activeExercises', { ttlMs: 3 * 60 * 60 * 1000, touchOnRead: true });
 
 // T-04: Track active assignment-report sessions. When the client taps
 // "Write report" on an assignment, we set activeReports[telegramId] = assignmentId
 // so that the next text OR voice message is routed to the report endpoint
 // instead of the diary endpoint. Cleared after one message (single-shot).
-const activeReports = {};
+// M22: expires 3 h after the last use (sliding), so a forgotten "Write
+// report" no longer swallows a diary entry days later.
+const activeReports = createTtlState('activeReports', { ttlMs: 3 * 60 * 60 * 1000, touchOnRead: true });
 
 // Track active profile edit sessions (telegramId -> 'name' | 'phone')
-const activeProfileEdits = {};
+const activeProfileEdits = createTtlState('activeProfileEdits');
 
 // Track pending phone sharing requests after therapist registration (telegramId -> lang)
-const pendingPhoneShares = {};
+const pendingPhoneShares = createTtlState('pendingPhoneShares');
 
 // Track pending email input after phone step (telegramId -> lang)
-const pendingEmailInputs = {};
+const pendingEmailInputs = createTtlState('pendingEmailInputs');
+
+// M8: waiting for the 6-digit code mailed to the entered address (telegramId -> lang)
+const pendingEmailCodes = createTtlState('pendingEmailCodes');
 
 // Track pending other_info input after email step (telegramId -> lang)
-const pendingOtherInfoInputs = {};
+const pendingOtherInfoInputs = createTtlState('pendingOtherInfoInputs');
 
 // Get user language from cache or API
 async function getUserLang(telegramId) {
-  if (userLangCache[telegramId]) return userLangCache[telegramId];
+  const cached = userLangCache[telegramId];
+  if (cached) return cached;
   try {
     const response = await api.get(`/api/bot/user/${telegramId}`);
     const lang = response.data.user?.language || 'en';
@@ -424,23 +568,20 @@ if (!token || token === 'your-telegram-bot-token') {
 
   // Set bot menu commands (≡ button) with scoped commands
   async function setBotMenuCommands() {
+    // Client commands for all private chats: English as the default, plus one
+    // localized set per supported Telegram language_code.
     try {
-      // Client commands (default for all private chats)
-      await bot.setMyCommands([
-        { command: 'assignments', description: 'My assignments' },
-        { command: 'report', description: 'Send a progress report' },
-        { command: 'exercises', description: 'My exercises' },
-        { command: 'sessions', description: 'My recent sessions' },
-        { command: 'history', description: 'Diary history' },
-        { command: 'sos', description: 'Emergency contact' },
-        { command: 'profile', description: 'My profile' },
-        { command: 'timezone', description: 'View or change timezone' },
-        { command: 'help', description: 'Help' },
-        { command: 'disconnect', description: 'Disconnect from therapist' }
-      ], { scope: { type: 'all_private_chats' } });
-      console.log('Bot menu commands set for all_private_chats');
+      await bot.setMyCommands(buildMenuCommands('en'), { scope: { type: 'all_private_chats' } });
+      console.log('Bot menu commands set for all_private_chats (default)');
     } catch (err) {
       console.warn('Failed to set bot menu commands:', err.message);
+    }
+    for (const lang of ['en', 'ru', 'es', 'uk']) {
+      try {
+        await bot.setMyCommands(buildMenuCommands(lang), { scope: { type: 'all_private_chats' }, language_code: lang });
+      } catch (err) {
+        console.warn(`Failed to set bot menu commands for ${lang}:`, err.message);
+      }
     }
   }
 
@@ -521,6 +662,8 @@ if (!token || token === 'your-telegram-bot-token') {
     };
     if (mode === 'reconsent') {
       try { await safeSend(chatId, t(lang, 'consentReprompt'), { parse_mode: 'Markdown' }); } catch { /* ignore */ }
+    } else if (mode === 'linked') {
+      try { await safeSend(chatId, t(lang, 'consentLinkedIntro'), { parse_mode: 'Markdown' }); } catch { /* ignore */ }
     }
     const body = buildConsentBodyText(lang, therapistName);
     // safeSend retries as plain text if Telegram rejects the Markdown (e.g. a
@@ -535,33 +678,67 @@ if (!token || token === 'your-telegram-bot-token') {
     }
   }
 
+  // The therapist's account is blocked, so no new consent can be given.
+  // `offerDisconnect`: the client is linked to that therapist (admin link
+  // without consent) — offer the same "Yes, disconnect" action.
+  async function sendTherapistUnavailable(chatId, lang, therapistId, offerDisconnect) {
+    const opts = offerDisconnect ? {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: t(lang, 'linkedDisconnectYes'), callback_data: `linked_disconnect_yes_${therapistId}` }
+        ]]
+      }
+    } : {};
+    await safeSend(chatId, t(lang, offerDisconnect ? 'linkedTherapistUnavailable' : 'therapistUnavailable'), opts);
+  }
+
   // T-18: Returns true if the user is allowed to proceed (not a connected
   // client OR consent_version is up-to-date). If the user is a connected
   // client whose consent_version < CONSENT_TEXT_VERSION, this triggers the
   // re-consent prompt and returns false. Callers should early-return when
   // false. `user` is optional — if omitted, fetched via checkExistingUser.
+  // Audit wave 3: a client LINKED to a therapist (e.g. by an admin) who never
+  // gave consent (consent_therapist_access = 0) gets the full consent prompt
+  // for that therapist (mode 'linked') — previously the only way out was
+  // /disconnect followed by /connect.
   async function requireConsentUpToDate(chatId, telegramId, lang, user) {
     try {
       let u = user;
       if (!u) u = await checkExistingUser(telegramId);
       if (!u) return true; // Not registered yet — let the normal flow handle it
       if (u.role !== 'client') return true; // Therapists/superadmin not gated
-      if (!u.consent_therapist_access || !u.therapist_id) return true; // Unconnected client — nothing to gate
-      const v = (u.consent_version === undefined || u.consent_version === null) ? 0 : u.consent_version;
-      if (v >= CONSENT_TEXT_VERSION) return true;
-      // Need re-consent. If a re-consent prompt is already in flight, just
-      // remind the user to complete it instead of spamming a new copy.
-      if (pendingConsents[telegramId] && pendingConsents[telegramId].mode === 'reconsent') {
+      if (!u.therapist_id) return true; // Unconnected client — nothing to gate
+      let mode;
+      if (!u.consent_therapist_access) {
+        mode = 'linked';
+      } else {
+        const v = (u.consent_version === undefined || u.consent_version === null) ? 0 : u.consent_version;
+        if (v >= CONSENT_TEXT_VERSION) return true;
+        mode = 'reconsent';
+      }
+      // If a prompt for the same purpose is already in flight, just remind
+      // the user to complete it instead of spamming a new copy.
+      const inFlight = pendingConsents[telegramId];
+      if (inFlight && inFlight.mode === mode && String(inFlight.therapistId) === String(u.therapist_id)) {
         try { await safeSend(chatId, t(lang, 'consentBlockedText')); } catch { /* ignore */ }
         return false;
       }
       // Look up therapist display name for the disclaimer header.
-      let therapistName = `Therapist #${u.therapist_id}`;
+      let therapistName = t(lang, 'therapistFallbackName')(u.therapist_id);
+      let therapistAvailable = true;
       try {
         const tres = await api.get(`/api/bot/therapist-display/${u.therapist_id}`);
         if (tres.data && tres.data.display_name) therapistName = tres.data.display_name;
+        if (tres.data && tres.data.available === false) therapistAvailable = false;
       } catch { /* fallback to ID label */ }
-      await sendConsentPrompt(chatId, telegramId, lang, u.therapist_id, therapistName, 'reconsent');
+      // A first consent to a blocked therapist would be refused by the
+      // backend (THERAPIST_UNAVAILABLE): say so and offer to disconnect
+      // instead of showing a prompt that cannot succeed.
+      if (mode === 'linked' && !therapistAvailable) {
+        await sendTherapistUnavailable(chatId, lang, u.therapist_id, true);
+        return false;
+      }
+      await sendConsentPrompt(chatId, telegramId, lang, u.therapist_id, therapistName, mode);
       return false;
     } catch (err) {
       console.error('requireConsentUpToDate error:', err.message);
@@ -679,7 +856,7 @@ if (!token || token === 'your-telegram-bot-token') {
         } else if ((entry.entry_type === 'voice' || entry.entry_type === 'video') && entry.transcription_status === 'pending') {
           preview = t(lang, 'transcribing');
         } else {
-          preview = entry.content ? entry.content.substring(0, 100) + (entry.content.length > 100 ? '...' : '') : '[no content]';
+          preview = entry.content ? entry.content.substring(0, 100) + (entry.content.length > 100 ? '...' : '') : t(lang, 'diaryNoContent');
         }
         text += `${i + 1}. ${typeIcon} ${date}\n${preview}\n\n`;
       });
@@ -746,6 +923,8 @@ if (!token || token === 'your-telegram-bot-token') {
 
   async function handleExercises(chatId, telegramId, lang) {
     try {
+      // Exercises come from the linked therapist: consent gate first.
+      if (!(await requireConsentUpToDate(chatId, telegramId, lang))) return;
       const result = await api.get(`/api/bot/exercises/${telegramId}`);
       const exercises = result.data.exercises;
 
@@ -758,9 +937,7 @@ if (!token || token === 'your-telegram-bot-token') {
       const inlineButtons = [];
 
       exercises.forEach((ex, i) => {
-        const title = lang === 'ru' ? (ex.title_ru || ex.title_en || 'Exercise') :
-                      lang === 'es' ? (ex.title_es || ex.title_en || 'Exercise') :
-                      (ex.title_en || 'Exercise');
+        const title = localizedField(ex, 'title', lang) || t(lang, 'exerciseFallbackTitle');
 
         let statusLabel;
         if (ex.status === 'completed') {
@@ -994,6 +1171,8 @@ if (!token || token === 'your-telegram-bot-token') {
 
   async function handleAssignments(chatId, telegramId, lang) {
     try {
+      // Assignments come from the linked therapist: consent gate first.
+      if (!(await requireConsentUpToDate(chatId, telegramId, lang))) return;
       const result = await api.get(`/api/bot/assignments/${telegramId}`);
       const assignments = (result.data && result.data.assignments) || [];
 
@@ -1012,7 +1191,7 @@ if (!token || token === 'your-telegram-bot-token') {
             : a.exercise.title_en)
           : null;
           // Prefer therapist-supplied title; fall back to library exercise title.
-        const displayTitle = (a.title && a.title.trim()) ? a.title : (exerciseTitle || `Assignment #${a.id}`);
+        const displayTitle = (a.title && a.title.trim()) ? a.title : (exerciseTitle || t(lang, 'assignmentFallbackTitle')(a.id));
         const freqLabel = t(lang, `assignmentFrequency_${a.report_frequency}`);
         text += `${i + 1}. *${mdInEntity(displayTitle)}*\n   ⏱ ${freqLabel}\n`;
         inlineButtons.push([{
@@ -1047,6 +1226,7 @@ if (!token || token === 'your-telegram-bot-token') {
     const explicitId = match && match[1] ? parseInt(match[1], 10) : null;
 
     try {
+      if (!(await requireConsentUpToDate(chatId, telegramId, lang))) return;
       const result = await api.get(`/api/bot/assignments/${telegramId}`);
       const assignments = (result.data && result.data.assignments) || [];
 
@@ -1077,7 +1257,7 @@ if (!token || token === 'your-telegram-bot-token') {
             : lang === 'uk' ? (a.exercise.title_uk || a.exercise.title_en)
             : a.exercise.title_en)
           : null;
-        const displayTitle = (a.title && a.title.trim()) ? a.title : (exerciseTitle || `Assignment #${a.id}`);
+        const displayTitle = (a.title && a.title.trim()) ? a.title : (exerciseTitle || t(lang, 'assignmentFallbackTitle')(a.id));
         text += `${i + 1}. *${mdInEntity(displayTitle)}*\n`;
         inlineButtons.push([{
           text: `${i + 1}. ${displayTitle}`,
@@ -1190,7 +1370,7 @@ if (!token || token === 'your-telegram-bot-token') {
       }
     } catch (error) {
       console.error('Settings command error:', error.message);
-      safeSend(chatId, '❌ Failed to load settings');
+      safeSend(chatId, t(lang, 'settingsLoadFailed'));
     }
   }
 
@@ -1306,7 +1486,7 @@ if (!token || token === 'your-telegram-bot-token') {
         });
       } catch (err) {
         console.error('Failed to update forward setting:', err.message);
-        answer({ text: '❌ Failed to update' });
+        answer({ text: t(lang, 'settingsUpdateFailed') });
       }
       return;
     }
@@ -1424,7 +1604,7 @@ if (!token || token === 'your-telegram-bot-token') {
             : lang === 'uk' ? (a.exercise.title_uk || a.exercise.title_en)
             : a.exercise.title_en)
           : null;
-        const displayTitle = (a.title && a.title.trim()) ? a.title : (exerciseTitle || `Assignment #${a.id}`);
+        const displayTitle = (a.title && a.title.trim()) ? a.title : (exerciseTitle || t(lang, 'assignmentFallbackTitle')(a.id));
         const freqLabel = t(lang, `assignmentFrequency_${a.report_frequency}`);
         const detailFn = t(lang, 'assignmentDetail');
         const body = detailFn(mdInEntity(displayTitle), escapeMd(a.description), freqLabel, escapeMd(a.deadline));
@@ -1497,11 +1677,8 @@ if (!token || token === 'your-telegram-bot-token') {
           return;
         }
 
-        const title = lang === 'ru' ? (exercise.title_ru || exercise.title_en || 'Exercise') :
-                      lang === 'es' ? (exercise.title_es || exercise.title_en || 'Exercise') :
-                      (exercise.title_en || 'Exercise');
-        const instructions = lang === 'ru' ? (exercise.instructions_ru || exercise.instructions_en) :
-                             (exercise.instructions_en || '');
+        const title = localizedField(exercise, 'title', lang) || t(lang, 'exerciseFallbackTitle');
+        const instructions = localizedField(exercise, 'instructions', lang);
 
         const detailMsg = t(lang, 'exerciseDetail');
         safeSend(chatId, detailMsg(mdInEntity(title), escapeMd(exercise.category), escapeMd(instructions)), {
@@ -1600,6 +1777,19 @@ if (!token || token === 'your-telegram-bot-token') {
     // - consent_chk_<tid>_<point>: toggle one of the 6 checkboxes
     // - consent_continue_<tid>: submit consent if all 6 are ticked
     // - consent_cancel_<tid>: cancel and clear pending state
+    // M22: when the in-memory prompt state is gone (bot restart, 30-min TTL)
+    // or belongs to another prompt, the press is answered with consentStale
+    // ("send /start again") instead of being silently ignored.
+    async function replyConsentStale(lang) {
+      try {
+        await bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
+          chat_id: chatId, message_id: callbackQuery.message.message_id
+        });
+      } catch { /* keyboard edit is best-effort */ }
+      answer({ text: t(lang, 'consentStale'), show_alert: true });
+      await safeSend(chatId, t(lang, 'consentStale'));
+    }
+
     if (data.startsWith('consent_chk_')) {
       const lang = await getUserLang(telegramId);
       // Parse: consent_chk_<therapistId>_<point>
@@ -1617,8 +1807,7 @@ if (!token || token === 'your-telegram-bot-token') {
       }
       const state = pendingConsents[telegramId];
       if (!state || String(state.therapistId) !== String(therapistId)) {
-        // Stale callback from a previous prompt — silently ignore.
-        answer();
+        await replyConsentStale(lang);
         return;
       }
       state.checked[point] = !state.checked[point];
@@ -1639,7 +1828,7 @@ if (!token || token === 'your-telegram-bot-token') {
       const therapistId = data.slice('consent_continue_'.length);
       const state = pendingConsents[telegramId];
       if (!state || String(state.therapistId) !== String(therapistId)) {
-        answer();
+        await replyConsentStale(lang);
         return;
       }
       const allChecked = CONSENT_POINTS.every(pt => !!state.checked[pt]);
@@ -1651,6 +1840,8 @@ if (!token || token === 'your-telegram-bot-token') {
       const body = buildConsentBodyText(lang, state.therapistName);
       const textHash = computeConsentHash(body);
       try {
+        // 'linked' (admin link without consent) is a first consent for the
+        // therapist the client is already linked to: backend mode 'connect'.
         const result = await api.post('/api/bot/consent', {
           telegram_id: String(telegramId),
           therapist_id: parseInt(therapistId, 10),
@@ -1678,6 +1869,25 @@ if (!token || token === 'your-telegram-bot-token') {
           safeSend(chatId, t(lang, 'connectionCancelled'));
         }
       } catch (error) {
+        // M7: the backend only links to the therapist from this client's own
+        // /connect (or the existing link); an expired lookup is "start again".
+        if (error.response && error.response.status === 403 && error.response.data && error.response.data.code === 'CONSENT_NOT_PENDING') {
+          delete pendingConsents[telegramId];
+          await replyConsentStale(lang);
+          return;
+        }
+        // The therapist's account was blocked after the prompt was shown.
+        if (error.response && error.response.status === 403 && error.response.data && error.response.data.code === 'THERAPIST_UNAVAILABLE') {
+          delete pendingConsents[telegramId];
+          try {
+            await bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
+              chat_id: chatId, message_id: callbackQuery.message.message_id
+            });
+          } catch { /* ignore */ }
+          await sendTherapistUnavailable(chatId, lang, therapistId, state.mode === 'linked');
+          answer();
+          return;
+        }
         const errorMsg = error.response?.data?.error
           || (isReconsent ? t(lang, 'consentReconsentFailed') : t(lang, 'failedConsent'));
         safeSend(chatId, `❌ ${errorMsg}`);
@@ -1690,7 +1900,36 @@ if (!token || token === 'your-telegram-bot-token') {
       const lang = await getUserLang(telegramId);
       const therapistId = data.slice('consent_cancel_'.length);
       const state = pendingConsents[telegramId];
-      const isReconsent = state && state.mode === 'reconsent';
+      if (!state || String(state.therapistId) !== String(therapistId)) {
+        // Unknown prompt (restart / TTL) or an older prompt for another
+        // therapist: nothing was linked by it. The CURRENT prompt's state (if
+        // any) belongs to another therapist and is left alone.
+        await replyConsentStale(lang);
+        return;
+      }
+      try {
+        await bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
+          chat_id: chatId, message_id: callbackQuery.message.message_id
+        });
+      } catch { /* ignore */ }
+
+      if (state.mode === 'linked') {
+        // Admin link without consent: Cancel means "I don't want this
+        // therapist". Ask before unlinking; only "Yes, disconnect" calls
+        // revoke-consent. The prompt state stays so "Back" can reopen it.
+        await safeSend(chatId, t(lang, 'linkedDisconnectConfirm')(mdInEntity(state.therapistName)), {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [[
+              { text: t(lang, 'linkedDisconnectYes'), callback_data: `linked_disconnect_yes_${therapistId}` },
+              { text: t(lang, 'linkedDisconnectBack'), callback_data: `linked_disconnect_back_${therapistId}` }
+            ]]
+          }
+        });
+        answer();
+        return;
+      }
+
       delete pendingConsents[telegramId];
       // Record the decline in audit log via the existing endpoint.
       try {
@@ -1701,53 +1940,82 @@ if (!token || token === 'your-telegram-bot-token') {
           consent_version: CONSENT_TEXT_VERSION
         });
       } catch { /* best-effort */ }
-      try {
-        await bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
-          chat_id: chatId, message_id: callbackQuery.message.message_id
-        });
-      } catch { /* ignore */ }
-      safeSend(chatId, t(lang, 'connectionCancelled'));
-      // For re-consent, the user has effectively refused the new policy.
-      // We do NOT auto-disconnect — they can /disconnect manually if they
-      // want. But every subsequent action will keep prompting them via the
-      // requireConsentUpToDate gate until they agree or disconnect.
-      if (isReconsent) {
-        safeSend(chatId, t(lang, 'consentBlockedText'));
+      if (state.mode === 'reconsent') {
+        // New consent version declined: the link stays, the client stays
+        // gated (requireConsentUpToDate re-prompts on the next diary or
+        // exercise action) and can /disconnect if they want to leave.
+        safeSend(chatId, t(lang, 'consentReconsentDeclined'));
+      } else {
+        safeSend(chatId, t(lang, 'connectionCancelled'));
       }
       answer();
       return;
     }
 
-    // Backward-compat: legacy single-button consent callbacks (consent_yes_/
-    // consent_no_) from messages sent before the bot was upgraded to the
-    // T-18 multi-checkbox flow. New prompts use consent_chk_/consent_continue_/
-    // consent_cancel_.
-    if (data.startsWith('consent_yes_') || data.startsWith('consent_no_')) {
-      const consent = data.startsWith('consent_yes_');
-      const therapistId = data.split('_').pop();
+    // Admin-linked consent declined -> confirmation answers.
+    if (data.startsWith('linked_disconnect_back_')) {
       const lang = await getUserLang(telegramId);
-
+      const therapistId = data.slice('linked_disconnect_back_'.length);
       try {
-        const result = await api.post('/api/bot/consent', {
-          telegram_id: String(telegramId),
-          therapist_id: parseInt(therapistId),
-          consent: consent,
-          consent_version: 0
+        await bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
+          chat_id: chatId, message_id: callbackQuery.message.message_id
         });
-
-        if (consent && result.data.linked) {
-          safeSend(chatId, t(lang, 'connected'), {
-            reply_markup: getClientKeyboard(lang)
-          });
-        } else {
-          safeSend(chatId, t(lang, 'connectionCancelled'));
-        }
-      } catch (error) {
-        const errorMsg = error.response?.data?.error || t(lang, 'failedConsent');
-        safeSend(chatId, `❌ ${errorMsg}`);
+      } catch { /* ignore */ }
+      const user = await checkExistingUser(telegramId).catch(() => null);
+      if (!user || String(user.therapist_id) !== String(therapistId) || user.consent_therapist_access) {
+        await replyConsentStale(lang);
+        return;
       }
-
+      // Reopen the consent prompt for the linked therapist.
+      delete pendingConsents[telegramId];
+      await requireConsentUpToDate(chatId, telegramId, lang, user);
       answer();
+      return;
+    }
+
+    if (data.startsWith('linked_disconnect_yes_')) {
+      const lang = await getUserLang(telegramId);
+      const therapistId = data.slice('linked_disconnect_yes_'.length);
+      try {
+        await bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
+          chat_id: chatId, message_id: callbackQuery.message.message_id
+        });
+      } catch { /* ignore */ }
+      // Works after a restart too: the decision is checked against the
+      // backend, not in-memory state. Only a link to THIS therapist that is
+      // still waiting for consent is removed.
+      const user = await checkExistingUser(telegramId).catch(() => null);
+      if (!user || user.role !== 'client' || String(user.therapist_id) !== String(therapistId) || user.consent_therapist_access) {
+        await replyConsentStale(lang);
+        return;
+      }
+      const state = pendingConsents[telegramId];
+      if (!state || String(state.therapistId) === String(therapistId)) delete pendingConsents[telegramId];
+      try {
+        await api.post('/api/bot/consent', {
+          telegram_id: String(telegramId),
+          therapist_id: parseInt(therapistId, 10),
+          consent: false,
+          consent_version: CONSENT_TEXT_VERSION
+        });
+      } catch { /* best-effort audit */ }
+      try {
+        await api.post('/api/bot/revoke-consent', { telegram_id: String(telegramId) });
+        safeSend(chatId, t(lang, 'consentDeclinedUnlinked'));
+      } catch (error) {
+        safeSend(chatId, `❌ ${t(lang, 'disconnectFailed')}`);
+      }
+      answer();
+      return;
+    }
+
+    // Legacy single-button consent callbacks (consent_yes_/consent_no_) from
+    // messages sent before the T-18 multi-checkbox flow. Audit M7: they are no
+    // longer honoured (consent_yes_<id> could link to any therapist id) —
+    // the client is asked to start again, which shows the current flow.
+    if (data.startsWith('consent_yes_') || data.startsWith('consent_no_')) {
+      const lang = await getUserLang(telegramId);
+      await replyConsentStale(lang);
       return;
     }
 
@@ -1803,7 +2071,7 @@ if (!token || token === 'your-telegram-bot-token') {
         }
       } catch (err) {
         console.error(`[SessionReminder] ${action} session_id=${sessionId} failed:`, err.message);
-        const errMsg = (err.response && err.response.data && err.response.data.error) || 'Failed to process. Please try again.';
+        const errMsg = (err.response && err.response.data && err.response.data.error) || t(lang, 'actionFailedRetry');
         safeSend(chatId, '❌ ' + errMsg);
       }
 
@@ -1848,7 +2116,7 @@ if (!token || token === 'your-telegram-bot-token') {
         }
       } catch (err) {
         console.error(`[SessionReminder] optin ${data} failed:`, err.message);
-        const errMsg = (err.response && err.response.data && err.response.data.error) || 'Failed to process. Please try again.';
+        const errMsg = (err.response && err.response.data && err.response.data.error) || t(lang, 'actionFailedRetry');
         safeSend(chatId, '❌ ' + errMsg);
       }
 
@@ -2065,7 +2333,9 @@ if (!token || token === 'your-telegram-bot-token') {
       }
 
       const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'UTC' });
-      const caption = `📨 ${forwardInfo.client_name} | ${entryType === 'video' ? 'Video' : 'Voice'} diary | ${timestamp} UTC`;
+      // Caption in the THERAPIST's language (getUserLang takes a Telegram id).
+      const therapistLang = await getUserLang(forwardInfo.therapist_telegram_id);
+      const caption = t(therapistLang, entryType === 'video' ? 'forwardCaptionVideo' : 'forwardCaptionVoice')(forwardInfo.client_name, timestamp);
 
       if (entryType === 'voice') {
         await bot.sendVoice(forwardInfo.therapist_telegram_id, fileId, { caption });
@@ -2100,7 +2370,12 @@ if (!token || token === 'your-telegram-bot-token') {
         }
         // Download the file bytes
         const fileUrl = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
-        const response = await axios.get(fileUrl, { responseType: 'arraybuffer', timeout: 30000 });
+        // M24: never buffer more than Telegram's 20 MB bot download limit.
+        const response = await axios.get(fileUrl, {
+          responseType: 'arraybuffer',
+          timeout: 30000,
+          maxContentLength: MAX_TELEGRAM_DOWNLOAD_BYTES
+        });
         const buffer = Buffer.from(response.data);
         console.log(`Downloaded Telegram file: ${buffer.length} bytes (attempt ${attempt}/${maxRetries})`);
         return {
@@ -2119,98 +2394,36 @@ if (!token || token === 'your-telegram-bot-token') {
     return null;
   }
 
-  // Handle voice messages - save as diary entries (clients only)
-  onEvent('voice', async (msg) => {
-    const chatId = msg.chat.id;
-    const telegramId = msg.from.id;
-    const lang = await getUserLang(telegramId);
-
-    try {
-      // Check user role - only clients can create diary entries
-      const user = await checkExistingUser(telegramId);
-      if (user && user.role !== 'client') {
-        safeSend(chatId, t(lang, 'therapistVoiceText'));
-        return;
-      }
-      // T-18: Block diary intake if the client's consent version is outdated.
-      // requireConsentUpToDate() sends the re-consent prompt + returns false.
-      if (!(await requireConsentUpToDate(chatId, telegramId, lang, user))) return;
-
-      // Get file info from Telegram
-      const fileId = msg.voice.file_id;
-      const duration = msg.voice.duration;
-
-      // Download actual voice file from Telegram servers
-      let fileData = null;
-      let fileExt = '.ogg'; // Telegram voice messages are always .ogg (opus)
-      try {
-        const downloaded = await downloadTelegramFile(fileId);
-        if (downloaded) {
-          fileData = downloaded.buffer.toString('base64');
-          console.log(`Downloaded voice file: ${downloaded.buffer.length} bytes`);
-        } else {
-          console.warn('Voice file download failed for file_id:', fileId, '- entry will be saved without audio');
-        }
-      } catch (dlErr) {
-        console.error('Voice file download failed, saving file_ref only:', dlErr.message);
-      }
-
-      // T-04: If the client is in "writing report" mode, route the voice
-      // message to the assignment-report endpoint instead of saving as a
-      // diary entry. The server will run the same Whisper pipeline.
-      if (activeReports[telegramId]) {
-        const assignmentId = activeReports[telegramId];
-        delete activeReports[telegramId];
-        try {
-          await api.post(`/api/bot/assignments/${assignmentId}/reports`, {
-            telegram_id: String(telegramId),
-            report_type: 'voice',
-            content: `[Voice message, duration: ${duration}s]`,
-            file_ref: fileId,
-            file_data: fileData,
-            file_ext: fileExt,
-          });
-          safeSend(chatId, t(lang, 'reportVoiceSaved'));
-          return;
-        } catch (error) {
-          const errorMsg = error.response?.data?.error || t(lang, 'reportFailed');
-          safeSend(chatId, `❌ ${errorMsg}`);
-          return;
-        }
-      }
-
-      // Submit voice diary entry via backend API (auto-transcription is triggered server-side)
-      const result = await api.post('/api/bot/diary', {
-        telegram_id: String(telegramId),
-        entry_type: 'voice',
-        content: `[Voice message, duration: ${duration}s]`,
-        file_ref: fileId,
-        file_data: fileData,
-        file_ext: fileExt
-      });
-
-      // Check if audio file was stored successfully
-      if (result.data && result.data.entry && !result.data.entry.has_audio_file) {
-        console.warn(`Audio file was not stored for voice entry ${result.data.entry.id}`);
-      }
-
-      // Notify user that transcription is in progress + offer T-12 "Make private"
-      const voiceEntryId = result.data && result.data.entry ? result.data.entry.id : null;
-      const voiceKb = makePrivateKeyboard(voiceEntryId, lang);
-      safeSend(chatId, t(lang, 'voiceSavedTranscribing'), voiceKb ? { reply_markup: voiceKb } : {});
-
-      // Forward voice to therapist if enabled
-      if (result.data && result.data.forward_voice) {
-        forwardVoiceToTherapist(result.data.forward_voice, fileId, 'voice', chatId);
-      }
-    } catch (error) {
-      const errorMsg = error.response?.data?.error || t(lang, 'failedVoiceDiary');
-      safeSend(chatId, `❌ ${errorMsg}`);
+  // Voice / video / video-note diary entries (clients only). One shared
+  // handler; per-kind settings below.
+  // Audit M24:
+  //  - file_size is checked BEFORE downloading (Telegram bots cannot fetch
+  //    files over 20 MB) -> localized mediaTooLarge;
+  //  - a failed download is reported as a failure (it used to be saved as an
+  //    audio-less entry and answered "saved, transcribing");
+  //  - a backend size rejection (413 / *_TOO_LARGE code) -> mediaTooLarge;
+  //  - at most MAX_CONCURRENT_MEDIA downloads+uploads run at once.
+  const mediaSlots = createSemaphore(MAX_CONCURRENT_MEDIA);
+  const MEDIA_KINDS = {
+    voice: {
+      field: 'voice', entryType: 'voice', defaultExt: '.ogg', extFromPath: false,
+      label: 'Voice message', therapistKey: 'therapistVoiceText',
+      savedKey: 'voiceSavedTranscribing', failedKey: 'failedVoiceDiary', reportable: true
+    },
+    video: {
+      field: 'video', entryType: 'video', defaultExt: '.mp4', extFromPath: true,
+      label: 'Video message', therapistKey: 'therapistVideoText',
+      savedKey: 'videoSavedTranscribing', failedKey: 'failedVideoDiary', reportable: false
+    },
+    video_note: {
+      field: 'video_note', entryType: 'video', defaultExt: '.mp4', extFromPath: false,
+      label: 'Video note', therapistKey: 'therapistVideoText',
+      savedKey: 'videoSavedTranscribing', failedKey: 'failedVideoDiary', reportable: false
     }
-  });
+  };
 
-  // Handle video messages - save as diary entries (clients only)
-  onEvent('video', async (msg) => {
+  async function handleMediaDiary(msg, kindName) {
+    const kind = MEDIA_KINDS[kindName];
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const lang = await getUserLang(telegramId);
@@ -2219,130 +2432,109 @@ if (!token || token === 'your-telegram-bot-token') {
       // Check user role - only clients can create diary entries
       const user = await checkExistingUser(telegramId);
       if (user && user.role !== 'client') {
-        safeSend(chatId, t(lang, 'therapistVideoText'));
+        safeSend(chatId, t(lang, kind.therapistKey));
         return;
       }
-      // T-18: Re-consent gate.
+      // T-18: Block diary intake if the client's consent is outdated/missing.
+      // requireConsentUpToDate() sends the consent prompt + returns false.
       if (!(await requireConsentUpToDate(chatId, telegramId, lang, user))) return;
 
-      // Get file info from Telegram
-      const fileId = msg.video.file_id;
-      const duration = msg.video.duration;
+      const media = msg[kind.field] || {};
+      const fileId = media.file_id;
+      const duration = media.duration;
 
-      // Download actual video file from Telegram servers
-      let fileData = null;
-      let fileExt = '.mp4'; // Telegram video messages are typically .mp4
-      try {
+      if (isFileTooLarge(media.file_size)) {
+        console.warn(`[media] ${kindName} from ${telegramId} rejected before download: ${media.file_size} bytes`);
+        safeSend(chatId, t(lang, 'mediaTooLarge'));
+        return;
+      }
+
+      await mediaSlots.run(async () => {
         const downloaded = await downloadTelegramFile(fileId);
-        if (downloaded) {
-          fileData = downloaded.buffer.toString('base64');
-          // Determine extension from file path
-          if (downloaded.filePath) {
-            const ext = downloaded.filePath.split('.').pop();
-            if (ext && ext.length <= 5) fileExt = '.' + ext;
+        if (!downloaded || !downloaded.buffer) {
+          console.warn(`[media] ${kindName} download failed for file_id ${fileId} - nothing saved`);
+          safeSend(chatId, `❌ ${t(lang, 'mediaDownloadFailed')}`);
+          return;
+        }
+        if (isFileTooLarge(downloaded.buffer.length)) {
+          safeSend(chatId, t(lang, 'mediaTooLarge'));
+          return;
+        }
+        console.log(`Downloaded ${kindName} file: ${downloaded.buffer.length} bytes`);
+
+        let fileExt = kind.defaultExt;
+        if (kind.extFromPath && downloaded.filePath) {
+          const ext = downloaded.filePath.split('.').pop();
+          if (ext && ext.length <= 5) fileExt = '.' + ext;
+        }
+        const fileData = downloaded.buffer.toString('base64');
+        const content = `[${kind.label}, duration: ${duration}s]`;
+
+        // T-04: If the client is in "writing report" mode, route the voice
+        // message to the assignment-report endpoint instead of saving as a
+        // diary entry. The server will run the same Whisper pipeline.
+        if (kind.reportable && activeReports[telegramId]) {
+          const assignmentId = activeReports[telegramId];
+          delete activeReports[telegramId];
+          try {
+            await api.post(`/api/bot/assignments/${assignmentId}/reports`, {
+              telegram_id: String(telegramId),
+              report_type: 'voice',
+              content,
+              file_ref: fileId,
+              file_data: fileData,
+              file_ext: fileExt,
+            });
+            safeSend(chatId, t(lang, 'reportVoiceSaved'));
+          } catch (error) {
+            if (isPayloadTooLargeError(error)) {
+              safeSend(chatId, t(lang, 'mediaTooLarge'));
+              return;
+            }
+            const errorMsg = error.response?.data?.error || t(lang, 'reportFailed');
+            safeSend(chatId, `❌ ${errorMsg}`);
           }
-          console.log(`Downloaded video file: ${downloaded.buffer.length} bytes`);
-        } else {
-          console.warn('Video file download failed for file_id:', fileId, '- entry will be saved without audio');
+          return;
         }
-      } catch (dlErr) {
-        console.error('Video file download failed, saving file_ref only:', dlErr.message);
-      }
 
-      // Submit video diary entry via backend API (auto-transcription is triggered server-side)
-      const result = await api.post('/api/bot/diary', {
-        telegram_id: String(telegramId),
-        entry_type: 'video',
-        content: `[Video message, duration: ${duration}s]`,
-        file_ref: fileId,
-        file_data: fileData,
-        file_ext: fileExt
+        // Submit diary entry via backend API (auto-transcription is triggered server-side)
+        const result = await api.post('/api/bot/diary', {
+          telegram_id: String(telegramId),
+          entry_type: kind.entryType,
+          content,
+          file_ref: fileId,
+          file_data: fileData,
+          file_ext: fileExt
+        });
+
+        // Check if audio file was stored successfully
+        if (result.data && result.data.entry && !result.data.entry.has_audio_file) {
+          console.warn(`Audio file was not stored for ${kindName} entry ${result.data.entry.id}`);
+        }
+
+        // Notify user that transcription is in progress + offer T-12 "Make private"
+        const entryId = result.data && result.data.entry ? result.data.entry.id : null;
+        const kb = makePrivateKeyboard(entryId, lang);
+        safeSend(chatId, t(lang, kind.savedKey), kb ? { reply_markup: kb } : {});
+
+        // Forward to therapist if enabled
+        if (result.data && result.data.forward_voice) {
+          forwardVoiceToTherapist(result.data.forward_voice, fileId, kind.entryType, chatId);
+        }
       });
-
-      // Check if audio file was stored successfully
-      if (result.data && result.data.entry && !result.data.entry.has_audio_file) {
-        console.warn(`Audio file was not stored for video entry ${result.data.entry.id}`);
-      }
-
-      // Notify user that transcription is in progress + offer T-12 "Make private"
-      const videoEntryId = result.data && result.data.entry ? result.data.entry.id : null;
-      const videoKb = makePrivateKeyboard(videoEntryId, lang);
-      safeSend(chatId, t(lang, 'videoSavedTranscribing'), videoKb ? { reply_markup: videoKb } : {});
-
-      // Forward video to therapist if enabled
-      if (result.data && result.data.forward_voice) {
-        forwardVoiceToTherapist(result.data.forward_voice, fileId, 'video', chatId);
-      }
     } catch (error) {
-      const errorMsg = error.response?.data?.error || t(lang, 'failedVideoDiary');
-      safeSend(chatId, `❌ ${errorMsg}`);
-    }
-  });
-
-  // Handle video note (round video) messages - save as diary entries (clients only)
-  onEvent('video_note', async (msg) => {
-    const chatId = msg.chat.id;
-    const telegramId = msg.from.id;
-    const lang = await getUserLang(telegramId);
-
-    try {
-      // Check user role - only clients can create diary entries
-      const user = await checkExistingUser(telegramId);
-      if (user && user.role !== 'client') {
-        safeSend(chatId, t(lang, 'therapistVideoText'));
+      if (isPayloadTooLargeError(error)) {
+        safeSend(chatId, t(lang, 'mediaTooLarge'));
         return;
       }
-      // T-18: Re-consent gate.
-      if (!(await requireConsentUpToDate(chatId, telegramId, lang, user))) return;
-
-      // Get file info from Telegram
-      const fileId = msg.video_note.file_id;
-      const duration = msg.video_note.duration;
-
-      // Download actual video note file from Telegram servers
-      let fileData = null;
-      let fileExt = '.mp4'; // Telegram video notes are .mp4
-      try {
-        const downloaded = await downloadTelegramFile(fileId);
-        if (downloaded) {
-          fileData = downloaded.buffer.toString('base64');
-          console.log(`Downloaded video note: ${downloaded.buffer.length} bytes`);
-        } else {
-          console.warn('Video note download failed for file_id:', fileId, '- entry will be saved without audio');
-        }
-      } catch (dlErr) {
-        console.error('Video note download failed, saving file_ref only:', dlErr.message);
-      }
-
-      // Submit video diary entry via backend API (auto-transcription is triggered server-side)
-      const result = await api.post('/api/bot/diary', {
-        telegram_id: String(telegramId),
-        entry_type: 'video',
-        content: `[Video note, duration: ${duration}s]`,
-        file_ref: fileId,
-        file_data: fileData,
-        file_ext: fileExt
-      });
-
-      // Check if audio file was stored successfully
-      if (result.data && result.data.entry && !result.data.entry.has_audio_file) {
-        console.warn(`Audio file was not stored for video note entry ${result.data.entry.id}`);
-      }
-
-      // Notify user that transcription is in progress + offer T-12 "Make private"
-      const noteEntryId = result.data && result.data.entry ? result.data.entry.id : null;
-      const noteKb = makePrivateKeyboard(noteEntryId, lang);
-      safeSend(chatId, t(lang, 'videoSavedTranscribing'), noteKb ? { reply_markup: noteKb } : {});
-
-      // Forward video note to therapist if enabled
-      if (result.data && result.data.forward_voice) {
-        forwardVoiceToTherapist(result.data.forward_voice, fileId, 'video', chatId);
-      }
-    } catch (error) {
-      const errorMsg = error.response?.data?.error || t(lang, 'failedVideoDiary');
+      const errorMsg = error.response?.data?.error || t(lang, kind.failedKey);
       safeSend(chatId, `❌ ${errorMsg}`);
     }
-  });
+  }
+
+  onEvent('voice', (msg) => handleMediaDiary(msg, 'voice'));
+  onEvent('video', (msg) => handleMediaDiary(msg, 'video'));
+  onEvent('video_note', (msg) => handleMediaDiary(msg, 'video_note'));
 
   // T-21: Handle photo messages (feature #379)
   // ------------------------------------------
@@ -2505,9 +2697,19 @@ if (!token || token === 'your-telegram-bot-token') {
       }
     }
 
-    // Check if this is an email input or skip during registration
+    // Check if this is an email input or skip during registration.
+    // Audit M8: the address is only PENDING on the backend until the 6-digit
+    // code mailed to it is typed back here (pendingEmailCodes step below).
+    const emailSkipKeyboard = {
+      reply_markup: {
+        keyboard: [[{ text: t(lang, 'shareEmailSkip') }]],
+        resize_keyboard: true,
+        one_time_keyboard: true
+      }
+    };
+    const emailSkipTexts = ['en', 'ru', 'es', 'uk'].map(l => t(l, 'shareEmailSkip'));
+
     if (pendingEmailInputs[telegramId]) {
-      const emailSkipTexts = ['en', 'ru', 'es', 'uk'].map(l => t(l, 'shareEmailSkip'));
       if (emailSkipTexts.includes(msg.text)) {
         delete pendingEmailInputs[telegramId];
         await safeSend(chatId, t(lang, 'shareEmailSkipped'));
@@ -2519,36 +2721,72 @@ if (!token || token === 'your-telegram-bot-token') {
       const emailText = msg.text.trim().toLowerCase();
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(emailText)) {
-        safeSend(chatId, t(lang, 'shareEmailInvalid'), {
-          reply_markup: {
-            keyboard: [[{ text: t(lang, 'shareEmailSkip') }]],
-            resize_keyboard: true,
-            one_time_keyboard: true
-          }
-        });
+        safeSend(chatId, t(lang, 'shareEmailInvalid'), emailSkipKeyboard);
         return;
       }
-      // Try to save email
+      // Ask the backend to mail a confirmation code to the address
       try {
-        await api.put(`/api/bot/profile/${telegramId}`, { email: emailText });
+        const res = await api.put(`/api/bot/profile/${telegramId}`, { email: emailText });
         delete pendingEmailInputs[telegramId];
-        await safeSend(chatId, t(lang, 'shareEmailSaved'));
-        // Proceed to other info step
-        sendOtherInfoPrompt(chatId, telegramId, lang);
+        pendingEmailCodes[telegramId] = lang;
+        const ttl = (res.data && res.data.ttl_min) || 15;
+        safeSend(chatId, t(lang, 'shareEmailCodeSent')(emailText, ttl), emailSkipKeyboard);
       } catch (error) {
-        if (error.response && error.response.status === 409) {
-          safeSend(chatId, t(lang, 'shareEmailTaken'), {
-            reply_markup: {
-              keyboard: [[{ text: t(lang, 'shareEmailSkip') }]],
-              resize_keyboard: true,
-              one_time_keyboard: true
-            }
-          });
+        const status = error.response && error.response.status;
+        if (status === 400) {
+          safeSend(chatId, t(lang, 'shareEmailInvalid'), emailSkipKeyboard);
+        } else if (status === 429) {
+          delete pendingEmailInputs[telegramId];
+          await safeSend(chatId, t(lang, 'shareEmailCodeRateLimited'));
+          sendOtherInfoPrompt(chatId, telegramId, lang);
         } else {
           console.error('Failed to save email:', error.message);
           delete pendingEmailInputs[telegramId];
           await safeSend(chatId, t(lang, 'profileSaveFailed'));
           // Still proceed to other info step
+          sendOtherInfoPrompt(chatId, telegramId, lang);
+        }
+      }
+      return;
+    }
+
+    // M8: waiting for the 6-digit code from the confirmation email
+    if (pendingEmailCodes[telegramId]) {
+      if (emailSkipTexts.includes(msg.text)) {
+        delete pendingEmailCodes[telegramId];
+        await safeSend(chatId, t(lang, 'shareEmailSkipped'));
+        sendOtherInfoPrompt(chatId, telegramId, lang);
+        return;
+      }
+      const codeText = msg.text.trim();
+      if (!/^\d{6}$/.test(codeText)) {
+        safeSend(chatId, t(lang, 'shareEmailCodeReminder'), emailSkipKeyboard);
+        return;
+      }
+      try {
+        await api.post(`/api/bot/profile/${telegramId}/confirm-email`, {
+          telegram_id: String(telegramId),
+          code: codeText
+        });
+        delete pendingEmailCodes[telegramId];
+        await safeSend(chatId, t(lang, 'shareEmailSaved'));
+        sendOtherInfoPrompt(chatId, telegramId, lang);
+      } catch (error) {
+        const data = (error.response && error.response.data) || {};
+        if (data.code === 'CODE_INVALID') {
+          safeSend(chatId, t(lang, 'shareEmailCodeInvalid')(data.attempts_left), emailSkipKeyboard);
+        } else if (data.code === 'EMAIL_TAKEN') {
+          delete pendingEmailCodes[telegramId];
+          pendingEmailInputs[telegramId] = lang;
+          safeSend(chatId, t(lang, 'shareEmailTaken'), emailSkipKeyboard);
+        } else if (data.code === 'CODE_EXPIRED' || data.code === 'CODE_ATTEMPTS_EXCEEDED') {
+          delete pendingEmailCodes[telegramId];
+          pendingEmailInputs[telegramId] = lang;
+          safeSend(chatId, t(lang, 'shareEmailCodeExpired'), emailSkipKeyboard);
+        } else {
+          console.error('Failed to confirm email:', error.message);
+          delete pendingEmailCodes[telegramId];
+          await safeSend(chatId, t(lang, 'profileSaveFailed'));
           sendOtherInfoPrompt(chatId, telegramId, lang);
         }
       }
@@ -2569,7 +2807,7 @@ if (!token || token === 'your-telegram-bot-token') {
       try {
         const otherInfoText = msg.text.trim();
         if (otherInfoText.length > 1000) {
-          safeSend(chatId, '❌ Text too long (max 1000 characters). Please try again:', {
+          safeSend(chatId, t(lang, 'otherInfoTooLong'), {
             reply_markup: {
               keyboard: [[{ text: t(lang, 'shareOtherInfoSkip') }]],
               resize_keyboard: true,
@@ -2683,6 +2921,12 @@ if (!token || token === 'your-telegram-bot-token') {
           return;
         } catch (error) {
           delete activeExercises[telegramId];
+          // M23: consent revoked / moved to another therapist since the
+          // exercise was sent — the backend stored and forwarded nothing.
+          if (error.response && error.response.data && error.response.data.code === 'CONSENT_REVOKED') {
+            safeSend(chatId, t(lang, 'exerciseConsentRevoked'));
+            return;
+          }
           const errorMsg = error.response?.data?.error || t(lang, 'exerciseCompleteFailed');
           safeSend(chatId, `❌ ${errorMsg}`);
           return;
@@ -2754,6 +2998,40 @@ if (!token || token === 'your-telegram-bot-token') {
     });
   });
 
+  // === Heartbeat for the container healthcheck ===
+  // Every 30 s, while polling is healthy, rewrite HEARTBEAT_FILE
+  // (BOT_HEARTBEAT_FILE, default /tmp/bot-heartbeat). "Healthy" = polling is
+  // on and a getUpdates long-poll (10 s timeout) succeeded within the last
+  // 90 s (node-telegram-bot-api stamps _polling._lastUpdate on every
+  // successful getUpdates). A stale file means the bot is stuck or cannot
+  // reach Telegram; the healthcheck only compares the file's mtime.
+  const HEARTBEAT_INTERVAL_MS = 30000;
+  const HEARTBEAT_MAX_POLL_AGE_MS = 90000;
+  let heartbeatErrorLogged = false;
+  function pollingHealthy() {
+    if (shuttingDown) return false;
+    const poller = bot._polling;
+    const lastUpdate = poller && typeof poller._lastUpdate === 'number' ? poller._lastUpdate : null;
+    if (lastUpdate !== null) {
+      return lastUpdate > 0 && (Date.now() - lastUpdate) < HEARTBEAT_MAX_POLL_AGE_MS;
+    }
+    return typeof bot.isPolling === 'function' ? bot.isPolling() : false;
+  }
+  function heartbeatTick() {
+    if (!pollingHealthy()) return;
+    try {
+      writeHeartbeat(HEARTBEAT_FILE);
+      heartbeatErrorLogged = false;
+    } catch (err) {
+      if (!heartbeatErrorLogged) {
+        console.warn(`[bot] heartbeat write to ${HEARTBEAT_FILE} failed:`, redact(err && err.message));
+        heartbeatErrorLogged = true;
+      }
+    }
+  }
+  setTimeout(heartbeatTick, 15000).unref();
+  setInterval(heartbeatTick, HEARTBEAT_INTERVAL_MS).unref();
+
   console.log('PR-TOP Telegram Bot is running.');
 }
 
@@ -2790,4 +3068,9 @@ async function checkExistingUser(telegramId) {
 }
 
 // Export for testing
-module.exports = { registerUser, checkExistingUser, api, escapeMd, mdInEntity, stripMd, commandRegex, redact };
+module.exports = {
+  registerUser, checkExistingUser, api, escapeMd, mdInEntity, stripMd, commandRegex, redact,
+  // Audit wave 3 (track N) helpers, exported for unit tests
+  createTtlState, sweepAllStates, isFileTooLarge, isPayloadTooLargeError, createSemaphore,
+  localizedField, buildMenuCommands, writeHeartbeat, HEARTBEAT_FILE, MAX_TELEGRAM_DOWNLOAD_BYTES
+};

@@ -186,6 +186,19 @@ Yes. The email-code method and password sign-in are both available on the same a
 
 Both methods work simultaneously. You can use whichever is more convenient.
 
+### Password sign-in pauses after too many wrong passwords
+
+To stop password guessing, PR-TOP counts wrong passwords per account. After **10 wrong passwords within 15 minutes**, password sign-in for that account is paused for **15 minutes**:
+
+- During the pause the sign-in form shows the same message as for a wrong password — *"Invalid email or password"* — even if the password you type is correct. PR-TOP deliberately does not say that the account is paused, so nobody can use the message to find out which emails have accounts.
+- **Sign-in by email code keeps working during the pause.** Switch to **"Get code"** mode and sign in with the 6-digit code or the one-click link.
+- The pause ends by itself after 15 minutes. Resetting your password with **Forgot password?** ends it immediately.
+- A successful password sign-in clears the wrong-password counter.
+- The account owner gets an email when the pause starts, with a button to sign in by email code and a link to reset the password.
+- Wrong passwords typed from a network (IP address) where you signed in to this account during the last 30 days are not counted, and the pause does not apply there. Someone guessing your password from elsewhere therefore cannot lock you out of your usual office or home connection.
+
+If you are sure your password is right but keep seeing *"Invalid email or password"*, wait 15 minutes or sign in by code.
+
 ## What happens after I sign in?
 
 After a successful sign-in by code:
@@ -200,6 +213,10 @@ After a successful sign-in by code:
 **Q: Can I change my email address after I sign in by code?**
 
 A: Yes, but only if your email is not yet confirmed. Once email is confirmed, you must contact support to change it. If you registered with a password and have not yet confirmed your email via the verification link, you can click the **Change email** button on the dashboard banner and set a new address. A new verification email will be sent to the new address.
+
+**Q: My correct password says "Invalid email or password". Is my account locked?**
+
+A: Possibly. After 10 wrong passwords within 15 minutes, password sign-in for that account is paused for 15 minutes, and the form shows the same "Invalid email or password" message during the pause. Sign in with an email code instead (it is not affected), wait 15 minutes, or use **Forgot password?** — setting a new password ends the pause at once. You also receive an email when the pause starts. From a network where you signed in during the last 30 days, the pause does not apply.
 
 **Q: What if I sign in by code on one device and password on another?**
 

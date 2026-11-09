@@ -366,5 +366,45 @@
     "question": "Why can't I add a client? I get an error saying 'confirm your email'",
     "answer": "Before you can add clients, invite them via invite links, or upload session recordings, you must confirm your email address. This is a security measure to ensure email access. After you register, check your inbox for a confirmation email and click the link inside it. Alternatively, if you use the sign-in code method on the login page, your email is automatically confirmed after you sign in that way. Once confirmed, all gated features become available immediately.",
     "tags": ["clients", "email", "confirmation", "access", "gate"]
+  },
+  {
+    "id": "password-login-paused",
+    "audience": "public",
+    "locale": "en",
+    "question": "Why does my correct password say \"Invalid email or password\"?",
+    "answer": "After 10 wrong passwords within 15 minutes, PR-TOP pauses password sign-in for that account for 15 minutes. During the pause the sign-in form shows the usual \"Invalid email or password\" message, even for the right password, so the message cannot be used to probe accounts. The account owner is also emailed when the pause starts, and a network where the owner signed in during the last 30 days is not affected. Sign in with an email code instead (it keeps working), wait 15 minutes, or use \"Forgot password\" — setting a new password ends the pause immediately.",
+    "tags": ["account", "password", "sign-in"]
+  },
+  {
+    "id": "register-existing-email",
+    "audience": "public",
+    "locale": "en",
+    "question": "I registered but was told to check my email instead of reaching the dashboard. Why?",
+    "answer": "That email address already has a PR-TOP account. For privacy, registration never says whether an address is registered, and no second account is created. If it is a therapist account, a sign-in email with a 6-digit code and a one-click sign-in link is sent to that address. Use it, or \"Forgot password\" on the sign-in page, to get into your existing account.",
+    "tags": ["account", "registration", "sign-in"]
+  },
+  {
+    "id": "bot-recording-too-large",
+    "audience": "public",
+    "locale": "en",
+    "question": "Why did the bot say my voice or video message is too large?",
+    "answer": "Telegram lets bots download files of up to 20 MB, so longer voice or video messages cannot be saved to the diary. The bot rejects them before downloading and asks for a shorter recording. If a download from Telegram fails for another reason, nothing is saved and the bot asks the client to send the recording again.",
+    "tags": ["diary", "voice", "video", "telegram"]
+  },
+  {
+    "id": "session-transcription-too-long",
+    "audience": "public",
+    "locale": "en",
+    "question": "Why does my session say transcription_too_long?",
+    "answer": "The transcription service accepts about 24 MB of audio per request. PR-TOP splits longer MP3 and WAV recordings automatically, but other formats (M4A, MP4, MOV, OGG/Opus, WebM, FLAC, AAC) cannot be cut safely, so a larger file in one of those formats gets the status transcription_too_long. The recording itself is kept and can still be played. To get a transcript, export the recording as MP3 or split it into shorter files and upload again.",
+    "tags": ["sessions", "upload", "transcription"]
+  },
+  {
+    "id": "session-upload-unsupported-type",
+    "audience": "public",
+    "locale": "en",
+    "question": "Why was my recording rejected as an unsupported file type?",
+    "answer": "PR-TOP checks the actual content of an uploaded recording, not only its name. Supported formats are MP3, M4A, MP4, MOV, OGG/Opus, WebM, WAV, FLAC and AAC, up to 100 MB. A document renamed to .mp3, a damaged file or another format is refused with \"Unsupported file type\". Re-export the recording from your recorder app and upload it again.",
+    "tags": ["sessions", "upload"]
   }
 ]

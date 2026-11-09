@@ -109,7 +109,8 @@ router.post('/', requireNLQueryAccess, (req, res) => {
       logger.warn('Failed to audit log NL query: ' + auditErr.message);
     }
 
-    logger.info(`NL query by therapist ${therapistId} for client ${client_id}: "${query.trim().substring(0, 50)}..." -> ${result.total_matches} matches`);
+    // The query text is clinical content: log only its length, never the text.
+    logger.info(`NL query by therapist ${therapistId} for client ${client_id} (${query.trim().length} chars) -> ${result.total_matches} matches`);
 
     res.json({
       success: true,

@@ -6,18 +6,24 @@ const crypto = require('crypto');
  * Uses the Synchronizer Token Pattern:
  * 1. GET /api/csrf-token returns a CSRF token
  * 2. State-changing requests (POST/PUT/DELETE/PATCH) must include X-CSRF-Token header
- * 3. Requests with valid Authorization (JWT) headers are exempt (API-to-API calls)
+ * 3. Requests with an Authorization: Bearer header are exempt (non-browser API
+ *    clients; browsers never attach that header cross-site on their own)
  *
- * For SPAs using JWT in Authorization headers, CSRF risk is minimal since
- * browsers don't auto-attach custom headers in cross-origin requests.
- * This adds defense-in-depth.
+ * The browser SPA authenticates with the HttpOnly `session_token` cookie only,
+ * so every state-changing browser request (JSON, FormData/multipart, XHR) goes
+ * through the token check below. The SPA's fetchApi attaches X-CSRF-Token
+ * automatically and retries once with a fresh token on a CSRF 403.
  */
 
 // In-memory token store (per-session tokens)
 const csrfTokens = new Map();
 
+// Hard cap so GET /api/csrf-token cannot grow the store without bound;
+// the oldest tokens are evicted first (Map keeps insertion order).
+const MAX_CSRF_TOKENS = 50000;
+
 // Clean up expired tokens every 30 minutes
-setInterval(() => {
+const csrfSweep = setInterval(() => {
   const now = Date.now();
   for (const [token, data] of csrfTokens.entries()) {
     if (now - data.created > 2 * 60 * 60 * 1000) { // 2 hour expiry
@@ -25,8 +31,12 @@ setInterval(() => {
     }
   }
 }, 30 * 60 * 1000);
+if (csrfSweep.unref) csrfSweep.unref();
 
 function generateCsrfToken() {
+  while (csrfTokens.size >= MAX_CSRF_TOKENS) {
+    csrfTokens.delete(csrfTokens.keys().next().value);
+  }
   const token = crypto.randomBytes(32).toString('hex');
   csrfTokens.set(token, { created: Date.now() });
   return token;
@@ -83,8 +93,8 @@ function csrfProtection(req, res, next) {
     return next();
   }
 
-  // Requests with Authorization header (JWT) are already CSRF-safe
-  // because browsers don't auto-attach custom Authorization headers
+  // Requests with an Authorization: Bearer header (non-browser API clients) are
+  // CSRF-safe because browsers don't auto-attach custom Authorization headers
   const authHeader = req.headers['authorization'];
   if (authHeader && authHeader.startsWith('Bearer ')) {
     return next();

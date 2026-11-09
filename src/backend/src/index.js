@@ -150,11 +150,34 @@ const loginCodeLimiter = rateLimit({
 });
 app.use('/api/auth/login-code', loginCodeLimiter);
 
+// CSRF-token issuing (wave 3 review): every GET /api/csrf-token adds a token
+// to the in-memory CSRF store, so spamming it could flush legitimate tokens.
+// The SPA needs few: fetchApi caches its token, and useCsrfToken fetches once
+// per mounted public form (login / register / landing forms). 120 per 15 min
+// per IP leaves room for several people behind one office NAT.
+const csrfTokenLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: process.env.CSRF_TOKEN_RATE_LIMIT_MAX ? parseInt(process.env.CSRF_TOKEN_RATE_LIMIT_MAX) : (process.env.NODE_ENV !== 'production' ? 10000 : 120),
+  keyGenerator: getClientIp,
+  standardHeaders: true,
+  legacyHeaders: true,
+  handler: rateLimitHandler('Too many requests, please try again later.')
+});
+app.use('/api/csrf-token', csrfTokenLimiter);
+
 // Webhook routes MUST be mounted before JSON body parser (needs raw body for signature verification)
 app.use('/api/webhooks', webhookRoutes);
 
 // Body parsing (after webhooks which need raw body)
-app.use(express.json({ limit: '50mb' })); // Increased for base64-encoded voice/video files from Telegram (up to ~20MB raw)
+// Audit M13: the 50mb JSON limit used to apply to every route, including
+// unauthenticated ones. Only the bot API carries large JSON (base64 voice /
+// video / photo, Telegram caps downloads at 20 MB raw = ~27 MB base64); it is
+// parsed first with its own limit and is unreachable through the proxy
+// (rejectProxiedBotRequests above). Everything else gets JSON_BODY_LIMIT.
+// Bulk/client import uses multipart (multer), not JSON. An oversized body is
+// answered 413 { code: 'PAYLOAD_TOO_LARGE' } by the error handler below.
+app.use('/api/bot', express.json({ limit: process.env.BOT_JSON_BODY_LIMIT || '30mb' }));
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Cookie parser for secure session cookies
@@ -566,6 +589,11 @@ app.use((err, req, res, next) => {
   if (err.type === 'entity.parse.failed') {
     return res.status(400).json({ error: 'Invalid JSON in request body', message: err.message });
   }
+  // M13: body over JSON_BODY_LIMIT / BOT_JSON_BODY_LIMIT (body-parser).
+  if (err.type === 'entity.too.large') {
+    logger.warn(`Request body too large: ${req.method} ${String(req.originalUrl || '').split('?')[0]} (${err.length} bytes, limit ${err.limit})`);
+    return res.status(413).json({ error: 'Request body too large', code: 'PAYLOAD_TOO_LARGE' });
+  }
   logger.error('Unhandled error: ' + err.message);
   logger.error('Stack: ' + err.stack);
   // Never expose internal error details to users
@@ -585,6 +613,13 @@ async function start() {
       require('./services/vectorStore').ensureTable();
     } catch (e) {
       logger.error('Vector store migration failed at startup: ' + e.message);
+    }
+
+    // A key re-encryption job interrupted by a restart continues from its cursor.
+    try {
+      require('./services/keyRotation').resumeInterruptedJob();
+    } catch (e) {
+      logger.error('Key rotation resume failed: ' + e.message);
     }
 
     // Older code let /api/clients/link attach clients to the superadmin account,
