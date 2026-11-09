@@ -151,3 +151,6 @@ response.json
 response.txt
 src/backend/.check_*.js
 src/backend/_tmp_schema_check*.js
+
+# Scratch DB written by _t_assistant_kb_audit.js (local + CI)
+.assistant_kb_audit_test.sqlite*

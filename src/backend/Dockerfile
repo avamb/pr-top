@@ -17,13 +17,24 @@ RUN npm ci --omit=dev
 # Copy backend runtime source
 COPY src/backend/src/ ./src/
 
-# Package a read-only snapshot of the repo for assistant knowledge indexing.
-# Dokploy production deploys do not provide the expected bind mounts, so the
-# knowledge base must index files already present inside the image.
-RUN mkdir -p /app/project-root
-COPY src/ /app/project-root/src/
-COPY docs/ /app/project-root/docs/
-COPY docker-compose.yml README.md .env.example /app/project-root/
+# Package a read-only snapshot of ONLY the files the assistant reads, for
+# knowledge indexing. Dokploy production deploys do not provide the expected
+# bind mounts, so the knowledge base must index files already present inside
+# the image. What is read (see services/assistantKnowledge.js and
+# services/assistantCache.js):
+#   - docs/assistant-kb/**.md  curated how-to pages (+ faq-seed.json for the
+#                              canned-answer cache)
+#   - docs/*.md                top-level project docs (depth 1)
+#   - README.md
+#   - src/frontend/src/i18n    UI label strings
+# No source code, security docs, compose file or .env.example is copied. The
+# knowledge base detects this root by the presence of /app/project-root/src.
+# Keep the root .dockerignore allow-list in sync with these COPY lines.
+RUN mkdir -p /app/project-root/docs /app/project-root/src/frontend/src
+COPY docs/assistant-kb/ /app/project-root/docs/assistant-kb/
+COPY docs/*.md /app/project-root/docs/
+COPY README.md /app/project-root/
+COPY src/frontend/src/i18n/ /app/project-root/src/frontend/src/i18n/
 
 # Create data directories for SQLite and file uploads, and make /app itself
 # (non-recursive) writable for node so V8 heap snapshots (SIGUSR2) can be

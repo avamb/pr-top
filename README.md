@@ -8,7 +8,7 @@ PR-TOP helps practicing psychologists preserve client context, reduce double doc
 
 ## Architecture
 
-The platform consists of four components:
+The platform consists of three application components plus the web edge:
 
 - **Web Application** (`src/frontend/`) - React + Tailwind CSS
   - Public landing page with pricing and registration
@@ -16,7 +16,7 @@ The platform consists of four components:
   - Superadmin panel (platform management, AI configuration, statistics, logs)
 
 - **Backend API** (`src/backend/`) - Node.js REST API
-  - SQLite database with application-layer encryption for sensitive data
+  - SQLite database (via `sql.js`, SQLite compiled to WebAssembly) with application-layer encryption for sensitive data. The whole database lives in memory and is flushed atomically to `/app/data` (see `src/backend/src/db/connection.js`); a move to `better-sqlite3` with WAL is planned but not done.
   - Stripe integration for subscription management
   - Vector DB for semantic search
   - AI summarization and transcription pipelines
@@ -28,16 +28,17 @@ The platform consists of four components:
   - SOS/safety features with escalation notifications
   - Client consent management
 
-- **Nginx Reverse Proxy** (`nginx/`) - Single entry point
-  - Routes `/` to frontend, `/api/` to backend, `/analytics/` to Umami
-  - SSL/TLS termination (Let's Encrypt), rate limiting, security headers, gzip
+- **Web edge** - Cloudflare (SSL Full) -> Dokploy Traefik -> the `frontend` container's nginx (`src/frontend/nginx.conf`)
+  - Serves the prerendered SPA, proxies `/api/` and `/ws` to the backend (`backend:3001`) and `/analytics/` to Umami
+  - Security headers and cache policy live in `src/frontend/security-headers.conf`; TLS is terminated at Cloudflare/Traefik, not inside the stack
+  - The top-level `nginx/` directory is a legacy standalone reverse proxy and is **not** used by `docker-compose.yml`
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React, Tailwind CSS, React Router, Zustand, i18next |
-| Backend | Node.js, Express, SQLite, Stripe SDK, node-cron |
+| Backend | Node.js 22, Express, SQLite (sql.js), Stripe SDK, node-cron |
 | Bot | Telegram Bot API |
 | AI | OpenAI, Anthropic, Google Gemini, OpenRouter (configurable) |
 | Transcription | OpenAI Whisper (configurable provider) |
@@ -51,7 +52,7 @@ The platform consists of four components:
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 22 (the Docker images and CI use Node 22)
 - npm
 - Telegram Bot Token
 - Stripe API Keys (test mode for development)
@@ -71,6 +72,18 @@ This will:
 2. Set up the SQLite database
 3. Start the backend server (port 3001)
 4. Start the frontend dev server (port 3000)
+
+### Tests and CI
+
+```bash
+# Backend: node:test suites, each file boots its own temp database with dummy env
+cd src/backend && npm test
+
+# Bot: unit tests for the pure helpers (escapeMd, mdInEntity, commandRegex, redact)
+cd src/bot && npm test
+```
+
+The tests never read `.env` and make no network calls (Stripe, Telegram, SMTP and LLM calls are stubbed). GitHub Actions (`.github/workflows/ci.yml`) runs on pushes and pull requests to `dev` and `master`: per package `npm ci`, `node --check` on all sources and `npm test`; for the backend also `npm run docs:assistant:check` and `node _t_assistant_kb_audit.js`; for the frontend `npx vite build` (no prerender). `npm audit` runs as a non-blocking step.
 
 ### Access Points
 
@@ -107,14 +120,18 @@ src/
     src/
       index.js      # Telegram bot entry point
       i18n.js       # Bot translations (EN, RU, ES, UK)
-nginx/
-  nginx.conf          # Reverse proxy server blocks (HTTP/HTTPS)
-  locations.conf      # Shared location routing rules
-  Dockerfile          # nginx:alpine with config
-  certs/              # SSL certificates (not in repo)
+.github/
+  workflows/ci.yml      # CI (backend, bot, frontend)
+scripts/
+  generate-assistant-docs.mjs  # `npm run docs:assistant` (assistant KB reference)
+  legacy/               # old one-off audit/debug scripts, kept for reference
+nginx/                  # legacy standalone reverse proxy, NOT used by docker-compose.yml
 docs/
-  PRD.md            # Full Product Requirements Document
+  PRD.md                # Full Product Requirements Document
+  assistant-kb/         # Knowledge base for the "Ask about PR-TOP" assistant
 ```
+
+Backend and bot tests live in `src/backend/test/` and `src/bot/test/`.
 
 ## Security
 
@@ -192,45 +209,44 @@ cp .env.example .env
 docker-compose up --build -d
 
 # 3. Access the application
-# All traffic goes through the Nginx reverse proxy:
-# Landing page:   http://localhost/
-# Backend API:    http://localhost/api/health
-# Umami analytics: http://localhost/analytics/
+# The compose file only `expose`s ports (no host port mapping). Put a reverse
+# proxy in front (production: Dokploy/Traefik) or add a `ports:` mapping to the
+# `frontend` service locally. The frontend nginx then serves:
+#   Landing page:    /
+#   Backend API:     /api/health
+#   Umami analytics: /analytics/
 ```
 
 ### Services
 
 | Service | Description | Port |
 |---------|-------------|------|
-| **nginx** | Reverse proxy — single entry point for all traffic | 80, 443 (public) |
-| **frontend** | React SPA served via nginx (internal) | 80 (internal) |
-| **backend** | Node.js Express API with SQLite | 3001 (internal) |
+| **frontend** | React SPA served via nginx; proxies `/api/`, `/ws`, `/analytics/` (entry point behind Traefik) | 80 (internal) |
+| **backend** | Node.js Express API with SQLite (sql.js) | 3001 (internal) |
 | **bot** | Telegram bot (long-polling, no port) | none |
 | **umami** | Umami web analytics (privacy-first) | 3000 (internal) |
 | **umami-db** | PostgreSQL for Umami data | 5432 (internal) |
 
 ### Architecture
 
-- **Nginx Reverse Proxy**: Single entry point on ports 80/443. Routes `/` to frontend, `/api/` to backend, `/analytics/` to Umami. Includes rate limiting (30 req/s for API, 10 req/s for analytics), security headers (HSTS, X-Frame-Options, etc.), gzip compression, and WebSocket proxy support.
-- **Frontend**: Multi-stage build (Vite build + nginx). Serves static SPA files only; API proxying handled by the external nginx reverse proxy.
-- **Backend**: Node.js 18 Alpine. SQLite data persisted in a Docker named volume (`backend-data`).
-- **Bot**: Node.js 18 Alpine. Connects to backend via internal Docker network.
-- **Umami**: Privacy-first analytics accessible at `/analytics/` via the reverse proxy.
+- **Frontend nginx** (`src/frontend/nginx.conf`): the single HTTP entry point of the stack. Serves the prerendered SPA, proxies `/api/` and `/ws` to the backend and `/analytics/` to Umami, and sets security headers and cache policy. Cloudflare (SSL Full) and Dokploy's Traefik sit in front of it.
+- **Frontend image**: multi-stage build (Vite build + Playwright prerender, then nginx:alpine).
+- **Backend**: Node.js 22 Alpine, runs as the unprivileged `node` user. SQLite data persisted in a Docker named volume (`backend-data`). The image also carries a read-only snapshot of only the files the assistant knowledge base reads (`docs/assistant-kb`, `docs/*.md`, `README.md`, UI i18n strings) under `/app/project-root`.
+- **Bot**: Node.js 22 Alpine, unprivileged. Connects to the backend via the internal Docker network and receives only the environment variables it needs.
+- **Umami**: Privacy-first analytics accessible at `/analytics/` through the frontend nginx.
 
-### SSL Setup (Production)
+### TLS (Production)
 
-1. Set `DOMAIN` and `SSL_EMAIL` in `.env`
-2. Place SSL certificates in `nginx/certs/` (or configure certbot)
-3. Uncomment the HTTPS server block in `nginx/nginx.conf`
-4. Uncomment the HTTP→HTTPS redirect
+TLS is terminated outside this stack: Cloudflare (SSL mode Full) in front of Dokploy's Traefik, which forwards to the `frontend` container on port 80. There is nothing to configure in the repo for certificates.
 
 ### Production Notes
 
 - Change all default secrets in `.env` before deploying
-- Only the nginx container exposes ports to the host — all other services are internal
+- No service publishes host ports; Traefik (Dokploy) routes to the `frontend` container, and every other service is internal
+- Set `UMAMI_APP_SECRET` and `UMAMI_DB_PASSWORD` (and a matching `UMAMI_DATABASE_URL`) in Dokploy: compose falls back to insecure local defaults when they are unset
 - The `backend-data` volume persists the SQLite database across container restarts
 - The `backend-uploads` volume persists encrypted audio/video session files separately
-- Health checks are configured on all services; nginx waits for backend, frontend, and umami to be healthy
+- Health checks are configured on every service (the bot's checks a heartbeat file it rewrites every 30 s while Telegram polling works); the frontend and bot wait for the backend to be healthy
 
 ### Backend Resilience (auto-restart on hang / memory growth)
 
@@ -244,7 +260,7 @@ guard rails; details and the incident write-up are in
 - `src/backend/healthcheck.sh` — after `HEALTHCHECK_MAX_FAILURES` consecutive misses it kills the node process; `restart: unless-stopped` recreates it (compose runs the container with `init: true` so the kill is honoured).
 - In-process memory watchdog — logs `[MEMORY] rss=…` hourly and exits (→ restart) once RSS ≥ `MEMORY_WATCHDOG_MAX_RSS_MB` (default 1024).
 - `NODE_OPTIONS=--max-old-space-size=768 --heapsnapshot-signal=SIGUSR2` — V8 aborts fast on a leak; `docker kill -s SIGUSR2 <backend>` writes a heap snapshot to `/app` for analysis.
-- `mem_limit`/`memswap_limit` (1536m backend, 512m bot) — hard ceiling, no swap, so one service can no longer drag the host into swap thrash.
+- `mem_limit`/`memswap_limit` (1536m backend, 512m bot and umami, 256m umami-db, 128m frontend) — hard ceiling, no swap, so one service can no longer drag the host into swap thrash.
 - Graceful shutdown on SIGTERM: scheduler stopped, in-memory SQLite flushed to disk, server closed.
 
 ### Common Commands

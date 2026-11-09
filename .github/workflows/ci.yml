@@ -1,0 +1,113 @@
+name: CI
+
+# Runs on pushes and pull requests to dev and master. One job per package keeps
+# the minutes modest (the repo is private); npm downloads are cached per
+# lockfile and superseded runs on the same ref are cancelled.
+on:
+  push:
+    branches: [dev, master]
+  pull_request:
+    branches: [dev, master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: src/backend
+    env:
+      # Dummy values only: the tests never talk to Stripe, Telegram, SMTP or an
+      # LLM, and every test file creates its own temp database.
+      NODE_ENV: test
+      JWT_SECRET: ci-dummy-jwt-secret-0123456789abcdef
+      ENCRYPTION_MASTER_KEY: ci-dummy-master-key-0123456789abcdef
+      BOT_API_KEY: ci-dummy-bot-key-0123456789abcdef
+      SIGNED_LINK_SECRET: ci-dummy-signed-link-0123456789abcdef
+      LOGIN_CODE_PEPPER: ci-dummy-pepper-0123456789abcdef
+      LOG_LEVEL: error
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: src/backend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Syntax check (node --check)
+        run: find src test -name '*.js' -not -path '*/node_modules/*' -print0 | xargs -0 -n1 node --check
+      - name: Unit and integration tests
+        run: npm test
+      - name: Assistant reference docs are up to date
+        run: npm run docs:assistant:check
+      - name: Assistant knowledge base audit
+        # Run from the repo root, as CLAUDE.md's definition of done says.
+        working-directory: .
+        run: node _t_assistant_kb_audit.js
+      - name: Dependency audit (non-blocking)
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=critical
+
+  bot:
+    name: Bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: src/bot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: src/bot/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Syntax check (node --check)
+        run: find src test -name '*.js' -not -path '*/node_modules/*' -print0 | xargs -0 -n1 node --check
+      - name: Tests
+        run: npm test
+      - name: Dependency audit (non-blocking)
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=critical
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: src/frontend
+    env:
+      # Playwright is only needed by the prerender step, which CI skips.
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint (non-blocking)
+        continue-on-error: true
+        run: npm run lint
+      - name: Build (Vite only, no prerender)
+        run: npx vite build
+      - name: Dependency audit (non-blocking)
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=critical

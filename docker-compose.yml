@@ -83,9 +83,23 @@ services:
     restart: unless-stopped
     expose:
       - "80"
+    # Static nginx; a small hard ceiling (no swap) keeps it from ever competing
+    # with the backend for memory.
+    mem_limit: 128m
+    memswap_limit: 128m
+    # service_started on purpose: the landing/SEO pages are static and must come
+    # up even while the backend is still booting (migrations) or unhealthy.
     depends_on:
       backend:
         condition: service_started
+    healthcheck:
+      # busybox wget ships in nginx:alpine. 127.0.0.1 (not "localhost") avoids
+      # an IPv6 ::1 lookup, since nginx only listens on IPv4 here.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # === Telegram Bot ===
   bot:
@@ -111,19 +125,37 @@ services:
     stop_grace_period: 15s
     mem_limit: 512m
     memswap_limit: 512m
+    healthcheck:
+      # The bot rewrites /tmp/bot-heartbeat every 30 s while Telegram polling is
+      # healthy (see the heartbeat block in src/bot/src/index.js). A file older
+      # than 2 minutes, or a missing one, means the bot is stuck or cannot reach
+      # Telegram. Docker only marks the container unhealthy; it does not restart
+      # it. Without TELEGRAM_BOT_TOKEN the bot never polls, so it stays unhealthy.
+      test: ["CMD-SHELL", "test -n \"$$(find /tmp/bot-heartbeat -mmin -2 2>/dev/null)\""]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
 
   # === Umami Web Analytics ===
   umami:
     image: ghcr.io/umami-software/umami:postgresql-latest
     restart: unless-stopped
     environment:
+      # The fallbacks below exist only so a local `docker compose up` works.
+      # In production UMAMI_APP_SECRET and UMAMI_DB_PASSWORD MUST be set in
+      # Dokploy (see the Umami section of .env.example). `:?` is deliberately
+      # not used: it would make `docker compose config` fail on dev machines.
       - DATABASE_URL=${UMAMI_DATABASE_URL:-postgresql://umami:umami@umami-db:5432/umami}
       - APP_SECRET=${UMAMI_APP_SECRET:-replace-me-with-a-random-string}
     expose:
       - "3000"
+    # Node/Next.js app; hard ceiling, no swap (see the backend note above).
+    mem_limit: 512m
+    memswap_limit: 512m
     depends_on:
       umami-db:
         condition: service_healthy
@@ -146,6 +178,8 @@ services:
       - umami-db-data:/var/lib/postgresql/data
     expose:
       - "5432"
+    mem_limit: 256m
+    memswap_limit: 256m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-umami} -d umami"]
       interval: 10s

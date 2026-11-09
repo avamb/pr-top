@@ -1,14 +1,43 @@
+# Root .dockerignore: applies to the BACKEND image only (compose builds it with
+# context "."). The frontend and bot images use their own contexts
+# (src/frontend, src/bot) and their own .dockerignore files.
+#
+# Allow-list approach: exclude everything, then re-include only what
+# src/backend/Dockerfile COPYs. If you add a COPY there, add it here too.
+*
+
+# --- backend runtime ---
+!src/backend/package.json
+!src/backend/package-lock.json
+!src/backend/src
+!src/backend/healthcheck.sh
+!src/backend/docker-entrypoint.sh
+
+# --- assistant knowledge base snapshot (/app/project-root) ---
+# services/assistantKnowledge.js indexes ONLY: docs/assistant-kb/**.md,
+# docs/*.md (depth 1), README.md and the UI strings in src/frontend/src/i18n;
+# services/assistantCache.js reads docs/assistant-kb/faq-seed.json.
+!docs/assistant-kb
+!docs/*.md
+!README.md
+!src/frontend/src/i18n
+
+# --- never ship, even inside an allowed directory ---
+**/node_modules
+**/data
+**/backups
+**/*.db
+**/*.db-*
+**/*.log
+**/.env
+**/.env.*
+**/_t*
+**/.tmp_*
+**/test
+**/.restart-trigger
 .git
-.env
-.autoforge
 .claude
+.autoforge
 .playwright
 .playwright-cli
 .vite
-node_modules
-**/node_modules
-*.log
-backups
-src/backend/data
-src/backend/backups
-src/frontend/dist

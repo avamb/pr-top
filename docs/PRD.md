@@ -107,7 +107,7 @@ Superadmins manage the platform through a dedicated admin panel.
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React, Tailwind CSS, React Router, Zustand, react-i18next |
-| Backend | Node.js, Express, better-sqlite3, Stripe SDK, node-cron |
+| Backend | Node.js, Express, sql.js (whole database in memory, persisted to a file), Stripe SDK, node-cron |
 | Bot | Telegram Bot API (node-telegram-bot-api) |
 | AI | OpenAI, Anthropic, Google Gemini, OpenRouter (configurable) |
 | Transcription | OpenAI Whisper (configurable provider) |
