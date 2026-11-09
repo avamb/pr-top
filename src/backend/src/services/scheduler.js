@@ -500,14 +500,16 @@ function runMarkNoShows() {
  * Job 6: Database backup
  * Create encrypted compressed backup of the SQLite database
  */
-function runDatabaseBackup() {
+async function runDatabaseBackup() {
   try {
     if (!backupService) {
       logger.warn('[SCHEDULER] Backup service not available');
       return { success: false, error: 'Backup service not loaded' };
     }
 
-    const result = backupService.backup();
+    // backup() is async (gzip off the main thread, serialized with restore /
+    // key re-encryption).
+    const result = await backupService.backup();
 
     if (result.success) {
       logger.info('[SCHEDULER] Database backup completed: ' + result.filename + ' (' + result.size + ' bytes)');

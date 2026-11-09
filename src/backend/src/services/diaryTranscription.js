@@ -9,6 +9,7 @@ const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 const { encrypt, decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
 const { logUsage, checkSpendingLimit } = require('./aiUsageLogger');
+const fileCrypto = require('./fileCrypto');
 
 const TRANSCRIPTION_API_KEY = process.env.TRANSCRIPTION_API_KEY;
 const DIARY_FILES_DIR = path.resolve(__dirname, '../../data/diary_files');
@@ -70,16 +71,29 @@ function getTranscriptionModel() {
   return model;
 }
 
+// Per-request limit of the transcription API (25 MB; keep a margin).
+// Telegram limits bot downloads to 20 MB, so diary media normally fits.
+const MAX_DIARY_TRANSCRIPTION_BYTES = (() => {
+  const v = parseInt(process.env.TRANSCRIPTION_MAX_FILE_BYTES || '', 10);
+  return Number.isInteger(v) && v > 2 * 1024 * 1024 ? v : 24 * 1024 * 1024;
+})();
+
+// File names the transcription API recognises (it checks the extension).
+const API_EXT = {
+  '.mp3': '.mp3', '.m4a': '.m4a', '.mp4': '.mp4', '.wav': '.wav', '.webm': '.webm',
+  '.ogg': '.ogg', '.oga': '.oga', '.flac': '.flac',
+  '.mov': '.mp4', '.3gp': '.mp4', '.mkv': '.webm', '.ogv': '.ogg',
+};
+
 /**
- * Call the STT API to transcribe audio buffer.
- * Builds multipart/form-data request manually (same pattern as session transcription).
+ * Call the STT API to transcribe a decrypted audio file.
+ * The file is uploaded as a file-backed Blob (streamed from disk).
  *
- * @param {Buffer} audioBuffer - Raw audio data (decrypted)
+ * @param {{path:string, size:number, contentType:string, ext:string}} audio - decrypted temp file
  * @param {string} [language] - Optional language hint for STT API
- * @param {string} [fileExt] - File extension for MIME type detection
- * @returns {Promise<{text: string, usage: {model: string, inputTokens: number, outputTokens: number}}>}
+ * @returns {Promise<{text: string, duration: number, usage: {model: string, inputTokens: number, outputTokens: number}}>}
  */
-async function callDiaryTranscriptionAPI(audioBuffer, language, fileExt) {
+async function callDiaryTranscriptionAPI(audio, language) {
   // Check spending limit before making API call
   const spendingCheck = checkSpendingLimit();
   if (!spendingCheck.allowed) {
@@ -92,72 +106,24 @@ async function callDiaryTranscriptionAPI(audioBuffer, language, fileExt) {
   // Use provided language, env override, or auto-detect
   const lang = language || process.env.TRANSCRIPTION_LANGUAGE || undefined;
 
-  // Build multipart/form-data body manually (no external dependency needed)
-  const boundary = '----FormBoundary' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  const mimeType = audio.contentType || 'audio/ogg';
+  const ext = audio.ext || '.ogg';
+  const form = new FormData();
+  form.append('model', model);
+  if (lang) form.append('language', lang);
+  form.append('response_format', 'text');
+  form.append('file', await fs.openAsBlob(audio.path, { type: mimeType }), 'diary_audio' + (API_EXT[ext] || ext));
 
-  const parts = [];
-
-  // model field
-  parts.push(
-    '--' + boundary + '\r\n' +
-    'Content-Disposition: form-data; name="model"\r\n\r\n' +
-    model + '\r\n'
-  );
-
-  // language field (optional)
-  if (lang) {
-    parts.push(
-      '--' + boundary + '\r\n' +
-      'Content-Disposition: form-data; name="language"\r\n\r\n' +
-      lang + '\r\n'
-    );
-  }
-
-  // response_format field
-  parts.push(
-    '--' + boundary + '\r\n' +
-    'Content-Disposition: form-data; name="response_format"\r\n\r\n' +
-    'text\r\n'
-  );
-
-  // Determine MIME type from file extension
-  const mimeTypes = {
-    '.ogg': 'audio/ogg',
-    '.oga': 'audio/ogg',
-    '.mp3': 'audio/mpeg',
-    '.wav': 'audio/wav',
-    '.webm': 'audio/webm',
-    '.aac': 'audio/aac',
-    '.flac': 'audio/flac',
-    '.m4a': 'audio/mp4',
-    '.mp4': 'video/mp4'
-  };
-  const mimeType = (fileExt && mimeTypes[fileExt]) || 'audio/ogg';
-  const filename = 'diary_audio' + (fileExt || '.ogg');
-
-  // audio file field
-  const fileHeader = Buffer.from(
-    '--' + boundary + '\r\n' +
-    'Content-Disposition: form-data; name="file"; filename="' + filename + '"\r\n' +
-    'Content-Type: ' + mimeType + '\r\n\r\n'
-  );
-  const fileFooter = Buffer.from('\r\n');
-  const ending = Buffer.from('--' + boundary + '--\r\n');
-
-  const textParts = Buffer.from(parts.join(''));
-  const body = Buffer.concat([textParts, fileHeader, audioBuffer, fileFooter, ending]);
-
-  logger.info('Calling diary transcription API: ' + apiBase + '/audio/transcriptions (model=' + model + ', lang=' + (lang || 'auto') + ', audio=' + Math.round(audioBuffer.length / 1024) + 'KB)');
+  logger.info('Calling diary transcription API: ' + apiBase + '/audio/transcriptions (model=' + model + ', lang=' + (lang || 'auto') + ', audio=' + Math.round(audio.size / 1024) + 'KB ' + mimeType + ')');
 
   const startTime = Date.now();
 
   const response = await fetch(apiBase + '/audio/transcriptions', {
     method: 'POST',
     headers: {
-      'Authorization': 'Bearer ' + TRANSCRIPTION_API_KEY,
-      'Content-Type': 'multipart/form-data; boundary=' + boundary
+      'Authorization': 'Bearer ' + TRANSCRIPTION_API_KEY
     },
-    body: body,
+    body: form,
     signal: AbortSignal.timeout(300000) // 5 minute timeout for long audio
   });
 
@@ -181,7 +147,7 @@ async function callDiaryTranscriptionAPI(audioBuffer, language, fileExt) {
   logger.info('Diary transcription API returned ' + transcript.length + ' characters in ' + duration + 'ms');
 
   // Estimate tokens (Whisper doesn't return token counts in text mode)
-  const estimatedInputTokens = Math.ceil(audioBuffer.length / 100);
+  const estimatedInputTokens = Math.ceil(audio.size / 100);
   const estimatedOutputTokens = Math.ceil(transcript.length / 4);
 
   return {
@@ -194,16 +160,15 @@ async function callDiaryTranscriptionAPI(audioBuffer, language, fileExt) {
 /**
  * Transcribe a diary entry's audio with retry logic.
  *
- * @param {Buffer} audioBuffer - Raw decrypted audio data
+ * @param {{path:string, size:number, contentType:string, ext:string}} audio - decrypted temp file
  * @param {string} [language] - Language hint
- * @param {string} [fileExt] - File extension
  * @returns {Promise<{text: string, duration: number, usage: object}>}
  */
-async function transcribeWithRetry(audioBuffer, language, fileExt) {
+async function transcribeWithRetry(audio, language) {
   let lastError;
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      return await callDiaryTranscriptionAPI(audioBuffer, language, fileExt);
+      return await callDiaryTranscriptionAPI(audio, language);
     } catch (error) {
       lastError = error;
       // Don't retry on spending limit errors
@@ -241,19 +206,21 @@ async function transcribeDiaryEntry(entryType, contentText, fileRef, audioFileRe
       throw new Error('Audio file not found on disk: ' + audioFileRef);
     }
 
-    // Decrypt the audio file (stored as encrypted base64)
-    const encryptedContent = fs.readFileSync(filePath, 'utf-8');
-    const decryptedBase64 = decrypt(encryptedContent);
-    const audioBuffer = Buffer.from(decryptedBase64, 'base64');
-
-    logger.info('Loaded diary audio: ' + audioFileRef + ' (' + Math.round(audioBuffer.length / 1024) + 'KB decrypted)');
-
-    // Determine file extension for MIME type
-    const fileExt = path.extname(audioFileRef.replace('.enc', '')).toLowerCase() || '.ogg';
-
-    // Call STT API with retry logic
-    const result = await transcribeWithRetry(audioBuffer, language, fileExt);
-    return result;
+    // Decrypt to a private temp file (0600) instead of memory; removed in
+    // finally. The content type comes from the encrypted file's header
+    // (validated at upload) or, for pre-wave-3 files, from the extension.
+    const audio = await fileCrypto.decryptToTempFile(filePath);
+    try {
+      logger.info('Loaded diary audio: ' + audioFileRef + ' (' + Math.round(audio.size / 1024) + 'KB decrypted, ' + audio.contentType + ')');
+      if (audio.size > MAX_DIARY_TRANSCRIPTION_BYTES) {
+        throw new Error('Recording is too long to transcribe (' + Math.round(audio.size / (1024 * 1024)) + ' MB; limit ' +
+          Math.round(MAX_DIARY_TRANSCRIPTION_BYTES / (1024 * 1024)) + ' MB)');
+      }
+      // Call STT API with retry logic
+      return await transcribeWithRetry(audio, language);
+    } finally {
+      await audio.cleanup();
+    }
   }
 
   // Development mode: generate a transcript

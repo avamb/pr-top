@@ -2550,6 +2550,70 @@ function applySchema(db) {
   //   (status 'sending'). Kept out of `error`, which the UI shows as red text.
   try { db.run('ALTER TABLE session_reminder_dispatches ADD COLUMN claimed_at TEXT'); } catch (e) { /* exists */ }
 
+  // Audit wave 3 (track N), all idempotent. Only "duplicate column" is
+  // swallowed; any other ALTER failure is logged.
+  const addColumnN = (table, columnDef) => {
+    try {
+      db.run(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`);
+    } catch (e) {
+      if (!/duplicate column/i.test(String(e && e.message))) {
+        logger.warn(`Migration (wave 3 N): ALTER TABLE ${table} ADD COLUMN ${columnDef} failed: ${e.message}`);
+      }
+    }
+  };
+  // - M4: per-account failed-password counter and password-login lock.
+  addColumnN('users', 'failed_login_count INTEGER NOT NULL DEFAULT 0');
+  addColumnN('users', 'failed_login_window_start TEXT');
+  addColumnN('users', 'password_locked_until TEXT');
+  // - M7: the therapist a client looked up with /api/bot/connect; consent may
+  //   only link to this therapist (or the one an admin already linked).
+  addColumnN('users', 'pending_connect_therapist_id INTEGER');
+  addColumnN('users', 'pending_connect_at TEXT');
+  // - M8: an email entered in the bot stays pending until the 6-digit code
+  //   sent to it is typed back into the bot.
+  addColumnN('users', 'pending_email TEXT');
+  addColumnN('users', 'pending_email_code_hash TEXT');
+  addColumnN('users', 'pending_email_expires_at TEXT');
+  addColumnN('users', 'pending_email_attempts INTEGER NOT NULL DEFAULT 0');
+  // - Reset tokens are stored as sha256 hex (64 chars). Hash any legacy
+  //   plaintext (uuid) token in place so links issued before the deploy keep
+  //   working until they expire.
+  try {
+    const legacy = db.exec('SELECT id, token FROM password_reset_tokens WHERE length(token) != 64');
+    if (legacy.length > 0 && legacy[0].values.length > 0) {
+      const crypto = require('crypto');
+      for (const [id, token] of legacy[0].values) {
+        db.run('UPDATE password_reset_tokens SET token = ? WHERE id = ?',
+          [crypto.createHash('sha256').update(String(token)).digest('hex'), id]);
+      }
+      logger.info(`Hashed ${legacy[0].values.length} legacy password reset token(s)`);
+    }
+  } catch (e) {
+    logger.warn('Password reset token hashing migration failed: ' + e.message);
+  }
+
+  // Audit wave 3 (M16, track O): master-key rotation. Both idempotent.
+  // - encryption_keys.key_check: a canary encrypted under that key version;
+  //   services/encryption.js uses it to detect a wrong master secret before
+  //   anything is written under the version.
+  // - encryption_rotation_jobs: resumable re-encryption job state
+  //   (services/keyRotation.js). Class B only: counters, table/column names,
+  //   row ids and error messages, never plaintext or ciphertext.
+  try { db.run('ALTER TABLE encryption_keys ADD COLUMN key_check TEXT'); } catch (e) { /* exists */ }
+  db.run(`CREATE TABLE IF NOT EXISTS encryption_rotation_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    target_version INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    phase TEXT,
+    cursor_json TEXT,
+    stats_json TEXT,
+    error TEXT,
+    started_by INTEGER,
+    started_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    finished_at TEXT
+  )`);
+
   // Seed default superadmin account if not exists
   seedSuperadmin(db);
 

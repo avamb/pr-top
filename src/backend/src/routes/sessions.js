@@ -14,6 +14,9 @@ const { processSessionDiarization } = require('../services/diarization');
 const { checkSessionLimit } = require('../utils/planLimits');
 const { logger } = require('../utils/logger');
 const { verifyClientConsent } = require('../utils/consentCheck');
+const fileCrypto = require('../services/fileCrypto');
+const { sniffMedia, mimeFromRef } = require('../utils/mediaSniff');
+const { createMediaUrl, mediaAuth } = require('../utils/mediaLinks');
 const assignmentsService = require('../services/assignments');
 const reminderService = require('../services/reminderService');
 
@@ -33,51 +36,104 @@ if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, UPLOAD_DIR);
-  },
-  filename: (req, file, cb) => {
-    // Generate opaque filename - no original name exposure
-    const opaqueId = crypto.randomUUID();
-    const ext = path.extname(file.originalname) || '.bin';
-    cb(null, `${opaqueId}${ext}`);
-  }
-});
+// Uploads (audit M12). The multipart file stream is encrypted on the fly
+// (services/fileCrypto.js, chunked AES-256-GCM) straight into UPLOAD_DIR: the
+// plaintext never touches the disk and the file is never held in memory as a
+// whole. The real content type is detected from the first bytes (magic
+// numbers) instead of trusting the client MIME; anything that is not an
+// audio/video container is rejected with 415 before it is stored.
+const MAX_SESSION_UPLOAD_BYTES = 100 * 1024 * 1024; // 100MB
+const MAX_VOICE_NOTE_BYTES = 25 * 1024 * 1024;      // Whisper's per-request limit
 
-const upload = multer({
-  storage,
-  limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB max
-  },
-  fileFilter: (req, file, cb) => {
-    // Allow common audio and video formats (video for session recordings)
-    const allowedMimes = [
-      'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg',
-      'audio/webm', 'audio/aac', 'audio/flac', 'audio/m4a',
-      'audio/x-m4a', 'audio/mp4', 'application/octet-stream',
-      'video/webm', 'video/mp4', 'video/ogg', 'video/quicktime'
-    ];
-    if (allowedMimes.includes(file.mimetype) || file.mimetype.startsWith('audio/') || file.mimetype.startsWith('video/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only audio files are allowed'), false);
-    }
-  }
-});
-
-// Encrypt a file on disk (in-place replacement with encrypted version)
-function encryptFileOnDisk(filePath) {
-  const fileData = fs.readFileSync(filePath);
-  const { encrypted, keyVersion, keyId } = encrypt(fileData.toString('base64'));
-  fs.writeFileSync(filePath + '.enc', encrypted);
-  // Remove the original unencrypted file
-  fs.unlinkSync(filePath);
-  return { encryptedPath: filePath + '.enc', keyVersion, keyId };
+function EncryptingStorage(dir) {
+  this.dir = dir;
 }
 
+EncryptingStorage.prototype._handleFile = function handleFile(req, file, cb) {
+  const id = crypto.randomUUID();
+  const stagePath = path.join(this.dir, `${id}.upload.enc`);
+  const sniffer = new fileCrypto.SniffStream({
+    hints: [file.originalname, file.mimetype],
+    strict: true,
+    accept: (r) => r.kind === 'audio' || r.kind === 'video',
+  });
+  fileCrypto.encryptStreamToFile(file.stream, stagePath, {
+    transforms: [sniffer],
+    contentType: () => sniffer.result.mime,
+  }).then(async (info) => {
+    const filename = `${id}${sniffer.result.ext}.enc`;
+    const finalPath = path.join(this.dir, filename);
+    try {
+      fs.renameSync(stagePath, finalPath);
+    } catch (e) {
+      try { fs.unlinkSync(stagePath); } catch (_) { /* ignore */ }
+      throw e;
+    }
+    cb(null, {
+      path: finalPath,
+      filename,
+      size: info.plaintextSize,
+      detectedMime: info.contentType,
+      keyVersion: info.keyVersion,
+      keyId: info.keyId,
+    });
+  }).catch((err) => cb(err));
+};
+
+EncryptingStorage.prototype._removeFile = function removeFile(req, file, cb) {
+  const p = file.path;
+  delete file.path;
+  if (!p) return cb(null);
+  fs.unlink(p, () => cb(null));
+};
+
+const upload = multer({
+  storage: new EncryptingStorage(UPLOAD_DIR),
+  limits: { fileSize: MAX_SESSION_UPLOAD_BYTES, files: 1 },
+});
+
+// Post-session voice notes are transcribed once and never stored: keep them
+// in memory (bounded) instead of writing plaintext audio to disk.
+const voiceNoteUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_VOICE_NOTE_BYTES, files: 1 },
+});
+
+// Run a multer middleware and turn its errors into clear JSON responses
+// (they used to reach the global handler as a generic 500).
+function runUpload(mw, maxLabel) {
+  return (req, res, next) => mw(req, res, (err) => {
+    if (!err) return next();
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ error: `File too large. Maximum size is ${maxLabel}.`, code: 'FILE_TOO_LARGE' });
+    }
+    if (err.code === 'UNSUPPORTED_MEDIA_TYPE') {
+      return res.status(415).json({
+        error: 'Unsupported file type. Upload an audio or video recording (MP3, M4A, MP4, MOV, OGG/Opus, WebM, WAV, FLAC, AAC).',
+        code: 'UNSUPPORTED_MEDIA_TYPE',
+      });
+    }
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ error: `Invalid upload (${err.code})`, code: err.code });
+    }
+    logger.error('Session upload storage error: ' + err.message);
+    return res.status(500).json({ error: 'Failed to upload session audio' });
+  });
+}
+
+// Remove an uploaded (already encrypted) file when the request is rejected.
+function discardUpload(req) {
+  if (req.file && req.file.path) {
+    try { fs.unlinkSync(req.file.path); } catch (_) { /* already gone */ }
+  }
+}
+
+// Temp-file housekeeping (plaintext working copies in data/tmp, interrupted
+// *.part writes in the media dirs): purge at startup, then every 15 min.
+fileCrypto.startHousekeeping([UPLOAD_DIR, path.resolve(__dirname, '../../data/diary_files')]);
+
 // POST /api/sessions - Upload session audio
-router.post('/', authenticate, requireRole('therapist', 'superadmin'), upload.single('audio'), async (req, res) => {
+router.post('/', authenticate, requireRole('therapist', 'superadmin'), runUpload(upload.single('audio'), '100 MB'), async (req, res) => {
   try {
     const therapistId = req.user.id;
     const clientId = req.body.client_id;
@@ -107,9 +163,7 @@ router.post('/', authenticate, requireRole('therapist', 'superadmin'), upload.si
 
     if (!clientId) {
       // Clean up uploaded file if validation fails
-      if (req.file) {
-        fs.unlinkSync(req.file.path);
-      }
+      discardUpload(req);
       return res.status(400).json({ error: 'client_id is required' });
     }
 
@@ -118,9 +172,7 @@ router.post('/', authenticate, requireRole('therapist', 'superadmin'), upload.si
     }
 
     if (inquiryId !== null && (Number.isNaN(inquiryId) || inquiryId <= 0)) {
-      if (req.file) {
-        fs.unlinkSync(req.file.path);
-      }
+      discardUpload(req);
       return res.status(400).json({ error: 'inquiry_id must be a positive integer' });
     }
 
@@ -130,9 +182,7 @@ router.post('/', authenticate, requireRole('therapist', 'superadmin'), upload.si
     const sessionCheck = checkSessionLimit(therapistId);
     if (!sessionCheck.allowed) {
       // Clean up uploaded file if limit reached
-      if (req.file) {
-        fs.unlinkSync(req.file.path);
-      }
+      discardUpload(req);
       return res.status(403).json({
         error: sessionCheck.message,
         current: sessionCheck.current,
@@ -149,7 +199,7 @@ router.post('/', authenticate, requireRole('therapist', 'superadmin'), upload.si
 
     if (clientCheck.length === 0 || clientCheck[0].values.length === 0) {
       // Clean up uploaded file
-      fs.unlinkSync(req.file.path);
+      discardUpload(req);
       return res.status(403).json({ error: 'Client not found or not linked to you' });
     }
 
@@ -160,16 +210,16 @@ router.post('/', authenticate, requireRole('therapist', 'superadmin'), upload.si
         [inquiryId, therapistId, clientId]
       );
       if (inquiryCheck.length === 0 || inquiryCheck[0].values.length === 0) {
-        fs.unlinkSync(req.file.path);
+        discardUpload(req);
         return res.status(400).json({ error: 'inquiry_id not found for this client' });
       }
     }
 
-    // Encrypt the uploaded audio file on disk
-    const { encryptedPath, keyVersion, keyId } = encryptFileOnDisk(req.file.path);
-
-    // Store relative path as audio_ref (opaque ID based)
-    const audioRef = path.basename(encryptedPath);
+    // The file was encrypted while it streamed in (EncryptingStorage); its
+    // name carries the extension of the DETECTED type: <uuid>.<ext>.enc
+    const keyVersion = req.file.keyVersion;
+    const keyId = req.file.keyId;
+    const audioRef = req.file.filename;
 
     // Create session record in database (T-07: optional title/scheduled_at/inquiry_id; T-19: recording_mode)
     // For single_track mode, status starts as 'diarizing' so the UI can show a
@@ -237,9 +287,7 @@ router.post('/', authenticate, requireRole('therapist', 'superadmin'), upload.si
     });
   } catch (error) {
     // Clean up uploaded file on error
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
+    discardUpload(req);
     logger.error('Session upload error: ' + error.message);
     res.status(500).json({ error: 'Failed to upload session audio' });
   }
@@ -426,6 +474,14 @@ router.post('/:id/transcribe', authenticate, requireRole('therapist', 'superadmi
 
     if (transcriptionResult.success) {
       res.json({ message: 'Transcription completed successfully', session_id: parseInt(sessionId) });
+    } else if (transcriptionResult.code === 'FILE_TOO_LONG_TO_TRANSCRIBE') {
+      // M20: explicit, non-retryable outcome (status 'transcription_too_long').
+      res.status(422).json({
+        error: 'Recording is too long to transcribe automatically',
+        code: transcriptionResult.code,
+        details: transcriptionResult.error,
+        status: 'transcription_too_long'
+      });
     } else {
       res.status(500).json({ error: 'Transcription failed', details: transcriptionResult.error });
     }
@@ -761,12 +817,13 @@ router.patch('/:id', authenticate, requireRole('therapist', 'superadmin'), async
 // runs it through the transcription service, and returns the resulting text
 // WITHOUT persisting the audio. The therapist then decides whether to commit
 // the text to post_session_notes via PATCH.
-router.post('/:id/transcribe-voice-note', authenticate, requireRole('therapist', 'superadmin'), upload.single('audio'), async (req, res) => {
+router.post('/:id/transcribe-voice-note', authenticate, requireRole('therapist', 'superadmin'), runUpload(voiceNoteUpload.single('audio'), '25 MB'), async (req, res) => {
   try {
     const db = getDatabase();
     const sessionId = req.params.id;
 
-    if (!req.file) {
+    // memoryStorage: req.file.buffer only, nothing is written to disk.
+    if (!req.file || !req.file.buffer) {
       return res.status(400).json({ error: 'Audio file is required' });
     }
 
@@ -775,35 +832,44 @@ router.post('/:id/transcribe-voice-note', authenticate, requireRole('therapist',
       [sessionId]
     );
     if (result.length === 0 || result[0].values.length === 0) {
-      // Clean up uploaded temp file
-      try { fs.unlinkSync(req.file.path); } catch (_) {}
       return res.status(404).json({ error: 'Session not found' });
     }
     const row = result[0].values[0];
 
     if (row[1] !== req.user.id) {
-      try { fs.unlinkSync(req.file.path); } catch (_) {}
       return res.status(403).json({ error: 'Access denied' });
     }
 
     if (row[2]) {
       const consentCheck = verifyClientConsent(req.user.id, row[2], 'session_voice_note');
       if (!consentCheck.allowed) {
-        try { fs.unlinkSync(req.file.path); } catch (_) {}
         return res.status(consentCheck.status).json({ error: consentCheck.error });
       }
     }
 
-    // Read raw audio and transcribe. We never encrypt or persist this audio —
-    // it is processed once and the temp file is unlinked.
-    let transcript = '';
-    try {
-      const audioBuffer = fs.readFileSync(req.file.path);
-      const { transcribeAudioBuffer } = require('../services/transcription');
-      const result = await transcribeAudioBuffer(audioBuffer);
-      transcript = (result && result.text) ? result.text : '';
-    } finally {
-      try { fs.unlinkSync(req.file.path); } catch (_) {}
+    // Real content type from the bytes (M12), not the client MIME.
+    const detected = sniffMedia(req.file.buffer.subarray(0, 4096), { hints: [req.file.originalname, req.file.mimetype, 'audio'] });
+    if (!detected || (detected.kind !== 'audio' && detected.kind !== 'video')) {
+      return res.status(415).json({
+        error: 'Unsupported file type. Record or upload an audio clip.',
+        code: 'UNSUPPORTED_MEDIA_TYPE',
+      });
+    }
+
+    // Transcribe once; the audio is never encrypted or persisted.
+    const { transcribeAudioBuffer } = require('../services/transcription');
+    const txResult = await transcribeAudioBuffer(req.file.buffer, { mime: detected.mime, ext: detected.ext });
+    const transcript = (txResult && txResult.text) ? txResult.text : '';
+    req.file.buffer = null;
+
+    if (txResult && txResult.usage && isTranscriptionConfigured()) {
+      try {
+        const { logUsage } = require('../services/aiUsageLogger');
+        const u = txResult.usage;
+        logUsage(req.user.id, 'openai', u.model, 'voice_note_transcription', u.inputTokens, u.outputTokens, null, parseInt(sessionId, 10));
+      } catch (e) {
+        logger.warn('Voice note usage logging failed: ' + e.message);
+      }
     }
 
     db.run(
@@ -814,9 +880,6 @@ router.post('/:id/transcribe-voice-note', authenticate, requireRole('therapist',
 
     res.json({ session_id: parseInt(sessionId), transcript });
   } catch (error) {
-    if (req.file && fs.existsSync(req.file.path)) {
-      try { fs.unlinkSync(req.file.path); } catch (_) {}
-    }
     logger.error('Voice note transcription error: ' + error.message);
     res.status(500).json({ error: 'Failed to transcribe voice note' });
   }
@@ -1013,117 +1076,123 @@ router.delete('/:id', authenticate, requireRole('therapist', 'superadmin'), asyn
   }
 });
 
-// GET /api/sessions/:id/stream - Stream decrypted audio/video file
-router.get('/:id/stream', authenticate, requireRole('therapist', 'superadmin'), async (req, res) => {
+// Audit rule (one row per access path; HEAD never audits):
+//   - GET /media-url writes the row: every signed link issued = one row,
+//     even if the player then makes many Range requests with it;
+//   - a stream request authenticated by cookie / Bearer (not a signed link)
+//     writes one row per request, whatever its Range.
+// So no download — full or ranged — can bypass the audit trail.
+function auditSessionStream(req, sessionId, clientId, via) {
+  const db = getDatabase();
+  db.run(
+    "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'stream_session_audio', 'session', ?, ?, datetime('now'))",
+    [req.user.id, sessionId, JSON.stringify({ client_id: clientId, via })]
+  );
+  saveDatabaseAfterWrite();
+}
+
+// Shared authorization for the recording of a session (stream + media-url):
+// the caller must own the session and the client's consent must be in force
+// (unchanged from the pre-wave-3 stream route).
+function authorizeSessionMedia(req) {
+  const db = getDatabase();
+  const result = db.exec(
+    'SELECT therapist_id, client_id, audio_ref FROM sessions WHERE id = ?',
+    [req.params.id]
+  );
+  if (result.length === 0 || result[0].values.length === 0) {
+    return { status: 404, error: 'Session not found' };
+  }
+  const [therapistId, clientId, audioRef] = result[0].values[0];
+
+  // Verify therapist owns this session
+  if (therapistId !== req.user.id) {
+    return { status: 403, error: 'Access denied' };
+  }
+
+  // Verify client consent
+  if (clientId) {
+    const consentCheck = verifyClientConsent(req.user.id, clientId, 'session_stream');
+    if (!consentCheck.allowed) {
+      return { status: consentCheck.status, error: consentCheck.error };
+    }
+  }
+
+  if (!audioRef || path.basename(audioRef) !== audioRef) {
+    return { status: 404, error: 'No audio file available for this session' };
+  }
+  const filePath = path.join(UPLOAD_DIR, audioRef);
+  if (!fs.existsSync(filePath)) {
+    return { status: 404, error: 'Audio file not found on disk' };
+  }
+  return { therapistId, clientId, audioRef, filePath };
+}
+
+// GET /api/sessions/:id/media-url - short-lived signed URL for <audio src>/<video src>.
+// Same authorization as the stream itself. The returned URL works without
+// cookies/headers for 10 minutes and only for this user + session.
+router.get('/:id/media-url', authenticate, requireRole('therapist', 'superadmin'), async (req, res) => {
   try {
-    const db = getDatabase();
-    const sessionId = req.params.id;
-
-    const result = db.exec(
-      'SELECT therapist_id, client_id, audio_ref FROM sessions WHERE id = ?',
-      [sessionId]
-    );
-
-    if (result.length === 0 || result[0].values.length === 0) {
+    if (!/^\d+$/.test(String(req.params.id))) {
       return res.status(404).json({ error: 'Session not found' });
     }
+    const media = authorizeSessionMedia(req);
+    if (media.error) return res.status(media.status).json({ error: media.error });
 
-    const row = result[0].values[0];
-    const therapistId = row[0];
-    const clientId = row[1];
-    const audioRef = row[2];
-
-    // Verify therapist owns this session
-    if (therapistId !== req.user.id) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    // Verify client consent
-    if (clientId) {
-      const consentCheck = verifyClientConsent(req.user.id, clientId, 'session_stream');
-      if (!consentCheck.allowed) {
-        return res.status(consentCheck.status).json({ error: consentCheck.error });
-      }
-    }
-
-    if (!audioRef) {
-      return res.status(404).json({ error: 'No audio file available for this session' });
-    }
-
-    const filePath = path.join(UPLOAD_DIR, audioRef);
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: 'Audio file not found on disk' });
-    }
-
-    // Decrypt the file: read encrypted content, decrypt to get base64, then decode to binary
-    const encryptedContent = fs.readFileSync(filePath, 'utf8');
-    let decryptedBase64;
+    let contentType = mimeFromRef(media.audioRef);
     try {
-      decryptedBase64 = decrypt(encryptedContent);
-    } catch (e) {
-      logger.error(`Failed to decrypt audio for session ${sessionId}: ${e.message}`);
-      return res.status(500).json({ error: 'Failed to decrypt audio file' });
-    }
-
-    const audioBuffer = Buffer.from(decryptedBase64, 'base64');
-    const totalSize = audioBuffer.length;
-
-    // Determine Content-Type from audio_ref filename
-    const ext = path.extname(audioRef.replace('.enc', '')).toLowerCase();
-    const mimeTypes = {
-      '.mp3': 'audio/mpeg',
-      '.wav': 'audio/wav',
-      '.ogg': 'audio/ogg',
-      '.webm': 'audio/webm',
-      '.aac': 'audio/aac',
-      '.flac': 'audio/flac',
-      '.m4a': 'audio/mp4',
-      '.mp4': 'video/mp4',
-      '.mkv': 'video/x-matroska',
-      '.mov': 'video/quicktime'
-    };
-    const contentType = mimeTypes[ext] || 'application/octet-stream';
-
-    // Audit log
-    db.run(
-      "INSERT INTO audit_logs (actor_id, action, target_type, target_id, details_encrypted, created_at) VALUES (?, 'stream_session_audio', 'session', ?, ?, datetime('now'))",
-      [req.user.id, sessionId, JSON.stringify({ client_id: clientId })]
-    );
-    saveDatabaseAfterWrite();
-
-    // Handle range requests for seeking
-    const rangeHeader = req.headers.range;
-    if (rangeHeader) {
-      const parts = rangeHeader.replace(/bytes=/, '').split('-');
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
-
-      if (start >= totalSize || end >= totalSize || start > end) {
-        res.status(416).set('Content-Range', `bytes */${totalSize}`);
-        return res.end();
+      const info = await fileCrypto.readFileInfo(media.filePath);
+      if (info.contentType) contentType = info.contentType;
+      if (info.format === 'legacy') {
+        // Start the one-time upgrade to the chunked format now, so the first
+        // Range request does not wait for it (the stream awaits the same lock).
+        fileCrypto.upgradeLegacyFile(media.filePath, { contentTypeHint: contentType })
+          .catch((e) => logger.warn(`Legacy upgrade of session ${req.params.id} audio failed: ${e.code || e.message}`));
       }
-
-      const chunkSize = end - start + 1;
-      res.status(206).set({
-        'Content-Range': `bytes ${start}-${end}/${totalSize}`,
-        'Accept-Ranges': 'bytes',
-        'Content-Length': chunkSize,
-        'Content-Type': contentType,
-        'Cache-Control': 'no-store'
-      });
-      res.end(audioBuffer.slice(start, end + 1));
-    } else {
-      res.set({
-        'Content-Length': totalSize,
-        'Content-Type': contentType,
-        'Accept-Ranges': 'bytes',
-        'Cache-Control': 'no-store'
-      });
-      res.end(audioBuffer);
+    } catch (e) {
+      logger.warn(`Session ${req.params.id} media info failed: ${e.message}`);
     }
+
+    const sessionId = parseInt(req.params.id, 10);
+    auditSessionStream(req, sessionId, media.clientId, 'media_url');
+    const { url, expiresAt } = createMediaUrl({
+      kind: 'session',
+      resourceId: sessionId,
+      userId: req.user.id,
+      streamPath: `/api/sessions/${sessionId}/stream`,
+    });
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ url, expires_at: expiresAt, content_type: contentType, is_video: contentType.startsWith('video/') });
+  } catch (error) {
+    logger.error('Session media-url error: ' + error.message);
+    res.status(500).json({ error: 'Failed to prepare audio' });
+  }
+});
+
+// GET /api/sessions/:id/stream - Stream decrypted audio/video file.
+// Auth: session cookie / Bearer, or a signed link from /media-url. Answers
+// Range requests with 206 and decrypts only the chunks that cover the range.
+router.get('/:id/stream', mediaAuth('session'), requireRole('therapist', 'superadmin'), async (req, res) => {
+  try {
+    const sessionId = req.params.id;
+    const media = authorizeSessionMedia(req);
+    if (media.error) return res.status(media.status).json({ error: media.error });
+
+    await fileCrypto.serveEncryptedFile(req, res, media.filePath, {
+      contentTypeHint: mimeFromRef(media.audioRef),
+      notFoundMessage: 'Audio file not found on disk',
+      decryptErrorMessage: 'Failed to decrypt audio file',
+      // See the audit rule above: signed-link requests were audited when
+      // the link was issued; HEAD never transfers content.
+      onServe: () => {
+        if (req.mediaLink || req.method === 'HEAD') return;
+        auditSessionStream(req, sessionId, media.clientId, 'direct');
+      },
+    });
   } catch (error) {
     logger.error('Stream session audio error: ' + error.message);
-    res.status(500).json({ error: 'Failed to stream audio' });
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to stream audio' });
+    else res.destroy();
   }
 });
 

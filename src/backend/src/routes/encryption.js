@@ -9,8 +9,10 @@ const {
   decrypt,
   rotateKey,
   getActiveKeyVersion,
-  listKeyVersions
+  listKeyVersions,
+  getKeyRingInfo
 } = require('../services/encryption');
+const keyRotation = require('../services/keyRotation');
 
 const router = express.Router();
 
@@ -42,17 +44,59 @@ function requireDebugEndpoints(req, res, next) {
 // List all encryption key versions
 router.get('/keys', authenticate, requireSuperadmin, (req, res) => {
   try {
-    const keys = listKeyVersions();
     const activeVersion = getActiveKeyVersion();
-    res.json({ keys, active_version: activeVersion });
+    const keys = listKeyVersions();
+    res.json({ keys, active_version: activeVersion, key_ring: getKeyRingInfo() });
   } catch (error) {
     logger.error('List encryption keys error: ' + error.message);
     res.status(500).json({ error: 'Failed to list encryption keys' });
   }
 });
 
+// GET /api/encryption/rotation/status
+// Key ring, key versions (source / key check / fingerprint), re-encryption job
+// progress and what is still stored under an older key version. Superadmin.
+router.get('/rotation/status', authenticate, requireSuperadmin, async (req, res) => {
+  try {
+    res.json(await keyRotation.getRotationStatus());
+  } catch (error) {
+    logger.error('Key rotation status error: ' + error.message);
+    res.status(500).json({ error: 'Failed to get key rotation status' });
+  }
+});
+
+// POST /api/encryption/rotation/start
+// Start (or resume a paused / interrupted / failed) re-encryption job that
+// moves every Class A value and backup to the active key version. Superadmin.
+router.post('/rotation/start', authenticate, requireSuperadmin, (req, res) => {
+  try {
+    const result = keyRotation.startReencryption({ actorId: req.user.id });
+    res.status(result.already_running ? 200 : 202).json(result);
+  } catch (error) {
+    if (error.code === 'KEY_CHECK_FAILED' || error.code === 'KEY_VERSION_NOT_WRITABLE') {
+      return res.status(409).json({ error: error.message, code: error.code });
+    }
+    logger.error('Key rotation start error: ' + error.message);
+    res.status(500).json({ error: 'Failed to start re-encryption' });
+  }
+});
+
+// POST /api/encryption/rotation/pause
+// Stop the running job after its current batch; start resumes it. Superadmin.
+router.post('/rotation/pause', authenticate, requireSuperadmin, (req, res) => {
+  try {
+    res.json(keyRotation.pauseReencryption({ actorId: req.user.id }));
+  } catch (error) {
+    logger.error('Key rotation pause error: ' + error.message);
+    res.status(500).json({ error: 'Failed to pause re-encryption' });
+  }
+});
+
 // POST /api/encryption/rotate
-// Rotate encryption key (create new version)
+// Create a new key version from the CURRENT master secret (derived-key
+// rotation). Changing the master secret itself is done through env; see
+// docs/troubleshooting/key-rotation-runbook.md. Existing data moves to the
+// new version via POST /api/encryption/rotation/start.
 router.post('/rotate', authenticate, requireSuperadmin, (req, res) => {
   try {
     const result = rotateKey();

@@ -37,7 +37,7 @@
 const fs = require('fs');
 const path = require('path');
 const { logger } = require('../utils/logger');
-const { decrypt } = require('./encryption');
+const fileCrypto = require('./fileCrypto');
 const { getDatabase, saveDatabaseAfterWrite } = require('../db/connection');
 
 const UPLOAD_DIR = path.resolve(__dirname, '../../data/sessions');
@@ -122,11 +122,15 @@ async function diarizeSessionAudio(audioRef) {
     throw new Error(`Audio file not found: ${audioRef}`);
   }
 
-  // We need the *decrypted* size for production providers. For the dev
-  // estimator we can use the encrypted file size — it's only ~33% larger due
-  // to base64 + the encryption envelope, which is fine for a rough chunk plan.
-  const stat = fs.statSync(filePath);
-  const encryptedBytes = stat.size;
+  // The dev estimator works from the plaintext size: exact for the chunked
+  // format (read from the header), estimated for pre-wave-3 files.
+  let plaintextBytes;
+  try {
+    const info = await fileCrypto.readFileInfo(filePath);
+    plaintextBytes = info.plaintextSize != null ? info.plaintextSize : info.fileSize;
+  } catch (_) {
+    plaintextBytes = fs.statSync(filePath).size;
+  }
 
   if (isProviderConfigured()) {
     // Production path: decrypt, send to provider, normalize response.
@@ -137,19 +141,21 @@ async function diarizeSessionAudio(audioRef) {
     // of the pipeline is wired correctly. When the provider is plugged in,
     // implement `callProviderDiarization(audioBuffer)` returning the same
     // output shape as buildDevSpeakers().
+    let plain = null;
     try {
-      const encryptedContent = fs.readFileSync(filePath, 'utf-8');
-      const decryptedBase64 = decrypt(encryptedContent);
-      const audioBuffer = Buffer.from(decryptedBase64, 'base64');
-      const result = await callProviderDiarization(audioBuffer);
+      // Decrypt to a private temp file (0600), never into memory.
+      plain = await fileCrypto.decryptToTempFile(filePath);
+      const result = await callProviderDiarization(plain);
       return result;
     } catch (e) {
       logger.warn(`Diarization provider failed (${DIARIZATION_PROVIDER}): ${e.message}. Falling back to dev split.`);
       // Fall through to dev split so the upload flow doesn't dead-end.
+    } finally {
+      if (plain) await plain.cleanup();
     }
   }
 
-  const totalDurationSec = estimateDurationFromSize(encryptedBytes);
+  const totalDurationSec = estimateDurationFromSize(plaintextBytes);
   const speakers = buildDevSpeakers(totalDurationSec);
 
   logger.info(
@@ -165,11 +171,12 @@ async function diarizeSessionAudio(audioRef) {
  * caller falls back to dev split. To enable, set DIARIZATION_PROVIDER and
  * implement the provider-specific call (HTTP POST to whisperx/pyannote/Deepgram).
  *
- * @param {Buffer} audioBuffer - decoded audio bytes
+ * @param {{path:string, size:number, contentType:string, ext:string}} audio -
+ *   decrypted recording in a private temp file (deleted by the caller)
  * @returns {Promise<{totalDurationSec:number, speakers:Array}>}
  */
 // eslint-disable-next-line no-unused-vars
-async function callProviderDiarization(audioBuffer) {
+async function callProviderDiarization(audio) {
   // Implementation stub. Real provider integration belongs here.
   // Expected return shape matches buildDevSpeakers() output plus totalDurationSec.
   throw new Error(`Diarization provider '${DIARIZATION_PROVIDER}' not yet implemented`);

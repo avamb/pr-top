@@ -16,15 +16,20 @@ the Basic plan and above.
   attach an audio file to a manual note, but transcription requires a
   paid plan.
 - The file is under 100 MB and in a common audio or video container
-  (mp3, m4a, wav, mp4, webm).
+  (MP3, M4A, MP4, MOV, OGG/Opus, WebM, WAV, FLAC or AAC). PR-TOP checks
+  the actual file content, not just the file name or extension: a file
+  that is not really audio or video is refused with "Unsupported file
+  type", and a file over 100 MB is refused with "File too large".
 
 ## Step-by-step
 
 1. Open the client page from Clients in the sidebar.
 2. Click **New session**. Enter the session date and (optionally) a short title.
 3. Choose **Attach recording** and pick your file.
-4. Confirm upload. The file is stored encrypted at rest with an opaque
-   identifier — even a server-side viewer cannot read it without the key.
+4. Confirm upload. The file is encrypted while it is being received and
+   stored encrypted at rest under an opaque identifier — the unencrypted
+   recording is never written to the server's disk, and nobody with access
+   to the storage can play it without the encryption key.
 5. Wait for transcription to complete. Small files finish in under a
    minute; a 60-minute session usually takes 3-6 minutes.
 6. Review the transcript. Redact anything you want removed by editing the
@@ -62,10 +67,38 @@ waits in draft state until you approve it.
 
 ## Where the file lives
 
-Recordings are stored encrypted on the backend under a signed-access
-stream. They are never exposed at a guessable URL. If you delete the
-session, both the recording and its transcript are removed within the
-nightly cleanup window.
+Recordings are stored encrypted on the backend and are never exposed at a
+guessable URL. When you press play on the session page, the player asks
+the server for a personal playback link that is valid for 10 minutes and
+works only for you and for that one recording. The browser then streams
+the recording in small pieces, so playback starts quickly and you can
+jump to any point (seek) without downloading the whole file first. If a
+link expires while the player is paused, the player fetches a fresh one
+automatically and continues from the same position. Signing out of all
+devices, a password reset, or the client withdrawing consent stops
+playback links from working immediately. Each playback is recorded in the
+audit log.
+
+If you delete the session, both the recording and its transcript are
+removed.
+
+## Long recordings and transcription limits
+
+The transcription service accepts at most about 24 MB of audio per
+request. PR-TOP handles larger files like this:
+
+- **MP3 and WAV** recordings over the limit are cut automatically into
+  parts, each part is transcribed, and the parts are joined into one
+  transcript. Nothing is needed from you.
+- **Other formats** (M4A, MP4, MOV, OGG/Opus, WebM, FLAC, AAC) cannot be
+  cut safely on the server. If such a file is larger than about 24 MB,
+  the session status becomes **transcription_too_long** and the
+  recording itself stays available for playback. To get a transcript,
+  export the recording as MP3 (for example in your recorder app or an
+  audio editor) or split it into shorter files, and upload again.
+
+As a rough guide, 24 MB is around 25 minutes of audio at 128 kbit/s;
+voice-quality recordings (lower bitrate) fit much longer sessions.
 
 ## Troubleshooting
 
@@ -75,6 +108,14 @@ nightly cleanup window.
   provider is healthy.
 - **Summary looks generic** — make sure the transcript is legible; the
   quality of the summary depends on the transcript.
+- **"Unsupported file type"** — the file content is not a recognised
+  audio or video format (for example a document renamed to .mp3, or a
+  damaged file). Re-export the recording from your recorder app.
+- **Status "transcription_too_long"** — see *Long recordings and
+  transcription limits* above. Retrying the same file will not help;
+  upload an MP3 version or shorter parts.
+- **Player shows "Failed to load media file"** — reload the page. If the
+  client has withdrawn consent, recordings can no longer be played.
 
 ## Edge cases
 
@@ -98,9 +139,22 @@ A: Roughly 0.1× real-time on the default transcription provider —
 a 60-minute recording takes about six minutes, plus queue wait.
 
 **Q: Are video files supported?**
-A: Yes. mp4 and webm up to 100 MB. Only the audio track is
+A: Yes. MP4, MOV and WebM up to 100 MB. Only the audio track is
 transcribed; the original video file is preserved for streaming
-playback via the session player.
+playback via the session player. Video files are usually large, so a
+video over about 24 MB will get the status transcription_too_long —
+upload an MP3 export of its audio if you need a transcript.
+
+**Q: Why is my long session not transcribed?**
+A: The transcription service takes at most about 24 MB per request.
+MP3 and WAV files are split automatically; other formats above that
+size get the status transcription_too_long. Convert the recording to
+MP3 and upload it again.
+
+**Q: Does playback download the whole recording to my computer?**
+A: No. The player streams the recording in pieces through a personal
+link that expires after 10 minutes, so you can start listening and
+seek right away.
 
 **Q: Where do transcripts live?**
 A: On the session page. Both the transcript and the AI summary are

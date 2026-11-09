@@ -10,6 +10,8 @@ const { encrypt, decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
 const wsService = require('./websocketService');
 const { logUsage, checkSpendingLimit } = require('./aiUsageLogger');
+const fileCrypto = require('./fileCrypto');
+const { splitForTranscription, removePieces } = require('./audioSplit');
 // Lazy-loaded to avoid circular dependency
 let summarizationService = null;
 function getSummarizationService() {
@@ -28,6 +30,34 @@ function getVectorStoreService() {
 
 const TRANSCRIPTION_API_KEY = process.env.TRANSCRIPTION_API_KEY;
 const UPLOAD_DIR = path.resolve(__dirname, '../../data/sessions');
+
+// Audit M20: the OpenAI transcription endpoint rejects uploads over 25 MB.
+// Larger recordings are split (MP3 / WAV only, see services/audioSplit.js);
+// recordings that cannot be split safely end in the explicit status
+// 'transcription_too_long' instead of an opaque API failure.
+const MAX_TRANSCRIPTION_FILE_BYTES = (() => {
+  const v = parseInt(process.env.TRANSCRIPTION_MAX_FILE_BYTES || '', 10);
+  return Number.isInteger(v) && v > 2 * 1024 * 1024 ? v : 24 * 1024 * 1024;
+})();
+const SPLIT_TARGET_BYTES = Math.min(20 * 1024 * 1024, MAX_TRANSCRIPTION_FILE_BYTES - 1024 * 1024);
+const TOO_LONG_CODE = 'FILE_TOO_LONG_TO_TRANSCRIBE';
+
+function tooLongError(sizeBytes, mime) {
+  const mb = Math.round(sizeBytes / (1024 * 1024));
+  const err = new Error(
+    `Recording is too long to transcribe (${mb} MB ${mime || 'audio'}; the limit per transcription request is ` +
+    `${Math.round(MAX_TRANSCRIPTION_FILE_BYTES / (1024 * 1024))} MB and only MP3/WAV recordings can be split automatically)`
+  );
+  err.code = TOO_LONG_CODE;
+  return err;
+}
+
+// File names the transcription API recognises (it checks the extension).
+const API_EXT = {
+  '.mp3': '.mp3', '.m4a': '.m4a', '.mp4': '.mp4', '.wav': '.wav', '.webm': '.webm',
+  '.ogg': '.ogg', '.oga': '.oga', '.flac': '.flac', '.mpeg': '.mpeg', '.mpga': '.mpga',
+  '.mov': '.mp4', '.3gp': '.mp4', '.mkv': '.webm', '.ogv': '.ogg',
+};
 
 /**
  * Check if a real transcription service is configured.
@@ -56,14 +86,14 @@ async function transcribeAudio(audioRef) {
   const fileStats = fs.statSync(filePath);
 
   if (isConfigured()) {
-    // Production path: call real transcription API
-    // First decrypt the audio file to get raw audio data
-    const encryptedContent = fs.readFileSync(filePath, 'utf-8');
-    const decryptedBase64 = decrypt(encryptedContent);
-    const audioBuffer = Buffer.from(decryptedBase64, 'base64');
-
-    const result = await callTranscriptionAPI(audioBuffer);
-    return result;
+    // Production path: decrypt to a private temp file (0600, never into
+    // memory), upload it as a file-backed stream, delete it afterwards.
+    const plain = await fileCrypto.decryptToTempFile(filePath);
+    try {
+      return await transcribePlainFile(plain);
+    } finally {
+      await plain.cleanup();
+    }
   } else {
     // Development mode: generate a development transcript
     // This provides realistic-looking output for testing the pipeline
@@ -97,17 +127,70 @@ async function transcribeAudio(audioRef) {
 }
 
 /**
- * Call OpenAI Whisper API for speech-to-text transcription.
- * Sends the raw audio buffer as a multipart/form-data upload.
+ * Transcribe a decrypted recording on disk, splitting it first when it is
+ * over the per-request limit.
  *
- * @param {Buffer} audioBuffer - Raw audio data (decrypted)
- * @returns {Promise<string>} The transcription text
+ * @param {{path:string, size:number, contentType:string, ext:string}} plain
+ * @returns {Promise<{text:string, usage:object, parts:number}>}
  */
-async function callTranscriptionAPI(audioBuffer) {
+async function transcribePlainFile(plain) {
+  const source = { path: plain.path, size: plain.size, mime: plain.contentType, ext: plain.ext };
+  if (plain.size <= MAX_TRANSCRIPTION_FILE_BYTES) {
+    const r = await callTranscriptionAPI(source);
+    return { ...r, parts: 1 };
+  }
+  const pieces = await splitForTranscription(plain.path, {
+    mime: plain.contentType,
+    size: plain.size,
+    targetBytes: SPLIT_TARGET_BYTES,
+    tmpDir: path.dirname(plain.path),
+  });
+  if (!pieces || pieces.length === 0 || pieces.some(p => p.size > MAX_TRANSCRIPTION_FILE_BYTES)) {
+    await removePieces(pieces);
+    throw tooLongError(plain.size, plain.contentType);
+  }
+  logger.info(`Transcription: ${Math.round(plain.size / 1024)}KB ${plain.contentType} split into ${pieces.length} parts`);
+  try {
+    const texts = [];
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let model = null;
+    for (const piece of pieces) {
+      const r = await callTranscriptionAPI({ path: piece.path, size: piece.size, mime: plain.contentType, ext: plain.ext });
+      texts.push(r.text);
+      inputTokens += r.usage.inputTokens;
+      outputTokens += r.usage.outputTokens;
+      model = r.usage.model;
+    }
+    return { text: texts.join('\n'), usage: { model, inputTokens, outputTokens }, parts: pieces.length };
+  } finally {
+    await removePieces(pieces);
+  }
+}
+
+/**
+ * Call OpenAI Whisper API for speech-to-text transcription.
+ * Sends the audio as multipart/form-data. A file source is uploaded as a
+ * file-backed Blob (fs.openAsBlob), so it is streamed from disk instead of
+ * being copied into memory.
+ *
+ * @param {Buffer|{path:string, size:number, mime?:string, ext?:string}} source - decrypted audio
+ * @param {{mime?:string, ext?:string}} [meta] - for Buffer sources
+ * @returns {Promise<{text:string, usage:object}>}
+ */
+async function callTranscriptionAPI(source, meta = {}) {
   // Check spending limit before making API call
   const spendingCheck = checkSpendingLimit();
   if (!spendingCheck.allowed) {
     throw new Error('AI spending limit reached. Contact admin.');
+  }
+
+  const isBuffer = Buffer.isBuffer(source);
+  const size = isBuffer ? source.length : source.size;
+  const mime = (isBuffer ? meta.mime : source.mime) || 'audio/webm';
+  const ext = (isBuffer ? meta.ext : source.ext) || '.webm';
+  if (size > MAX_TRANSCRIPTION_FILE_BYTES) {
+    throw tooLongError(size, mime);
   }
 
   const apiBase = process.env.TRANSCRIPTION_API_URL || 'https://api.openai.com/v1';
@@ -116,7 +199,6 @@ async function callTranscriptionAPI(audioBuffer) {
 
   // Read transcription model from platform_settings (DB override)
   try {
-    const { getDatabase } = require('../db/connection');
     const db = getDatabase();
     const modResult = db.exec("SELECT value FROM platform_settings WHERE key = 'ai_transcription_model'");
     if (modResult.length > 0 && modResult[0].values.length > 0 && modResult[0].values[0][0]) {
@@ -126,55 +208,23 @@ async function callTranscriptionAPI(audioBuffer) {
     // Fall back to env var
   }
 
-  // Build multipart/form-data body manually (no external dependency needed)
-  const boundary = '----FormBoundary' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  const blob = isBuffer
+    ? new Blob([source], { type: mime })
+    : await fs.openAsBlob(source.path, { type: mime });
+  const form = new FormData();
+  form.append('model', model);
+  if (language) form.append('language', language);
+  form.append('response_format', 'text');
+  form.append('file', blob, 'session_audio' + (API_EXT[ext] || ext));
 
-  const parts = [];
-
-  // model field
-  parts.push(
-    `--${boundary}\r\n` +
-    `Content-Disposition: form-data; name="model"\r\n\r\n` +
-    `${model}\r\n`
-  );
-
-  // language field (optional)
-  if (language) {
-    parts.push(
-      `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="language"\r\n\r\n` +
-      `${language}\r\n`
-    );
-  }
-
-  // response_format field
-  parts.push(
-    `--${boundary}\r\n` +
-    `Content-Disposition: form-data; name="response_format"\r\n\r\n` +
-    `text\r\n`
-  );
-
-  // audio file field
-  const fileHeader = Buffer.from(
-    `--${boundary}\r\n` +
-    `Content-Disposition: form-data; name="file"; filename="session_audio.webm"\r\n` +
-    `Content-Type: audio/webm\r\n\r\n`
-  );
-  const fileFooter = Buffer.from(`\r\n`);
-  const ending = Buffer.from(`--${boundary}--\r\n`);
-
-  const textParts = Buffer.from(parts.join(''));
-  const body = Buffer.concat([textParts, fileHeader, audioBuffer, fileFooter, ending]);
-
-  logger.info(`Calling transcription API: ${apiBase}/audio/transcriptions (model=${model}, audio=${Math.round(audioBuffer.length / 1024)}KB)`);
+  logger.info(`Calling transcription API: ${apiBase}/audio/transcriptions (model=${model}, audio=${Math.round(size / 1024)}KB ${mime})`);
 
   const response = await fetch(`${apiBase}/audio/transcriptions`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${TRANSCRIPTION_API_KEY}`,
-      'Content-Type': `multipart/form-data; boundary=${boundary}`
+      'Authorization': `Bearer ${TRANSCRIPTION_API_KEY}`
     },
-    body: body,
+    body: form,
     signal: AbortSignal.timeout(300000) // 5 minute timeout for long audio
   });
 
@@ -184,6 +234,7 @@ async function callTranscriptionAPI(audioBuffer) {
       const errorBody = await response.text();
       errorDetail = errorBody.substring(0, 500);
     } catch { /* ignore */ }
+    if (response.status === 413) throw tooLongError(size, mime);
     throw new Error(`Transcription API returned ${response.status}: ${errorDetail}`);
   }
 
@@ -196,7 +247,7 @@ async function callTranscriptionAPI(audioBuffer) {
   logger.info(`Transcription API returned ${transcript.length} characters`);
 
   // Estimate tokens from transcript length (Whisper doesn't return token counts in text mode)
-  const estimatedInputTokens = Math.ceil(audioBuffer.length / 100); // rough estimate from audio size
+  const estimatedInputTokens = Math.ceil(size / 100); // rough estimate from audio size
   const estimatedOutputTokens = Math.ceil(transcript.length / 4);
 
   return {
@@ -339,14 +390,28 @@ async function processSessionTranscription(sessionId) {
   } catch (error) {
     logger.error(`Transcription failed for session ${sessionId}: ${error.message}`);
 
-    // Update session status to transcription_failed
+    // Update session status: 'transcription_too_long' when the recording is
+    // over the API limit and cannot be split, else 'transcription_failed'.
+    const tooLong = !!error && error.code === TOO_LONG_CODE;
     db.run(
-      "UPDATE sessions SET status = 'transcription_failed', updated_at = datetime('now') WHERE id = ?",
-      [sessionId]
+      "UPDATE sessions SET status = ?, updated_at = datetime('now') WHERE id = ?",
+      [tooLong ? 'transcription_too_long' : 'transcription_failed', sessionId]
     );
     saveDatabaseAfterWrite();
 
-    return { success: false, sessionId, error: error.message };
+    if (tooLong) {
+      try {
+        const r = db.exec('SELECT therapist_id, client_id FROM sessions WHERE id = ?', [sessionId]);
+        if (r.length && r[0].values.length) {
+          const [tId, cId] = r[0].values[0];
+          wsService.emitSessionStatus(tId, { sessionId, clientId: cId, status: 'transcription_too_long' });
+        }
+      } catch (wsErr) {
+        logger.warn(`[WS] Failed to emit session status: ${wsErr.message}`);
+      }
+    }
+
+    return { success: false, sessionId, error: error.message, code: tooLong ? TOO_LONG_CODE : undefined };
   }
 }
 
@@ -359,11 +424,12 @@ async function processSessionTranscription(sessionId) {
  * works without a Whisper key configured.
  *
  * @param {Buffer} audioBuffer - Raw audio bytes (e.g. webm/ogg from MediaRecorder)
+ * @param {{mime?:string, ext?:string}} [meta] - detected content type (magic bytes)
  * @returns {Promise<{text: string, usage: {model: string, inputTokens: number, outputTokens: number}}>}
  */
-async function transcribeAudioBuffer(audioBuffer) {
+async function transcribeAudioBuffer(audioBuffer, meta = {}) {
   if (isConfigured()) {
-    return await callTranscriptionAPI(audioBuffer);
+    return await callTranscriptionAPI(audioBuffer, meta);
   }
   // Dev fallback — produce a deterministic, recognisable transcript so the
   // therapist can verify the voice -> text wiring without external services.
@@ -387,6 +453,9 @@ async function transcribeAudioBuffer(audioBuffer) {
 module.exports = {
   transcribeAudio,
   transcribeAudioBuffer,
+  transcribePlainFile,
   processSessionTranscription,
-  isConfigured
+  isConfigured,
+  MAX_TRANSCRIPTION_FILE_BYTES,
+  TOO_LONG_CODE
 };

@@ -847,10 +847,10 @@ router.get('/stats/utm', (req, res) => {
 });
 
 // POST /api/admin/backup - Trigger manual database backup
-router.post('/backup', (req, res) => {
+router.post('/backup', async (req, res) => {
   try {
     logger.info(`[BACKUP] Manual backup triggered by admin ${req.user.id}`);
-    const result = backupService.backup();
+    const result = await backupService.backup();
 
     if (result.success) {
       // Audit log
@@ -865,7 +865,8 @@ router.post('/backup', (req, res) => {
         message: 'Backup created successfully',
         filename: result.filename,
         size: result.size,
-        raw_size: result.raw_size
+        raw_size: result.raw_size,
+        key_version: result.key_version
       });
     } else {
       res.status(500).json({ error: 'Backup failed: ' + result.error });
@@ -899,7 +900,7 @@ router.get('/backup/status', (req, res) => {
 });
 
 // POST /api/admin/restore - Restore from a specific backup
-router.post('/restore', (req, res) => {
+router.post('/restore', async (req, res) => {
   try {
     const { filename, confirm } = req.body;
 
@@ -924,13 +925,15 @@ router.post('/restore', (req, res) => {
     );
     saveDatabaseAfterWrite();
 
-    const result = backupService.restore(filename);
+    const result = await backupService.restore(filename);
 
     if (result.success) {
       res.json({
         message: 'Database restored successfully. Server restart recommended.',
         filename: result.filename,
         size: result.size,
+        format: result.format,
+        safety_backup: result.safety_backup,
         restart_required: true
       });
     } else {
