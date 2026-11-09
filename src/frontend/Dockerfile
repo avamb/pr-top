@@ -46,6 +46,7 @@ ENV VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY
 RUN npm run build
 
 # ---- Stage 2: Serve with nginx ----
+# nginx.conf relies on `server ... resolve` in upstreams (nginx >= 1.27.3).
 FROM nginx:alpine
 
 # Remove default nginx config
