@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatUserDate } from '../utils/formatDate';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 
@@ -39,17 +40,13 @@ export default function AdminAuditLogs() {
   const [actions, setActions] = useState([]);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-    loadActions(token);
-    loadLogs(token, 1);
+    loadActions();
+    loadLogs(1);
   }, []);
 
-  const loadActions = async (token) => {
+  const loadActions = async () => {
     try {
-      const res = await fetch(`${API_URL}/admin/logs/audit/actions`, {
-        headers: { Authorization: `Bearer ${token || localStorage.getItem('token')}` }
-      });
+      const res = await fetchApi(`${API_URL}/admin/logs/audit/actions`);
       if (res.ok) {
         const data = await res.json();
         setActions(data.actions || []);
@@ -59,7 +56,7 @@ export default function AdminAuditLogs() {
     }
   };
 
-  const loadLogs = async (token, pageNum, action, from, to) => {
+  const loadLogs = async (pageNum, action, from, to) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -73,9 +70,7 @@ export default function AdminAuditLogs() {
       if (df) params.append('date_from', df);
       if (dt) params.append('date_to', dt);
 
-      const res = await fetch(`${API_URL}/admin/logs/audit?${params}`, {
-        headers: { Authorization: `Bearer ${token || localStorage.getItem('token')}` }
-      });
+      const res = await fetchApi(`${API_URL}/admin/logs/audit?${params}`);
       if (res.ok) {
         const data = await res.json();
         setLogs(data.logs || []);

@@ -84,8 +84,9 @@ access to any individual client's diary or notes.
 - **Multiple therapists in one practice.** Each therapist registers
   their own account. Premium accounts can share specific clients
   read-only with a supervising colleague.
-- **Client already on Telegram with a different therapist.** The
-  `/switch` command lets the client flip between therapist bindings.
+- **Client already on Telegram with a different therapist.** A
+  Telegram account is linked to one therapist at a time: the client
+  sends `/disconnect` and then `/connect` with the new invite code.
 
 ## Troubleshooting
 

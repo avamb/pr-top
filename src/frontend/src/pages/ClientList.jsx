@@ -5,6 +5,7 @@ import { formatUserDate, formatUserDateOnly } from '../utils/formatDate';
 import BulkImport from '../components/BulkImport';
 import CreateSoloClient from '../components/CreateSoloClient';
 import useWebSocket from '../hooks/useWebSocket';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 
@@ -145,8 +146,6 @@ export default function ClientList() {
   const { on: onWsEvent } = useWebSocket();
 
   const fetchClients = useCallback(async (searchTerm, pageNum) => {
-    const token = localStorage.getItem('token');
-    if (!token) { navigate('/login'); return; }
 
     // Abort previous request
     if (abortControllerRef.current) {
@@ -169,13 +168,11 @@ export default function ClientList() {
       const trimmedSearch = (searchTerm || '').trim();
       if (trimmedSearch) params.set('search', trimmedSearch);
 
-      const res = await fetch(`${API_URL}/clients?${params}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+      const res = await fetchApi(`${API_URL}/clients?${params}`, {
         signal: controller.signal
       });
 
       if (res.status === 401) {
-        localStorage.removeItem('token');
         localStorage.removeItem('user');
         navigate('/login');
         return;
@@ -220,8 +217,6 @@ export default function ClientList() {
   );
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) { navigate('/login'); return; }
     fetchClients(search, page);
 
     return () => {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { fetchApi } from '../utils/fetchApi';
 
 const API = '/api';
 
@@ -128,7 +129,6 @@ function EventRow({ event, t }) {
  */
 export default function AttendanceTimeline({ sessionId }) {
   const { t } = useTranslation();
-  const token = localStorage.getItem('token');
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -141,9 +141,7 @@ export default function AttendanceTimeline({ sessionId }) {
       setLoading(true);
       setError('');
       try {
-        const res = await fetch(`${API}/sessions/${sessionId}/attendance-history`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const res = await fetchApi(`${API}/sessions/${sessionId}/attendance-history`);
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           throw new Error(data.error || t('reminders.sessionDetail.timeline.fetchError', 'Could not load timeline.'));
@@ -159,7 +157,7 @@ export default function AttendanceTimeline({ sessionId }) {
 
     fetchHistory();
     return () => { cancelled = true; };
-  }, [sessionId, token, t]);
+  }, [sessionId, t]);
 
   return (
     <section

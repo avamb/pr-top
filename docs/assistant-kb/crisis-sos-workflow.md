@@ -112,9 +112,9 @@ The client's message and the bot's reply are logged as an SOS event.
   is still active on the client page. If they revoked the bot, the
   reply button is disabled with a tooltip explaining why.
 - **Wrong crisis line shown in the client's bot chat.** The bot picks
-  from a table keyed by the client's Telegram-language field. Ask the
-  client to set `/lang <en|ru|es|uk>` in Telegram to correct it;
-  future SOS replies will use the corrected locale.
+  from a table keyed by the client's Telegram-language field. The bot has
+  no language command: the language was set from the client's Telegram
+  app language at registration. Contact support to correct it.
 
 ## FAQ
 

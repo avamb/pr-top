@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { fetchApi } from '../utils/fetchApi';
 
 const PANEL_STATE_KEY = 'assistant_panel_open';
 const CONVERSATION_ID_KEY = 'assistant_conversation_id';
@@ -84,12 +85,10 @@ const useAssistantStore = create((set, get) => ({
     }));
 
     try {
-      const token = localStorage.getItem('token');
       const headers = {
         'Content-Type': 'application/json',
         'X-Locale': locale || 'en'
       };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
       if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
       const body = {
@@ -100,7 +99,7 @@ const useAssistantStore = create((set, get) => ({
         stream: useStreaming
       };
 
-      const res = await fetch('/api/assistant/chat', {
+      const res = await fetchApi('/api/assistant/chat', {
         method: 'POST',
         headers,
         body: JSON.stringify(body)
@@ -227,12 +226,10 @@ const useAssistantStore = create((set, get) => ({
     set({ historyLoading: true });
 
     try {
-      const token = localStorage.getItem('token');
       const headers = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
       if (options.csrfToken) headers['X-CSRF-Token'] = options.csrfToken;
 
-      const res = await fetch('/api/assistant/history', { headers });
+      const res = await fetchApi('/api/assistant/history', { headers });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data = await res.json();
@@ -257,12 +254,10 @@ const useAssistantStore = create((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const token = localStorage.getItem('token');
       const headers = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
       if (options.csrfToken) headers['X-CSRF-Token'] = options.csrfToken;
 
-      const res = await fetch(`/api/assistant/history/${id}`, { headers });
+      const res = await fetchApi(`/api/assistant/history/${id}`, { headers });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data = await res.json();
@@ -306,12 +301,10 @@ const useAssistantStore = create((set, get) => ({
     if (!id) return;
 
     try {
-      const token = localStorage.getItem('token');
       const headers = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
       if (options.csrfToken) headers['X-CSRF-Token'] = options.csrfToken;
 
-      const res = await fetch(`/api/assistant/history/${id}`, {
+      const res = await fetchApi(`/api/assistant/history/${id}`, {
         method: 'DELETE',
         headers
       });

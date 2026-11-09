@@ -12,9 +12,11 @@ import '@fontsource/inter/700.css';
 import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/500.css';
 
-import './i18n/index.js';
-import App from './App';
+import i18n, { i18nReady } from './i18n/index.js';
+import App, { preloadRoute } from './App';
 import './styles/index.css';
+import { removeLegacyToken } from './utils/logout';
+import { reloadOnceForChunkError } from './utils/chunkReload';
 
 // F9 — Hydration correctness:
 // Some public routes are prerendered at build time (see scripts/prerender.mjs)
@@ -41,22 +43,60 @@ const appTree = (
 const prerenderedPath = rootEl && rootEl.getAttribute('data-prerendered-path');
 const currentPath = typeof window !== 'undefined' ? window.location.pathname : '/';
 const normalize = (p) => (p && p.length > 1 ? p.replace(/\/+$/, '') : (p || '/'));
+// Prerendered shells whose snapshot can never equal the first client render:
+// /reset-password is prerendered without ?token=, so the snapshot contains the
+// "no reset token" error banner that the page only sets in an effect (and only
+// when the token is missing). They are SEO/head shells; render them fresh.
+const NEVER_HYDRATE = new Set(['/reset-password']);
 const shouldHydrate =
   !!rootEl &&
+  !NEVER_HYDRATE.has(normalize(currentPath)) &&
   !!prerenderedPath &&
   rootEl.hasChildNodes() &&
   normalize(prerenderedPath) === normalize(currentPath);
 
-if (shouldHydrate) {
-  hydrateRoot(rootEl, appTree);
-} else {
-  // Clear any stale prerendered markup before mounting so the user never sees
-  // a flash of the wrong route's content.
-  if (rootEl && rootEl.hasChildNodes()) {
-    rootEl.innerHTML = '';
+// One-time migration: older builds kept the JWT in localStorage. Pure storage
+// cleanup, no render impact (safe before hydration).
+removeLegacyToken();
+
+// Vite fires this when a modulepreload/dynamic import of a hashed chunk fails
+// (typically a 404 after a deploy). Reload once to fetch the new build.
+window.addEventListener('vite:preloadError', (event) => {
+  if (reloadOnceForChunkError()) event.preventDefault();
+});
+
+async function boot() {
+  // The detected language's bundle is lazy-loaded (ru/es/uk): wait for it so
+  // the first render is fully translated.
+  await i18nReady;
+  if (shouldHydrate) {
+    // Hydration must start from exactly the markup that was prerendered:
+    //  1. same language - the prerender ran with the default language (en for
+    //     /login, the URL locale for /ru/...), not necessarily this visitor's
+    //     stored/browser language (LocaleSync switches to it right after
+    //     hydration, so nothing is lost);
+    //  2. same content - the route chunk is code-split (H14), so load it
+    //     first; otherwise React would hydrate a Suspense fallback and throw
+    //     away the server HTML (errors #418/#423/#425).
+    const lang = rootEl.getAttribute('data-prerendered-lang');
+    if (lang && i18n.language !== lang) {
+      await i18n.changeLanguage(lang);
+    }
+    await preloadRoute(currentPath);
+    hydrateRoot(rootEl, appTree);
+  } else {
+    // Clear any stale prerendered markup before mounting so the user never sees
+    // a flash of the wrong route's content.
+    if (rootEl && rootEl.hasChildNodes()) {
+      rootEl.innerHTML = '';
+    }
+    // Start downloading the route chunk now instead of after the first render.
+    preloadRoute(currentPath);
+    createRoot(rootEl).render(appTree);
   }
-  createRoot(rootEl).render(appTree);
 }
+
+boot();
 
 // Register service worker for PWA support
 if ('serviceWorker' in navigator) {

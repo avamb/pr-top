@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { formatUserDateOnly } from '../utils/formatDate';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 
@@ -17,16 +18,12 @@ export default function AdminTherapists() {
   const [expandedId, setExpandedId] = useState(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-    loadTherapists(token);
+    loadTherapists();
   }, []);
 
-  const loadTherapists = async (token) => {
+  const loadTherapists = async () => {
     try {
-      const res = await fetch(`${API_URL}/admin/therapists`, {
-        headers: { Authorization: `Bearer ${token || localStorage.getItem('token')}` }
-      });
+      const res = await fetchApi(`${API_URL}/admin/therapists`);
       if (res.ok) {
         const data = await res.json();
         setTherapists(data.therapists || []);
@@ -42,15 +39,13 @@ export default function AdminTherapists() {
     setActionLoading(therapistId);
     setMessage('');
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/admin/therapists/${therapistId}/block`, {
+      const res = await fetchApi(`${API_URL}/admin/therapists/${therapistId}/block`, {
         method: 'PUT',
-        headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
       if (res.ok) {
         setMessage(t('admin.blockedSuccess', { id: therapistId }));
-        await loadTherapists(token);
+        await loadTherapists();
       } else {
         setMessage(`Error: ${data.error}`);
       }
@@ -65,15 +60,13 @@ export default function AdminTherapists() {
     setActionLoading(therapistId);
     setMessage('');
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/admin/therapists/${therapistId}/unblock`, {
+      const res = await fetchApi(`${API_URL}/admin/therapists/${therapistId}/unblock`, {
         method: 'PUT',
-        headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
       if (res.ok) {
         setMessage(t('admin.unblockedSuccess', { id: therapistId }));
-        await loadTherapists(token);
+        await loadTherapists();
       } else {
         setMessage(`Error: ${data.error}`);
       }
@@ -98,11 +91,9 @@ export default function AdminTherapists() {
     setPlanLoading(true);
     setMessage('');
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/admin/therapists/${planModal.id}/plan`, {
+      const res = await fetchApi(`${API_URL}/admin/therapists/${planModal.id}/plan`, {
         method: 'PUT',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -115,7 +106,7 @@ export default function AdminTherapists() {
       if (res.ok) {
         setMessage(t('admin.planOverrideSuccess', { id: planModal.id, plan: planForm.plan }));
         setPlanModal(null);
-        await loadTherapists(token);
+        await loadTherapists();
       } else {
         setMessage(`Error: ${data.error}`);
       }
@@ -132,16 +123,14 @@ export default function AdminTherapists() {
     setPlanLoading(true);
     setMessage('');
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/admin/therapists/${planModal.id}/plan-override`, {
+      const res = await fetchApi(`${API_URL}/admin/therapists/${planModal.id}/plan-override`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
       if (res.ok) {
         setMessage(t('admin.overrideRemovedSuccess', { id: planModal.id }));
         setPlanModal(null);
-        await loadTherapists(token);
+        await loadTherapists();
       } else {
         setMessage(`Error: ${data.error}`);
       }

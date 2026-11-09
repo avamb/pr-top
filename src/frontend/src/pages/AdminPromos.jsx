@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatUserDate } from '../utils/formatDate';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 
@@ -37,10 +38,8 @@ export default function AdminPromos() {
     expires_at: '',
   });
 
-  const token = localStorage.getItem('token');
 
   const headers = {
-    Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
   };
 
@@ -58,7 +57,7 @@ export default function AdminPromos() {
 
   const loadPromos = async () => {
     try {
-      const res = await fetch(`${API_URL}/admin/promos`, { headers });
+      const res = await fetchApi(`${API_URL}/admin/promos`, { headers });
       if (res.ok) {
         const data = await res.json();
         setPromos(data.promos || []);
@@ -73,7 +72,7 @@ export default function AdminPromos() {
       const url = statusFilter
         ? `${API_URL}/admin/promos/redemptions?status=${statusFilter}`
         : `${API_URL}/admin/promos/redemptions`;
-      const res = await fetch(url, { headers });
+      const res = await fetchApi(url, { headers });
       if (res.ok) {
         const data = await res.json();
         setRedemptions(data.redemptions || []);
@@ -86,7 +85,7 @@ export default function AdminPromos() {
   const loadReferrals = async (page = 1) => {
     setReferralLoading(true);
     try {
-      const res = await fetch(`${API_URL}/admin/referrals?page=${page}&limit=20`, { headers });
+      const res = await fetchApi(`${API_URL}/admin/referrals?page=${page}&limit=20`, { headers });
       if (res.ok) {
         const data = await res.json();
         setReferrals(data.referrals || []);
@@ -102,12 +101,10 @@ export default function AdminPromos() {
   };
 
   useEffect(() => {
-    if (!token) return;
     Promise.all([loadPromos(), loadRedemptions()]).finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
-    if (!token) return;
     loadRedemptions();
   }, [statusFilter]);
 
@@ -128,7 +125,7 @@ export default function AdminPromos() {
         max_uses: form.max_uses ? parseInt(form.max_uses) : null,
         expires_at: form.expires_at || null,
       };
-      const res = await fetch(`${API_URL}/admin/promos`, {
+      const res = await fetchApi(`${API_URL}/admin/promos`, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
@@ -150,7 +147,7 @@ export default function AdminPromos() {
 
   const handleDeactivate = async (promoId) => {
     try {
-      const res = await fetch(`${API_URL}/admin/promos/${promoId}/deactivate`, {
+      const res = await fetchApi(`${API_URL}/admin/promos/${promoId}/deactivate`, {
         method: 'PUT',
         headers,
       });
@@ -168,7 +165,7 @@ export default function AdminPromos() {
 
   const handleApplyRedemption = async (redemptionId) => {
     try {
-      const res = await fetch(`${API_URL}/admin/promos/redemptions/${redemptionId}/apply`, {
+      const res = await fetchApi(`${API_URL}/admin/promos/redemptions/${redemptionId}/apply`, {
         method: 'PUT',
         headers,
       });

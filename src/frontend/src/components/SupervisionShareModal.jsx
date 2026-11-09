@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { fetchApi } from '../utils/fetchApi';
 
 /**
  * SupervisionShareModal — T-17
@@ -9,7 +10,7 @@ import { useTranslation } from 'react-i18next';
  * a password. Optional anonymization replaces the client's name with "Client A"
  * and redacts emails/phones from displayed text.
  */
-function SupervisionShareModal({ open, onClose, clientId, clientLabel, token }) {
+function SupervisionShareModal({ open, onClose, clientId, clientLabel }) {
   const { t } = useTranslation();
   const API = '/api';
 
@@ -29,9 +30,7 @@ function SupervisionShareModal({ open, onClose, clientId, clientLabel, token }) 
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API}/clients/${clientId}/supervision-share`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetchApi(`${API}/clients/${clientId}/supervision-share`);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || t('supervision.errorLoad', 'Failed to load share links'));
@@ -43,7 +42,7 @@ function SupervisionShareModal({ open, onClose, clientId, clientLabel, token }) 
     } finally {
       setLoading(false);
     }
-  }, [clientId, token, t]);
+  }, [clientId, t]);
 
   useEffect(() => {
     if (open && clientId) {
@@ -57,11 +56,10 @@ function SupervisionShareModal({ open, onClose, clientId, clientLabel, token }) 
     setCreating(true);
     setError('');
     try {
-      const res = await fetch(`${API}/clients/${clientId}/supervision-share`, {
+      const res = await fetchApi(`${API}/clients/${clientId}/supervision-share`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ ttl, anonymize, note: note.trim() }),
       });
@@ -87,9 +85,8 @@ function SupervisionShareModal({ open, onClose, clientId, clientLabel, token }) 
     setRevokeBusyId(linkId);
     setError('');
     try {
-      const res = await fetch(`${API}/clients/${clientId}/supervision-share/${linkId}`, {
+      const res = await fetchApi(`${API}/clients/${clientId}/supervision-share/${linkId}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));

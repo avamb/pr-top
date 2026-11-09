@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 
@@ -109,14 +110,12 @@ export default function BulkImport({ onClose, onImportComplete }) {
     setResult(null);
     setParseError('');
 
-    const token = localStorage.getItem('token');
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-      const res = await fetch(`${API_URL}/clients/import-bulk`, {
+      const res = await fetchApi(`${API_URL}/clients/import-bulk`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
         body: formData
       });
 

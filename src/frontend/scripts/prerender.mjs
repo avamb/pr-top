@@ -138,9 +138,22 @@ function outputPathFor(routePath) {
   return resolve(DIST_DIR, trimmed, 'index.html');
 }
 
-async function prerenderRoute(browser, baseUrl, routePath) {
+// Unknown path used to render the SPA's NotFound page into dist/404.html (M30).
+const NOT_FOUND_SENTINEL_PATH = '/__prerender-404__';
+
+// Language the app boots in for a URL when nothing else is stored: the URL
+// locale prefix, otherwise English. main.jsx switches to this language before
+// hydrating, so the prerendered markup and the first client render agree.
+function prerenderLangFor(routePath) {
+  const m = routePath.match(/^\/(ru|uk|es)(\/|$)/);
+  return m ? m[1] : 'en';
+}
+
+async function prerenderRoute(browser, baseUrl, routePath, { outFile, notFound = false } = {}) {
   const url = `${baseUrl}${routePath}`;
-  const context = await browser.newContext();
+  // Fixed locale + fresh storage: the snapshot must not depend on the build
+  // machine's language.
+  const context = await browser.newContext({ locale: 'en-US' });
   // The build must never depend on third-party network: abort every request
   // that is not for our own static server. Otherwise a widget that keeps a
   // connection open (Cloudflare Turnstile on /register and /forgot-password
@@ -148,13 +161,45 @@ async function prerenderRoute(browser, baseUrl, routePath) {
   // `networkidle` and fails the whole Docker build. Aborted scripts fire
   // `onerror`, components fall back gracefully, and the <h1> still renders.
   await context.route(
-    (requestUrl) => requestUrl.hostname !== '127.0.0.1' && requestUrl.hostname !== 'localhost',
+    (requestUrl) =>
+      (requestUrl.hostname !== '127.0.0.1' && requestUrl.hostname !== 'localhost')
+      // Same-origin analytics script: the static server has no /analytics/;
+      // abort it (a script left pending would block the 'load' event).
+      || requestUrl.pathname.startsWith('/analytics/'),
     (route) => route.abort(),
   );
+  // Hydration correctness: the snapshot is taken AFTER React effects ran, but
+  // hydrateRoot() compares it with the FIRST render (before any effect). Pages
+  // whose state changes when a request settles (the auth forms disable their
+  // submit button and show a spinner until /api/csrf-token answers, then
+  // re-render) were therefore captured in a different state than the one
+  // they hydrate from (React errors #418/#423/#425). Same-origin /api
+  // requests are left pending forever so every page is captured in its
+  // initial, request-pending state. (Pending fetches do not delay the
+  // 'load' event, which is why we no longer wait for 'networkidle'.)
+  await context.route(
+    (requestUrl) => requestUrl.pathname.startsWith('/api/'),
+    () => { /* never fulfilled */ },
+  );
+  // Same reasoning for browser-only state: components that react to
+  // IntersectionObserver entries (table-of-contents highlighting, reveal on
+  // scroll) or to a "first visit" flag in localStorage (the assistant FAB's
+  // pulse ring) re-render right after mount, so a snapshot taken afterwards
+  // differs from what hydrateRoot() renders first. Make the observer inert and
+  // mark the intro as seen so the snapshot equals the initial render.
+  await context.addInitScript(() => {
+    window.IntersectionObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+      takeRecords() { return []; }
+    };
+    try { localStorage.setItem('public_assistant_intro_seen', '1'); } catch (_) { /* ignore */ }
+  });
   const page = await context.newPage();
   try {
     // Fail loudly if a route silently 404s or errors out — we want the build to break.
-    const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+    const response = await page.goto(url, { waitUntil: 'load', timeout: 30000 });
     if (!response) {
       throw new Error(`no response for ${url}`);
     }
@@ -173,17 +218,55 @@ async function prerenderRoute(browser, baseUrl, routePath) {
       { timeout: 30000 },
     );
 
+    // Let the lazy route chunk, fonts-independent layout effects and the
+    // react-helmet-async head update settle before the snapshot.
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    await page.waitForTimeout(250);
+
+    // Adjacent text nodes (`← {t('back')}` renders "← " and "Back" as two
+    // nodes) merge into ONE node when the serialized HTML is parsed again, so
+    // hydration found a single text node where React expects two and failed
+    // with #425. React's own SSR separates such nodes with an `<!-- -->`
+    // comment, which hydration skips - do the same in the snapshot.
+    await page.evaluate(() => {
+      const root = document.getElementById('root');
+      if (!root) return;
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const texts = [];
+      while (walker.nextNode()) texts.push(walker.currentNode);
+      for (const node of texts) {
+        const prev = node.previousSibling;
+        if (prev && prev.nodeType === Node.TEXT_NODE) {
+          node.parentNode.insertBefore(document.createComment(' '), node);
+        }
+      }
+    });
+
     let html = await page.content();
     // F9 — Tag the prerendered #root so the client boot code (main.jsx) can
     // decide between hydrateRoot() (path matches) and createRoot() (path
     // mismatch, e.g. SPA fallback served this file for /dashboard). Without
     // this marker, the /dashboard fallback would incorrectly try to hydrate
     // Landing markup and throw a hydration mismatch.
-    const marker = ` data-prerendered-path="${routePath}"`;
-    if (!html.includes('data-prerendered-path=')) {
-      html = html.replace('<div id="root"', `<div id="root"${marker}`);
+    if (notFound) {
+      // 404.html is served by nginx for ANY unknown URL, so it must not claim
+      // to be prerendered for a particular path (main.jsx would try to
+      // hydrate it) and must not mention the sentinel path.
+      html = html.replace(/The page <code[^>]*>[^<]*<\/code> does not exist\./, 'The page you requested does not exist.');
+      html = html.replace(/ data-prerendered-(path|lang)="[^"]*"/g, '');
+      // Seo.jsx derives canonical / og:url from the current path.
+      html = html.replace(new RegExp(`<(link|meta)\\b[^>]*${NOT_FOUND_SENTINEL_PATH}[^>]*>`, 'g'), '');
+      if (html.includes(NOT_FOUND_SENTINEL_PATH)) {
+        throw new Error('sentinel path leaked into 404.html');
+      }
+    } else {
+      // main.jsx also needs the language the page was prerendered in.
+      const marker = ` data-prerendered-path="${routePath}" data-prerendered-lang="${prerenderLangFor(routePath)}"`;
+      if (!html.includes('data-prerendered-path=')) {
+        html = html.replace('<div id="root"', `<div id="root"${marker}`);
+      }
     }
-    const outPath = outputPathFor(routePath);
+    const outPath = outFile || outputPathFor(routePath);
     mkdirSync(dirname(outPath), { recursive: true });
     writeFileSync(outPath, html, 'utf8');
     console.log(`[prerender] ${routePath}  ->  ${outPath}`);
@@ -227,16 +310,33 @@ async function main() {
     const noindexShells = NOINDEX_PRERENDER_ROUTES.map(({ path }) => ({ path, basePath: path }));
     const ordered = [...deep, ...localeRoots, ...englishRoot, ...noindexShells];
 
+    // M30 - dist/404.html: the SPA's NotFound page, served by nginx with a real
+    // 404 status for URLs that are neither files, prerendered pages nor SPA
+    // routes. Rendered by visiting a path no route matches.
+    ordered.push({
+      path: NOT_FOUND_SENTINEL_PATH,
+      outFile: resolve(DIST_DIR, '404.html'),
+      notFound: true,
+    });
+
+    // Dev aid: PRERENDER_ONLY="/login,/__prerender-404__" renders just those.
+    const only = (process.env.PRERENDER_ONLY || '').split(',').map((x) => x.trim()).filter(Boolean);
+    if (only.length) {
+      for (let i = ordered.length - 1; i >= 0; i--) {
+        if (!only.includes(ordered[i].path)) ordered.splice(i, 1);
+      }
+    }
+
     for (const route of ordered) {
       try {
-        await prerenderRoute(browser, baseUrl, route.path);
+        await prerenderRoute(browser, baseUrl, route.path, { outFile: route.outFile, notFound: route.notFound });
       } catch (err) {
         failed = true;
         console.error(`[prerender] FAILED ${route.path}: ${err && err.message ? err.message : err}`);
         // Restore the shell template so a partial write does not corrupt the
         // build output for that route.
         try {
-          const outPath = outputPathFor(route.path);
+          const outPath = route.outFile || outputPathFor(route.path);
           if (route.path === '/') {
             writeFileSync(INDEX_HTML, shellTemplate, 'utf8');
           } else if (existsSync(outPath)) {
@@ -254,8 +354,8 @@ async function main() {
     console.error('[prerender] one or more routes failed — aborting build');
     process.exit(1);
   }
-  const totalRendered = LOCALIZED_ROUTES.length + NOINDEX_PRERENDER_ROUTES.length;
-  console.log(`[prerender] wrote ${totalRendered} prerendered pages under ${DIST_DIR} (${LOCALIZED_ROUTES.length} public + ${NOINDEX_PRERENDER_ROUTES.length} noindex auth shells)`);
+  const totalRendered = LOCALIZED_ROUTES.length + NOINDEX_PRERENDER_ROUTES.length + 1; // +1: 404.html
+  console.log(`[prerender] wrote ${totalRendered} prerendered pages under ${DIST_DIR} (${LOCALIZED_ROUTES.length} public + ${NOINDEX_PRERENDER_ROUTES.length} noindex auth shells + 404.html)`);
 }
 
 main().catch((err) => {

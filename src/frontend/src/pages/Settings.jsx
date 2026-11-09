@@ -6,6 +6,7 @@ import KnowledgeBaseSection from '../components/KnowledgeBaseSection';
 import ReminderPolicyForm from '../components/ReminderPolicyForm';
 import PendingOptInList from '../components/PendingOptInList';
 import { formatUserDateOnly } from '../utils/formatDate';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 
@@ -159,13 +160,11 @@ export default function Settings() {
   const abortControllerRef = React.useRef(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) { navigate('/login'); return; }
-    fetchProfile(token);
-    fetchReferralLink(token);
-    fetchSummarySettings(token);
+    fetchProfile();
+    fetchReferralLink();
+    fetchSummarySettings();
     fetchFeatureFlags();
-    fetchReminderPolicy(token);
+    fetchReminderPolicy();
 
     return () => {
       if (abortControllerRef.current) {
@@ -175,11 +174,9 @@ export default function Settings() {
   }, []);
 
   // T-08: Pull current summary specialization + preset metadata from the API.
-  async function fetchSummarySettings(token) {
+  async function fetchSummarySettings() {
     try {
-      const res = await fetch(`${API_URL}/settings/summary`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API_URL}/settings/summary`);
       if (res.status === 401) {
         // Auth handled elsewhere; just bail.
         return;
@@ -203,7 +200,7 @@ export default function Settings() {
   // Fetch feature flags from /api/features (public, no auth required)
   async function fetchFeatureFlags() {
     try {
-      const res = await fetch(`${API_URL}/features`);
+      const res = await fetchApi(`${API_URL}/features`);
       if (!res.ok) return;
       const data = await res.json();
       setFeatureFlags(data || {});
@@ -213,11 +210,9 @@ export default function Settings() {
   }
 
   // Fetch the therapist's session reminder policy
-  async function fetchReminderPolicy(token) {
+  async function fetchReminderPolicy() {
     try {
-      const res = await fetch(`${API_URL}/settings/reminder-policy`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API_URL}/settings/reminder-policy`);
       if (!res.ok) return; // 403 = plan not eligible; just hide the section
       const data = await res.json();
       if (data?.reminder_policy) setReminderPolicy(data.reminder_policy);
@@ -234,11 +229,9 @@ export default function Settings() {
     setSummarySuccess(null);
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/settings/summary`, {
+      const res = await fetchApi(`${API_URL}/settings/summary`, {
         method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -249,7 +242,6 @@ export default function Settings() {
       });
 
       if (res.status === 401) {
-        localStorage.removeItem('token');
         navigate('/login');
         return;
       }
@@ -273,13 +265,11 @@ export default function Settings() {
     }
   }
 
-  async function fetchReferralLink(token) {
+  async function fetchReferralLink() {
     setReferralLoading(true);
     setReferralError('');
     try {
-      const res = await fetch(`${API_URL}/user/referral-link`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API_URL}/user/referral-link`);
       if (!res.ok) {
         setReferralError(t('settings.referralError'));
         return;
@@ -311,7 +301,7 @@ export default function Settings() {
     }
   }
 
-  async function fetchProfile(token) {
+  async function fetchProfile() {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -320,13 +310,11 @@ export default function Settings() {
 
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}/settings/profile`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+      const res = await fetchApi(`${API_URL}/settings/profile`, {
         signal: controller.signal
       });
       if (controller.signal.aborted) return;
       if (res.status === 401) {
-        localStorage.removeItem('token');
         navigate('/login');
         return;
       }
@@ -377,18 +365,15 @@ export default function Settings() {
     setSuccess(null);
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/settings/profile`, {
+      const res = await fetchApi(`${API_URL}/settings/profile`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ language, timezone })
       });
 
       if (res.status === 401) {
-        localStorage.removeItem('token');
         navigate('/login');
         return;
       }
@@ -404,10 +389,9 @@ export default function Settings() {
       localStorage.setItem('app_language', language);
       // Also sync language to dedicated endpoint for consistency
       try {
-        await fetch(`${API_URL}/profile/language`, {
+        await fetchApi(`${API_URL}/profile/language`, {
           method: 'PATCH',
           headers: {
-            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({ language })
@@ -436,18 +420,15 @@ export default function Settings() {
     setProfileSuccess(null);
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/settings/profile`, {
+      const res = await fetchApi(`${API_URL}/settings/profile`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ first_name: firstName, last_name: lastName, phone, telegram_username: telegramUsername, other_info: otherInfo })
       });
 
       if (res.status === 401) {
-        localStorage.removeItem('token');
         navigate('/login');
         return;
       }
@@ -480,18 +461,15 @@ export default function Settings() {
     setEscalationSuccess(null);
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/settings/escalation`, {
+      const res = await fetchApi(`${API_URL}/settings/escalation`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ escalation_preferences: escalation })
       });
 
       if (res.status === 401) {
-        localStorage.removeItem('token');
         navigate('/login');
         return;
       }
@@ -524,18 +502,15 @@ export default function Settings() {
     setRemindersSuccess(null);
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/settings/profile`, {
+      const res = await fetchApi(`${API_URL}/settings/profile`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ reminders_enabled_default: remindersEnabledDefault })
       });
 
       if (res.status === 401) {
-        localStorage.removeItem('token');
         navigate('/login');
         return;
       }
@@ -568,18 +543,15 @@ export default function Settings() {
     setAiSourcesSuccess(null);
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/settings/profile`, {
+      const res = await fetchApi(`${API_URL}/settings/profile`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ show_ai_sources: showAiSources })
       });
 
       if (res.status === 401) {
-        localStorage.removeItem('token');
         navigate('/login');
         return;
       }

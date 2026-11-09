@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 
@@ -108,14 +109,11 @@ function MessageComments({ messageId, t }) {
   const [loaded, setLoaded] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
-  const token = localStorage.getItem('token');
-  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const headers = { 'Content-Type': 'application/json' };
 
   async function loadComments() {
     try {
-      const res = await fetch(`${API_URL}/admin/assistant/messages/${messageId}/comments`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API_URL}/admin/assistant/messages/${messageId}/comments`);
       if (res.ok) {
         const data = await res.json();
         setComments(data.comments);
@@ -134,11 +132,11 @@ function MessageComments({ messageId, t }) {
   async function handleSave(formData) {
     try {
       if (editingComment) {
-        await fetch(`${API_URL}/admin/assistant/comments/${editingComment.id}`, {
+        await fetchApi(`${API_URL}/admin/assistant/comments/${editingComment.id}`, {
           method: 'PUT', headers, body: JSON.stringify(formData)
         });
       } else {
-        await fetch(`${API_URL}/admin/assistant/messages/${messageId}/comments`, {
+        await fetchApi(`${API_URL}/admin/assistant/messages/${messageId}/comments`, {
           method: 'POST', headers, body: JSON.stringify(formData)
         });
       }
@@ -153,7 +151,7 @@ function MessageComments({ messageId, t }) {
   async function handleDelete(commentId) {
     if (!confirm(t('admin.conversations.deleteConfirm', 'Delete this comment?'))) return;
     try {
-      await fetch(`${API_URL}/admin/assistant/comments/${commentId}`, {
+      await fetchApi(`${API_URL}/admin/assistant/comments/${commentId}`, {
         method: 'DELETE', headers
       });
       await loadComments();
@@ -238,8 +236,7 @@ export default function AdminAssistantConversations() {
   // Therapist list for filter dropdown
   const [therapists, setTherapists] = useState([]);
 
-  const token = localStorage.getItem('token');
-  const headers = { Authorization: `Bearer ${token}` };
+  const headers = { };
 
   useEffect(() => {
     loadTherapists();
@@ -251,7 +248,7 @@ export default function AdminAssistantConversations() {
 
   async function loadTherapists() {
     try {
-      const res = await fetch(`${API_URL}/admin/therapists`, { headers });
+      const res = await fetchApi(`${API_URL}/admin/therapists`, { headers });
       if (res.ok) {
         const data = await res.json();
         setTherapists(data.therapists || []);
@@ -271,7 +268,7 @@ export default function AdminAssistantConversations() {
       if (filterDateTo) params.set('date_to', filterDateTo);
       if (searchQuery) params.set('search', searchQuery);
 
-      const res = await fetch(`${API_URL}/admin/assistant/conversations?${params}`, { headers });
+      const res = await fetchApi(`${API_URL}/admin/assistant/conversations?${params}`, { headers });
       if (!res.ok) throw new Error('Failed to load conversations');
       const data = await res.json();
       setConversations(data.conversations);
@@ -288,7 +285,7 @@ export default function AdminAssistantConversations() {
     setMessagesLoading(true);
     setSelectedConv(conv);
     try {
-      const res = await fetch(`${API_URL}/admin/assistant/conversations/${conv.id}/messages`, { headers });
+      const res = await fetchApi(`${API_URL}/admin/assistant/conversations/${conv.id}/messages`, { headers });
       if (!res.ok) throw new Error('Failed to load messages');
       const data = await res.json();
       setMessages(data.messages);

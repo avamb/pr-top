@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 
@@ -21,10 +22,7 @@ export default function AdminCachedAnswers() {
   const loadCachedAnswers = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/admin/assistant/cached-answers?page=${page}&limit=20`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API_URL}/admin/assistant/cached-answers?page=${page}&limit=20`);
       if (res.ok) {
         const data = await res.json();
         setItems(data.items || []);
@@ -45,10 +43,9 @@ export default function AdminCachedAnswers() {
 
   const handleSaveEdit = async (id) => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/admin/assistant/cached-answers/${id}`, {
+      const res = await fetchApi(`${API_URL}/admin/assistant/cached-answers/${id}`, {
         method: 'PUT',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ answer_text: editText })
       });
       if (res.ok) {
@@ -67,10 +64,8 @@ export default function AdminCachedAnswers() {
   const handleDelete = async (id) => {
     if (!window.confirm(t('admin.cache.confirmDelete'))) return;
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/admin/assistant/cached-answers/${id}`, {
+      const res = await fetchApi(`${API_URL}/admin/assistant/cached-answers/${id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
         setMessage({ type: 'success', text: t('admin.cache.deleteSuccess') });
@@ -104,7 +99,7 @@ export default function AdminCachedAnswers() {
         )}
 
         {loading ? (
-          <div className="text-center py-12 text-secondary">{t('loading')}</div>
+          <div className="text-center py-12 text-secondary">{t('common.loading')}</div>
         ) : items.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-lg border">
             <p className="text-secondary">{t('admin.cache.empty')}</p>
@@ -156,13 +151,13 @@ export default function AdminCachedAnswers() {
                             onClick={() => handleSaveEdit(item.id)}
                             className="px-3 py-1 bg-primary text-white text-sm rounded hover:bg-primary/90"
                           >
-                            {t('save')}
+                            {t('common.save')}
                           </button>
                           <button
                             onClick={() => setEditingId(null)}
                             className="px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded hover:bg-gray-200"
                           >
-                            {t('cancel')}
+                            {t('common.cancel')}
                           </button>
                         </div>
                       </div>
@@ -179,7 +174,7 @@ export default function AdminCachedAnswers() {
                       <button
                         onClick={() => handleEdit(item)}
                         className="p-1.5 text-gray-500 hover:text-primary hover:bg-primary/5 rounded"
-                        title={t('edit')}
+                        title={t('common.edit')}
                       >
                         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -188,7 +183,7 @@ export default function AdminCachedAnswers() {
                       <button
                         onClick={() => handleDelete(item.id)}
                         className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded"
-                        title={t('delete')}
+                        title={t('common.delete')}
                       >
                         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -208,7 +203,7 @@ export default function AdminCachedAnswers() {
                   disabled={page <= 1}
                   className="px-3 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:opacity-50 text-sm"
                 >
-                  {t('previous')}
+                  {t('common.previous')}
                 </button>
                 <span className="px-3 py-1 text-sm text-secondary">
                   {page} / {pages}
@@ -218,7 +213,7 @@ export default function AdminCachedAnswers() {
                   disabled={page >= pages}
                   className="px-3 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:opacity-50 text-sm"
                 >
-                  {t('next')}
+                  {t('common.next')}
                 </button>
               </div>
             )}

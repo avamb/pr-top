@@ -81,8 +81,9 @@ client's bot session.
 - **Resolve button greyed out.** The incident must be acknowledged
   first — tap Acknowledge then Resolve.
 - **Wrong crisis line shown to the client.** The bot picks by
-  Telegram-language field. Ask the client to run `/lang <en|ru|es|uk>`
-  and future SOS replies will use the corrected locale.
+  Telegram-language field. The bot has no language command; the language was set
+  from the client's Telegram app language at registration, so contact
+  support to correct it.
 
 ## FAQ
 

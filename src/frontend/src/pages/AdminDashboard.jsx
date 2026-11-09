@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { formatUserDateOnly } from '../utils/formatDate';
+import { fetchApi } from '../utils/fetchApi';
+import EncryptionKeyRotationPanel from '../components/EncryptionKeyRotationPanel';
 
 const API_URL = '/api';
 
@@ -31,21 +33,19 @@ export default function AdminDashboard() {
   const [aiLimits, setAiLimits] = useState(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-    loadStats(token);
+    loadStats();
   }, []);
 
-  const loadStats = async (token) => {
+  const loadStats = async () => {
     try {
-      const headers = { Authorization: `Bearer ${token}` };
+      const headers = { };
 
       const [statsRes, subStatsRes, utmRes, backupRes, aiLimitsRes] = await Promise.all([
-        fetch(`${API_URL}/admin/stats/users`, { headers }),
-        fetch(`${API_URL}/admin/stats/subscriptions`, { headers }),
-        fetch(`${API_URL}/admin/stats/utm`, { headers }),
-        fetch(`${API_URL}/admin/backup/status`, { headers }),
-        fetch(`${API_URL}/admin/ai/limits`, { headers })
+        fetchApi(`${API_URL}/admin/stats/users`, { headers }),
+        fetchApi(`${API_URL}/admin/stats/subscriptions`, { headers }),
+        fetchApi(`${API_URL}/admin/stats/utm`, { headers }),
+        fetchApi(`${API_URL}/admin/backup/status`, { headers }),
+        fetchApi(`${API_URL}/admin/ai/limits`, { headers })
       ]);
 
       if (statsRes.ok) {
@@ -383,18 +383,14 @@ export default function AdminDashboard() {
                 setBackingUp(true);
                 setBackupMessage(null);
                 try {
-                  const token = localStorage.getItem('token');
-                  const res = await fetch(`${API_URL}/admin/backup`, {
+                  const res = await fetchApi(`${API_URL}/admin/backup`, {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` }
                   });
                   const data = await res.json();
                   if (res.ok) {
                     setBackupMessage({ type: 'success', text: t('admin.backupCreated', { filename: data.filename }) });
                     // Refresh backup status
-                    const statusRes = await fetch(`${API_URL}/admin/backup/status`, {
-                      headers: { 'Authorization': `Bearer ${token}` }
-                    });
+                    const statusRes = await fetchApi(`${API_URL}/admin/backup/status`);
                     if (statusRes.ok) setBackupStatus(await statusRes.json());
                   } else {
                     setBackupMessage({ type: 'error', text: data.error || t('admin.backupFailed') });
@@ -433,6 +429,10 @@ export default function AdminDashboard() {
             </div>
           )}
         </div>
+
+        {/* Encryption keys and re-encryption (audit wave 3, M16) */}
+        <h3 className="text-lg font-semibold text-text mb-4">{t('admin.encryptionKeysTitle')}</h3>
+        <EncryptionKeyRotationPanel />
 
         {/* Quick Actions */}
         <div className="bg-white rounded-lg shadow-md p-6">

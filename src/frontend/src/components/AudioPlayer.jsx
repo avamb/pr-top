@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { fetchApi } from '../utils/fetchApi';
 
 const PLAYBACK_SPEEDS = [0.5, 1, 1.5, 2];
 
@@ -9,6 +10,21 @@ function formatTime(seconds) {
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
+
+// The player never downloads the recording itself (audit H8). It asks the
+// backend for a short-lived signed stream URL (GET .../media-url, normal
+// cookie auth + the same ownership/consent checks as the stream) and hands
+// that URL to <audio>/<video src>, so the browser streams the file with
+// Range requests and only the requested part is decrypted server-side.
+// `streamUrl` (diary entries) is mapped to its sibling /media-url endpoint.
+function mediaUrlEndpoint(sessionId, streamUrl) {
+  if (streamUrl) return streamUrl.replace(/\/stream(\?.*)?$/, '/media-url');
+  return `/api/sessions/${sessionId}/media-url`;
+}
+
+// Refresh a signed URL at most once per this window after a media error
+// (e.g. the 10-minute link expired while paused, then the user seeks).
+const REFRESH_COOLDOWN_MS = 30 * 1000;
 
 function AudioPlayer({ sessionId, audioRef, streamUrl: customStreamUrl }) {
   const { t } = useTranslation();
@@ -22,12 +38,14 @@ function AudioPlayer({ sessionId, audioRef, streamUrl: customStreamUrl }) {
   const [error, setError] = useState('');
   const [isVideo, setIsVideo] = useState(false);
   const [mediaUrl, setMediaUrl] = useState(null);
+  const lastRefreshRef = useRef(0);
+  // Position / play state to restore after a URL refresh.
+  const resumeRef = useRef(null);
 
-  const token = localStorage.getItem('token');
-  const streamUrl = customStreamUrl || `/api/sessions/${sessionId}/stream`;
+  const endpoint = mediaUrlEndpoint(sessionId, customStreamUrl);
 
-  // Detect media type from audio_ref extension
-  // Only treat explicitly video-only formats as video; webm/ogg default to audio
+  // Initial guess from the audio_ref extension until the server reports the
+  // stored content type. Only explicitly video formats count as video.
   useEffect(() => {
     if (audioRef) {
       const ext = audioRef.replace('.enc', '').split('.').pop().toLowerCase();
@@ -36,58 +54,35 @@ function AudioPlayer({ sessionId, audioRef, streamUrl: customStreamUrl }) {
     }
   }, [audioRef]);
 
-  // Cleanup blob URL on unmount or when URL changes to prevent memory leaks
-  useEffect(() => {
-    return () => {
-      if (mediaUrl) {
-        URL.revokeObjectURL(mediaUrl);
-      }
-    };
-  }, [mediaUrl]);
+  const fetchSignedUrl = useCallback(async () => {
+    const res = await fetchApi(endpoint);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.url) {
+      throw new Error(data.error || t('player.loadError'));
+    }
+    return data;
+  }, [endpoint, t]);
 
-  // Fetch the audio blob with auth header since <audio> can't send Bearer tokens
   useEffect(() => {
     let cancelled = false;
-    async function loadMedia() {
-      setLoading(true);
-      setError('');
-      // Revoke previous URL before loading new one
-      setMediaUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return null;
-      });
-      try {
-        const res = await fetch(streamUrl, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || 'Failed to load media');
-        }
-        const blob = await res.blob();
+    setLoading(true);
+    setError('');
+    setMediaUrl(null);
+    resumeRef.current = null;
+    fetchSignedUrl()
+      .then((data) => {
         if (cancelled) return;
-        // Determine if video from blob type
-        const blobIsVideo = blob.type && blob.type.startsWith('video/');
-        if (blobIsVideo) {
-          setIsVideo(true);
+        if (typeof data.is_video === 'boolean') setIsVideo(data.is_video);
+        setMediaUrl(data.url);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setError(e.message);
+          setLoading(false);
         }
-        // Store blob URL in state — React will assign it as src attribute
-        // after the media element is rendered, avoiding the race condition
-        const url = URL.createObjectURL(blob);
-        if (cancelled) {
-          URL.revokeObjectURL(url);
-          return;
-        }
-        setMediaUrl(url);
-      } catch (e) {
-        if (!cancelled) setError(e.message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    if (token && (sessionId || customStreamUrl)) loadMedia();
+      });
     return () => { cancelled = true; };
-  }, [sessionId, token, streamUrl]);
+  }, [fetchSignedUrl]);
 
   const handleTimeUpdate = useCallback(() => {
     if (mediaRef.current) {
@@ -96,23 +91,51 @@ function AudioPlayer({ sessionId, audioRef, streamUrl: customStreamUrl }) {
   }, []);
 
   const handleLoadedMetadata = useCallback(() => {
-    if (mediaRef.current) {
-      setDuration(mediaRef.current.duration);
-      setLoading(false);
+    const el = mediaRef.current;
+    if (!el) return;
+    setDuration(el.duration);
+    setLoading(false);
+    el.volume = volume;
+    el.playbackRate = playbackSpeed;
+    const resume = resumeRef.current;
+    if (resume) {
+      resumeRef.current = null;
+      if (resume.time) el.currentTime = resume.time;
+      if (resume.playing) {
+        el.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+      }
     }
-  }, []);
+  }, [volume, playbackSpeed]);
 
   const handleEnded = useCallback(() => {
     setIsPlaying(false);
   }, []);
 
   const handleError = useCallback(() => {
-    // Only show error if we have a mediaUrl (otherwise it's just an empty element)
-    if (mediaUrl) {
-      setError(t('player.loadError'));
+    // Only meaningful once a src is set (otherwise it's just an empty element)
+    if (!mediaUrl) {
+      setLoading(false);
+      return;
     }
+    // The signed link may have expired: get a fresh one once and continue
+    // from the same position.
+    const now = Date.now();
+    if (now - lastRefreshRef.current > REFRESH_COOLDOWN_MS) {
+      lastRefreshRef.current = now;
+      const el = mediaRef.current;
+      resumeRef.current = { time: el ? el.currentTime : 0, playing: isPlaying };
+      fetchSignedUrl()
+        .then((data) => setMediaUrl(data.url))
+        .catch((e) => {
+          setError(e.message);
+          setLoading(false);
+        });
+      return;
+    }
+    setError(t('player.loadError'));
+    setIsPlaying(false);
     setLoading(false);
-  }, [t, mediaUrl]);
+  }, [t, mediaUrl, isPlaying, fetchSignedUrl]);
 
   const togglePlay = async () => {
     if (!mediaRef.current) return;

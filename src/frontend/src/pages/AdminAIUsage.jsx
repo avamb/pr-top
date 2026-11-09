@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 
@@ -188,11 +189,9 @@ function SpendingLimitSettings({ spendingLimit, onSave, t }) {
     setSaving(true);
     setMessage(null);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/admin/ai/limits`, {
+      const res = await fetchApi(`${API_URL}/admin/ai/limits`, {
         method: 'PUT',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -295,18 +294,16 @@ export default function AdminAIUsage() {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-      const headers = { Authorization: `Bearer ${token}` };
+      const headers = { };
 
       const params = new URLSearchParams();
       if (from) params.set('date_from', from);
       if (to) params.set('date_to', to);
 
       const [summaryRes, dailyRes, limitsRes] = await Promise.all([
-        fetch(`${API_URL}/admin/ai/usage/summary?${params}`, { headers }),
-        fetch(`${API_URL}/admin/ai/usage/daily?${params}`, { headers }),
-        fetch(`${API_URL}/admin/ai/limits`, { headers })
+        fetchApi(`${API_URL}/admin/ai/usage/summary?${params}`, { headers }),
+        fetchApi(`${API_URL}/admin/ai/usage/daily?${params}`, { headers }),
+        fetchApi(`${API_URL}/admin/ai/limits`, { headers })
       ]);
 
       if (summaryRes.ok) {

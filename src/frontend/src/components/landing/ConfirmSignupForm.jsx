@@ -6,6 +6,9 @@ import LoadingSpinner from '../LoadingSpinner';
 import { useCsrfToken } from '../../hooks/useCsrfToken';
 import { useAntibotFields, waitForTurnstileToken } from '../../hooks/useAntibotFields';
 import TurnstileWidget from '../TurnstileWidget';
+import { fetchApi } from '../../utils/fetchApi';
+import { setVerifiedUser } from '../../utils/authSession';
+import { removeLegacyToken } from '../../utils/logout';
 
 /**
  * IANA timezones list (common subset). Full list would need a library.
@@ -106,6 +109,7 @@ export default function ConfirmSignupForm({ formRef, defaultLanguage = 'en' }) {
 
   const [errors, setErrors] = useState({});
   const [submitError, setSubmitError] = useState('');
+  const [checkEmail, setCheckEmail] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const { honeypotProps, honeypotValue, setHoneypotValue, hiddenFields } = useAntibotFields();
@@ -220,18 +224,24 @@ export default function ConfirmSignupForm({ formRef, defaultLanguage = 'en' }) {
 
       trackUmamiEvent('confirm_signup_success', { locale: i18n.language });
 
-      // Store auth token
-      localStorage.setItem('token', registerData.token);
-      localStorage.setItem('user', JSON.stringify(registerData.user));
+      if (registerData.check_email === true) {
+        // Existing address: no session, no user. Stop here (no Stripe, no dashboard).
+        setCheckEmail(true);
+        setLoading(false);
+        return;
+      }
+
+      // The backend set the HttpOnly session cookie; keep only the profile.
+      if (registerData.user) setVerifiedUser(registerData.user);
+      removeLegacyToken();
 
       // Step 2: If next_action is 'await_stripe_checkout', go to Stripe
       if (registerData.next_action === 'await_stripe_checkout') {
         try {
-          const checkoutRes = await fetch('/api/subscription/checkout', {
+          const checkoutRes = await fetchApi('/api/subscription/checkout', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${registerData.token}`,
             },
             body: JSON.stringify({ plan: 'confirm' }),
           });
@@ -276,6 +286,11 @@ export default function ConfirmSignupForm({ formRef, defaultLanguage = 'en' }) {
         </div>
 
         <div className="bg-white rounded-2xl shadow-lg border border-surface p-8">
+          {checkEmail && (
+            <div role="status" data-testid="confirm-check-email" className="bg-green-50 border border-green-300 text-green-800 rounded-md p-3 mb-4 text-sm">
+              {t('auth.checkEmailToContinue')}
+            </div>
+          )}
           {submitError && (
             <div role="alert" className="bg-red-50 border border-error text-error rounded-lg p-3 mb-5 text-sm">
               {submitError}

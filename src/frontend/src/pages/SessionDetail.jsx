@@ -8,6 +8,8 @@ import AssignmentsPanel from '../components/AssignmentsPanel';
 // pipeline pulled passages from the therapist's personal KB (T-09 RAG).
 import AiSourceDisclaimer from '../components/AiSourceDisclaimer';
 import AttendanceTimeline from '../components/AttendanceTimeline';
+import { fetchApi } from '../utils/fetchApi';
+import { sessionStatusBadge, sessionStatusLabel } from '../utils/sessionStatus';
 
 const API = '/api';
 
@@ -18,7 +20,6 @@ function SessionDetail() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const token = localStorage.getItem('token');
 
   // T-26: therapist's `show_ai_sources` preference. Fetched once on mount;
   // defaults to true (transparency on) so the disclaimer renders unless the
@@ -48,8 +49,8 @@ function SessionDetail() {
   // the therapist must pick which detected speaker is their own voice. We use
   // a hidden <audio> element to play the 10-second preview window for each
   // speaker, then POST /select-speaker once they confirm.
-  // The audio is fetched as a Blob (same approach as AudioPlayer) because the
-  // <audio> element can't carry an Authorization header on its src URL.
+  // The audio streams from a short-lived signed URL (same approach as
+  // AudioPlayer), see ensurePreviewBlob below.
   const previewAudioRef = useRef(null);
   const previewBlobUrlRef = useRef(null);
   const previewLoadingRef = useRef(false);
@@ -58,13 +59,10 @@ function SessionDetail() {
   const [selectingSpeaker, setSelectingSpeaker] = useState('');
   const [speakerSelectError, setSpeakerSelectError] = useState('');
 
-  // Release the blob URL when the component unmounts so we don't leak memory.
+  // Forget the signed preview URL on unmount.
   useEffect(() => {
     return () => {
-      if (previewBlobUrlRef.current) {
-        try { URL.revokeObjectURL(previewBlobUrlRef.current); } catch (_) {}
-        previewBlobUrlRef.current = null;
-      }
+      previewBlobUrlRef.current = null;
     };
   }, []);
   // Auto-poll while diarization or transcription is running so the UI advances
@@ -80,10 +78,6 @@ function SessionDetail() {
   }, [session && session.status]);
 
   useEffect(() => {
-    if (!token) {
-      navigate('/login');
-      return;
-    }
     fetchSession();
     fetchShowAiSourcesPreference();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -94,9 +88,7 @@ function SessionDetail() {
   // failed fetch as "show" (transparency-on by default).
   async function fetchShowAiSourcesPreference() {
     try {
-      const res = await fetch(`${API}/settings/profile`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API}/settings/profile`);
       if (!res.ok) return;
       const data = await res.json();
       if (data && data.profile && Object.prototype.hasOwnProperty.call(data.profile, 'show_ai_sources')) {
@@ -128,11 +120,8 @@ function SessionDetail() {
   async function fetchSession() {
     try {
       setLoading(true);
-      const res = await fetch(`${API}/sessions/${id}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API}/sessions/${id}`);
       if (res.status === 401) {
-        localStorage.removeItem('token');
         localStorage.removeItem('user');
         navigate('/login');
         return;
@@ -162,11 +151,10 @@ function SessionDetail() {
     setPostNotesError('');
     setPostNotesStatus('');
     try {
-      const res = await fetch(`${API}/sessions/${id}`, {
+      const res = await fetchApi(`${API}/sessions/${id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ post_session_notes: postNotes })
       });
@@ -256,9 +244,8 @@ function SessionDetail() {
       const ext = mime.includes('webm') ? 'webm' : mime.includes('ogg') ? 'ogg' : mime.includes('mp4') ? 'mp4' : 'bin';
       const fd = new FormData();
       fd.append('audio', blob, `voice-note.${ext}`);
-      const res = await fetch(`${API}/sessions/${id}/transcribe-voice-note`, {
+      const res = await fetchApi(`${API}/sessions/${id}/transcribe-voice-note`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
         body: fd
       });
       if (!res.ok) {
@@ -287,9 +274,8 @@ function SessionDetail() {
     setPostNotesError('');
     setPostNotesStatus('resummarizing');
     try {
-      const res = await fetch(`${API}/sessions/${id}/summarize`, {
+      const res = await fetchApi(`${API}/sessions/${id}/summarize`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -305,44 +291,35 @@ function SessionDetail() {
     }
   }
 
-  const statusBadge = (status) => {
-    switch (status) {
-      case 'complete': return 'bg-green-100 text-green-800';
-      case 'transcribing': return 'bg-blue-100 text-blue-800';
-      case 'pending': return 'bg-amber-100 text-amber-800';
-      case 'diarizing': return 'bg-indigo-100 text-indigo-800';
-      case 'awaiting_speaker_selection': return 'bg-amber-100 text-amber-800';
-      case 'diarization_failed':
-      case 'transcription_failed': return 'bg-rose-100 text-rose-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
+  const statusBadge = sessionStatusBadge;
 
   // T-19 helpers: play the preview window for a single speaker, stop on end.
-  // We fetch the decrypted audio once as a blob (same trick AudioPlayer uses
-  // because <audio src> can't carry the Bearer header) and seek to the preview
+  // The hidden <audio> streams the recording from a short-lived signed URL
+  // (GET /sessions/:id/media-url, same as AudioPlayer) with Range requests,
+  // instead of downloading the whole file as a blob, and seeks to the preview
   // start. A timeupdate listener stops playback once we cross the end boundary.
+  // previewBlobUrlRef holds { url (absolute), exp (ms) } of the signed link.
   async function ensurePreviewBlob() {
-    if (previewBlobUrlRef.current) return previewBlobUrlRef.current;
+    const cached = previewBlobUrlRef.current;
+    if (cached && cached.exp - Date.now() > 30000) return cached.url;
     if (previewLoadingRef.current) {
       // Spin until loaded
       while (previewLoadingRef.current) {
         await new Promise(r => setTimeout(r, 50));
       }
-      return previewBlobUrlRef.current;
+      if (previewBlobUrlRef.current) return previewBlobUrlRef.current.url;
     }
     previewLoadingRef.current = true;
     try {
-      const res = await fetch(`${API}/sessions/${id}/stream`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
+      const res = await fetchApi(`${API}/sessions/${id}/media-url`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) {
         throw new Error(data.error || t('session.upload.singleTrack.noPreviewAvailable'));
       }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      previewBlobUrlRef.current = url;
+      // Absolute, so the `audio.src !== url` check below compares like with like.
+      const url = new URL(data.url, window.location.origin).href;
+      const exp = data.expires_at ? Date.parse(data.expires_at) : Date.now() + 5 * 60 * 1000;
+      previewBlobUrlRef.current = { url, exp };
       return url;
     } finally {
       previewLoadingRef.current = false;
@@ -420,11 +397,10 @@ function SessionDetail() {
         try { audio.pause(); } catch (_) {}
       }
       setPreviewPlayingLabel('');
-      const res = await fetch(`${API}/sessions/${id}/select-speaker`, {
+      const res = await fetchApi(`${API}/sessions/${id}/select-speaker`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ speaker_label: label })
       });
@@ -474,7 +450,7 @@ function SessionDetail() {
             <div className="flex items-center gap-3 mb-6">
               <h2 className="text-2xl font-bold text-stone-800">{t('sessionDetail.sessionTitle', { id: session.id })}</h2>
               <span className={`text-xs px-3 py-1 rounded-full font-medium ${statusBadge(session.status)}`}>
-                {session.status}
+                {sessionStatusLabel(t, session.status)}
               </span>
               {session.recording_mode === 'single_track' && (
                 <span
@@ -486,6 +462,15 @@ function SessionDetail() {
                 </span>
               )}
             </div>
+
+            {session.status === 'transcription_too_long' && (
+              <p
+                data-testid="session-too-long-hint"
+                className="mb-4 text-sm text-orange-800 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2"
+              >
+                {t('session.statusHint.transcription_too_long')}
+              </p>
+            )}
 
             <div className="flex gap-4 mb-6 text-sm text-stone-500">
               <span>{t('sessionDetail.clientId', { id: session.client_id })}</span>

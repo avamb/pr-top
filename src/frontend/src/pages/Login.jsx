@@ -8,6 +8,9 @@ import LanguageSwitcher from '../components/LanguageSwitcher';
 import Seo from '../components/Seo';
 import TurnstileWidget from '../components/TurnstileWidget';
 import CodeInput from '../components/auth/CodeInput';
+import { fetchApi } from '../utils/fetchApi';
+import { fetchCurrentUser, setVerifiedUser } from '../utils/authSession';
+import { logout, removeLegacyToken } from '../utils/logout';
 
 const RESEND_COOLDOWN_S = 60;
 
@@ -29,10 +32,17 @@ export default function Login() {
 
   // Redirect if already authenticated (prevents back-button resubmit)
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token && !accessDenied) {
-      navigate('/dashboard', { replace: true });
-    }
+    if (accessDenied) return undefined;
+    // No cached profile = not signed in here: skip the /me round trip (and its 401).
+    if (!localStorage.getItem('user')) return undefined;
+    let cancelled = false;
+    // The session is an HttpOnly cookie: ask the server whether it is valid.
+    fetchCurrentUser().then(({ user: me, offline }) => {
+      if (!cancelled && me && !offline && me.role !== 'client') {
+        navigate('/dashboard', { replace: true });
+      }
+    });
+    return () => { cancelled = true; };
   }, [navigate, accessDenied]);
 
   const [mode, setMode] = useState('email'); // 'email' | 'code' | 'password'
@@ -119,17 +129,18 @@ export default function Login() {
   const handleLoginSuccess = useCallback(async (data) => {
     if (data.user.role === 'client') {
       setError(t('auth.clientAccessDenied', 'Access denied. The web panel is for therapists only. Clients should use the Telegram bot.'));
+      // The backend already set the session cookie: clear it again.
+      await logout();
       return false;
     }
 
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify(data.user));
+    // The JWT is in the HttpOnly session cookie; keep only the profile.
+    setVerifiedUser(data.user);
+    removeLegacyToken();
 
     // Fetch user profile to sync language
     try {
-      const profileRes = await fetch('/api/settings/profile', {
-        headers: { 'Authorization': `Bearer ${data.token}` }
-      });
+      const profileRes = await fetchApi('/api/settings/profile');
       if (profileRes.ok) {
         const profileData = await profileRes.json();
         const lang = profileData.profile?.language || 'en';

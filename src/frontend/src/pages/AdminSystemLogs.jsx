@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatUserDate } from '../utils/formatDate';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 
@@ -28,7 +29,6 @@ export default function AdminSystemLogs() {
   const loadLogs = useCallback(async (pageNum, level, searchTerm) => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
       const params = new URLSearchParams({
         page: pageNum || page,
         per_page: perPage
@@ -38,9 +38,7 @@ export default function AdminSystemLogs() {
       if (lev) params.append('level', lev);
       if (s) params.append('search', s);
 
-      const res = await fetch(`${API_URL}/admin/logs/system?${params}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API_URL}/admin/logs/system?${params}`);
       if (res.ok) {
         const data = await res.json();
         setLogs(data.logs || []);
@@ -56,8 +54,6 @@ export default function AdminSystemLogs() {
   }, [page, perPage, levelFilter, search]);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
     loadLogs(1, '', '');
   }, []);
 

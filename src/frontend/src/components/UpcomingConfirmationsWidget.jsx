@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import RescheduleModal from './RescheduleModal';
+import { fetchApi } from '../utils/fetchApi';
 
 const API = '/api';
 
@@ -34,7 +35,6 @@ function formatDatetime(isoStr, t) {
 export default function UpcomingConfirmationsWidget() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const token = localStorage.getItem('token');
 
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -46,9 +46,7 @@ export default function UpcomingConfirmationsWidget() {
     try {
       setLoading(true);
       setError('');
-      const res = await fetch(`${API}/dashboard/upcoming-confirmations`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API}/dashboard/upcoming-confirmations`);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || t('reminders.dashboard.widget.fetchError', 'Could not load upcoming sessions.'));
@@ -60,7 +58,7 @@ export default function UpcomingConfirmationsWidget() {
     } finally {
       setLoading(false);
     }
-  }, [token, t]);
+  }, [t]);
 
   useEffect(() => {
     fetchSessions();
@@ -69,11 +67,10 @@ export default function UpcomingConfirmationsWidget() {
   async function handleMarkAttendance(sessionId, status) {
     setActionLoading(sessionId);
     try {
-      const res = await fetch(`${API}/sessions/${sessionId}/attendance`, {
+      const res = await fetchApi(`${API}/sessions/${sessionId}/attendance`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ status })
       });

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 
@@ -23,10 +24,7 @@ export default function PendingOptInList() {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/clients?filter=pending_optin&per_page=100`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API_URL}/clients?filter=pending_optin&per_page=100`);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || t('reminders.settings.pendingList.fetchError'));
@@ -51,11 +49,9 @@ export default function PendingOptInList() {
     }));
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/clients/${clientId}/resend-opt-in`, {
+      const res = await fetchApi(`${API_URL}/clients/${clientId}/resend-opt-in`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });

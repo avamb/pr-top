@@ -7,6 +7,7 @@ import AssistantChatButton from './AssistantChatButton';
 import AssistantChatPanel from './AssistantChatPanel';
 import { UnsavedChangesProvider } from '../contexts/UnsavedChangesContext';
 import { setupSessionExpiredHandler } from '../utils/fetchApi';
+import { fetchApi } from '../utils/fetchApi';
 // Assistant chat state is now managed via Zustand store (stores/assistantStore.js)
 
 const API_URL = '/api';
@@ -34,14 +35,10 @@ export default function AppLayout({ user, children }) {
     if (location.pathname.startsWith('/subscription')) return;
     if (subscriptionCheckedRef.current) return;
 
-    const token = localStorage.getItem('token');
-    if (!token) return;
 
     subscriptionCheckedRef.current = true;
 
-    fetch(`${API_URL}/dashboard/stats`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    }).then(res => {
+    fetchApi(`${API_URL}/dashboard/stats`).then(res => {
       if (res.status === 402) {
         navigate('/subscription', { state: { expired: true } });
       }

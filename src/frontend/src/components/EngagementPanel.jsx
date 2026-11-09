@@ -13,6 +13,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatUserDateOnly } from '../utils/formatDate';
+import { fetchApi } from '../utils/fetchApi';
 
 const API = '/api';
 
@@ -265,7 +266,7 @@ function EngagementPanel({ clientId }) {
     setError('');
     try {
       const param = windowDays === 'all' ? 'all' : String(windowDays);
-      const res = await fetch(`${API}/clients/${clientId}/engagement?window=${encodeURIComponent(param)}`, {
+      const res = await fetchApi(`${API}/clients/${clientId}/engagement?window=${encodeURIComponent(param)}`, {
         credentials: 'include',
       });
       if (!res.ok) {

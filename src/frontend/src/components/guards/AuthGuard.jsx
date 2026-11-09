@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { fetchCurrentUser, clearVerifiedUser } from '../../utils/authSession';
 
 /**
- * AuthGuard - Checks for valid authentication token.
- * Redirects to /login if no token is found or token is invalid.
- * Handles cross-tab session sync via storage events.
+ * AuthGuard - Checks the cookie session with GET /api/auth/me.
+ * Redirects to /login when the server says the visitor is not authenticated.
+ * (The JWT is an HttpOnly cookie: the SPA never sees or stores it.)
+ * Handles cross-tab session sync via storage events on the cached `user`.
  * Passes the authenticated user object to children.
  */
 export default function AuthGuard({ children }) {
@@ -15,13 +17,9 @@ export default function AuthGuard({ children }) {
 
   // Cross-tab session sync: listen for localStorage changes from other tabs
   const handleStorageChange = useCallback((e) => {
-    if (e.key === 'token' && !e.newValue) {
-      setUser(null);
-      setChecked(false);
-      navigate('/login');
-      return;
-    }
     if (e.key === 'user' && !e.newValue) {
+      // Another tab logged out (or the session expired there)
+      clearVerifiedUser();
       setUser(null);
       setChecked(false);
       navigate('/login');
@@ -43,19 +41,17 @@ export default function AuthGuard({ children }) {
   }, [handleStorageChange]);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const storedUser = localStorage.getItem('user');
-    if (!token || !storedUser) {
-      navigate('/login', { state: { from: location.pathname + location.search } });
-      return;
-    }
-    try {
-      const parsedUser = JSON.parse(storedUser);
-      setUser(parsedUser);
+    let cancelled = false;
+    fetchCurrentUser().then(({ user: me }) => {
+      if (cancelled) return;
+      if (!me) {
+        navigate('/login', { state: { from: location.pathname + location.search } });
+        return;
+      }
+      setUser(me);
       setChecked(true);
-    } catch {
-      navigate('/login', { state: { from: location.pathname + location.search } });
-    }
+    });
+    return () => { cancelled = true; };
   }, [navigate, location.pathname, location.search]);
 
   if (!checked || !user) return null;

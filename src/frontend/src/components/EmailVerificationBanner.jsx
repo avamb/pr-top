@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { onEmailNotVerified } from '../utils/emailVerificationEvents';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 const DISMISS_KEY = 'email_verify_banner_dismissed';
@@ -29,12 +30,10 @@ function ChangeEmailModal({ currentEmail, onClose, onChanged }) {
     }
     setSaving(true);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/auth/change-unverified-email`, {
+      const res = await fetchApi(`${API_URL}/auth/change-unverified-email`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
         },
         body: JSON.stringify({ email: email.trim(), password })
       });
@@ -166,14 +165,11 @@ export default function EmailVerificationBanner({ user }) {
 
   const fetchMe = useCallback(async () => {
     if (!isTherapist) return;
-    const token = localStorage.getItem('token');
-    if (!token) return;
     fetchAbortRef.current?.abort();
     const controller = new AbortController();
     fetchAbortRef.current = controller;
     try {
-      const res = await fetch(`${API_URL}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await fetchApi(`${API_URL}/auth/me`, {
         signal: controller.signal
       });
       if (!mountedRef.current) return;
@@ -253,10 +249,8 @@ export default function EmailVerificationBanner({ user }) {
     setResendState('sending');
     setResendError('');
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/auth/resend-verification`, {
+      const res = await fetchApi(`${API_URL}/auth/resend-verification`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json().catch(() => ({}));
       if (res.status === 429) {

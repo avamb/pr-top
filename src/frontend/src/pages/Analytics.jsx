@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { formatUserDateOnly } from '../utils/formatDate';
+import { fetchApi } from '../utils/fetchApi';
 
 const API = '/api';
 
@@ -134,8 +135,6 @@ export default function Analytics() {
   const abortControllerRef = React.useRef(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) { navigate('/login'); return; }
     fetchAnalytics();
 
     return () => {
@@ -152,17 +151,14 @@ export default function Analytics() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    const token = localStorage.getItem('token');
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API}/dashboard/analytics?days=${days}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+      const res = await fetchApi(`${API}/dashboard/analytics?days=${days}`, {
         signal: controller.signal
       });
       if (controller.signal.aborted) return;
       if (res.status === 401) {
-        localStorage.removeItem('token');
         navigate('/login');
         return;
       }
@@ -187,11 +183,8 @@ export default function Analytics() {
     if (exportLoading) return;
     setExportLoading(true);
     setExportMsg('');
-    const token = localStorage.getItem('token');
     try {
-      const res = await fetch(`${API}/export/analytics?days=${days}&format=${format}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API}/export/analytics?days=${days}&format=${format}`);
       if (res.status === 403) {
         setExportMsg(t('analytics.exportUpgradeRequired', 'Analytics export requires Premium plan'));
         return;

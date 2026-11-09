@@ -25,6 +25,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { fetchApi, uploadWithProgress } from '../utils/fetchApi';
 
 const API = '/api';
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // matches backend multer limit
@@ -105,12 +106,9 @@ export default function BulkUpload() {
       try {
         setClientsLoading(true);
         setClientsError('');
-        const token = localStorage.getItem('token');
         const collected = [];
         for (let page = 1; page <= 5; page++) {
-          const res = await fetch(`${API}/clients?per_page=100&page=${page}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
+          const res = await fetchApi(`${API}/clients?per_page=100&page=${page}`);
           if (!res.ok) {
             if (res.status === 401) {
               navigate('/login');
@@ -193,13 +191,9 @@ export default function BulkUpload() {
   async function runAutoMatch(forRows) {
     setIsMatching(true);
     try {
-      const token = localStorage.getItem('token');
-      const csrfMeta = document.querySelector('meta[name="csrf-token"]');
       const headers = {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
+        'Content-Type': 'application/json'
       };
-      if (csrfMeta) headers['x-csrf-token'] = csrfMeta.content;
 
       const payload = {
         files: forRows.map(r => ({
@@ -207,10 +201,9 @@ export default function BulkUpload() {
           last_modified_ms: r.file.lastModified || null
         }))
       };
-      const res = await fetch(`${API}/sessions/auto-match`, {
+      const res = await fetchApi(`${API}/sessions/auto-match`, {
         method: 'POST',
         headers,
-        credentials: 'include',
         body: JSON.stringify(payload)
       });
       if (!res.ok) {
@@ -308,64 +301,35 @@ export default function BulkUpload() {
     return true;
   }
 
-  function uploadRow(row) {
-    return new Promise((resolve) => {
-      const token = localStorage.getItem('token');
-      const csrfMeta = document.querySelector('meta[name="csrf-token"]');
-      const formData = new FormData();
-      formData.append('audio', row.file);
-      formData.append('client_id', row.selectedClientId);
-      if (row.meetingDate) formData.append('scheduled_at', row.meetingDate);
-      const trimmedTitle = (row.title || '').trim();
-      if (trimmedTitle) formData.append('title', trimmedTitle.slice(0, 200));
+  async function uploadRow(row) {
+    const formData = new FormData();
+    formData.append('audio', row.file);
+    formData.append('client_id', row.selectedClientId);
+    if (row.meetingDate) formData.append('scheduled_at', row.meetingDate);
+    const trimmedTitle = (row.title || '').trim();
+    if (trimmedTitle) formData.append('title', trimmedTitle.slice(0, 200));
 
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `${API}/sessions`);
-      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-      if (csrfMeta) xhr.setRequestHeader('x-csrf-token', csrfMeta.content);
-
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          const pct = Math.round((e.loaded / e.total) * 100);
-          updateRow(row.rowId, { progress: pct });
-        }
-      };
-      xhr.onload = () => {
-        try {
-          const data = JSON.parse(xhr.responseText || '{}');
-          if (xhr.status >= 200 && xhr.status < 300) {
-            updateRow(row.rowId, {
-              status: 'done',
-              progress: 100,
-              sessionId: data.id || null,
-              error: ''
-            });
-            resolve({ ok: true });
-          } else {
-            updateRow(row.rowId, {
-              status: 'error',
-              error: data.error || `HTTP ${xhr.status}`
-            });
-            resolve({ ok: false });
-          }
-        } catch {
-          updateRow(row.rowId, { status: 'error', error: `HTTP ${xhr.status}` });
-          resolve({ ok: false });
-        }
-      };
-      xhr.onerror = () => {
-        updateRow(row.rowId, { status: 'error', error: t('session.upload.autoLink.networkError', 'Network error') });
-        resolve({ ok: false });
-      };
-      xhr.ontimeout = () => {
-        updateRow(row.rowId, { status: 'error', error: t('session.upload.autoLink.timeout', 'Upload timed out') });
-        resolve({ ok: false });
-      };
-      xhr.timeout = 5 * 60 * 1000;
-
-      updateRow(row.rowId, { status: 'uploading', progress: 0, error: '' });
-      xhr.send(formData);
-    });
+    updateRow(row.rowId, { status: 'uploading', progress: 0, error: '' });
+    try {
+      // Cookie auth + CSRF (refresh/retry once) + 401 handling: see uploadWithProgress
+      const res = await uploadWithProgress(`${API}/sessions`, formData, {
+        onProgress: (pct) => updateRow(row.rowId, { progress: pct })
+      });
+      if (res.ok) {
+        updateRow(row.rowId, { status: 'done', progress: 100, sessionId: res.data.id || null, error: '' });
+        return { ok: true };
+      }
+      updateRow(row.rowId, { status: 'error', error: res.data.error || `HTTP ${res.status}` });
+      return { ok: false };
+    } catch (err) {
+      updateRow(row.rowId, {
+        status: 'error',
+        error: err.code === 'timeout'
+          ? t('session.upload.autoLink.timeout', 'Upload timed out')
+          : t('session.upload.autoLink.networkError', 'Network error')
+      });
+      return { ok: false };
+    }
   }
 
   async function handleUploadAll() {

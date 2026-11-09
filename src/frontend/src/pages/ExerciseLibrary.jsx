@@ -5,6 +5,7 @@ import { useCsrfToken } from '../hooks/useCsrfToken';
 // T-26: AI source disclaimer block. Renders on exercise cards/modals when the
 // exercise was generated with AI assistance, optionally listing KB sources.
 import AiSourceDisclaimer from '../components/AiSourceDisclaimer';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 
@@ -512,24 +513,15 @@ function ExerciseLibrary() {
   const [showAiSources, setShowAiSources] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/login');
-      return;
-    }
-    fetchExercises(token);
+    fetchExercises();
   }, [selectedCategory, lang, activeView]);
 
   // T-26: pull the therapist's transparency preference once on mount.
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${API_URL}/settings/profile`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const res = await fetchApi(`${API_URL}/settings/profile`);
         if (!res.ok || cancelled) return;
         const data = await res.json();
         if (data && data.profile && Object.prototype.hasOwnProperty.call(data.profile, 'show_ai_sources')) {
@@ -542,8 +534,7 @@ function ExerciseLibrary() {
     return () => { cancelled = true; };
   }, []);
 
-  async function fetchExercises(tokenArg) {
-    const token = tokenArg || localStorage.getItem('token');
+  async function fetchExercises() {
     setLoading(true);
     setError('');
     try {
@@ -554,9 +545,7 @@ function ExerciseLibrary() {
       if (selectedCategory) params.set('category', selectedCategory);
       params.set('language', lang);
       const url = `${API_URL}/exercises?${params.toString()}`;
-      const res = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchApi(url);
       if (res.status === 401) {
         navigate('/login');
         return;
@@ -575,7 +564,6 @@ function ExerciseLibrary() {
   }
 
   async function handleSaveExercise(formData) {
-    const token = localStorage.getItem('token');
     setSaving(true);
     try {
       const isEdit = !!editExercise;
@@ -583,12 +571,11 @@ function ExerciseLibrary() {
       const method = isEdit ? 'PUT' : 'POST';
 
       const headers = {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       };
       if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
-      const res = await fetch(url, { method, headers, body: JSON.stringify(formData) });
+      const res = await fetchApi(url, { method, headers, body: JSON.stringify(formData) });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || 'Failed to save exercise');
@@ -598,7 +585,7 @@ function ExerciseLibrary() {
       setEditExercise(null);
       setSuccessMsg(isEdit ? t('exerciseLibrary.exerciseUpdated') : t('exerciseLibrary.exerciseCreated'));
       setTimeout(() => setSuccessMsg(''), 3000);
-      fetchExercises(token);
+      fetchExercises();
     } catch (err) {
       throw err;
     } finally {
@@ -608,14 +595,13 @@ function ExerciseLibrary() {
 
   async function handleDeleteExercise() {
     if (!deleteTarget) return;
-    const token = localStorage.getItem('token');
     setDeleting(true);
     setDeleteError('');
     try {
-      const headers = { 'Authorization': `Bearer ${token}` };
+      const headers = { };
       if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
-      const res = await fetch(`${API_URL}/exercises/${deleteTarget.id}`, {
+      const res = await fetchApi(`${API_URL}/exercises/${deleteTarget.id}`, {
         method: 'DELETE',
         headers
       });
@@ -627,7 +613,7 @@ function ExerciseLibrary() {
       setDeleteTarget(null);
       setSuccessMsg(t('exerciseLibrary.exerciseDeleted'));
       setTimeout(() => setSuccessMsg(''), 3000);
-      fetchExercises(token);
+      fetchExercises();
     } catch (err) {
       setDeleteError(err.message);
     } finally {

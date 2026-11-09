@@ -1,9 +1,15 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import en from './en.json';
-import ru from './ru.json';
-import es from './es.json';
-import uk from './uk.json';
+
+// Only English (the fallback language) is bundled eagerly. ru/es/uk are
+// separate chunks that are fetched on demand, the first time that language
+// becomes active (initial load or runtime language switch).
+const LOADERS = {
+  ru: () => import('./ru.json'),
+  es: () => import('./es.json'),
+  uk: () => import('./uk.json')
+};
 
 /**
  * Detect the initial language for i18n.
@@ -42,16 +48,42 @@ i18n
   .use(initReactI18next)
   .init({
     resources: {
-      en: { translation: en },
-      ru: { translation: ru },
-      es: { translation: es },
-      uk: { translation: uk }
+      en: { translation: en }
     },
-    lng: getInitialLanguage(),
+    // Start in the fallback language synchronously; the detected language is
+    // activated below once its bundle is in memory, so no component ever
+    // renders a half-translated page.
+    lng: 'en',
     fallbackLng: 'en',
     interpolation: {
       escapeValue: false
     }
   });
+
+async function ensureBundle(lng) {
+  const base = typeof lng === 'string' ? lng.split('-')[0] : lng;
+  if (!LOADERS[base] || i18n.hasResourceBundle(base, 'translation')) return;
+  const mod = await LOADERS[base]();
+  i18n.addResourceBundle(base, 'translation', mod.default, true, true);
+}
+
+// Every language switch (LocaleSync, LanguageSwitcher, confirm funnel, ...)
+// goes through changeLanguage(); load the bundle first so the switch is atomic.
+const originalChangeLanguage = i18n.changeLanguage.bind(i18n);
+i18n.changeLanguage = async (lng, ...rest) => {
+  try {
+    await ensureBundle(lng);
+  } catch (err) {
+    // Network failure: fall back to English rather than failing the switch.
+    console.warn('[i18n] could not load language bundle', lng, err);
+  }
+  return originalChangeLanguage(lng, ...rest);
+};
+
+/**
+ * Resolves once the initially detected language is active. main.jsx awaits it
+ * before hydrating/rendering so the first paint is already translated.
+ */
+export const i18nReady = i18n.changeLanguage(getInitialLanguage());
 
 export default i18n;

@@ -2,12 +2,22 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import usePublicAssistantStore from '../stores/publicAssistantStore';
 import { useCsrfToken } from '../hooks/useCsrfToken';
+import { sanitizeLinkUrl } from '../utils/safeLink';
 import { useAntibotFields, waitForTurnstileToken } from '../hooks/useAntibotFields';
 import TurnstileWidget from './TurnstileWidget';
 
 /**
  * Simple markdown-to-JSX renderer (same as in AssistantChatPanel).
  */
+/** Safe markdown link: http/https/mailto/relative only, else plain text (M26). */
+function renderSafeLink(key, text, url) {
+  const safe = sanitizeLinkUrl(url);
+  if (!safe) return text;
+  return safe.external
+    ? <a key={key} href={safe.href} className="text-primary underline" target="_blank" rel="noopener noreferrer">{text}</a>
+    : <a key={key} href={safe.href} className="text-primary underline">{text}</a>;
+}
+
 function renderMarkdown(text) {
   if (!text) return null;
   const lines = text.split('\n');
@@ -73,7 +83,7 @@ function renderInline(text) {
     if (match[1]) parts.push(<strong key={parts.length}>{match[2]}</strong>);
     else if (match[3]) parts.push(<em key={parts.length}>{match[4]}</em>);
     else if (match[5]) parts.push(<code key={parts.length} className="bg-gray-200 px-1 py-0.5 rounded text-xs font-mono">{match[6]}</code>);
-    else if (match[7]) parts.push(<a key={parts.length} href={match[9]} className="text-primary underline" target="_blank" rel="noopener noreferrer">{match[8]}</a>);
+    else if (match[7]) parts.push(renderSafeLink(parts.length, match[8], match[9]));
     lastIndex = regex.lastIndex;
   }
   if (lastIndex < text.length) parts.push(text.slice(lastIndex));
@@ -357,7 +367,7 @@ export default function PublicAssistantChatPanel() {
             <button
               onClick={closePanel}
               className="p-1 rounded hover:bg-white/20 transition-colors"
-              aria-label="Close"
+              aria-label={t('common.close')}
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

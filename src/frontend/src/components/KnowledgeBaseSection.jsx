@@ -10,6 +10,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import LoadingSpinner from './LoadingSpinner';
 import { formatUserDate } from '../utils/formatDate';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 
@@ -53,14 +54,9 @@ export default function KnowledgeBaseSection() {
   const fileInputRef = useRef(null);
   const pollRef = useRef(null);
 
-  function authHeader() {
-    const token = localStorage.getItem('token');
-    return token ? { 'Authorization': `Bearer ${token}` } : {};
-  }
-
   async function loadDocs() {
     try {
-      const res = await fetch(`${API_URL}/kb`, { headers: authHeader() });
+      const res = await fetchApi(`${API_URL}/kb`, );
       if (res.status === 403) {
         const data = await res.json().catch(() => ({}));
         if (data && data.code === 'tier_gate') {
@@ -121,9 +117,8 @@ export default function KnowledgeBaseSection() {
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const res = await fetch(`${API_URL}/kb/upload`, {
+      const res = await fetchApi(`${API_URL}/kb/upload`, {
         method: 'POST',
-        headers: authHeader(),
         body: fd
       });
       const data = await res.json().catch(() => ({}));
@@ -157,9 +152,8 @@ export default function KnowledgeBaseSection() {
   async function handleDelete(id, title) {
     if (!confirm(t('kb.deleteConfirm', { title }))) return;
     try {
-      const res = await fetch(`${API_URL}/kb/${id}`, {
+      const res = await fetchApi(`${API_URL}/kb/${id}`, {
         method: 'DELETE',
-        headers: authHeader()
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));

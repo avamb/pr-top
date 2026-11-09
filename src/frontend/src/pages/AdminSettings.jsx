@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { formatUserDateOnly } from '../utils/formatDate';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 
@@ -68,16 +69,12 @@ export default function AdminSettings() {
   ];
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-    loadSettings(token);
+    loadSettings();
   }, []);
 
-  const loadSettings = async (token) => {
+  const loadSettings = async () => {
     try {
-      const res = await fetch(`${API_URL}/admin/settings`, {
-        headers: { Authorization: `Bearer ${token || localStorage.getItem('token')}` }
-      });
+      const res = await fetchApi(`${API_URL}/admin/settings`);
       if (res.ok) {
         const data = await res.json();
         setSettings(data.settings);
@@ -109,7 +106,6 @@ export default function AdminSettings() {
     setErrors([]);
 
     try {
-      const token = localStorage.getItem('token');
       const changedSettings = {};
       for (const [key, value] of Object.entries(formValues)) {
         const currentVal = settings[key]?.value || '';
@@ -124,10 +120,9 @@ export default function AdminSettings() {
         return;
       }
 
-      const res = await fetch(`${API_URL}/admin/settings`, {
+      const res = await fetchApi(`${API_URL}/admin/settings`, {
         method: 'PUT',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ settings: changedSettings })

@@ -55,7 +55,7 @@ session's summary.
   Confirm the Telegram binding is active. Ask the client to check
   the pinned bot chat and unmute if needed.
 - **Wrong language.** The client's bot language comes from Telegram
-  at first-connect; they can override with `/lang`.
+  at first-connect and cannot be changed in the bot; contact support.
 - **Response truncated in the review card.** Long responses render as
   first ~600 chars with a "read full response" link. The full
   encrypted body is preserved.

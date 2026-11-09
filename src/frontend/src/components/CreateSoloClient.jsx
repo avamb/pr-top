@@ -17,6 +17,7 @@
 //   - language defaults to therapist's UI language (en/ru/es/uk)
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 
@@ -66,18 +67,11 @@ export default function CreateSoloClient({ open, onClose, onCreated }) {
       return;
     }
 
-    const token = localStorage.getItem('token');
-    if (!token) {
-      setError(t('client.solo.errorAuth', 'Authentication expired. Please log in again.'));
-      return;
-    }
-
     setSubmitting(true);
     try {
-      const res = await fetch(`${API_URL}/clients/solo`, {
+      const res = await fetchApi(`${API_URL}/clients/solo`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({

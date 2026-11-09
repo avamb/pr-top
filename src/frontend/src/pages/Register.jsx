@@ -8,6 +8,8 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import Seo from '../components/Seo';
 import TurnstileWidget from '../components/TurnstileWidget';
+import { fetchCurrentUser, setVerifiedUser } from '../utils/authSession';
+import { removeLegacyToken } from '../utils/logout';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -17,10 +19,16 @@ export default function Register() {
 
   // Redirect if already authenticated (prevents back-button resubmit)
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      navigate('/dashboard', { replace: true });
-    }
+    // No cached profile = not signed in here: skip the /me round trip (and its 401).
+    if (!localStorage.getItem('user')) return undefined;
+    let cancelled = false;
+    // The session is an HttpOnly cookie: ask the server whether it is valid.
+    fetchCurrentUser().then(({ user: me, offline }) => {
+      if (!cancelled && me && !offline) {
+        navigate('/dashboard', { replace: true });
+      }
+    });
+    return () => { cancelled = true; };
   }, [navigate]);
 
   // Capture UTM params and referral code from URL
@@ -34,6 +42,7 @@ export default function Register() {
   const refCode = useMemo(() => searchParams.get('ref') || undefined, [searchParams]);
   const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '' });
   const [error, setError] = useState('');
+  const [checkEmail, setCheckEmail] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
@@ -150,9 +159,25 @@ export default function Register() {
         return;
       }
 
-      // Store token
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      if (data.check_email === true) {
+        // Existing address: the backend sends no session and no user.
+        // Stay here with a neutral "check your email" state.
+        setError('');
+        setCheckEmail(true);
+        setLoading(false);
+        return;
+      }
+
+      if (!data.user) {
+        // Registration accepted without opening a session (e.g. "check your
+        // email" style responses): send the person to sign in.
+        navigate('/login', { replace: true, state: data.message ? { message: data.message } : undefined });
+        return;
+      }
+
+      // The backend set the HttpOnly session cookie; keep only the profile.
+      setVerifiedUser(data.user);
+      removeLegacyToken();
 
       // Redirect to dashboard (replace history to prevent back-button resubmit)
       navigate('/dashboard', { replace: true });
@@ -182,6 +207,12 @@ export default function Register() {
           <p className="text-xs text-secondary mb-4">
             🔒 {t('auth.registerSecurityNote')}
           </p>
+
+          {checkEmail && (
+            <div role="status" data-testid="register-check-email" className="bg-green-50 border border-green-300 text-green-800 rounded-md p-3 mb-4 text-sm">
+              {t('auth.checkEmailToContinue')}
+            </div>
+          )}
 
           {error && (
             <div role="alert" className="bg-red-50 border border-error text-error rounded-md p-3 mb-4 text-sm">

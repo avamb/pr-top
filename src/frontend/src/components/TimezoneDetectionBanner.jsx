@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 const DISMISSED_KEY_PREFIX = 'timezone_confirmed_';
@@ -46,11 +47,9 @@ export default function TimezoneDetectionBanner({ user }) {
   async function handleConfirm() {
     setSaving(true);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/settings/profile`, {
+      const res = await fetchApi(`${API_URL}/settings/profile`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ timezone: browserTz })

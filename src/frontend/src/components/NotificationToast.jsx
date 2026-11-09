@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useWebSocket from '../hooks/useWebSocket';
+import { fetchApi } from '../utils/fetchApi';
 
 const SOS_SOUND_FREQUENCY = 880; // Hz
 const SOS_SOUND_DURATION = 200; // ms
@@ -156,11 +157,7 @@ export default function NotificationToast() {
   useEffect(() => {
     async function loadPrefs() {
       try {
-        const token = localStorage.getItem('token');
-        if (!token) return;
-        const res = await fetch('/api/settings/escalation', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const res = await fetchApi('/api/settings/escalation');
         if (res.ok) {
           const data = await res.json();
           setQuietHoursPrefs(data.escalation_preferences || null);

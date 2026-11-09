@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 
@@ -142,14 +143,11 @@ function MessageComments({ messageId, t }) {
   const [loaded, setLoaded] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
-  const token = localStorage.getItem('token');
-  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const headers = { 'Content-Type': 'application/json' };
 
   async function loadComments() {
     try {
-      const res = await fetch(`${API_URL}/admin/assistant/messages/${messageId}/comments`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API_URL}/admin/assistant/messages/${messageId}/comments`);
       if (res.ok) {
         const data = await res.json();
         setComments(data.comments);
@@ -168,12 +166,12 @@ function MessageComments({ messageId, t }) {
   async function handleSave(formData) {
     try {
       if (editingComment) {
-        const res = await fetch(`${API_URL}/admin/assistant/comments/${editingComment.id}`, {
+        const res = await fetchApi(`${API_URL}/admin/assistant/comments/${editingComment.id}`, {
           method: 'PUT', headers, body: JSON.stringify(formData)
         });
         if (!res.ok) throw new Error('Failed to update');
       } else {
-        const res = await fetch(`${API_URL}/admin/assistant/messages/${messageId}/comments`, {
+        const res = await fetchApi(`${API_URL}/admin/assistant/messages/${messageId}/comments`, {
           method: 'POST', headers, body: JSON.stringify(formData)
         });
         if (!res.ok) throw new Error('Failed to create');
@@ -189,7 +187,7 @@ function MessageComments({ messageId, t }) {
   async function handleDelete(commentId) {
     if (!confirm(t('admin.assistantAnalytics.deleteConfirm', 'Delete this comment?'))) return;
     try {
-      await fetch(`${API_URL}/admin/assistant/comments/${commentId}`, {
+      await fetchApi(`${API_URL}/admin/assistant/comments/${commentId}`, {
         method: 'DELETE', headers
       });
       await loadComments();
@@ -291,8 +289,7 @@ export default function AdminAssistantAnalytics() {
   const [summaryMeta, setSummaryMeta] = useState(null);
   const [summaryStreamText, setSummaryStreamText] = useState('');
 
-  const token = localStorage.getItem('token');
-  const headers = { Authorization: `Bearer ${token}` };
+  const headers = { };
 
   useEffect(() => {
     loadAnalytics();
@@ -301,7 +298,7 @@ export default function AdminAssistantAnalytics() {
 
   async function loadAnalytics() {
     try {
-      const res = await fetch(`${API_URL}/admin/assistant/analytics`, { headers });
+      const res = await fetchApi(`${API_URL}/admin/assistant/analytics`, { headers });
       if (!res.ok) throw new Error('Failed to load analytics');
       const data = await res.json();
       setAnalytics(data);
@@ -314,7 +311,7 @@ export default function AdminAssistantAnalytics() {
 
   async function loadConversations(p) {
     try {
-      const res = await fetch(`${API_URL}/admin/assistant/conversations?page=${p}&limit=20`, { headers });
+      const res = await fetchApi(`${API_URL}/admin/assistant/conversations?page=${p}&limit=20`, { headers });
       if (!res.ok) throw new Error('Failed to load conversations');
       const data = await res.json();
       setConversations(data.conversations);
@@ -327,7 +324,7 @@ export default function AdminAssistantAnalytics() {
 
   async function loadMessages(convId) {
     try {
-      const res = await fetch(`${API_URL}/admin/assistant/conversations/${convId}/messages`, { headers });
+      const res = await fetchApi(`${API_URL}/admin/assistant/conversations/${convId}/messages`, { headers });
       if (!res.ok) throw new Error('Failed to load messages');
       const data = await res.json();
       setSelectedConversation(data.conversation);
@@ -339,7 +336,7 @@ export default function AdminAssistantAnalytics() {
 
   async function handleExport(format) {
     try {
-      const res = await fetch(`${API_URL}/admin/assistant/export?format=${format}`, { headers });
+      const res = await fetchApi(`${API_URL}/admin/assistant/export?format=${format}`, { headers });
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -360,7 +357,7 @@ export default function AdminAssistantAnalytics() {
     setError(null);
 
     try {
-      const res = await fetch(`${API_URL}/admin/assistant/summary`, {
+      const res = await fetchApi(`${API_URL}/admin/assistant/summary`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -437,7 +434,7 @@ export default function AdminAssistantAnalytics() {
   async function handleExportSummary() {
     if (!summaryResult) return;
     try {
-      const res = await fetch(`${API_URL}/admin/assistant/summary/export`, {
+      const res = await fetchApi(`${API_URL}/admin/assistant/summary/export`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ summary: summaryResult, meta: summaryMeta })
@@ -462,7 +459,7 @@ export default function AdminAssistantAnalytics() {
 
   async function handleExportComments(format) {
     try {
-      const res = await fetch(`${API_URL}/admin/assistant/comments/export?format=${format}`, { headers });
+      const res = await fetchApi(`${API_URL}/admin/assistant/comments/export?format=${format}`, { headers });
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

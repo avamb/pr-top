@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 
@@ -77,7 +78,7 @@ export default function AdminViewerAnalytics() {
       if (range === 'custom' && customStart && customEnd) {
         url += `&start=${customStart}&end=${customEnd}`;
       }
-      const res = await fetch(url, { credentials: 'include' });
+      const res = await fetchApi(url, { credentials: 'include' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setData(json);

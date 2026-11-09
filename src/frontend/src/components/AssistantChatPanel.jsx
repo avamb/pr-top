@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import useAssistantStore from '../stores/assistantStore';
 import { useCsrfToken } from '../hooks/useCsrfToken';
+import { sanitizeLinkUrl } from '../utils/safeLink';
 
 /**
  * Simple markdown-to-JSX renderer.
@@ -100,6 +101,15 @@ function renderMarkdown(text) {
   return elements;
 }
 
+/** Safe markdown link: http/https/mailto/relative only, else plain text (M26). */
+function renderSafeLink(key, text, url) {
+  const safe = sanitizeLinkUrl(url);
+  if (!safe) return text;
+  return safe.external
+    ? <a key={key} href={safe.href} className="text-primary underline" target="_blank" rel="noopener noreferrer">{text}</a>
+    : <a key={key} href={safe.href} className="text-primary underline">{text}</a>;
+}
+
 /** Render inline markdown: **bold**, *italic*, `code`, [links](url) */
 function renderInline(text) {
   if (!text) return text;
@@ -124,7 +134,7 @@ function renderInline(text) {
       parts.push(<code key={parts.length} className="bg-gray-200 px-1 py-0.5 rounded text-xs font-mono">{match[6]}</code>);
     } else if (match[7]) {
       // link
-      parts.push(<a key={parts.length} href={match[9]} className="text-primary underline" target="_blank" rel="noopener noreferrer">{match[8]}</a>);
+      parts.push(renderSafeLink(parts.length, match[8], match[9]));
     }
     lastIndex = regex.lastIndex;
   }
@@ -427,7 +437,7 @@ export default function AssistantChatPanel() {
             <button
               onClick={closePanel}
               className="p-2 rounded-lg text-gray-500 hover:bg-gray-200 transition-colors"
-              aria-label="Close"
+              aria-label={t('common.close')}
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

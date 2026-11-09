@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { formatUserDateOnly } from '../utils/formatDate';
 import UpcomingConfirmationsWidget from '../components/UpcomingConfirmationsWidget';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 
@@ -118,10 +119,7 @@ function InviteCodeSection({ t }) {
   async function fetchInviteCode() {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/invite-code`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API_URL}/invite-code`);
       if (!res.ok) throw new Error('Failed to fetch invite code');
       const data = await res.json();
       setInviteCode(data.invite_code);
@@ -137,10 +135,7 @@ function InviteCodeSection({ t }) {
 
   async function fetchInviteLink() {
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/invite-code/link`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API_URL}/invite-code/link`);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         if (res.status === 400 && data.error?.includes('BOT_USERNAME')) {
@@ -159,10 +154,8 @@ function InviteCodeSection({ t }) {
     try {
       setRegenerating(true);
       setError(null);
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/invite-code/regenerate`, {
+      const res = await fetchApi(`${API_URL}/invite-code/regenerate`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Failed to regenerate invite code');
       const data = await res.json();
@@ -323,19 +316,18 @@ export default function Dashboard() {
   const abortControllerRef = React.useRef(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
 
-    if (!token || !storedUser) {
+    if (!storedUser) {
       navigate('/login');
       return;
     }
 
     const parsedUser = JSON.parse(storedUser);
     setUser(parsedUser);
-    fetchDashboardData(token);
-    fetchFeatureFlags(token);
-    fetchReminderPolicy(token);
+    fetchDashboardData();
+    fetchFeatureFlags();
+    fetchReminderPolicy();
 
     return () => {
       // Abort any in-flight requests when component unmounts
@@ -345,7 +337,7 @@ export default function Dashboard() {
     };
   }, [navigate]);
 
-  async function fetchDashboardData(token) {
+  async function fetchDashboardData() {
     // Abort previous request if still pending
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -358,19 +350,17 @@ export default function Dashboard() {
       setError(null);
 
       const headers = {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       };
 
       const [statsRes, activityRes] = await Promise.all([
-        fetch(`${API_URL}/dashboard/stats`, { headers, signal: controller.signal }),
-        fetch(`${API_URL}/dashboard/activity`, { headers, signal: controller.signal })
+        fetchApi(`${API_URL}/dashboard/stats`, { headers, signal: controller.signal }),
+        fetchApi(`${API_URL}/dashboard/activity`, { headers, signal: controller.signal })
       ]);
 
       if (controller.signal.aborted) return;
 
       if (statsRes.status === 401 || activityRes.status === 401) {
-        localStorage.removeItem('token');
         localStorage.removeItem('user');
         navigate('/login');
         return;
@@ -408,11 +398,9 @@ export default function Dashboard() {
     }
   }
 
-  async function fetchFeatureFlags(token) {
+  async function fetchFeatureFlags() {
     try {
-      const res = await fetch(`${API_URL}/features`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API_URL}/features`);
       if (!res.ok) return;
       const data = await res.json();
       setFeatureFlags(data || {});
@@ -421,11 +409,9 @@ export default function Dashboard() {
     }
   }
 
-  async function fetchReminderPolicy(token) {
+  async function fetchReminderPolicy() {
     try {
-      const res = await fetch(`${API_URL}/settings/reminder-policy`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API_URL}/settings/reminder-policy`);
       if (!res.ok) return;
       const data = await res.json();
       // API returns { reminder_policy: { enabled: bool, ... } }
@@ -457,7 +443,7 @@ export default function Dashboard() {
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center justify-between">
             <span>{t('dashboard.failedToLoad')} {error}</span>
             <button
-              onClick={() => fetchDashboardData(localStorage.getItem('token'))}
+              onClick={() => fetchDashboardData()}
               className="ml-4 px-3 py-1 bg-red-100 hover:bg-red-200 text-red-800 rounded text-xs font-medium"
             >
               {t('dashboard.retry')}

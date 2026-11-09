@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { fetchApi } from '../utils/fetchApi';
 
 const API = '/api';
 
@@ -13,7 +14,6 @@ const API = '/api';
  */
 export default function RescheduleModal({ sessionId, currentScheduledAt, onClose, onSuccess }) {
   const { t } = useTranslation();
-  const token = localStorage.getItem('token');
 
   // Default the picker to the current scheduled_at if it exists, else empty
   const defaultDatetime = currentScheduledAt
@@ -38,11 +38,10 @@ export default function RescheduleModal({ sessionId, currentScheduledAt, onClose
     setSaving(true);
     setError('');
     try {
-      const res = await fetch(`${API}/sessions/${sessionId}/reschedule`, {
+      const res = await fetchApi(`${API}/sessions/${sessionId}/reschedule`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ new_scheduled_at: newAt, notify_client: notifyClient })
       });

@@ -13,6 +13,8 @@ import AssignmentsPanel from '../components/AssignmentsPanel';
 import EngagementPanel from '../components/EngagementPanel';
 import SupervisionShareModal from '../components/SupervisionShareModal';
 import SessionCalendar from '../components/SessionCalendar';
+import { fetchApi, uploadWithProgress } from '../utils/fetchApi';
+import { sessionStatusBadge, sessionStatusLabel } from '../utils/sessionStatus';
 
 const API = '/api';
 
@@ -42,10 +44,9 @@ function DiaryEntryCard({ entry, typeIcon, typeBadgeColor, formatUserDate, delet
     setRetranscribing(true);
     setRetranscribeError('');
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API}/diary/${entry.id}/retranscribe`, {
+      const res = await fetchApi(`${API}/diary/${entry.id}/retranscribe`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' }
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transcription failed');
@@ -89,7 +90,7 @@ function DiaryEntryCard({ entry, typeIcon, typeBadgeColor, formatUserDate, delet
         <button
           onClick={() => deleteDiaryEntry(entry.id)}
           className="ml-2 text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 border border-red-200"
-          title="Delete diary entry"
+          title={t('clientDetail.deleteDiaryEntry')}
         >🗑️ Delete</button>
       </div>
 
@@ -312,7 +313,6 @@ function ClientDetail() {
   const [remindersSaving, setRemindersSaving] = useState(false);
   const [remindersMsg, setRemindersMsg] = useState('');
   const { on: onWsEvent } = useWebSocket();
-  const token = localStorage.getItem('token');
 
   // Warn user before leaving page with unsaved form data
   const hasUnsavedChanges = newNoteContent.trim() !== '' || contextDirty;
@@ -406,8 +406,7 @@ function ClientDetail() {
   const fetchSos = useCallback(async (signal) => {
     setSosLoading(true);
     try {
-      const res = await fetch(`${API}/clients/${id}/sos`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+      const res = await fetchApi(`${API}/clients/${id}/sos`, {
         signal
       });
       if (res.ok) {
@@ -420,7 +419,7 @@ function ClientDetail() {
     } finally {
       setSosLoading(false);
     }
-  }, [id, token]);
+  }, [id]);
 
   // Inquiries fetch function (T-01)
   const fetchInquiries = useCallback(async (signal, statusOverride) => {
@@ -429,8 +428,7 @@ function ClientDetail() {
     try {
       const status = statusOverride !== undefined ? statusOverride : inquiryStatusFilter;
       const qs = status ? `?status=${encodeURIComponent(status)}` : '';
-      const res = await fetch(`${API}/clients/${id}/inquiries${qs}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+      const res = await fetchApi(`${API}/clients/${id}/inquiries${qs}`, {
         signal
       });
       if (signal && signal.aborted) return;
@@ -450,7 +448,7 @@ function ClientDetail() {
     } finally {
       setInquiriesLoading(false);
     }
-  }, [id, token, inquiryStatusFilter, t]);
+  }, [id, inquiryStatusFilter, t]);
 
   async function handleCreateInquiry(e) {
     if (e && e.preventDefault) e.preventDefault();
@@ -458,11 +456,10 @@ function ClientDetail() {
     setInquirySaving(true);
     setInquiriesError('');
     try {
-      const res = await fetch(`${API}/clients/${id}/inquiries`, {
+      const res = await fetchApi(`${API}/clients/${id}/inquiries`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           title: inquiryFormTitle.trim(),
@@ -501,11 +498,10 @@ function ClientDetail() {
     setInquiryActionLoading(inquiryId);
     setInquiriesError('');
     try {
-      const res = await fetch(`${API}/clients/${id}/inquiries/${inquiryId}`, {
+      const res = await fetchApi(`${API}/clients/${id}/inquiries/${inquiryId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           title: editingInquiryTitle.trim(),
@@ -529,11 +525,10 @@ function ClientDetail() {
     setInquiryActionLoading(inquiryId);
     setInquiriesError('');
     try {
-      const res = await fetch(`${API}/clients/${id}/inquiries/${inquiryId}`, {
+      const res = await fetchApi(`${API}/clients/${id}/inquiries/${inquiryId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ status: newStatus })
       });
@@ -554,9 +549,8 @@ function ClientDetail() {
     setInquiryActionLoading(inquiryId);
     setInquiriesError('');
     try {
-      const res = await fetch(`${API}/clients/${id}/inquiries/${inquiryId}`, {
+      const res = await fetchApi(`${API}/clients/${id}/inquiries/${inquiryId}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok && res.status !== 404) {
         const data = await res.json().catch(() => ({}));
@@ -572,12 +566,8 @@ function ClientDetail() {
 
   // Load client and all sub-resources when client ID changes
   useEffect(() => {
-    if (!token) {
-      navigate('/login');
-      return;
-    }
     if (!isValidId) {
-      setError('Invalid client ID');
+      setError(t('clientDetail.invalidClientId'));
       setLoading(false);
       return;
     }
@@ -610,13 +600,13 @@ function ClientDetail() {
 
   // Re-fetch only diary when diary filters change
   useEffect(() => {
-    if (!token || !isValidId) return;
+    if (!isValidId) return;
     fetchDiary();
   }, [typeFilter, dateFrom, dateTo]);
 
   // Re-fetch only timeline when timeline filters change
   useEffect(() => {
-    if (!token || !isValidId) return;
+    if (!isValidId) return;
     fetchTimeline();
   }, [timelineStartDate, timelineEndDate, timelineTypeFilter]);
 
@@ -632,27 +622,25 @@ function ClientDetail() {
 
   // Re-fetch inquiries when status filter changes (after initial load)
   useEffect(() => {
-    if (!token || !isValidId) return;
+    if (!isValidId) return;
     fetchInquiries();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inquiryStatusFilter]);
 
   // T-02: re-fetch sessions when the inquiry filter changes (after initial load)
   useEffect(() => {
-    if (!token || !isValidId) return;
+    if (!isValidId) return;
     fetchSessions(undefined, { inquiryFilter: sessionsInquiryFilter });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionsInquiryFilter]);
 
   async function fetchClient(signal) {
     try {
-      const res = await fetch(`${API}/clients/${id}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+      const res = await fetchApi(`${API}/clients/${id}`, {
         signal
       });
       if (signal && signal.aborted) return false;
       if (res.status === 401) {
-        localStorage.removeItem('token');
         localStorage.removeItem('user');
         navigate('/login');
         return false;
@@ -701,8 +689,7 @@ function ClientDetail() {
       if (tz) params.set('timezone', tz);
       const qs = params.toString();
       const url = `${API}/clients/${id}/diary${qs ? '?' + qs : ''}`;
-      const res = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` },
+      const res = await fetchApi(url, {
         signal
       });
       if (signal && signal.aborted) return;
@@ -733,11 +720,10 @@ function ClientDetail() {
   }
 
   async function deleteDiaryEntry(entryId) {
-    if (!window.confirm('Are you sure you want to delete this diary entry?')) return;
+    if (!window.confirm(t('clientDetail.confirmDeleteDiary'))) return;
     try {
-      const res = await fetch(`${API}/clients/${id}/diary/${entryId}`, {
+      const res = await fetchApi(`${API}/clients/${id}/diary/${entryId}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.status === 404) {
         // Entry was already deleted (e.g., by another session)
@@ -755,7 +741,7 @@ function ClientDetail() {
       fetchDiary();
       fetchTimeline();
     } catch (e) {
-      alert('Error deleting diary entry: ' + e.message);
+      alert(t('clientDetail.deleteDiaryError', { message: e.message }));
     }
   }
 
@@ -765,8 +751,7 @@ function ClientDetail() {
       const q = (search !== undefined ? search : notesSearch).trim();
       if (q) params.set('search', q);
       const qs = params.toString();
-      const res = await fetch(`${API}/clients/${id}/notes${qs ? '?' + qs : ''}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+      const res = await fetchApi(`${API}/clients/${id}/notes${qs ? '?' + qs : ''}`, {
         signal
       });
       if (signal && signal.aborted) return;
@@ -786,11 +771,10 @@ function ClientDetail() {
     if (!newNoteContent.trim() || creatingNote) return;
     setCreatingNote(true);
     try {
-      const res = await fetch(`${API}/clients/${id}/notes`, {
+      const res = await fetchApi(`${API}/clients/${id}/notes`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ content: newNoteContent.trim() })
       });
@@ -808,11 +792,10 @@ function ClientDetail() {
     if (!editingNoteContent.trim() || updatingNote) return;
     setUpdatingNote(true);
     try {
-      const res = await fetch(`${API}/clients/${id}/notes/${noteId}`, {
+      const res = await fetchApi(`${API}/clients/${id}/notes/${noteId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ content: editingNoteContent.trim() })
       });
@@ -829,9 +812,7 @@ function ClientDetail() {
 
   async function handleExportDiary() {
     try {
-      var res = await fetch(`${API}/clients/${id}/diary/export`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      var res = await fetchApi(`${API}/clients/${id}/diary/export`);
       if (!res.ok) {
         var errData = await res.json().catch(function() { return {}; });
         alert(errData.error || 'Failed to export diary entries');
@@ -851,7 +832,7 @@ function ClientDetail() {
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
     } catch (e) {
-      alert('Export failed: ' + e.message);
+      alert(`${t('clientDetail.exportFailed')}: ${e.message}`);
     }
   }
 
@@ -865,9 +846,8 @@ function ClientDetail() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch(`${API}/clients/${id}/import`, {
+      const res = await fetchApi(`${API}/clients/${id}/import`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
         body: formData
       });
       const data = await res.json();
@@ -888,8 +868,7 @@ function ClientDetail() {
 
   async function fetchContext(signal) {
     try {
-      const res = await fetch(`${API}/clients/${id}/context`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+      const res = await fetchApi(`${API}/clients/${id}/context`, {
         signal
       });
       if (signal && signal.aborted) return;
@@ -932,11 +911,10 @@ function ClientDetail() {
         body.expected_updated_at = context.updated_at;
       }
 
-      const res = await fetch(`${API}/clients/${id}/context`, {
+      const res = await fetchApi(`${API}/clients/${id}/context`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(body)
       });
@@ -992,8 +970,7 @@ function ClientDetail() {
       if (tz) params.set('timezone', tz);
       const qs = params.toString();
       const url = `${API}/clients/${id}/timeline${qs ? '?' + qs : ''}`;
-      const res = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` },
+      const res = await fetchApi(url, {
         signal
       });
       if (signal && signal.aborted) return;
@@ -1043,8 +1020,7 @@ function ClientDetail() {
       const url = qs.toString()
         ? `${API}/clients/${id}/sessions?${qs.toString()}`
         : `${API}/clients/${id}/sessions`;
-      const res = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` },
+      const res = await fetchApi(url, {
         signal
       });
       if (signal && signal.aborted) return;
@@ -1082,42 +1058,14 @@ function ClientDetail() {
       // T-19: opt into single-track (therapist-only) mode
       if (sessionSingleTrack) formData.append('recording_mode', 'single_track');
 
-      // Use XMLHttpRequest for progress tracking
-      const result = await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', `${API}/sessions`);
-        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-
-        // Get CSRF token from cookie or meta
-        const csrfMeta = document.querySelector('meta[name="csrf-token"]');
-        if (csrfMeta) {
-          xhr.setRequestHeader('x-csrf-token', csrfMeta.content);
-        }
-
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            setSessionUploadProgress(Math.round((e.loaded / e.total) * 100));
-          }
-        };
-
-        xhr.onload = () => {
-          try {
-            const data = JSON.parse(xhr.responseText);
-            if (xhr.status >= 200 && xhr.status < 300) {
-              resolve(data);
-            } else {
-              reject(new Error(data.error || `Upload failed (${xhr.status})`));
-            }
-          } catch {
-            reject(new Error(`Upload failed (${xhr.status})`));
-          }
-        };
-
-        xhr.onerror = () => reject(new Error('Network error during upload'));
-        xhr.ontimeout = () => reject(new Error('Upload timed out'));
-        xhr.timeout = 300000; // 5 minutes
-        xhr.send(formData);
+      // XHR for progress events; CSRF refresh/retry and 401 handling live in uploadWithProgress
+      const upRes = await uploadWithProgress(`${API}/sessions`, formData, {
+        onProgress: setSessionUploadProgress
       });
+      if (!upRes.ok) {
+        throw new Error(upRes.data.error || `Upload failed (${upRes.status})`);
+      }
+      const result = upRes.data;
 
       setSessionUploadMsg(t('clientDetail.uploadSuccess', 'Session uploaded successfully! Transcription in progress...'));
       setSessionUploadFile(null);
@@ -1189,10 +1137,9 @@ function ClientDetail() {
     setRemindersSaving(true);
     setRemindersMsg('');
     try {
-      const res = await fetch(`${API}/clients/${id}`, {
+      const res = await fetchApi(`${API}/clients/${id}`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ reminders_enabled: value })
@@ -1219,9 +1166,7 @@ function ClientDetail() {
     setExportLoading(true);
     setExportMsg('');
     try {
-      const res = await fetch(`${API}/export/client/${id}?format=${exportFormat}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API}/export/client/${id}?format=${exportFormat}`);
       if (res.status === 403) {
         const data = await res.json().catch(() => ({}));
         if (data.required_plans) {
@@ -1262,10 +1207,9 @@ function ClientDetail() {
     setNlQueryUpgradeRequired(false);
 
     try {
-      const res = await fetch(`${API}/query`, {
+      const res = await fetchApi(`${API}/query`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ client_id: parseInt(id), query: nlQueryText.trim() })
@@ -1294,8 +1238,7 @@ function ClientDetail() {
   async function fetchExercises(signal) {
     try {
       setExercisesLoading(true);
-      const res = await fetch(`${API}/clients/${id}/exercises`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+      const res = await fetchApi(`${API}/clients/${id}/exercises`, {
         signal
       });
       if (signal && signal.aborted) return;
@@ -1318,9 +1261,7 @@ function ClientDetail() {
     if (exerciseLibrary.length > 0) return; // already loaded
     try {
       setExerciseLibraryLoading(true);
-      const res = await fetch(`${API}/exercises?language=${lang}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchApi(`${API}/exercises?language=${lang}`);
       if (!res.ok) throw new Error('Failed to fetch exercise library');
       const data = await res.json();
       setExerciseLibrary(data.exercises || []);
@@ -1335,9 +1276,9 @@ function ClientDetail() {
     try {
       setSendingExercise(exerciseId);
       setExerciseSendMsg('');
-      const res = await fetch(`${API}/clients/${id}/exercises`, {
+      const res = await fetchApi(`${API}/clients/${id}/exercises`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ exercise_id: exerciseId })
       });
       const data = await res.json();
@@ -1357,9 +1298,8 @@ function ClientDetail() {
     setSosActionLoading(sosId);
     setSosMsg('');
     try {
-      const res = await fetch(`${API}/clients/${id}/sos/${sosId}/acknowledge`, {
+      const res = await fetchApi(`${API}/clients/${id}/sos/${sosId}/acknowledge`, {
         method: 'PUT',
-        headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to acknowledge');
@@ -1376,9 +1316,8 @@ function ClientDetail() {
     setSosActionLoading(sosId);
     setSosMsg('');
     try {
-      const res = await fetch(`${API}/clients/${id}/sos/${sosId}/resolve`, {
+      const res = await fetchApi(`${API}/clients/${id}/sos/${sosId}/resolve`, {
         method: 'PUT',
-        headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to resolve');
@@ -1431,7 +1370,7 @@ function ClientDetail() {
     return (
       <div className="min-h-screen bg-stone-50 flex items-center justify-center">
         <div className="text-center max-w-md mx-auto px-4">
-          <div className="text-5xl mb-4" role="img" aria-label="warning">&#9888;</div>
+          <div className="text-5xl mb-4" role="img" aria-label={t('common.warning')}>&#9888;</div>
           <h2 className="text-xl font-semibold text-gray-800 mb-2">{t('client.unavailable', 'Client Unavailable')}</h2>
           <p className="text-gray-600 mb-6">{error}</p>
           <button
@@ -1553,7 +1492,6 @@ function ClientDetail() {
             onClose={() => setShowSupervisionShare(false)}
             clientId={client.id}
             clientLabel={[client.first_name, client.last_name].filter(Boolean).join(' ') || client.email || client.telegram_id || `#${client.id}`}
-            token={token}
           />
         )}
 
@@ -1881,7 +1819,7 @@ function ClientDetail() {
                 <button
                   onClick={() => setTimelineTypeFilter('')}
                   className={`px-3 py-1 rounded text-sm ${!timelineTypeFilter ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
-                >All</button>
+                >{t('common.all')}</button>
                 <button
                   onClick={() => setTimelineTypeFilter('diary')}
                   className={`px-3 py-1 rounded text-sm ${timelineTypeFilter === 'diary' ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
@@ -1899,13 +1837,14 @@ function ClientDetail() {
 
             {/* Date Range Filter */}
             <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-stone-50 rounded-lg">
-              <label className="text-sm font-medium text-stone-600">{t('clientDetail.filterByDate')}</label>
+              <label htmlFor="timeline-start-date" className="text-sm font-medium text-stone-600">{t('clientDetail.filterByDate')}</label>
               <input
+                id="timeline-start-date"
                 type="date"
                 value={timelineStartDate}
                 onChange={(e) => setTimelineStartDate(e.target.value)}
                 className="px-3 py-1.5 border border-stone-300 rounded text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                aria-label="Timeline start date"
+                aria-label={t('clientDetail.timelineStartDate')}
               />
               <span className="text-stone-400 text-sm">to</span>
               <input
@@ -1913,27 +1852,27 @@ function ClientDetail() {
                 value={timelineEndDate}
                 onChange={(e) => setTimelineEndDate(e.target.value)}
                 className="px-3 py-1.5 border border-stone-300 rounded text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                aria-label="Timeline end date"
+                aria-label={t('clientDetail.timelineEndDate')}
               />
               {(timelineStartDate || timelineEndDate !== todayStr) && (
                 <button
                   onClick={() => { setTimelineStartDate(''); setTimelineEndDate(todayStr); }}
                   className="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
-                >Clear dates</button>
+                >{t('clientDetail.clearDates')}</button>
               )}
               {(timelineTypeFilter || timelineStartDate || timelineEndDate !== todayStr) && (
                 <button
                   onClick={() => { setTimelineTypeFilter(''); setTimelineStartDate(''); setTimelineEndDate(todayStr); }}
                   className="ml-auto px-3 py-1.5 text-sm bg-stone-200 hover:bg-stone-300 text-stone-700 rounded font-medium"
-                  aria-label="Reset all filters"
+                  aria-label={t('clientDetail.resetAllFilters')}
                 >
-                  {t('reset_all_filters', 'Reset all filters')}
+                  {t('clientDetail.resetAllFilters', 'Reset all filters')}
                 </button>
               )}
             </div>
 
             {timelineLoading ? (
-              <p className="text-stone-500 text-center py-8">Loading timeline...</p>
+              <p className="text-stone-500 text-center py-8">{t('clientDetail.timelineLoading')}</p>
             ) : timeline.length === 0 ? (
               <p className="text-stone-400 text-center py-8">No timeline items found{(timelineStartDate || timelineEndDate !== todayStr || timelineTypeFilter) ? ' for the selected filters' : ''}</p>
             ) : (
@@ -2014,7 +1953,7 @@ function ClientDetail() {
                           </div>
                           {item.summary && (
                             <div className="p-3 bg-green-50 rounded-lg text-sm text-stone-700">
-                              <p className="font-medium text-green-800 mb-1">Session Summary</p>
+                              <p className="font-medium text-green-800 mb-1">{t('clientDetail.sessionSummary')}</p>
                               <p className="whitespace-pre-wrap">{item.summary.length > 300 ? item.summary.substring(0, 300) + '...' : item.summary}</p>
                             </div>
                           )}
@@ -2091,7 +2030,7 @@ function ClientDetail() {
                       fetchNotes(trimmed);
                     }
                   }}
-                  placeholder="Search notes by keyword..."
+                  placeholder={t('clientDetail.searchNotesPlaceholder')}
                   className="w-full border border-stone-300 rounded-lg pl-10 pr-20 py-2 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                 />
                 <svg className="absolute left-3 top-2.5 h-4 w-4 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2128,7 +2067,7 @@ function ClientDetail() {
               <textarea
                 value={newNoteContent}
                 onChange={(e) => setNewNoteContent(e.target.value)}
-                placeholder="Write a private note about this client..."
+                placeholder={t('clientDetail.newNotePlaceholder')}
                 className="w-full border border-stone-300 rounded-lg p-3 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                 rows={3}
               />
@@ -2149,19 +2088,19 @@ function ClientDetail() {
               <div className="text-center py-12">
                 <div className="text-5xl mb-4">{notesSearch ? '🔍' : '🗒️'}</div>
                 <h3 className="text-lg font-medium text-stone-600 mb-2">
-                  {notesSearch ? t('no_notes_filtered', 'No notes match your search') : t('no_notes_yet', 'No notes yet')}
+                  {notesSearch ? t('clientDetail.noNotesFiltered', 'No notes match your search') : t('clientDetail.noNotesYet', 'No notes yet')}
                 </h3>
                 <p className="text-sm text-stone-400 max-w-sm mx-auto">
                   {notesSearch
-                    ? t('no_notes_filtered_hint', 'Try adjusting your search query to find more notes.')
-                    : t('no_notes_hint', 'Use the form above to create your first therapist note for this client.')}
+                    ? t('clientDetail.noNotesFilteredHint', 'Try adjusting your search query to find more notes.')
+                    : t('clientDetail.noNotesHint', 'Use the form above to create your first therapist note for this client.')}
                 </p>
                 {notesSearch && (
                   <button
                     onClick={() => { setNotesSearch(''); fetchNotes(''); }}
                     className="mt-4 px-4 py-2 text-sm bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg transition-colors"
                   >
-                    {t('clear_search', 'Clear search')}
+                    {t('clientDetail.clearSearch', 'Clear search')}
                   </button>
                 )}
               </div>
@@ -2172,11 +2111,11 @@ function ClientDetail() {
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs text-stone-400">
-                          {t('created', 'Created')}: {formatUserDate(note.created_at)}
+                          {t('common.created', 'Created')}: {formatUserDate(note.created_at)}
                         </span>
                         {note.updated_at && note.updated_at !== note.created_at && (
                           <span className="text-xs text-stone-400">
-                            | {t('updated', 'Updated')}: {formatUserDate(note.updated_at)}
+                            | {t('common.updated', 'Updated')}: {formatUserDate(note.updated_at)}
                           </span>
                         )}
                       </div>
@@ -2193,7 +2132,7 @@ function ClientDetail() {
                           }}
                           className="text-xs text-teal-600 hover:text-teal-800 cursor-pointer"
                         >
-                          {editingNoteId === note.id ? t('cancel', 'Cancel') : t('edit', 'Edit')}
+                          {editingNoteId === note.id ? t('common.cancel', 'Cancel') : t('common.edit', 'Edit')}
                         </button>
                       </div>
                     </div>
@@ -2210,7 +2149,7 @@ function ClientDetail() {
                           disabled={updatingNote || !editingNoteContent.trim()}
                           className="mt-2 px-4 py-1.5 bg-teal-600 text-white text-sm rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {updatingNote ? t('saving', 'Saving...') : t('save', 'Save')}
+                          {updatingNote ? t('common.saving', 'Saving...') : t('common.save', 'Save')}
                         </button>
                       </div>
                     ) : (
@@ -2234,11 +2173,12 @@ function ClientDetail() {
             )}
             <form onSubmit={handleSaveContext} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-stone-700 mb-1">Anamnesis / History</label>
+                <label htmlFor="context-anamnesis" className="block text-sm font-medium text-stone-700 mb-1">{t('clientDetail.anamnesisLabel')}</label>
                 <textarea
+                  id="context-anamnesis"
                   value={contextForm.anamnesis}
                   onChange={(e) => { setContextForm(f => ({ ...f, anamnesis: e.target.value })); setContextDirty(true); }}
-                  placeholder="Patient history, background, relevant medical/psychological information..."
+                  placeholder={t('clientDetail.anamnesisPlaceholder')}
                   className="w-full border border-stone-300 rounded-lg p-3 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   rows={4}
                   maxLength={50000}
@@ -2246,11 +2186,12 @@ function ClientDetail() {
                 <span className="text-xs text-stone-400">{contextForm.anamnesis.length}/50000</span>
               </div>
               <div>
-                <label className="block text-sm font-medium text-stone-700 mb-1">Current Goals</label>
+                <label htmlFor="context-goals" className="block text-sm font-medium text-stone-700 mb-1">{t('clientDetail.goalsLabel')}</label>
                 <textarea
+                  id="context-goals"
                   value={contextForm.current_goals}
                   onChange={(e) => { setContextForm(f => ({ ...f, current_goals: e.target.value })); setContextDirty(true); }}
-                  placeholder="Current therapy goals and objectives..."
+                  placeholder={t('clientDetail.goalsPlaceholder')}
                   className="w-full border border-stone-300 rounded-lg p-3 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   rows={3}
                   maxLength={50000}
@@ -2258,11 +2199,12 @@ function ClientDetail() {
                 <span className="text-xs text-stone-400">{contextForm.current_goals.length}/50000</span>
               </div>
               <div>
-                <label className="block text-sm font-medium text-stone-700 mb-1">Contraindications</label>
+                <label htmlFor="context-contraindications" className="block text-sm font-medium text-stone-700 mb-1">{t('clientDetail.contraindicationsLabel')}</label>
                 <textarea
+                  id="context-contraindications"
                   value={contextForm.contraindications}
                   onChange={(e) => { setContextForm(f => ({ ...f, contraindications: e.target.value })); setContextDirty(true); }}
-                  placeholder="Any contraindications or precautions..."
+                  placeholder={t('clientDetail.contraindicationsPlaceholder')}
                   className="w-full border border-stone-300 rounded-lg p-3 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   rows={3}
                   maxLength={50000}
@@ -2270,11 +2212,12 @@ function ClientDetail() {
                 <span className="text-xs text-stone-400">{contextForm.contraindications.length}/50000</span>
               </div>
               <div>
-                <label className="block text-sm font-medium text-stone-700 mb-1">AI Instructions / Boundaries</label>
+                <label htmlFor="context-ai-instructions" className="block text-sm font-medium text-stone-700 mb-1">{t('clientDetail.aiInstructionsLabel')}</label>
                 <textarea
+                  id="context-ai-instructions"
                   value={contextForm.ai_instructions}
                   onChange={(e) => { setContextForm(f => ({ ...f, ai_instructions: e.target.value })); setContextDirty(true); }}
-                  placeholder="Instructions for AI when processing this client's data..."
+                  placeholder={t('clientDetail.aiInstructionsPlaceholder')}
                   className="w-full border border-stone-300 rounded-lg p-3 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                   rows={3}
                   maxLength={50000}
@@ -2586,7 +2529,7 @@ function ClientDetail() {
                       onClick={() => { setSessionUploadFile(null); if (sessionFileInputRef.current) sessionFileInputRef.current.value = ''; }}
                       className="px-3 py-2 bg-stone-200 text-stone-600 rounded-lg hover:bg-stone-300 transition-colors text-sm"
                     >
-                      {t('cancel', 'Cancel')}
+                      {t('common.cancel', 'Cancel')}
                     </button>
                   </div>
                 </div>
@@ -2631,7 +2574,7 @@ function ClientDetail() {
                     onClick={() => { setSessionUploadError(''); handleSessionUpload(); }}
                     className="text-red-600 hover:text-red-800 text-sm font-medium underline"
                   >
-                    {t('retry', 'Retry')}
+                    {t('common.retry', 'Retry')}
                   </button>
                 )}
               </div>
@@ -2643,10 +2586,10 @@ function ClientDetail() {
               <div className="text-center py-12">
                 <div className="text-5xl mb-4">🎧</div>
                 <h3 className="text-lg font-medium text-stone-600 mb-2">
-                  {t('no_sessions_yet', 'No sessions recorded yet')}
+                  {t('clientDetail.noSessionsYet', 'No sessions recorded yet')}
                 </h3>
                 <p className="text-sm text-stone-400 max-w-sm mx-auto">
-                  {t('no_sessions_hint', 'Session recordings will appear here once you upload audio files for this client.')}
+                  {t('clientDetail.noSessionsHint', 'Session recordings will appear here once you upload audio files for this client.')}
                 </p>
               </div>
             ) : (
@@ -2670,13 +2613,11 @@ function ClientDetail() {
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                           <span className="text-lg">🎧</span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                            session.status === 'complete' ? 'bg-green-100 text-green-800' :
-                            session.status === 'transcribing' ? 'bg-blue-100 text-blue-800' :
-                            (session.status === 'transcription_failed' || session.status === 'failed') ? 'bg-red-100 text-red-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
-                            {session.status}
+                          <span
+                            data-testid={`session-row-${session.id}-status`}
+                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${sessionStatusBadge(session.status)}`}
+                          >
+                            {sessionStatusLabel(t, session.status)}
                           </span>
                           {linkedInquiry && (
                             <span
@@ -2741,9 +2682,9 @@ function ClientDetail() {
             )}
             {showExercisePicker && (
               <div className="mb-6 border border-teal-200 rounded-lg bg-teal-50 p-4">
-                <h4 className="font-medium text-stone-700 mb-3">{t('exercises.selectToSend', 'Select an exercise to send:')}</h4>
+                <h4 className="font-medium text-stone-700 mb-3">{t('clientDetail.selectExerciseToSend', 'Select an exercise to send:')}</h4>
                 {exerciseLibraryLoading ? (
-                  <p className="text-stone-500 text-center py-4">Loading exercise library...</p>
+                  <p className="text-stone-500 text-center py-4">{t('clientDetail.exerciseLibraryLoading')}</p>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
                     {exerciseLibrary.map(ex => (
@@ -2769,13 +2710,13 @@ function ClientDetail() {
                 <button
                   onClick={() => setShowExercisePicker(false)}
                   className="mt-3 text-sm text-stone-500 hover:text-stone-700"
-                >Cancel</button>
+                >{t('common.cancel')}</button>
               </div>
             )}
             {exercisesLoading ? (
-              <p className="text-stone-500 text-center py-8">Loading exercises...</p>
+              <p className="text-stone-500 text-center py-8">{t('clientDetail.exercisesLoading')}</p>
             ) : exercises.length === 0 && !showExercisePicker ? (
-              <p className="text-stone-400 text-center py-8">No exercises sent to this client yet.</p>
+              <p className="text-stone-400 text-center py-8">{t('clientDetail.exercisesEmpty')}</p>
             ) : (
               <div className="space-y-4">
                 {exercises.map(delivery => {
@@ -2886,7 +2827,7 @@ function ClientDetail() {
               <button
                 onClick={() => setTypeFilter('')}
                 className={`px-3 py-1 rounded text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${!typeFilter ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
-              >All</button>
+              >{t('common.all')}</button>
               <button
                 onClick={() => setTypeFilter('text')}
                 className={`px-3 py-1 rounded text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${typeFilter === 'text' ? 'bg-teal-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
@@ -2904,13 +2845,14 @@ function ClientDetail() {
 
           {/* Date Range Filter */}
           <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-stone-50 rounded-lg">
-            <label className="text-sm font-medium text-stone-600">Date range:</label>
+            <label htmlFor="diary-date-from" className="text-sm font-medium text-stone-600">{t('clientDetail.dateRange')}</label>
             <input
+              id="diary-date-from"
               type="date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
               className="px-3 py-1.5 border border-stone-300 rounded text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-              aria-label="Date from"
+              aria-label={t('clientDetail.dateFrom')}
             />
             <span className="text-stone-400 text-sm">to</span>
             <input
@@ -2918,21 +2860,21 @@ function ClientDetail() {
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
               className="px-3 py-1.5 border border-stone-300 rounded text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-              aria-label="Date to"
+              aria-label={t('clientDetail.dateTo')}
             />
             {(dateFrom || dateTo !== todayStr) && (
               <button
                 onClick={() => { setDateFrom(''); setDateTo(todayStr); }}
                 className="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
-              >Clear dates</button>
+              >{t('clientDetail.clearDates')}</button>
             )}
             {(typeFilter || dateFrom || dateTo !== todayStr || diarySearch) && (
               <button
                 onClick={() => { setTypeFilter(''); setDateFrom(''); setDateTo(todayStr); setDiarySearch(''); setDiaryPage(1); }}
                 className="ml-auto px-3 py-1.5 text-sm bg-stone-200 hover:bg-stone-300 text-stone-700 rounded font-medium"
-                aria-label="Reset all filters"
+                aria-label={t('clientDetail.resetAllFilters')}
               >
-                {t('reset_all_filters', 'Reset all filters')}
+                {t('clientDetail.resetAllFilters', 'Reset all filters')}
               </button>
             )}
           </div>
@@ -2952,9 +2894,9 @@ function ClientDetail() {
                   }
                 }}
                 maxLength={500}
-                placeholder={t('search_diary_placeholder', 'Search diary entries...')}
+                placeholder={t('clientDetail.searchDiaryPlaceholder', 'Search diary entries...')}
                 className="w-full border border-stone-300 rounded-lg pl-10 pr-20 py-2 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                aria-label="Search diary entries"
+                aria-label={t('clientDetail.searchDiaryAria')}
               />
               <svg className="absolute left-3 top-2.5 h-4 w-4 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -2965,7 +2907,7 @@ function ClientDetail() {
                   onClick={() => { const trimmed = diarySearch.trim(); setDiarySearch(trimmed); fetchDiary(false, trimmed); }}
                   className="px-3 py-1 bg-teal-600 text-white rounded text-xs font-medium hover:bg-teal-700"
                 >
-                  {t('search', 'Search')}
+                  {t('common.search', 'Search')}
                 </button>
                 {diarySearch && (
                   <button
@@ -2973,7 +2915,7 @@ function ClientDetail() {
                     onClick={() => { setDiarySearch(''); fetchDiary(false, ''); }}
                     className="px-2 py-1 bg-stone-200 text-stone-600 rounded text-xs font-medium hover:bg-stone-300"
                   >
-                    {t('clear', 'Clear')}
+                    {t('common.clear', 'Clear')}
                   </button>
                 )}
               </div>
@@ -2988,27 +2930,27 @@ function ClientDetail() {
           {diaryError ? (
             <div className="text-center py-8">
               <p className="text-amber-600">{diaryError}</p>
-              <button onClick={fetchDiary} className="mt-2 px-3 py-1 text-sm bg-amber-100 hover:bg-amber-200 text-amber-800 rounded">Retry</button>
+              <button onClick={fetchDiary} className="mt-2 px-3 py-1 text-sm bg-amber-100 hover:bg-amber-200 text-amber-800 rounded">{t('common.retry')}</button>
             </div>
           ) : loading && diary.length === 0 ? (
-            <p className="text-stone-500">Loading diary entries...</p>
+            <p className="text-stone-500">{t('clientDetail.diaryLoading')}</p>
           ) : diary.length === 0 ? (
             <div className="text-center py-12">
               <div className="text-5xl mb-4">{(typeFilter || dateFrom || dateTo !== todayStr || diarySearch) ? '🔍' : '📓'}</div>
               <h3 className="text-lg font-medium text-stone-600 mb-2">
-                {(typeFilter || dateFrom || dateTo !== todayStr || diarySearch) ? t('no_diary_filtered', 'No diary entries match your filters') : t('no_diary_entries', 'No diary entries yet')}
+                {(typeFilter || dateFrom || dateTo !== todayStr || diarySearch) ? t('clientDetail.noDiaryFiltered', 'No diary entries match your filters') : t('clientDetail.noDiaryEntries', 'No diary entries yet')}
               </h3>
               <p className="text-sm text-stone-400 max-w-sm mx-auto">
                 {(typeFilter || dateFrom || dateTo !== todayStr || diarySearch)
-                  ? t('no_diary_filtered_hint', 'Try adjusting or clearing your filters to see more entries.')
-                  : t('no_diary_hint', 'Diary entries will appear here once the client submits them via the Telegram bot.')}
+                  ? t('clientDetail.noDiaryFilteredHint', 'Try adjusting or clearing your filters to see more entries.')
+                  : t('clientDetail.noDiaryHint', 'Diary entries will appear here once the client submits them via the Telegram bot.')}
               </p>
               {(typeFilter || dateFrom || dateTo !== todayStr || diarySearch) && (
                 <button
                   onClick={() => { setTypeFilter(''); setDateFrom(''); setDateTo(todayStr); setDiarySearch(''); setDiaryPage(1); }}
                   className="mt-4 px-4 py-2 text-sm bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg transition-colors"
                 >
-                  {t('clear_filters', 'Clear all filters')}
+                  {t('clientDetail.clearAllFilters', 'Clear all filters')}
                 </button>
               )}
             </div>
@@ -3085,8 +3027,9 @@ function ClientDetail() {
             {showInquiryForm && (
               <form onSubmit={handleCreateInquiry} className="mb-6 p-4 border border-stone-200 rounded-lg bg-stone-50" data-testid="inquiry-create-form">
                 <div className="mb-3">
-                  <label className="block text-sm font-medium text-stone-700 mb-1">{t('inquiry.title')} *</label>
+                  <label htmlFor="inquiry-title" className="block text-sm font-medium text-stone-700 mb-1">{t('inquiry.title')} *</label>
                   <input
+                    id="inquiry-title"
                     type="text"
                     value={inquiryFormTitle}
                     onChange={(e) => setInquiryFormTitle(e.target.value)}
@@ -3099,8 +3042,9 @@ function ClientDetail() {
                   />
                 </div>
                 <div className="mb-3">
-                  <label className="block text-sm font-medium text-stone-700 mb-1">{t('inquiry.description')}</label>
+                  <label htmlFor="inquiry-description" className="block text-sm font-medium text-stone-700 mb-1">{t('inquiry.description')}</label>
                   <textarea
+                    id="inquiry-description"
                     value={inquiryFormDescription}
                     onChange={(e) => setInquiryFormDescription(e.target.value)}
                     placeholder={t('inquiry.descriptionPlaceholder')}

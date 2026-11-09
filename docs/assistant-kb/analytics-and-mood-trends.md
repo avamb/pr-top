@@ -63,9 +63,9 @@ aggregates across your whole roster:
 ## Edge cases
 
 - **Client with no mood ratings.** The mood trend line is hidden;
-  the summary strip shows a dash instead of a number. Encourage the
-  client to use the `/mood` command in Telegram, which prompts an
-  explicit 0–10 rating.
+  the summary strip shows a dash instead of a number. The Telegram
+  bot has no mood command, so ratings only appear where the platform
+  records one; do not promise the client a mood prompt in the bot.
 - **Very short windows.** In the 7-day window, the smoothed mood line
   becomes noisy; the platform automatically widens to 14 days if there
   is not enough data.
@@ -99,9 +99,10 @@ aggregates across your whole roster:
 ## FAQ
 
 **Q: Can the client see their own analytics?**
-A: The Telegram bot exposes a simplified view via the `/progress`
-command: a short streak count and their own mood trend. It does not
-show the therapist-side charts or PDF export.
+A: No. The Telegram bot has no progress, streak or mood command.
+Its `/history` command lists the client's last ten diary entries, and
+the therapist-side charts and PDF export stay on the therapist
+dashboard.
 
 **Q: How is the "average mood" computed?**
 A: It is the arithmetic mean of every explicit mood rating in the

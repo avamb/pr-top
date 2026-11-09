@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { formatUserDateOnly } from '../utils/formatDate';
+import { fetchApi } from '../utils/fetchApi';
 
 const PLAN_DETAILS = {
   trial: { name: 'Trial', price: 'Free', clients: 3, sessions: 5, features: ['Basic dashboard', 'Timeline view', 'SOS alerts'] },
@@ -44,16 +45,13 @@ export default function Subscription() {
   const [redemptions, setRedemptions] = useState([]);
   const [redemptionsLoading, setRedemptionsLoading] = useState(false);
 
-  const token = localStorage.getItem('token');
 
   const isExpiredRedirect = location.state?.expired === true;
 
   const fetchRedemptions = useCallback(async () => {
     setRedemptionsLoading(true);
     try {
-      const res = await fetch('/api/subscription/my-promos', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchApi('/api/subscription/my-promos');
       const data = await res.json();
       setRedemptions(data.redemptions || []);
     } catch (err) {
@@ -61,7 +59,7 @@ export default function Subscription() {
     } finally {
       setRedemptionsLoading(false);
     }
-  }, [token]);
+  }, []);
 
   const handleApplyPromo = async () => {
     if (!promoCode.trim()) return;
@@ -69,11 +67,10 @@ export default function Subscription() {
     setPromoError('');
     setPromoSuccess('');
     try {
-      const res = await fetch('/api/subscription/apply-promo', {
+      const res = await fetchApi('/api/subscription/apply-promo', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ code: promoCode.trim() })
       });
@@ -94,10 +91,6 @@ export default function Subscription() {
   };
 
   useEffect(() => {
-    if (!token) {
-      navigate('/login');
-      return;
-    }
     fetchSubscription();
     fetchPayments();
     fetchRedemptions();
@@ -109,11 +102,8 @@ export default function Subscription() {
 
   const fetchSubscription = async () => {
     try {
-      const res = await fetch('/api/subscription/current', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchApi('/api/subscription/current');
       if (res.status === 401) {
-        localStorage.removeItem('token');
         localStorage.removeItem('user');
         navigate('/login');
         return;
@@ -130,9 +120,7 @@ export default function Subscription() {
   const fetchPayments = async () => {
     setPaymentsLoading(true);
     try {
-      const res = await fetch('/api/subscription/payments', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchApi('/api/subscription/payments');
       const data = await res.json();
       setPayments(data.payments || []);
     } catch (err) {
@@ -196,11 +184,10 @@ export default function Subscription() {
     setError('');
     setSuccess('');
     try {
-      const res = await fetch('/api/subscription/checkout', {
+      const res = await fetchApi('/api/subscription/checkout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ plan })
       });
@@ -245,11 +232,10 @@ export default function Subscription() {
     setError('');
     setSuccess('');
     try {
-      const res = await fetch('/api/subscription/cancel', {
+      const res = await fetchApi('/api/subscription/cancel', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         }
       });
       const data = await res.json().catch(() => ({}));
@@ -279,11 +265,10 @@ export default function Subscription() {
     setError('');
     setSuccess('');
     try {
-      const res = await fetch('/api/subscription/resume', {
+      const res = await fetchApi('/api/subscription/resume', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         }
       });
       const data = await res.json().catch(() => ({}));
@@ -316,11 +301,10 @@ export default function Subscription() {
     setError('');
     setSuccess('');
     try {
-      const res = await fetch('/api/subscription/change-plan', {
+      const res = await fetchApi('/api/subscription/change-plan', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ plan })
       });
@@ -430,7 +414,7 @@ export default function Subscription() {
             )}
             <span className="text-stone-500">
               {t('subscription.status')}: <span className={`font-medium ${subscription?.status === 'active' ? 'text-green-600' : 'text-red-600'}`}>
-                {subscription?.status || 'N/A'}
+                {subscription?.status ? t(`subscription.statusValue.${subscription.status}`, { defaultValue: subscription.status }) : t('subscription.statusNA')}
               </span>
             </span>
             {!isManualOverride && subscription?.trial_ends_at && currentPlan === 'trial' && (
@@ -690,20 +674,20 @@ export default function Subscription() {
         {/* Payment History - hidden for manual override users */}
         {!isManualOverride && (
           <div className="mt-10">
-            <h2 className="text-lg font-semibold text-stone-900 mb-4">Payment History</h2>
+            <h2 className="text-lg font-semibold text-stone-900 mb-4">{t('subscription.paymentHistory')}</h2>
             <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
               {paymentsLoading ? (
-                <div className="p-6 text-center text-stone-500">Loading payment history...</div>
+                <div className="p-6 text-center text-stone-500">{t('subscription.paymentsLoading')}</div>
               ) : payments.length === 0 ? (
-                <div className="p-6 text-center text-stone-400">No payments yet</div>
+                <div className="p-6 text-center text-stone-400">{t('subscription.paymentsEmpty')}</div>
               ) : (
                 <table className="w-full">
                   <thead>
                     <tr className="bg-stone-50 border-b border-stone-200">
-                      <th className="text-left px-6 py-3 text-xs font-medium text-stone-500 uppercase tracking-wider">Date</th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-stone-500 uppercase tracking-wider">Amount</th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-stone-500 uppercase tracking-wider">Status</th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-stone-500 uppercase tracking-wider">Payment ID</th>
+                      <th className="text-left px-6 py-3 text-xs font-medium text-stone-500 uppercase tracking-wider">{t('subscription.paymentColDate')}</th>
+                      <th className="text-left px-6 py-3 text-xs font-medium text-stone-500 uppercase tracking-wider">{t('subscription.paymentColAmount')}</th>
+                      <th className="text-left px-6 py-3 text-xs font-medium text-stone-500 uppercase tracking-wider">{t('subscription.paymentColStatus')}</th>
+                      <th className="text-left px-6 py-3 text-xs font-medium text-stone-500 uppercase tracking-wider">{t('subscription.paymentColId')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
@@ -717,7 +701,7 @@ export default function Subscription() {
                         </td>
                         <td className="px-6 py-4">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusBadge(payment.status)}`}>
-                            {payment.status}
+                            {t(`subscription.paymentStatus.${payment.status}`, { defaultValue: payment.status })}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-sm text-stone-400 font-mono truncate max-w-[200px]">

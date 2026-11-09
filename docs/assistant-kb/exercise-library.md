@@ -95,7 +95,7 @@ namespaces.
   first ~600 chars, with a "read full response" link.
 - **Wrong language in the prompt.** The client's bot language is
   driven by their Telegram-language field at first-connect. The
-  client can override with the `/lang` command in Telegram.
+  bot has no language command, so contact support to change it.
 - **Cannot delete a custom exercise that is currently assigned.** The
   exercise stays in the library until the last outstanding assignment
   completes or is cancelled. Cancel or wait, then delete.

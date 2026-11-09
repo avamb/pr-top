@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { fetchApi } from '../utils/fetchApi';
 
 const API_URL = '/api';
 
@@ -78,7 +79,6 @@ export default function ReminderPolicyForm({ initialPolicy, onSaved }) {
     setSuccessMsg(null);
     setErrorMsg(null);
 
-    const token = localStorage.getItem('token');
     const payload = {
       enabled,
       tone,
@@ -88,10 +88,9 @@ export default function ReminderPolicyForm({ initialPolicy, onSaved }) {
     };
 
     try {
-      const res = await fetch(`${API_URL}/settings/reminder-policy`, {
+      const res = await fetchApi(`${API_URL}/settings/reminder-policy`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(payload)
@@ -265,10 +264,11 @@ export default function ReminderPolicyForm({ initialPolicy, onSaved }) {
               <p className="text-xs text-stone-400 italic">{t('reminders.settings.templateOverridesHint')}</p>
               {TEMPLATE_KEYS.map(key => (
                 <div key={key}>
-                  <label className="block text-xs font-medium text-stone-600 mb-1">
+                  <label htmlFor={`reminder-template-${key}`} className="block text-xs font-medium text-stone-600 mb-1">
                     {t(`reminders.settings.templateKey.${key}`)}
                   </label>
                   <textarea
+                    id={`reminder-template-${key}`}
                     rows={3}
                     maxLength={500}
                     value={(customTemplates[expandedLocale] || {})[key] || ''}

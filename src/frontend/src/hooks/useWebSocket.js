@@ -14,8 +14,10 @@ function notifySubscribers() {
 }
 
 function globalConnect() {
-  const token = localStorage.getItem('token');
-  if (!token) return;
+  // Auth is the HttpOnly session cookie, sent automatically with the
+  // same-origin upgrade request: no token in the URL. Without a cached
+  // profile (not signed in) there is nothing to connect for.
+  if (!localStorage.getItem('user')) return;
 
   // Prevent concurrent connection attempts
   if (globalConnecting) return;
@@ -27,7 +29,7 @@ function globalConnect() {
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.host; // includes port (goes through Vite proxy in dev)
-  const wsUrl = `${protocol}//${host}/ws?token=${encodeURIComponent(token)}`;
+  const wsUrl = `${protocol}//${host}/ws`;
 
   try {
     const ws = new WebSocket(wsUrl);
@@ -85,6 +87,10 @@ function globalConnect() {
   }
 }
 
+export function disconnectWebSocket() {
+  globalDisconnect();
+}
+
 function globalDisconnect() {
   if (globalReconnectTimer) {
     clearTimeout(globalReconnectTimer);
@@ -101,10 +107,10 @@ function globalDisconnect() {
 // Listen for logout across tabs
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (e) => {
-    if (e.key === 'token') {
+    if (e.key === 'user') {
       if (e.newValue) {
-        globalDisconnect();
-        setTimeout(globalConnect, 100);
+        // Signed in (or profile updated) in another tab: connect if needed.
+        if (!globalWs) setTimeout(globalConnect, 100);
       } else {
         globalDisconnect();
       }

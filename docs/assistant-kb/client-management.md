@@ -82,9 +82,10 @@ entries.
 
 ## Edge cases
 
-- **A client uses the same Telegram account for two therapists.** The
-  bot supports multiple bindings per Telegram user; when the client
-  sends `/switch` in Telegram they can flip between therapists.
+- **A client uses the same Telegram account for two therapists.** A
+  Telegram account is linked to one therapist at a time. To move to
+  another therapist the client sends `/disconnect`, then `/connect`
+  with the new therapist's invite code.
 - **The client changes Telegram accounts.** Generate a fresh invite
   from the client page and share the new link. The old binding remains
   in the audit log but stops receiving messages.

@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { trackUmamiEvent } from '../utils/umami';
 import { PUBLIC_MARKETING_PATHS, LOCALES } from '../seo/routes.mjs';
+import { fetchApi } from '../utils/fetchApi';
 
 /**
  * F12 - Strip any /ru, /uk, /es prefix from a pathname, returning the
@@ -107,12 +108,10 @@ export default function LanguageSwitcher({ variant = 'dark', compact = false, pe
     // Persist to server if user is logged in
     if (persistToServer) {
       try {
-        const token = localStorage.getItem('token');
-        if (token) {
-          await fetch('/api/profile/language', {
+        if (localStorage.getItem('user')) {
+          await fetchApi('/api/profile/language', {
             method: 'PATCH',
             headers: {
-              'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({ language: langCode })
