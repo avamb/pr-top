@@ -1,8 +1,16 @@
-// Container-safe splitting of long recordings for Whisper (audit M20).
+// Fitting long recordings into the transcription API limit (audit M20).
 //
-// The OpenAI transcription endpoint accepts at most 25 MB per request. The
-// backend image has no ffmpeg (adding it would roughly double the image), so
-// only formats that can be cut WITHOUT re-encoding are split here:
+// The OpenAI transcription endpoint accepts at most 25 MB per request.
+// prepareTranscriptionPieces() turns a decrypted recording into pieces under
+// the limit, in this order:
+//   1. small enough       -> the file itself;
+//   2. MP3 / WAV          -> cut losslessly (below), no re-encoding;
+//   3. anything else, or a cut that fails -> ffmpeg converts it to a speech
+//      MP3 (mono 16 kHz 32 kbit/s, services/ffmpeg.js), which is cut again
+//      if it is still over the limit;
+//   4. no ffmpeg / ffmpeg fails -> null: the caller reports "too long".
+//
+// Lossless cuts (formats that can be cut WITHOUT a demuxer):
 //
 //   - MP3: a stream of self-contained frames. We cut at a frame boundary that
 //     is confirmed by two following frame headers (no false sync on data
@@ -12,10 +20,9 @@
 //     the original 'fmt ' chunk.
 //
 // Everything else (MP4/M4A/MOV, Ogg/Opus, WebM, FLAC, AAC, ...) needs a demuxer
-// to cut safely; for those splitForTranscription() returns null and the caller
-// reports "too long to transcribe" instead of failing silently.
+// to cut safely; for those splitForTranscription() returns null.
 //
-// Pieces are written to the private temp dir with mode 0600; the caller
+// Pieces (and the transcoded MP3) are written to the private temp dir with mode 0600; the caller
 // deletes them (and the decrypted source) in a finally block.
 
 const fs = require('fs');
@@ -106,8 +113,13 @@ async function splitMp3(filePath, size, targetBytes, tmpDir) {
   const cuts = [0];
   try {
     while (size - cuts[cuts.length - 1] > targetBytes) {
-      const cut = await findMp3Boundary(fh, cuts[cuts.length - 1] + targetBytes, size);
+      const from = cuts[cuts.length - 1] + targetBytes;
+      const cut = await findMp3Boundary(fh, from, size);
       if (cut === null) {
+        // Near the end there may be too few frames left to confirm a
+        // boundary: keep the short remainder in the last piece (it is at
+        // most targetBytes + SEARCH_WINDOW; callers re-check piece sizes).
+        if (size - from <= SEARCH_WINDOW) break;
         // No frame sync near the cut point: not a plain MP3 stream.
         return null;
       }
@@ -208,8 +220,76 @@ async function splitForTranscription(filePath, { mime, size, targetBytes, tmpDir
   return null;
 }
 
+/**
+ * Turn a decrypted recording into pieces the transcription API accepts.
+ *
+ * @param {{path:string, size:number, contentType:string, ext:string}} plain
+ * @param {{maxBytes:number, targetBytes:number}} limits
+ * @returns {Promise<{pieces:Array<{path,size,mime,ext}>|null, method:string, reason?:string,
+ *   cleanup:()=>Promise<void>}>} pieces null = cannot be transcribed (reason says why).
+ *   cleanup() deletes every file this function created (never `plain` itself).
+ */
+async function prepareTranscriptionPieces(plain, { maxBytes, targetBytes }) {
+  const created = [];
+  const cleanup = () => removePieces(created.splice(0));
+  const tmpDir = path.dirname(plain.path);
+  const ok = (pieces) => pieces && pieces.length > 0 && pieces.every((p) => p.size <= maxBytes);
+
+  if (plain.size <= maxBytes) {
+    return { pieces: [{ path: plain.path, size: plain.size, mime: plain.contentType, ext: plain.ext }], method: 'direct', cleanup };
+  }
+
+  // 2. lossless cut (MP3 / WAV)
+  try {
+    const pieces = await splitForTranscription(plain.path, { mime: plain.contentType, size: plain.size, targetBytes, tmpDir });
+    if (ok(pieces)) {
+      created.push(...pieces);
+      return { pieces: pieces.map((p) => ({ ...p, mime: plain.contentType, ext: plain.ext })), method: 'split', cleanup };
+    }
+    await removePieces(pieces);
+  } catch (e) {
+    await cleanup();
+    throw e;
+  }
+
+  // 3. transcode with ffmpeg
+  const ffmpeg = require('./ffmpeg');
+  if (!(await ffmpeg.isAvailable())) {
+    return { pieces: null, method: 'none', reason: 'ffmpeg is not available', cleanup };
+  }
+  let mp3;
+  try {
+    mp3 = await ffmpeg.transcodeToSpeechMp3(plain.path, { tmpDir });
+  } catch (e) {
+    if (e instanceof ffmpeg.FfmpegError) {
+      return { pieces: null, method: 'none', reason: e.message, cleanup };
+    }
+    throw e;
+  }
+  created.push(mp3);
+  if (mp3.size <= maxBytes) {
+    return { pieces: [mp3], method: 'transcode', cleanup };
+  }
+  try {
+    const pieces = await splitForTranscription(mp3.path, { mime: 'audio/mpeg', size: mp3.size, targetBytes, tmpDir });
+    if (!ok(pieces)) {
+      await removePieces(pieces);
+      await cleanup();
+      return { pieces: null, method: 'none', reason: 'transcoded MP3 could not be split', cleanup };
+    }
+    created.push(...pieces);
+    // The full MP3 is no longer needed; free the disk space now.
+    await removePieces([mp3]);
+    return { pieces: pieces.map((p) => ({ ...p, mime: 'audio/mpeg', ext: '.mp3' })), method: 'transcode+split', cleanup };
+  } catch (e) {
+    await cleanup();
+    throw e;
+  }
+}
+
 module.exports = {
   splitForTranscription,
+  prepareTranscriptionPieces,
   removePieces,
   mp3FrameLength,
   _internal: { splitMp3, splitWav, wavHeader, findMp3Boundary },

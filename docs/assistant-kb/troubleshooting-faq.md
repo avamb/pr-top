@@ -82,10 +82,10 @@ namespaces.
 - **"Unsupported file type".** PR-TOP checks the file content, not the
   name. A renamed document or a damaged file is refused; re-export it
   from your recorder app.
-- **Status "transcription_too_long".** The transcription service takes
-  about 24 MB per request. MP3 and WAV files are split automatically;
-  other formats above that size get this status. Upload an MP3 export
-  or shorter parts.
+- **Status "transcription_too_long".** Recordings over about 24 MB are
+  normally converted to a compact MP3 and transcribed automatically. This
+  status appears only if that conversion fails. Press Retry; if it keeps
+  failing, upload an MP3 export or shorter parts.
 - **Transcription never finishes.** Open the session page — a failed
   job shows a **Retry** button. Repeated failures on the same file
   usually indicate corrupted audio; try re-exporting the file.

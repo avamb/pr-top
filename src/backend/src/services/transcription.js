@@ -11,7 +11,7 @@ const { logger } = require('../utils/logger');
 const wsService = require('./websocketService');
 const { logUsage, checkSpendingLimit } = require('./aiUsageLogger');
 const fileCrypto = require('./fileCrypto');
-const { splitForTranscription, removePieces } = require('./audioSplit');
+const { prepareTranscriptionPieces } = require('./audioSplit');
 // Lazy-loaded to avoid circular dependency
 let summarizationService = null;
 function getSummarizationService() {
@@ -32,9 +32,11 @@ const TRANSCRIPTION_API_KEY = process.env.TRANSCRIPTION_API_KEY;
 const UPLOAD_DIR = path.resolve(__dirname, '../../data/sessions');
 
 // Audit M20: the OpenAI transcription endpoint rejects uploads over 25 MB.
-// Larger recordings are split (MP3 / WAV only, see services/audioSplit.js);
-// recordings that cannot be split safely end in the explicit status
-// 'transcription_too_long' instead of an opaque API failure.
+// Larger recordings are cut losslessly (MP3 / WAV) or converted by ffmpeg to
+// a speech MP3 and cut (any other format), see services/audioSplit.js. Only
+// when that is impossible (no ffmpeg, or ffmpeg cannot read the file) does
+// the session end in the explicit status 'transcription_too_long' instead of
+// an opaque API failure.
 const MAX_TRANSCRIPTION_FILE_BYTES = (() => {
   const v = parseInt(process.env.TRANSCRIPTION_MAX_FILE_BYTES || '', 10);
   return Number.isInteger(v) && v > 2 * 1024 * 1024 ? v : 24 * 1024 * 1024;
@@ -42,11 +44,12 @@ const MAX_TRANSCRIPTION_FILE_BYTES = (() => {
 const SPLIT_TARGET_BYTES = Math.min(20 * 1024 * 1024, MAX_TRANSCRIPTION_FILE_BYTES - 1024 * 1024);
 const TOO_LONG_CODE = 'FILE_TOO_LONG_TO_TRANSCRIBE';
 
-function tooLongError(sizeBytes, mime) {
+function tooLongError(sizeBytes, mime, reason) {
   const mb = Math.round(sizeBytes / (1024 * 1024));
   const err = new Error(
     `Recording is too long to transcribe (${mb} MB ${mime || 'audio'}; the limit per transcription request is ` +
-    `${Math.round(MAX_TRANSCRIPTION_FILE_BYTES / (1024 * 1024))} MB and only MP3/WAV recordings can be split automatically)`
+    `${Math.round(MAX_TRANSCRIPTION_FILE_BYTES / (1024 * 1024))} MB and it could not be converted or split` +
+    (reason ? `: ${reason}` : '') + ')'
   );
   err.code = TOO_LONG_CODE;
   return err;
@@ -127,44 +130,40 @@ async function transcribeAudio(audioRef) {
 }
 
 /**
- * Transcribe a decrypted recording on disk, splitting it first when it is
- * over the per-request limit.
+ * Transcribe a decrypted recording on disk. Recordings over the per-request
+ * limit are cut (MP3/WAV) or converted to a speech MP3 by ffmpeg and cut;
+ * every intermediate file is deleted in finally.
  *
  * @param {{path:string, size:number, contentType:string, ext:string}} plain
- * @returns {Promise<{text:string, usage:object, parts:number}>}
+ * @returns {Promise<{text:string, usage:object, parts:number, method:string}>}
  */
 async function transcribePlainFile(plain) {
-  const source = { path: plain.path, size: plain.size, mime: plain.contentType, ext: plain.ext };
-  if (plain.size <= MAX_TRANSCRIPTION_FILE_BYTES) {
-    const r = await callTranscriptionAPI(source);
-    return { ...r, parts: 1 };
-  }
-  const pieces = await splitForTranscription(plain.path, {
-    mime: plain.contentType,
-    size: plain.size,
+  const prep = await prepareTranscriptionPieces(plain, {
+    maxBytes: MAX_TRANSCRIPTION_FILE_BYTES,
     targetBytes: SPLIT_TARGET_BYTES,
-    tmpDir: path.dirname(plain.path),
   });
-  if (!pieces || pieces.length === 0 || pieces.some(p => p.size > MAX_TRANSCRIPTION_FILE_BYTES)) {
-    await removePieces(pieces);
-    throw tooLongError(plain.size, plain.contentType);
+  if (!prep.pieces) {
+    await prep.cleanup();
+    throw tooLongError(plain.size, plain.contentType, prep.reason);
   }
-  logger.info(`Transcription: ${Math.round(plain.size / 1024)}KB ${plain.contentType} split into ${pieces.length} parts`);
   try {
+    if (prep.method !== 'direct') {
+      logger.info(`Transcription: ${Math.round(plain.size / 1024)}KB ${plain.contentType} -> ${prep.method}, ${prep.pieces.length} part(s)`);
+    }
     const texts = [];
     let inputTokens = 0;
     let outputTokens = 0;
     let model = null;
-    for (const piece of pieces) {
-      const r = await callTranscriptionAPI({ path: piece.path, size: piece.size, mime: plain.contentType, ext: plain.ext });
+    for (const piece of prep.pieces) {
+      const r = await callTranscriptionAPI({ path: piece.path, size: piece.size, mime: piece.mime, ext: piece.ext });
       texts.push(r.text);
       inputTokens += r.usage.inputTokens;
       outputTokens += r.usage.outputTokens;
       model = r.usage.model;
     }
-    return { text: texts.join('\n'), usage: { model, inputTokens, outputTokens }, parts: pieces.length };
+    return { text: texts.join('\n'), usage: { model, inputTokens, outputTokens }, parts: prep.pieces.length, method: prep.method };
   } finally {
-    await removePieces(pieces);
+    await prep.cleanup();
   }
 }
 

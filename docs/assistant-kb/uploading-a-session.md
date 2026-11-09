@@ -85,20 +85,29 @@ removed.
 ## Long recordings and transcription limits
 
 The transcription service accepts at most about 24 MB of audio per
-request. PR-TOP handles larger files like this:
+request, so PR-TOP prepares long recordings for you. Nothing is needed
+from you, whatever the format (MP3, M4A, MP4, MOV, OGG/Opus, WebM, WAV,
+FLAC, AAC):
 
-- **MP3 and WAV** recordings over the limit are cut automatically into
-  parts, each part is transcribed, and the parts are joined into one
-  transcript. Nothing is needed from you.
-- **Other formats** (M4A, MP4, MOV, OGG/Opus, WebM, FLAC, AAC) cannot be
-  cut safely on the server. If such a file is larger than about 24 MB,
-  the session status becomes **transcription_too_long** and the
-  recording itself stays available for playback. To get a transcript,
-  export the recording as MP3 (for example in your recorder app or an
-  audio editor) or split it into shorter files, and upload again.
+- A recording that fits the limit is transcribed as it is.
+- A recording over the limit is converted automatically to a compact
+  mono MP3 (voice quality, roughly 14 MB per hour of audio) and then
+  transcribed. Converting only affects the copy used for transcription;
+  the original recording stays as you uploaded it and plays back
+  unchanged.
+- If the converted audio is still over the limit, it is cut into parts at
+  safe boundaries, each part is transcribed, and the parts are joined
+  into one transcript.
 
-As a rough guide, 24 MB is around 25 minutes of audio at 128 kbit/s;
-voice-quality recordings (lower bitrate) fit much longer sessions.
+Converting a long recording takes extra time, so the session may stay in
+the transcribing state a little longer than for a short one.
+
+The status **transcription_too_long** now appears only if the automatic
+conversion could not be done (for example the server could not convert
+the file, or the conversion failed or timed out). The recording stays
+available for playback. Use **Retry** on the session page; if it keeps
+failing, re-export the recording from your recorder app (MP3 works well)
+or split it into shorter files and upload again.
 
 ## Troubleshooting
 
@@ -142,14 +151,16 @@ a 60-minute recording takes about six minutes, plus queue wait.
 A: Yes. MP4, MOV and WebM up to 100 MB. Only the audio track is
 transcribed; the original video file is preserved for streaming
 playback via the session player. Video files are usually large, so a
-video over about 24 MB will get the status transcription_too_long —
-upload an MP3 export of its audio if you need a transcript.
+video over about 24 MB is converted automatically to a compact audio
+track before transcription, so no separate export is needed.
 
 **Q: Why is my long session not transcribed?**
 A: The transcription service takes at most about 24 MB per request.
-MP3 and WAV files are split automatically; other formats above that
-size get the status transcription_too_long. Convert the recording to
-MP3 and upload it again.
+Longer recordings in any supported format are converted automatically
+to a compact MP3 (and split if needed) and then transcribed, so a long
+session may simply take longer. The status transcription_too_long
+appears only if that conversion fails; press Retry, and if it keeps
+failing re-export the recording as MP3 or split it into shorter parts.
 
 **Q: Does playback download the whole recording to my computer?**
 A: No. The player streams the recording in pieces through a personal

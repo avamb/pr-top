@@ -44,6 +44,10 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: src/backend/package-lock.json
+      - name: Install ffmpeg
+        # The ubuntu-latest runner image does not ship ffmpeg; the transcoding
+        # tests need it (production gets it from the backend Dockerfile).
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg && ffmpeg -version | head -1
       - name: Install dependencies
         run: npm ci
       - name: Syntax check (node --check)

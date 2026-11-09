@@ -4,7 +4,9 @@ FROM node:22.23.4-alpine3.24
 
 # su-exec: the entrypoint starts as root only to repair volume ownership and
 # then drops to the unprivileged "node" user (see docker-entrypoint.sh).
-RUN apk add --no-cache su-exec
+# ffmpeg: converts long therapy-session recordings to small mono MP3 so they
+# fit the Whisper size limit (see src/services/ffmpeg.js).
+RUN apk add --no-cache su-exec ffmpeg
 
 WORKDIR /app
 

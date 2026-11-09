@@ -396,7 +396,7 @@
     "audience": "public",
     "locale": "en",
     "question": "Why does my session say transcription_too_long?",
-    "answer": "The transcription service accepts about 24 MB of audio per request. PR-TOP splits longer MP3 and WAV recordings automatically, but other formats (M4A, MP4, MOV, OGG/Opus, WebM, FLAC, AAC) cannot be cut safely, so a larger file in one of those formats gets the status transcription_too_long. The recording itself is kept and can still be played. To get a transcript, export the recording as MP3 or split it into shorter files and upload again.",
+    "answer": "The transcription service accepts about 24 MB of audio per request. Longer recordings in any supported format (MP3, M4A, MP4, MOV, OGG/Opus, WebM, WAV, FLAC, AAC) are converted automatically to a compact mono MP3, split if still too big, and then transcribed, so this normally needs no action. The status transcription_too_long now appears only if that automatic conversion fails. The recording itself is kept and can still be played. Press Retry on the session page; if it keeps failing, export the recording as MP3 or split it into shorter files and upload again.",
     "tags": ["sessions", "upload", "transcription"]
   },
   {

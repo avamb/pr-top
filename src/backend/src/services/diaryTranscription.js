@@ -10,6 +10,7 @@ const { encrypt, decrypt } = require('./encryption');
 const { logger } = require('../utils/logger');
 const { logUsage, checkSpendingLimit } = require('./aiUsageLogger');
 const fileCrypto = require('./fileCrypto');
+const { prepareTranscriptionPieces } = require('./audioSplit');
 
 const TRANSCRIPTION_API_KEY = process.env.TRANSCRIPTION_API_KEY;
 const DIARY_FILES_DIR = path.resolve(__dirname, '../../data/diary_files');
@@ -212,12 +213,40 @@ async function transcribeDiaryEntry(entryType, contentText, fileRef, audioFileRe
     const audio = await fileCrypto.decryptToTempFile(filePath);
     try {
       logger.info('Loaded diary audio: ' + audioFileRef + ' (' + Math.round(audio.size / 1024) + 'KB decrypted, ' + audio.contentType + ')');
-      if (audio.size > MAX_DIARY_TRANSCRIPTION_BYTES) {
-        throw new Error('Recording is too long to transcribe (' + Math.round(audio.size / (1024 * 1024)) + ' MB; limit ' +
-          Math.round(MAX_DIARY_TRANSCRIPTION_BYTES / (1024 * 1024)) + ' MB)');
+      // Same path as session recordings: files over the per-request limit
+      // are cut (MP3/WAV) or converted by ffmpeg to a speech MP3 and cut.
+      // (Telegram caps bot downloads at 20 MB, so this only matters when
+      // TRANSCRIPTION_MAX_FILE_BYTES is set lower.)
+      const prep = await prepareTranscriptionPieces(audio, {
+        maxBytes: MAX_DIARY_TRANSCRIPTION_BYTES,
+        targetBytes: Math.min(20 * 1024 * 1024, MAX_DIARY_TRANSCRIPTION_BYTES - 1024 * 1024),
+      });
+      try {
+        if (!prep.pieces) {
+          throw new Error('Recording is too long to transcribe (' + Math.round(audio.size / (1024 * 1024)) + ' MB; limit ' +
+            Math.round(MAX_DIARY_TRANSCRIPTION_BYTES / (1024 * 1024)) + ' MB; ' + (prep.reason || 'cannot be converted') + ')');
+        }
+        if (prep.pieces.length === 1) {
+          const p = prep.pieces[0];
+          return await transcribeWithRetry({ path: p.path, size: p.size, contentType: p.mime, ext: p.ext }, language);
+        }
+        const texts = [];
+        let duration = 0;
+        let inputTokens = 0;
+        let outputTokens = 0;
+        let model = null;
+        for (const p of prep.pieces) {
+          const r = await transcribeWithRetry({ path: p.path, size: p.size, contentType: p.mime, ext: p.ext }, language);
+          texts.push(r.text);
+          duration += r.duration || 0;
+          inputTokens += r.usage.inputTokens;
+          outputTokens += r.usage.outputTokens;
+          model = r.usage.model;
+        }
+        return { text: texts.join('\n'), duration, usage: { model, inputTokens, outputTokens } };
+      } finally {
+        await prep.cleanup();
       }
-      // Call STT API with retry logic
-      return await transcribeWithRetry(audio, language);
     } finally {
       await audio.cleanup();
     }
