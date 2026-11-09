@@ -34,7 +34,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `admin.pro` — Pro
 - `admin.premium` — Premium
 - `admin.revenueMetrics` — Revenue Metrics
-- _+ 197 more keys_
+- _+ 368 more keys_
 
 ## adminPromos
 
@@ -126,7 +126,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `analytics.lastActive` — Last Active
 - `analytics.retry` — Retry
 - `analytics.exportCSV` — Export CSV
-- _+ 45 more keys_
+- _+ 55 more keys_
 
 ## assignment
 
@@ -195,9 +195,9 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `auth.noAccount` — Don't have an account?
 - `auth.hasAccount` — Already have an account?
 - `auth.networkError` — Network error. Please try again.
+- `auth.checkEmailToContinue` — Check your email to continue. If this address can be used to sign up, we have sent you ...
 - `auth.emailPasswordRequired` — Email and password are required
-- `auth.passwordMinLength` — Password must be at least 6 characters
-- _+ 63 more keys_
+- _+ 72 more keys_
 
 ## brand
 
@@ -249,7 +249,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `client.solo.creating` — Creating…
 - `client.solo.create` — Create solo client
 - `client.solo.errorNeedIdentifier` — Provide a first name, last name, or email.
-- _+ 3 more keys_
+- _+ 6 more keys_
 
 ## clientDetail
 
@@ -273,7 +273,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `clientDetail.remindersOn` — On
 - `clientDetail.remindersOff` — Off
 - `clientDetail.remindersOverrideOn` — Force on
-- _+ 114 more keys_
+- _+ 151 more keys_
 
 ## clientList
 
@@ -336,6 +336,16 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `common.no` — No
 - `common.ok` — OK
 - `common.dismiss` — Dismiss
+- `common.retry` — Retry
+- `common.previous` — Previous
+- `common.next` — Next
+- `common.warning` — Warning
+- `common.all` — All
+- `common.created` — Created
+- `common.updated` — Updated
+- `common.saving` — Saving...
+- `common.search` — Search
+- _+ 1 more keys_
 
 ## dashboard
 
@@ -371,6 +381,13 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `diary.retryTranscription` — Retry transcription
 - `diary.expand` — Expand
 - `diary.collapse` — Collapse
+- `diary.processingTranscription` — Processing...
+
+## errorBoundary
+
+- `errorBoundary.title` — Something went wrong
+- `errorBoundary.message` — The page could not be displayed. This can happen after an update. Reload the page to co...
+- `errorBoundary.reload` — Reload
 
 ## exercise
 
@@ -552,6 +569,16 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `nav.adminAIUsage` — AI Usage
 - _+ 7 more keys_
 
+## notFound
+
+- `notFound.title` — Page Not Found
+- `notFound.message` — The page <code>{{path}}</code> does not exist.
+- `notFound.hint` — It may have been moved or the URL might be incorrect.
+- `notFound.goDashboard` — Go to Dashboard
+- `notFound.goHome` — Go to Home
+- `notFound.seoTitle` — Page not found — PR-TOP
+- `notFound.seoDescription` — The page you requested does not exist.
+
 ## notifications
 
 - `notifications.sosAlert` — SOS Alert from {{client}}!
@@ -731,7 +758,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `session.upload.inquiryNone` — — No inquiry —
 - `session.upload.singleTrack.label` — Keep only my voice (single-track)
 - `session.upload.singleTrack.hint` — Use when the client did not consent to recording. After upload you'll pick which detect...
-- _+ 85 more keys_
+- _+ 95 more keys_
 
 ## sessionDetail
 
@@ -800,7 +827,7 @@ of truth — see `src/frontend/src/i18n/en.json`._
 - `subscription.cancelSuccess` — Subscription canceled. Your access continues until {{date}}.
 - `subscription.availablePlans` — Available Plans
 - `subscription.currentPlanBtn` — Current Plan
-- _+ 46 more keys_
+- _+ 64 more keys_
 
 ## supervision
 

@@ -94,7 +94,7 @@ Mount prefix: `/api/assistant`
 
 Mount prefix: `/api/auth`
 
-- `POST /api/auth/register` — antibot: honeypot (fake 201) -> timing (400) -> Turnstile (403).
+- `POST /api/auth/register` — (no user, no session cookie) — see notifyExistingAccountOwner.
 - `POST /api/auth/login` — POST /api/auth/login
 - `POST /api/auth/register-viewer` — Creates a user with role='viewer', links anonymous session, migrates messages, issues JWT.
 - `POST /api/auth/register-lead` — After registration, lead gets +10 messages in the chat. After email verification, +10 more.
@@ -102,7 +102,7 @@ Mount prefix: `/api/auth`
 - `POST /api/auth/logout` — localStorage copy of the token after this call.
 - `POST /api/auth/logout-all` — devices) by bumping users.token_version, then clear this device's cookie.
 - `GET /api/auth/me` — GET /api/auth/me
-- `POST /api/auth/forgot-password` — POST /api/auth/forgot-password
+- `POST /api/auth/forgot-password` — Logs carry user ids, never email addresses.
 - `POST /api/auth/reset-password` — POST /api/auth/reset-password
 
 ## bot — Telegram bot control surface (start/stop, health)
@@ -111,9 +111,10 @@ Mount prefix: `/api/bot`
 
 - `POST /api/bot/register` — POST /api/bot/register - Register or update a Telegram user with role
 - `GET /api/bot/user/:telegram_id` — GET /api/bot/user/:telegram_id - Get user by telegram_id
-- `PUT /api/bot/profile/:telegram_id` — PUT /api/bot/profile/:telegram_id - Update user profile fields from bot
+- `PUT /api/bot/profile/:telegram_id` — saved immediately (200 { message }).
+- `POST /api/bot/profile/:telegram_id/confirm-email` — 409 EMAIL_TAKEN (another account already uses the address).
 - `POST /api/bot/connect` — POST /api/bot/connect - Client enters invite code to connect with therapist
-- `POST /api/bot/consent` — compatibility — defaults to version=0 / hash=null.
+- `POST /api/bot/consent` — else: 403 { code: 'CONSENT_NOT_PENDING' | 'THERAPIST_UNAVAILABLE' }.
 - `GET /api/bot/therapist-display/:id` — without exposing other PII. Restricted to bot via botAuth.
 - `GET /api/bot/consent-status/:telegram_id` — the bot prompts the user to re-consent before accepting any other input.
 - `POST /api/bot/revoke-consent` — POST /api/bot/revoke-consent - Client revokes consent and disconnects from therapist
@@ -213,7 +214,8 @@ Mount prefix: `/api/dashboard`
 
 Mount prefix: `/api/diary`
 
-- `GET /api/diary/:id/stream` — GET /api/diary/:id/stream - Stream decrypted audio/video file for a diary entry
+- `GET /api/diary/:id/media-url` — GET /api/diary/:id/media-url - short-lived signed URL for <audio>/<video src>.
+- `GET /api/diary/:id/stream` — requests get 206 and only the covering chunks are decrypted.
 - `POST /api/diary/:id/retranscribe` — POST /api/diary/:id/retranscribe - Retry transcription for a diary entry (linked therapist only)
 
 ## emailVerification — Router module
@@ -229,7 +231,10 @@ Mount prefix: `/api`
 Mount prefix: `/api/encryption`
 
 - `GET /api/encryption/keys` — List all encryption key versions
-- `POST /api/encryption/rotate` — Rotate encryption key (create new version)
+- `GET /api/encryption/rotation/status` — progress and what is still stored under an older key version. Superadmin.
+- `POST /api/encryption/rotation/start` — moves every Class A value and backup to the active key version. Superadmin.
+- `POST /api/encryption/rotation/pause` — Stop the running job after its current batch; start resumes it. Superadmin.
+- `POST /api/encryption/rotate` — new version via POST /api/encryption/rotation/start.
 - `POST /api/encryption/encrypt` — Encrypt data (for testing/verification) - debug endpoint: 404 in production, superadmin-only elsewhere
 - `POST /api/encryption/decrypt` — Decrypt data (for testing/verification) - debug endpoint: 404 in production, superadmin-only elsewhere
 - `GET /api/encryption/active-version` — Get the current active encryption key version - debug endpoint: 404 in production, superadmin-only elsewhere
@@ -302,7 +307,7 @@ Mount prefix: `/api/search`
 
 - `POST /api/search` — POST /api/search - Semantic search across embedded client data
 - `GET /api/search/embedding/:sourceType/:sourceId` — GET /api/search/embedding/:sourceType/:sourceId - Check if a specific source has an embedding
-- `GET /api/search/stats` — GET /api/search/stats - Get vector store statistics
+- `GET /api/search/stats` — Same shape as vectorStore.getStats(): { total, by_type: { type: { count, total_tokens } } }.
 
 ## sessions — Session upload, transcription, AI summarization
 
@@ -318,7 +323,8 @@ Mount prefix: `/api/sessions`
 - `POST /api/sessions/:id/transcribe-voice-note` — the text to post_session_notes via PATCH.
 - `POST /api/sessions/:id/select-speaker` — the unselected tracks are NOT retained.
 - `DELETE /api/sessions/:id` — DELETE /api/sessions/:id - Delete a session and its associated files
-- `GET /api/sessions/:id/stream` — GET /api/sessions/:id/stream - Stream decrypted audio/video file
+- `GET /api/sessions/:id/media-url` — cookies/headers for 10 minutes and only for this user + session.
+- `GET /api/sessions/:id/stream` — Range requests with 206 and decrypts only the chunks that cover the range.
 - `POST /api/sessions/auto-match`
 - `GET /api/sessions/:id/assignments` — GET /api/sessions/:id/assignments — list all assignments attached to a session
 - `POST /api/sessions/:id/assignments` — POST /api/sessions/:id/assignments — create assignment attached to a session
