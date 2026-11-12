@@ -92,7 +92,7 @@ const CONTENT = {
         name: 'Upheal',
         tagline: 'AI-native EHR for therapists (notes + scheduling + billing)',
         category: 'AI-native session-notes EHR',
-        priceFrom: 'From ~$29/mo',
+        priceFrom: 'Free plan; AI Notes $39/mo',
         wins: 'Broadest feature set of any AI note-taker — includes scheduling, invoicing and US insurance flows.',
         loses: 'US-first, no client channel, English-only, higher price.',
         bestFor: 'US-based practices that want a single tool for notes, scheduling and billing.',
@@ -138,7 +138,7 @@ const CONTENT = {
       },
       {
         q: 'Is there a free alternative to Mentalyc?',
-        a: 'Yes. PR-TOP has a free Trial tier with the encrypted dashboard, Telegram client bot, diary, exercises and SOS enabled. Heidi ships a generous free tier. Most other AI note-takers (Upheal, Twofold, Supanote) offer short trials rather than a permanent free plan.',
+        a: 'Yes. PR-TOP has a free Trial tier with the encrypted dashboard, Telegram client bot, diary, exercises and SOS enabled. Heidi ships a generous free tier. Most other AI note-takers (Twofold, Supanote) offer short trials rather than a permanent free plan. Upheal has a basic free plan (individual therapy only).',
       },
       {
         q: 'Which Mentalyc alternative is best for EU / GDPR-first therapists?',
@@ -241,7 +241,7 @@ const CONTENT = {
         name: 'Upheal',
         tagline: 'AI-native EHR для психотерапевтов (заметки + расписание + биллинг)',
         category: 'AI-native EHR для заметок о сессиях',
-        priceFrom: 'От ~$29/мес',
+        priceFrom: 'Бесплатный план; AI Notes $39/мес',
         wins: 'Самый широкий набор функций среди AI-инструментов для заметок — включая расписание, выставление счетов и работу с американскими страховками.',
         loses: 'Ориентация на США, нет клиентского канала, только английский язык, выше цена.',
         bestFor: 'Практики в США, которым нужен один инструмент для заметок, расписания и биллинга.',
@@ -287,7 +287,7 @@ const CONTENT = {
       },
       {
         q: 'Есть ли бесплатная альтернатива Mentalyc?',
-        a: 'Да. У PR-TOP есть бесплатный тариф Trial с зашифрованным дашбордом, клиентским ботом в Telegram, дневником, упражнениями и SOS. У Heidi — щедрый бесплатный тариф. Большинство других AI-инструментов для заметок (Upheal, Twofold, Supanote) предлагают короткие пробные периоды, а не постоянный бесплатный план.',
+        a: 'Да. У PR-TOP есть бесплатный тариф Trial с зашифрованным дашбордом, клиентским ботом в Telegram, дневником, упражнениями и SOS. У Heidi — щедрый бесплатный тариф. Большинство других AI-инструментов для заметок (Twofold, Supanote) предлагают короткие пробные периоды, а не постоянный бесплатный план. У Upheal есть базовый бесплатный план (только для индивидуальной терапии).',
       },
       {
         q: 'Какая альтернатива Mentalyc лучше для специалистов из ЕС с приоритетом GDPR?',
@@ -388,7 +388,7 @@ const CONTENT = {
         name: 'Upheal',
         tagline: 'AI-native EHR для психотерапевтів (нотатки + розклад + білінг)',
         category: 'AI-native EHR для нотаток про сесії',
-        priceFrom: 'Від ~$29/міс',
+        priceFrom: 'Безкоштовний план; AI Notes $39/міс',
         wins: 'Найширший набір функцій серед AI-інструментів для нотаток — включно з розкладом, виставленням рахунків і роботою з американськими страховками.',
         loses: 'Орієнтація на США, немає клієнтського каналу, лише англійська мова, вища ціна.',
         bestFor: 'Практики в США, яким потрібен один інструмент для нотаток, розкладу та білінгу.',
@@ -434,7 +434,7 @@ const CONTENT = {
       },
       {
         q: 'Чи є безкоштовна альтернатива Mentalyc?',
-        a: 'Так. У PR-TOP є безкоштовний тариф Trial із зашифрованим дашбордом, клієнтським ботом у Telegram, щоденником, вправами та SOS. У Heidi — щедрий безкоштовний тариф. Більшість інших AI-інструментів для нотаток (Upheal, Twofold, Supanote) пропонують короткі пробні періоди, а не постійний безкоштовний план.',
+        a: 'Так. У PR-TOP є безкоштовний тариф Trial із зашифрованим дашбордом, клієнтським ботом у Telegram, щоденником, вправами та SOS. У Heidi — щедрий безкоштовний тариф. Більшість інших AI-інструментів для нотаток (Twofold, Supanote) пропонують короткі пробні періоди, а не постійний безкоштовний план. В Upheal є базовий безкоштовний план (лише для індивідуальної терапії).',
       },
       {
         q: 'Яка альтернатива Mentalyc найкраща для фахівців з ЄС із пріоритетом GDPR?',
@@ -537,7 +537,7 @@ const CONTENT = {
         name: 'Upheal',
         tagline: 'EHR nativo de IA para terapeutas (notas + agenda + facturación)',
         category: 'EHR de notas de sesión nativo de IA',
-        priceFrom: 'Desde ~29 $/mes',
+        priceFrom: 'Plan gratuito; AI Notes $39/mes',
         wins: 'El conjunto de funciones más amplio entre los tomadores de notas con IA: incluye agenda, facturación y flujos de seguros de EE. UU.',
         loses: 'Orientado a EE. UU., sin canal de cliente, solo en inglés, precio más alto.',
         bestFor: 'Consultas en EE. UU. que quieren una sola herramienta para notas, agenda y facturación.',
@@ -583,7 +583,7 @@ const CONTENT = {
       },
       {
         q: '¿Existe una alternativa gratuita a Mentalyc?',
-        a: 'Sí. PR-TOP tiene un plan Trial gratuito con el panel cifrado, el bot de Telegram para clientes, el diario, los ejercicios y el SOS activados. Heidi ofrece un plan gratuito generoso. La mayoría de los demás tomadores de notas con IA (Upheal, Twofold, Supanote) ofrecen pruebas cortas en lugar de un plan gratuito permanente.',
+        a: 'Sí. PR-TOP tiene un plan Trial gratuito con el panel cifrado, el bot de Telegram para clientes, el diario, los ejercicios y el SOS activados. Heidi ofrece un plan gratuito generoso. La mayoría de los demás tomadores de notas con IA (Twofold, Supanote) ofrecen pruebas cortas en lugar de un plan gratuito permanente. Upheal tiene un plan gratuito básico (solo terapia individual).',
       },
       {
         q: '¿Qué alternativa a Mentalyc es mejor para terapeutas de la UE con prioridad GDPR?',

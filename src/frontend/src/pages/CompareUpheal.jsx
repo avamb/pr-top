@@ -24,14 +24,14 @@ const CONTENT = {
   en: {
     seoTitle: 'PR-TOP vs Upheal (2026) — honest comparison for therapists',
     seoDescription:
-      'Upheal is an AI-native session-notes EHR from ~$29/mo. PR-TOP is a between-session assistant with Telegram client bot, diary, crisis alerts.',
+      'Upheal is an AI-native session-notes EHR with a free plan, paid from $39/mo. PR-TOP is a between-session assistant with Telegram client bot, diary, crisis alerts.',
     backHome: '← Back to home',
     badge: 'Comparison',
     h1: 'PR-TOP vs Upheal — comparison for therapists',
     stamp: 'Updated: July 2026 · Reviewed by the PR-TOP team',
     answer: {
       upheal:
-        'is an AI-native EHR for therapists built around session notes, scheduling and billing, from roughly $29/mo and US-market-oriented.',
+        'is an AI-native EHR for therapists built around session notes, scheduling and billing, with a free plan and paid plans from $39/mo, and US-market-oriented.',
       prtop:
         'is a therapist-controlled between-session assistant: an encrypted dashboard plus a Telegram client bot for diary, exercises and one-tap crisis alerts. GDPR-first, EU-hosted, four languages (EN/RU/UK/ES). Different jobs — many practices use both.',
     },
@@ -47,7 +47,7 @@ const CONTENT = {
       headers: ['Category', 'Upheal', 'PR-TOP'],
       rows: [
         ['Category', 'AI-native session-notes EHR', 'Between-session assistant + Telegram client bot'],
-        ['Pricing (from)', '~$29/mo (Starter), scales up per feature', 'Free Trial, then €9/mo Basic, €19/mo Pro'],
+        ['Pricing (from)', 'Free plan; AI Notes $39/mo; EHR from $1/session', 'Free Trial, then €9/mo Basic, €19/mo Pro'],
         ['AI session notes', 'Core product — deep, mature, SOAP/DAP/etc.', 'Yes (Whisper + configurable providers), simpler templates'],
         ['Client-facing app', 'No native client app', 'Telegram bot (voice/text/video diary, exercises, SOS)'],
         ['Between-session diary', 'Not in scope', 'Yes — voice / text / video, encrypted'],
@@ -89,7 +89,7 @@ const CONTENT = {
         },
         {
           q: 'Which is cheaper — Upheal or PR-TOP?',
-          a: 'PR-TOP starts free (Trial), then Basic is €9/mo and Pro €19/mo. Upheal starts at about $29/mo and scales up per feature set. On a like-for-like AI-notes-only comparison Upheal has more depth; on total client-engagement surface (bot + diary + exercises + alerts) PR-TOP is broader for less money.',
+          a: 'PR-TOP starts free (Trial), then Basic is €9/mo and Pro €19/mo. Upheal has a free plan, then AI Notes at $39/mo and EHR plans from $1/session. On a like-for-like AI-notes-only comparison Upheal has more depth; on total client-engagement surface (bot + diary + exercises + alerts) PR-TOP is broader.',
         },
         {
           q: 'Does Upheal work with Telegram?',
@@ -127,14 +127,14 @@ const CONTENT = {
   ru: {
     seoTitle: 'PR-TOP или Upheal — сравнение для психологов (2026)',
     seoDescription:
-      'Upheal — американская AI-EHR для заметок сессий от ~$29/мес. PR-TOP — ассистент между сессиями: Telegram-бот, дневник, SOS-оповещения, GDPR и хостинг в ЕС.',
+      'Upheal — американская AI-EHR для заметок сессий с бесплатным планом и платными планами от $39/мес. PR-TOP — ассистент между сессиями: Telegram-бот, дневник, SOS-оповещения, GDPR и хостинг в ЕС.',
     backHome: '← На главную',
     badge: 'Сравнение',
     h1: 'PR-TOP или Upheal — сравнение для психологов',
     stamp: 'Обновлено: июль 2026 · Проверено командой PR-TOP',
     answer: {
       upheal:
-        '— это AI-native EHR для терапевтов, построенная вокруг заметок сессий, расписания и биллинга: примерно от $29/мес и с ориентацией на рынок США.',
+        '— это AI-native EHR для терапевтов, построенная вокруг заметок сессий, расписания и биллинга: с бесплатным планом и платными планами от $39/мес, с ориентацией на рынок США.',
       prtop:
         '— это ассистент между сессиями под контролем терапевта: зашифрованный кабинет плюс Telegram-бот для клиента — дневник, упражнения и SOS-кнопка в одно касание. GDPR-first, хостинг в ЕС, четыре языка (EN/RU/UK/ES). Это разные задачи — многие практики используют оба инструмента.',
     },
@@ -150,7 +150,7 @@ const CONTENT = {
       headers: ['Категория', 'Upheal', 'PR-TOP'],
       rows: [
         ['Категория', 'AI-native EHR для заметок сессий', 'Ассистент между сессиями + Telegram-бот для клиента'],
-        ['Цена (от)', '~$29/мес (Starter), дороже по мере роста функций', 'Бесплатный Trial, далее Basic €9/мес, Pro €19/мес'],
+        ['Цена (от)', 'Бесплатный план; AI Notes $39/мес; EHR от $1/сессия', 'Бесплатный Trial, далее Basic €9/мес, Pro €19/мес'],
         ['ИИ-заметки сессий', 'Ядро продукта — глубокие, зрелые, SOAP/DAP и др.', 'Да (Whisper + настраиваемые провайдеры), шаблоны проще'],
         ['Приложение для клиента', 'Нет нативного клиентского приложения', 'Telegram-бот (голосовой/текстовый/видеодневник, упражнения, SOS)'],
         ['Дневник между сессиями', 'Вне фокуса продукта', 'Да — голос / текст / видео, с шифрованием'],
@@ -192,7 +192,7 @@ const CONTENT = {
         },
         {
           q: 'Что дешевле — Upheal или PR-TOP?',
-          a: 'PR-TOP начинается бесплатно (Trial), далее Basic — €9/мес и Pro — €19/мес. Upheal стартует примерно от $29/мес и дорожает по мере расширения функций. Если сравнивать только ИИ-заметки, у Upheal больше глубины; по общему охвату работы с клиентом (бот + дневник + упражнения + оповещения) PR-TOP шире и дешевле.',
+          a: 'PR-TOP начинается бесплатно (Trial), далее Basic — €9/мес и Pro — €19/мес. У Upheal есть бесплатный план, затем AI Notes за $39/мес и EHR-планы от $1 за сессию. Если сравнивать только ИИ-заметки, у Upheal больше глубины; по общему охвату работы с клиентом (бот + дневник + упражнения + оповещения) PR-TOP шире.',
         },
         {
           q: 'Работает ли Upheal с Telegram?',
@@ -230,14 +230,14 @@ const CONTENT = {
   uk: {
     seoTitle: 'PR-TOP чи Upheal — порівняння для психологів (2026)',
     seoDescription:
-      'Upheal — американська AI-EHR для нотаток сесій від ~$29/міс. PR-TOP — асистент між сесіями: Telegram-бот, щоденник, SOS-сповіщення, GDPR і хостинг у ЄС.',
+      'Upheal — американська AI-EHR для нотаток сесій із безкоштовним планом і платними планами від $39/міс. PR-TOP — асистент між сесіями: Telegram-бот, щоденник, SOS-сповіщення, GDPR і хостинг у ЄС.',
     backHome: '← На головну',
     badge: 'Порівняння',
     h1: 'PR-TOP чи Upheal — порівняння для психологів',
     stamp: 'Оновлено: липень 2026 · Перевірено командою PR-TOP',
     answer: {
       upheal:
-        '— це AI-native EHR для терапевтів, побудована навколо нотаток сесій, розкладу та білінгу: приблизно від $29/міс і з орієнтацією на ринок США.',
+        '— це AI-native EHR для терапевтів, побудована навколо нотаток сесій, розкладу та білінгу: із безкоштовним планом і платними планами від $39/міс, з орієнтацією на ринок США.',
       prtop:
         '— це асистент між сесіями під контролем терапевта: зашифрований кабінет плюс Telegram-бот для клієнта — щоденник, вправи та SOS-кнопка в один дотик. GDPR-first, хостинг у ЄС, чотири мови (EN/RU/UK/ES). Це різні завдання — багато практик використовують обидва інструменти.',
     },
@@ -253,7 +253,7 @@ const CONTENT = {
       headers: ['Категорія', 'Upheal', 'PR-TOP'],
       rows: [
         ['Категорія', 'AI-native EHR для нотаток сесій', 'Асистент між сесіями + Telegram-бот для клієнта'],
-        ['Ціна (від)', '~$29/міс (Starter), дорожче з розширенням функцій', 'Безкоштовний Trial, далі Basic €9/міс, Pro €19/міс'],
+        ['Ціна (від)', 'Безкоштовний план; AI Notes $39/міс; EHR від $1/сесія', 'Безкоштовний Trial, далі Basic €9/міс, Pro €19/міс'],
         ['ШІ-нотатки сесій', 'Ядро продукту — глибокі, зрілі, SOAP/DAP тощо', 'Так (Whisper + налаштовувані провайдери), простіші шаблони'],
         ['Застосунок для клієнта', 'Немає нативного клієнтського застосунку', 'Telegram-бот (голосовий/текстовий/відеощоденник, вправи, SOS)'],
         ['Щоденник між сесіями', 'Поза фокусом продукту', 'Так — голос / текст / відео, із шифруванням'],
@@ -295,7 +295,7 @@ const CONTENT = {
         },
         {
           q: 'Що дешевше — Upheal чи PR-TOP?',
-          a: 'PR-TOP починається безкоштовно (Trial), далі Basic — €9/міс і Pro — €19/міс. Upheal стартує приблизно від $29/міс і дорожчає з розширенням функцій. Якщо порівнювати лише ШІ-нотатки, в Upheal більше глибини; за загальним охопленням роботи з клієнтом (бот + щоденник + вправи + сповіщення) PR-TOP ширший і дешевший.',
+          a: 'PR-TOP починається безкоштовно (Trial), далі Basic — €9/міс і Pro — €19/міс. В Upheal є безкоштовний план, далі AI Notes за $39/міс і EHR-плани від $1 за сесію. Якщо порівнювати лише ШІ-нотатки, в Upheal більше глибини; за загальним охопленням роботи з клієнтом (бот + щоденник + вправи + сповіщення) PR-TOP ширший.',
         },
         {
           q: 'Чи працює Upheal з Telegram?',
@@ -333,14 +333,14 @@ const CONTENT = {
   es: {
     seoTitle: 'PR-TOP vs Upheal: comparativa para terapeutas (2026)',
     seoDescription:
-      'Upheal es un EHR de notas de sesión con IA desde ~$29/mes. PR-TOP es el asistente entre sesiones: bot de Telegram, diario del cliente y alertas SOS.',
+      'Upheal es un EHR de notas de sesión con IA con plan gratuito y planes de pago desde $39/mes. PR-TOP es el asistente entre sesiones: bot de Telegram, diario del cliente y alertas SOS.',
     backHome: '← Volver al inicio',
     badge: 'Comparativa',
     h1: 'PR-TOP vs Upheal: comparativa para terapeutas',
     stamp: 'Actualizado: julio de 2026 · Revisado por el equipo PR-TOP',
     answer: {
       upheal:
-        'es un EHR con IA nativa para terapeutas, centrado en notas de sesión, agenda y facturación: desde unos $29/mes y orientado al mercado estadounidense.',
+        'es un EHR con IA nativa para terapeutas, centrado en notas de sesión, agenda y facturación: con un plan gratuito y planes de pago desde $39/mes, y orientado al mercado estadounidense.',
       prtop:
         'es un asistente entre sesiones controlado por el terapeuta: un panel cifrado más un bot de Telegram para el cliente con diario, ejercicios y alerta de crisis con un toque. GDPR primero, alojado en la UE, cuatro idiomas (EN/RU/UK/ES). Son trabajos distintos: muchas consultas usan ambos.',
     },
@@ -356,7 +356,7 @@ const CONTENT = {
       headers: ['Categoría', 'Upheal', 'PR-TOP'],
       rows: [
         ['Categoría', 'EHR de notas de sesión con IA nativa', 'Asistente entre sesiones + bot de Telegram para el cliente'],
-        ['Precio (desde)', '~$29/mes (Starter), sube según las funciones', 'Trial gratuito; luego Basic €9/mes y Pro €19/mes'],
+        ['Precio (desde)', 'Plan gratuito; AI Notes $39/mes; EHR desde $1/sesión', 'Trial gratuito; luego Basic €9/mes y Pro €19/mes'],
         ['Notas de sesión con IA', 'Núcleo del producto: profundas, maduras, SOAP/DAP, etc.', 'Sí (Whisper + proveedores configurables), plantillas más simples'],
         ['App para el cliente', 'Sin app nativa para el cliente', 'Bot de Telegram (diario de voz/texto/vídeo, ejercicios, SOS)'],
         ['Diario entre sesiones', 'Fuera de su alcance', 'Sí: voz / texto / vídeo, cifrado'],
@@ -398,7 +398,7 @@ const CONTENT = {
         },
         {
           q: '¿Cuál es más barato: Upheal o PR-TOP?',
-          a: 'PR-TOP empieza gratis (Trial); después, Basic cuesta €9/mes y Pro €19/mes. Upheal parte de unos $29/mes y sube según el conjunto de funciones. Comparando solo las notas con IA, Upheal tiene más profundidad; en superficie total de acompañamiento al cliente (bot + diario + ejercicios + alertas), PR-TOP abarca más por menos dinero.',
+          a: 'PR-TOP empieza gratis (Trial); después, Basic cuesta €9/mes y Pro €19/mes. Upheal tiene un plan gratuito, luego AI Notes a $39/mes y planes EHR desde $1 por sesión. Comparando solo las notas con IA, Upheal tiene más profundidad; en superficie total de acompañamiento al cliente (bot + diario + ejercicios + alertas), PR-TOP abarca más.',
         },
         {
           q: '¿Funciona Upheal con Telegram?',

@@ -38,7 +38,7 @@ const CONTENT = {
     stamp: 'Updated: July 2026 · Reviewed by the PR-TOP team',
     backHome: 'Back to home',
     intro1:
-      ' is a privacy-first AI note-taker for therapists, from about $39/mo, HIPAA-aligned and US-hosted.',
+      ' is a privacy-first AI note-taker for therapists, from $19.99/mo, HIPAA-aligned and US-hosted.',
     intro2:
       ' is a therapist-controlled between-session assistant: an encrypted dashboard plus a Telegram client bot for diary, exercises and one-tap crisis alerts. Both are privacy-first; they solve different jobs and many EU practices run them together.',
     stopsTitle: 'Where each product stops',
@@ -71,7 +71,7 @@ const CONTENT = {
       },
       {
         label: 'Pricing (from)',
-        m: 'Limited free tier, then ~$39/mo',
+        m: '14-day free trial (no card), then from $19.99/mo',
         p: 'Free Trial, then €9/mo Basic, €19/mo Pro',
       },
       {
@@ -195,7 +195,7 @@ const CONTENT = {
     stamp: 'Обновлено: июль 2026 · Проверено командой PR-TOP',
     backHome: 'На главную',
     intro1:
-      ' — приватный AI-инструмент для заметок сессий: от ~$39/мес, ориентация на HIPAA, серверы в США.',
+      ' — приватный AI-инструмент для заметок сессий: от $19.99/мес, ориентация на HIPAA, серверы в США.',
     intro2:
       ' — ассистент между сессиями под контролем психолога: зашифрованный кабинет плюс Telegram-бот для клиента — дневник, упражнения и SOS в одно касание. Оба сервиса ставят приватность на первое место, но решают разные задачи, и многие практики в ЕС используют их вместе.',
     stopsTitle: 'Где заканчивается каждый продукт',
@@ -228,7 +228,7 @@ const CONTENT = {
       },
       {
         label: 'Цена (от)',
-        m: 'Ограниченный бесплатный тариф, далее ~$39/мес',
+        m: '14-дневный триал (без карты), далее от $19.99/мес',
         p: 'Бесплатный Trial, далее €9/мес Basic, €19/мес Pro',
       },
       {
@@ -352,7 +352,7 @@ const CONTENT = {
     stamp: 'Оновлено: липень 2026 · Перевірено командою PR-TOP',
     backHome: 'На головну',
     intro1:
-      ' — приватний AI-інструмент для нотаток сесій: від ~$39/міс, орієнтація на HIPAA, сервери у США.',
+      ' — приватний AI-інструмент для нотаток сесій: від $19.99/міс, орієнтація на HIPAA, сервери у США.',
     intro2:
       ' — асистент між сесіями під контролем психолога: зашифрований кабінет плюс Telegram-бот для клієнта — щоденник, вправи та SOS в один дотик. Обидва сервіси ставлять приватність на перше місце, але розв’язують різні задачі, і багато практик у ЄС використовують їх разом.',
     stopsTitle: 'Де закінчується кожен продукт',
@@ -385,7 +385,7 @@ const CONTENT = {
       },
       {
         label: 'Ціна (від)',
-        m: 'Обмежений безкоштовний тариф, далі ~$39/міс',
+        m: '14-денний тріал (без картки), далі від $19.99/міс',
         p: 'Безкоштовний Trial, далі €9/міс Basic, €19/міс Pro',
       },
       {
@@ -509,7 +509,7 @@ const CONTENT = {
     stamp: 'Actualizado: julio de 2026 · Revisado por el equipo PR-TOP',
     backHome: 'Volver al inicio',
     intro1:
-      ' es un asistente de notas con IA centrado en la privacidad, desde ~$39/mes, alineado con HIPAA y alojado en EE. UU.',
+      ' es un asistente de notas con IA centrado en la privacidad, desde $19.99/mes, alineado con HIPAA y alojado en EE. UU.',
     intro2:
       ' es un asistente entre sesiones controlado por el terapeuta: un panel cifrado más un bot de Telegram para el cliente con diario, ejercicios y alertas de crisis con un toque. Ambos priorizan la privacidad; resuelven tareas distintas y muchas consultas en la UE los usan juntos.',
     stopsTitle: 'Dónde termina cada producto',
@@ -542,7 +542,7 @@ const CONTENT = {
       },
       {
         label: 'Precio (desde)',
-        m: 'Nivel gratuito limitado, luego ~$39/mes',
+        m: 'Prueba gratuita de 14 días (sin tarjeta), luego desde $19.99/mes',
         p: 'Trial gratuito, luego €9/mes Basic, €19/mes Pro',
       },
       {

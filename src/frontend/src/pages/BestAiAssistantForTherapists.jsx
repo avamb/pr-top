@@ -109,7 +109,7 @@ const CONTENT = {
         internalHrefLabel: 'PR-TOP vs Upheal detail',
         tagline: 'AI-native session-notes EHR',
         category: 'AI session notes + light EHR',
-        priceFrom: 'From ~$39/mo (14-day free trial)',
+        priceFrom: 'Free plan; AI Notes $39/mo',
         verdict:
           'Deep therapy-specific note templates (SOAP, DAP, BIRP, EMDR), in-video capture, treatment planning. Strongest all-in-one for solo US practices whose bottleneck is documentation, not client engagement.',
         bestFor: 'best for solo US therapists who want AI notes + light EHR in one',
@@ -122,7 +122,7 @@ const CONTENT = {
         internalHrefLabel: 'PR-TOP vs Mentalyc detail',
         tagline: 'Privacy-first AI note-taker',
         category: 'AI session notes',
-        priceFrom: 'From ~$39/mo (limited free tier)',
+        priceFrom: 'From $19.99/mo (14-day free trial)',
         verdict:
           'Well-known privacy posture (zero recording storage, anonymized transcripts), mature clinical templates, strong US-market presence. Documentation-focused; no client-facing channel.',
         bestFor:
@@ -198,7 +198,7 @@ const CONTENT = {
       },
       {
         q: 'Which AI assistant for therapists has a free plan?',
-        a: 'PR-TOP has a permanent free Trial tier with the encrypted dashboard, Telegram client bot, diary, exercises and SOS enabled. Heidi ships a generous free tier for its AI scribe. Mentalyc has a limited free plan. The others (Upheal, Twofold, Supanote, Freed, Eleos) offer trials rather than a permanent free tier.',
+        a: 'PR-TOP has a permanent free Trial tier with the encrypted dashboard, Telegram client bot, diary, exercises and SOS enabled. Heidi ships a generous free tier for its AI scribe. Mentalyc has no permanent free plan, only a 14-day trial. The others (Twofold, Supanote, Freed, Eleos) offer trials rather than a permanent free tier. Upheal has a basic free plan (individual therapy only).',
       },
       {
         q: 'Which one works with Telegram?',
@@ -301,7 +301,7 @@ const CONTENT = {
         internalHrefLabel: 'PR-TOP vs Upheal: подробное сравнение',
         tagline: 'ИИ-нативная EHR для сессионных заметок',
         category: 'ИИ-заметки сессий + лёгкая EHR',
-        priceFrom: 'От ~$39/мес (14-дневный триал)',
+        priceFrom: 'Бесплатный план; AI Notes $39/мес',
         verdict:
           'Глубокие терапевтические шаблоны заметок (SOAP, DAP, BIRP, EMDR), запись прямо в видеосессии, планирование терапии. Сильнейшее решение «всё в одном» для сольных практик в США, где узкое место — документация, а не вовлечение клиентов.',
         bestFor:
@@ -315,7 +315,7 @@ const CONTENT = {
         internalHrefLabel: 'PR-TOP vs Mentalyc: подробное сравнение',
         tagline: 'ИИ-протоколист с приоритетом приватности',
         category: 'ИИ-заметки сессий',
-        priceFrom: 'От ~$39/мес (ограниченный бесплатный тариф)',
+        priceFrom: 'От $19.99/мес (14-дневный триал)',
         verdict:
           'Известная позиция по приватности (записи не хранятся, транскрипты анонимизируются), зрелые клинические шаблоны, сильное присутствие на рынке США. Фокус на документации; клиентского канала нет.',
         bestFor:
@@ -393,7 +393,7 @@ const CONTENT = {
       },
       {
         q: 'У какого ИИ-ассистента для психологов есть бесплатный тариф?',
-        a: 'У PR-TOP есть постоянный бесплатный тариф Trial с зашифрованным дашбордом, клиентским Telegram-ботом, дневником, упражнениями и SOS. У Heidi — щедрый бесплатный тариф для его ИИ-скрайба. У Mentalyc — ограниченный бесплатный план. Остальные (Upheal, Twofold, Supanote, Freed, Eleos) предлагают триалы, а не постоянный бесплатный тариф.',
+        a: 'У PR-TOP есть постоянный бесплатный тариф Trial с зашифрованным дашбордом, клиентским Telegram-ботом, дневником, упражнениями и SOS. У Heidi — щедрый бесплатный тариф для его ИИ-скрайба. У Mentalyc постоянного бесплатного плана нет, только 14-дневный триал. Остальные (Twofold, Supanote, Freed, Eleos) предлагают триалы, а не постоянный бесплатный тариф. У Upheal есть базовый бесплатный план (только для индивидуальной терапии).',
       },
       {
         q: 'Какой из них работает с Telegram?',
@@ -496,7 +496,7 @@ const CONTENT = {
         internalHrefLabel: 'PR-TOP vs Upheal: детальне порівняння',
         tagline: 'ШІ-нативна EHR для сесійних нотаток',
         category: 'ШІ-нотатки сесій + легка EHR',
-        priceFrom: 'Від ~$39/міс (14-денний тріал)',
+        priceFrom: 'Безкоштовний план; AI Notes $39/міс',
         verdict:
           'Глибокі терапевтичні шаблони нотаток (SOAP, DAP, BIRP, EMDR), запис просто у відеосесії, планування терапії. Найсильніше рішення «все в одному» для сольних практик у США, де вузьке місце — документація, а не залучення клієнтів.',
         bestFor:
@@ -510,7 +510,7 @@ const CONTENT = {
         internalHrefLabel: 'PR-TOP vs Mentalyc: детальне порівняння',
         tagline: 'ШІ-нотатник із пріоритетом приватності',
         category: 'ШІ-нотатки сесій',
-        priceFrom: 'Від ~$39/міс (обмежений безкоштовний тариф)',
+        priceFrom: 'Від $19.99/міс (14-денний тріал)',
         verdict:
           'Відома позиція щодо приватності (записи не зберігаються, транскрипти анонімізуються), зрілі клінічні шаблони, сильна присутність на ринку США. Фокус на документації; клієнтського каналу немає.',
         bestFor:
@@ -588,7 +588,7 @@ const CONTENT = {
       },
       {
         q: 'Який ШІ-асистент для терапевтів має безкоштовний план?',
-        a: 'PR-TOP має постійний безкоштовний тариф Trial із зашифрованим дашбордом, клієнтським Telegram-ботом, щоденником, вправами та SOS. Heidi пропонує щедрий безкоштовний тариф для свого ШІ-скрайба. Mentalyc має обмежений безкоштовний план. Решта (Upheal, Twofold, Supanote, Freed, Eleos) пропонують тріали, а не постійний безкоштовний тариф.',
+        a: 'PR-TOP має постійний безкоштовний тариф Trial із зашифрованим дашбордом, клієнтським Telegram-ботом, щоденником, вправами та SOS. Heidi пропонує щедрий безкоштовний тариф для свого ШІ-скрайба. У Mentalyc немає постійного безкоштовного плану, лише 14-денний тріал. Решта (Twofold, Supanote, Freed, Eleos) пропонують тріали, а не постійний безкоштовний тариф. В Upheal є базовий безкоштовний план (лише для індивідуальної терапії).',
       },
       {
         q: 'Який із них працює з Telegram?',
@@ -693,7 +693,7 @@ const CONTENT = {
         internalHrefLabel: 'PR-TOP vs Upheal en detalle',
         tagline: 'EHR nativo de IA para notas de sesión',
         category: 'Notas de sesión con IA + EHR ligero',
-        priceFrom: 'Desde ~$39/mes (prueba gratuita de 14 días)',
+        priceFrom: 'Plan gratuito; AI Notes $39/mes',
         verdict:
           'Plantillas de notas específicas de terapia muy completas (SOAP, DAP, BIRP, EMDR), captura durante la videollamada, planificación del tratamiento. El todo-en-uno más sólido para consultas individuales de EE. UU. cuyo cuello de botella es la documentación, no la vinculación con el cliente.',
         bestFor:
@@ -707,7 +707,7 @@ const CONTENT = {
         internalHrefLabel: 'PR-TOP vs Mentalyc en detalle',
         tagline: 'Generador de notas con IA centrado en la privacidad',
         category: 'Notas de sesión con IA',
-        priceFrom: 'Desde ~$39/mes (plan gratuito limitado)',
+        priceFrom: 'Desde $19.99/mes (prueba gratuita de 14 días)',
         verdict:
           'Postura de privacidad reconocida (sin almacenamiento de grabaciones, transcripciones anonimizadas), plantillas clínicas maduras, fuerte presencia en el mercado de EE. UU. Centrado en la documentación; sin canal para el cliente.',
         bestFor:
@@ -785,7 +785,7 @@ const CONTENT = {
       },
       {
         q: '¿Qué asistente de IA para terapeutas tiene plan gratuito?',
-        a: 'PR-TOP ofrece un plan Trial gratuito permanente con el panel cifrado, el bot de Telegram para clientes, el diario, los ejercicios y el SOS activados. Heidi incluye un plan gratuito generoso para su escriba de IA. Mentalyc tiene un plan gratuito limitado. El resto (Upheal, Twofold, Supanote, Freed, Eleos) ofrecen pruebas, no un plan gratuito permanente.',
+        a: 'PR-TOP ofrece un plan Trial gratuito permanente con el panel cifrado, el bot de Telegram para clientes, el diario, los ejercicios y el SOS activados. Heidi incluye un plan gratuito generoso para su escriba de IA. Mentalyc no tiene plan gratuito permanente, solo una prueba de 14 días. El resto (Twofold, Supanote, Freed, Eleos) ofrecen pruebas, no un plan gratuito permanente. Upheal tiene un plan gratuito básico (solo terapia individual).',
       },
       {
         q: '¿Cuál funciona con Telegram?',

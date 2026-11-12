@@ -87,7 +87,7 @@ const CONTENT = {
         internal: false,
         tagline: 'Privacy-first AI note-taker for therapists',
         category: 'AI session notes',
-        priceFrom: 'From ~$39/mo (limited free tier)',
+        priceFrom: 'From $19.99/mo (14-day free trial)',
         wins: 'Strong privacy posture, mature clinical templates (SOAP/DAP/BIRP), well-known brand in US therapy circles.',
         loses: 'US-first, no client-facing channel, no messenger integration, English only.',
         bestFor:
@@ -132,7 +132,7 @@ const CONTENT = {
       },
       {
         q: 'Is there a free alternative to Upheal?',
-        a: 'Yes. PR-TOP has a free Trial tier with the client bot, diary, exercises and encrypted dashboard enabled. Mentalyc offers a limited free plan. Most session-notes competitors (Twofold, Heidi, Supanote) run short free trials rather than a permanent free tier.',
+        a: 'Yes. PR-TOP has a free Trial tier with the client bot, diary, exercises and encrypted dashboard enabled. Mentalyc has no permanent free plan, only a 14-day trial. Most session-notes competitors (Twofold, Heidi, Supanote) run short free trials rather than a permanent free tier.',
       },
       {
         q: 'Which Upheal alternative is best for EU / GDPR-first therapists?',
@@ -227,7 +227,7 @@ const CONTENT = {
         internal: false,
         tagline: 'AI-ассистент для заметок с фокусом на приватность',
         category: 'AI-заметки по сессиям',
-        priceFrom: 'От ~$39/мес (ограниченный бесплатный тариф)',
+        priceFrom: 'От $19.99/мес (14-дневный триал)',
         wins: 'Сильная позиция по приватности, зрелые клинические шаблоны (SOAP/DAP/BIRP), известный бренд среди терапевтов в США.',
         loses: 'Ориентирован на США, нет клиентского канала, нет интеграции с мессенджерами, только английский язык.',
         bestFor:
@@ -272,7 +272,7 @@ const CONTENT = {
       },
       {
         q: 'Есть ли бесплатная альтернатива Upheal?',
-        a: 'Да. У PR-TOP есть бесплатный тариф Trial с клиентским ботом, дневником, упражнениями и зашифрованной панелью. У Mentalyc — ограниченный бесплатный план. Большинство конкурентов в сегменте заметок (Twofold, Heidi, Supanote) предлагают короткие пробные периоды, а не постоянный бесплатный тариф.',
+        a: 'Да. У PR-TOP есть бесплатный тариф Trial с клиентским ботом, дневником, упражнениями и зашифрованной панелью. У Mentalyc постоянного бесплатного плана нет, только 14-дневный триал. Большинство конкурентов в сегменте заметок (Twofold, Heidi, Supanote) предлагают короткие пробные периоды, а не постоянный бесплатный тариф.',
       },
       {
         q: 'Какая альтернатива Upheal лучше для терапевтов из ЕС с фокусом на GDPR?',
@@ -367,7 +367,7 @@ const CONTENT = {
         internal: false,
         tagline: 'AI-асистент для нотаток із фокусом на приватність',
         category: 'AI-нотатки із сесій',
-        priceFrom: 'Від ~$39/міс (обмежений безкоштовний тариф)',
+        priceFrom: 'Від $19.99/міс (14-денний тріал)',
         wins: 'Сильна позиція щодо приватності, зрілі клінічні шаблони (SOAP/DAP/BIRP), відомий бренд серед терапевтів у США.',
         loses: 'Орієнтований на США, немає клієнтського каналу, немає інтеграції з месенджерами, лише англійська мова.',
         bestFor:
@@ -412,7 +412,7 @@ const CONTENT = {
       },
       {
         q: 'Чи є безкоштовна альтернатива Upheal?',
-        a: 'Так. У PR-TOP є безкоштовний тариф Trial із клієнтським ботом, щоденником, вправами та зашифрованою панеллю. У Mentalyc — обмежений безкоштовний план. Більшість конкурентів у сегменті нотаток (Twofold, Heidi, Supanote) пропонують короткі пробні періоди, а не постійний безкоштовний тариф.',
+        a: 'Так. У PR-TOP є безкоштовний тариф Trial із клієнтським ботом, щоденником, вправами та зашифрованою панеллю. У Mentalyc немає постійного безкоштовного плану, лише 14-денний тріал. Більшість конкурентів у сегменті нотаток (Twofold, Heidi, Supanote) пропонують короткі пробні періоди, а не постійний безкоштовний тариф.',
       },
       {
         q: 'Яка альтернатива Upheal найкраща для терапевтів із ЄС із фокусом на GDPR?',
@@ -507,7 +507,7 @@ const CONTENT = {
         internal: false,
         tagline: 'Notas con IA para terapeutas con enfoque en la privacidad',
         category: 'Notas de sesión con IA',
-        priceFrom: 'Desde ~$39/mes (plan gratuito limitado)',
+        priceFrom: 'Desde $19.99/mes (prueba gratuita de 14 días)',
         wins: 'Sólida postura de privacidad, plantillas clínicas maduras (SOAP/DAP/BIRP), marca reconocida entre terapeutas de EE. UU.',
         loses: 'Orientado a EE. UU., sin canal para el cliente, sin integración con mensajería, solo en inglés.',
         bestFor:
@@ -552,7 +552,7 @@ const CONTENT = {
       },
       {
         q: '¿Existe una alternativa gratuita a Upheal?',
-        a: 'Sí. PR-TOP ofrece un plan Trial gratuito con el bot de cliente, el diario, los ejercicios y el panel cifrado activados. Mentalyc tiene un plan gratuito limitado. La mayoría de los competidores de notas de sesión (Twofold, Heidi, Supanote) ofrecen pruebas gratuitas cortas en lugar de un plan gratuito permanente.',
+        a: 'Sí. PR-TOP ofrece un plan Trial gratuito con el bot de cliente, el diario, los ejercicios y el panel cifrado activados. Mentalyc no tiene plan gratuito permanente, solo una prueba de 14 días. La mayoría de los competidores de notas de sesión (Twofold, Heidi, Supanote) ofrecen pruebas gratuitas cortas en lugar de un plan gratuito permanente.',
       },
       {
         q: '¿Qué alternativa a Upheal es mejor para terapeutas de la UE con enfoque GDPR?',
